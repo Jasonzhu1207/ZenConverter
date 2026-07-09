@@ -44,7 +44,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Restore local FFmpeg fallback dependencies
+      - name: Restore local FFmpeg fallback AAR
         run: |
           set -euo pipefail
           mkdir -p app/libs
@@ -53,8 +53,15 @@ jobs:
             url="$1"
             output="$2"
             sha256="$3"
-            curl -fsSL --retry 3 --retry-delay 5 "$url" -o "$output"
-            echo "$sha256  $output" | sha256sum --check --strict
+            echo "Downloading $output"
+            curl -fsSL --retry 3 --retry-all-errors --retry-delay 5 "$url" -o "$output"
+            actual_sha256="$(sha256sum "$output" | awk '{ print $1 }')"
+            if [ "$actual_sha256" != "$sha256" ]; then
+              echo "::error::SHA-256 mismatch for $output"
+              echo "Expected: $sha256"
+              echo "Actual:   $actual_sha256"
+              exit 1
+            fi
           }
 
           download_checked \
@@ -62,15 +69,7 @@ jobs:
             "app/libs/ffmpeg-kit-free71-7.1.5-arm64-v8a.aar" \
             "78b57215ca8790264cf48ea755ca4629ccebe79660d37ab14f41d8077e9dece7"
 
-          download_checked \
-            "https://repo1.maven.org/maven2/com/arthenica/smart-exception-common/0.2.1/smart-exception-common-0.2.1.jar" \
-            "app/libs/smart-exception-common-0.2.1.jar" \
-            "1cad0fb4dfa01755a014331b5ed199281d2c3fab5aca5c9d7abd0b41d0ec3f7b"
-
-          download_checked \
-            "https://repo1.maven.org/maven2/com/arthenica/smart-exception-java/0.2.1/smart-exception-java-0.2.1.jar" \
-            "app/libs/smart-exception-java-0.2.1.jar" \
-            "5b96aaa5f191dedbef72fb0c38f1a2b01807920afc0d92a75a2acd6e0cc7703c"
+          ls -lh app/libs
 
       - name: Validate release signing secrets
         env:
