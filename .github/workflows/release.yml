@@ -80,12 +80,23 @@ jobs:
         run: |
           set -euo pipefail
           missing=0
-          for name in KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
-            if [ -z "${!name}" ]; then
-              echo "::error::Missing required signing secret: $name"
+          check_secret() {
+            variable_name="$1"
+            secret_name="$2"
+            if [ -z "${!variable_name}" ]; then
+              echo "::error::Missing required signing secret: $secret_name"
+              missing=1
+              return
+            fi
+            if [ "${!variable_name}" = "$secret_name" ]; then
+              echo "::error::$secret_name value looks like the secret name, not the secret value"
               missing=1
             fi
-          done
+          }
+          check_secret KEYSTORE_BASE64 ANDROID_RELEASE_KEYSTORE_BASE64
+          check_secret STORE_PASSWORD RELEASE_STORE_PASSWORD
+          check_secret KEY_ALIAS RELEASE_KEY_ALIAS
+          check_secret KEY_PASSWORD RELEASE_KEY_PASSWORD
           exit "$missing"
 
       - name: Restore release signing config
@@ -110,11 +121,27 @@ jobs:
           KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
         run: |
           set -euo pipefail
-          keytool -list \
-            -keystore ci-release.jks \
-            -storepass "$STORE_PASSWORD" \
-            -alias "$KEY_ALIAS" \
-            >/dev/null
+          echo "Decoded keystore size: $(wc -c < ci-release.jks) bytes"
+          echo "Decoded keystore SHA-256: $(sha256sum ci-release.jks | awk '{ print $1 }')"
+
+          if ! keytool -list \
+              -keystore ci-release.jks \
+              -storepass "$STORE_PASSWORD" \
+              >/tmp/keytool-store.txt 2>/tmp/keytool-store.err; then
+            echo "::error::Could not open decoded keystore. Check ANDROID_RELEASE_KEYSTORE_BASE64 and RELEASE_STORE_PASSWORD."
+            sed -n '1,5p' /tmp/keytool-store.err
+            exit 1
+          fi
+
+          if ! keytool -list \
+              -keystore ci-release.jks \
+              -storepass "$STORE_PASSWORD" \
+              -alias "$KEY_ALIAS" \
+              >/tmp/keytool-alias.txt 2>/tmp/keytool-alias.err; then
+            echo "::error::Keystore opens, but RELEASE_KEY_ALIAS was not found."
+            sed -n '1,5p' /tmp/keytool-alias.err
+            exit 1
+          fi
 
       - name: Allow Gradle wrapper execution
         run: chmod +x ./gradlew

@@ -22,6 +22,10 @@ Create these under GitHub repository settings:
 | `RELEASE_KEY_ALIAS` | Signing key alias. |
 | `RELEASE_KEY_PASSWORD` | Signing key password. |
 
+The secret value must be the actual value, not the secret name. For example,
+`RELEASE_STORE_PASSWORD` should contain the password from local
+`local.properties`, not the text `RELEASE_STORE_PASSWORD`.
+
 On Windows PowerShell, generate the base64 secret from the project root:
 
 ```powershell
