@@ -44,6 +44,34 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
+      - name: Restore local FFmpeg fallback dependencies
+        run: |
+          set -euo pipefail
+          mkdir -p app/libs
+
+          download_checked() {
+            url="$1"
+            output="$2"
+            sha256="$3"
+            curl -fsSL --retry 3 --retry-delay 5 "$url" -o "$output"
+            echo "$sha256  $output" | sha256sum --check --strict
+          }
+
+          download_checked \
+            "https://github.com/ffmpegkit-maintained/ffmpeg/releases/download/v7.1.5-lts-android/ffmpeg-kit-free71-7.1.5-arm64-v8a.aar" \
+            "app/libs/ffmpeg-kit-free71-7.1.5-arm64-v8a.aar" \
+            "78b57215ca8790264cf48ea755ca4629ccebe79660d37ab14f41d8077e9dece7"
+
+          download_checked \
+            "https://repo1.maven.org/maven2/com/arthenica/smart-exception-common/0.2.1/smart-exception-common-0.2.1.jar" \
+            "app/libs/smart-exception-common-0.2.1.jar" \
+            "1cad0fb4dfa01755a014331b5ed199281d2c3fab5aca5c9d7abd0b41d0ec3f7b"
+
+          download_checked \
+            "https://repo1.maven.org/maven2/com/arthenica/smart-exception-java/0.2.1/smart-exception-java-0.2.1.jar" \
+            "app/libs/smart-exception-java-0.2.1.jar" \
+            "5b96aaa5f191dedbef72fb0c38f1a2b01807920afc0d92a75a2acd6e0cc7703c"
+
       - name: Validate release signing secrets
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
@@ -76,6 +104,18 @@ jobs:
             echo "RELEASE_KEY_ALIAS=$KEY_ALIAS"
             echo "RELEASE_KEY_PASSWORD=$KEY_PASSWORD"
           } > local.properties
+
+      - name: Verify release keystore
+        env:
+          STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          keytool -list \
+            -keystore ci-release.jks \
+            -storepass "$STORE_PASSWORD" \
+            -alias "$KEY_ALIAS" \
+            >/dev/null
 
       - name: Allow Gradle wrapper execution
         run: chmod +x ./gradlew

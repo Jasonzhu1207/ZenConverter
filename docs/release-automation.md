@@ -41,3 +41,7 @@ ZenConverter-vX.Y.Z-universal.apk
 
 ABI-specific APKs can be added later if FFmpeg/native libraries make the
 universal APK too large.
+
+The CI job downloads the documented FFmpegKit local fallback AAR/JAR files into
+`app/libs` and verifies their SHA-256 checksums before running Gradle. These
+binary files stay ignored by git.
