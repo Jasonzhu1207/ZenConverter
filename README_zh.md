@@ -1,4 +1,4 @@
-# ZenConverter 中文说明
+# ZenConverter 
 
 <p align="center">
   <a href="README.md">English</a> |
