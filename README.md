@@ -25,25 +25,31 @@
   <img src="docs/assets/zenconverter-cover.png" alt="ZenConverter app icon" width="240">
 </p>
 
-ZenConverter is an open-source Android file converter built around a simple
-rule: private files should not have to leave your phone.
+ZenConverter is a local file converter for Android. Pick a file on your phone,
+convert it on your phone, and keep it off someone else's server.
 
-It is native Kotlin plus Jetpack Compose, uses Android's Storage Access
-Framework for file access, and runs long conversions through a foreground
-service. It is also intentionally honest. ZenConverter is not a universal
-converter yet. Each format is added one path at a time, with limits documented
-before it is advertised as ready.
+The app is built with native Kotlin and Jetpack Compose. File access goes
+through Android's Storage Access Framework, and longer jobs run in a foreground
+service. This is still early, so the app stays deliberately narrow: formats are
+added one by one, with the rough edges written down instead of hidden.
 
-## Why It Exists
+**Note:** older phones with limited RAM may crash on large files. Even on newer
+devices, very large files are still something to test carefully.
 
-Most online converters are convenient until the file is private, huge, or both.
-ZenConverter takes the slower, sturdier route:
+## Why Build It
 
-- files stay on device by default,
-- no ads, forced accounts, or remote-upload fallback,
-- no `INTERNET` permission in the current app manifest,
-- large videos are treated as normal inputs, not edge cases,
-- format support is tracked in the public [support matrix](formats/support-matrix.md).
+Desktop users already have plenty of good open-source converters. Android feels
+rougher. Many converter apps are cluttered, ad-heavy, oddly priced, or built
+around uploading your file somewhere first.
+
+ZenConverter is the local-first Android converter I wanted to use:
+
+- no network transfer for conversion work,
+- no ads, accounts, paywalls, or remote uploads,
+- no `INTERNET` permission in the current Android manifest,
+- no extra permissions unless the app actually needs them,
+- large videos are treated as real use cases, even if that path is still rough,
+- the support list lives in the public [support matrix](formats/support-matrix.md).
 
 ## Current Status
 
@@ -51,15 +57,13 @@ ZenConverter takes the slower, sturdier route:
 | --- | --- | --- |
 | Native Android shell | Done | Kotlin, Compose, Material 3, foreground service pipeline. |
 | No-op conversion jobs | Done | File selection, task state, progress, cancel, and failure states. |
-| MP4 to MP4 | Experimental | Media3 Transformer path; still needs wider physical-device verification. |
-| MKV / WEBM / AVI / 3GP / TS / MTS to MP4 | Experimental | FFmpeg-compatible stream-copy remux. It only works when the streams already fit MP4. |
+| MP4 to MP4 | Experimental | Media3 Transformer path. Needs more physical-device samples, and large files can still hit memory limits. |
+| MP4 to MP3 | Planned | A near-term media target, but not connected in current app builds yet. |
+| MKV / WEBM / AVI and similar containers to MP4 | Experimental | FFmpeg-compatible stream-copy remux. It only works when the streams already fit MP4. |
 | Audio / video audio to M4A | Experimental | Media3 for supported native inputs; FFmpeg copy path for compatible non-MP4 audio tracks. |
-| JPG / PNG / WEBP conversion | Experimental | Native Android bitmap path. Static images only; metadata is not copied. |
-| MP4 to MP3, PDF, ZIP | Planned | Tracked in the roadmap and support matrix. |
-
-The short version: the app is ready for testing, but every experimental format
-still needs real sample files and physical-device smoke tests before it should
-be treated as stable.
+| JPG / PNG / WEBP image conversion | Implemented | Native Android bitmap path. Static images only; metadata is not copied. |
+| More audio/video formats | Planned | Added only after the current paths are easier to trust. |
+| Documents and archives | Planned | PDF and archive work comes later. |
 
 ## Architecture
 
@@ -75,8 +79,8 @@ flowchart LR
     Pick --> Preset --> Queue --> Service --> Engine --> Output
 ```
 
-The conversion engine is deliberately split from the UI. The app chooses a mode
-per task:
+The UI does not do conversion work. Each task is routed to an engine based on
+the input, output, and device capability:
 
 - `FastCopy`: remux or extract without re-encoding where possible.
 - `Hardware`: AndroidX Media3 / MediaCodec for common Android-supported video work.
@@ -86,49 +90,7 @@ per task:
 More detail lives in [docs/architecture.md](docs/architecture.md) and
 [docs/technical-route.md](docs/technical-route.md).
 
-## Roadmap
-
-1. Keep hardening the first real Media3 video path.
-2. Verify the first FFmpeg compatibility remux/extract path on physical devices.
-3. Stabilize static image conversion.
-4. Add MP4 to MP3, then PDF/image and ZIP workflows.
-5. Publish signed APKs through GitHub Releases.
-
-See [docs/roadmap.md](docs/roadmap.md) for the working plan.
-
-## Development
-
-The preferred workflow right now is VS Code for editing plus Android Studio
-Run/Debug on a physical Android device for verification. This local setup keeps
-the shared Android toolchain under `E:\AndroidDev` to avoid duplicate SDK and
-Gradle caches.
-
-Command-line smoke scripts are available when needed:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\build-debug.ps1
-powershell -ExecutionPolicy Bypass -File .\scripts\install-debug.ps1
-powershell -ExecutionPolicy Bypass -File .\scripts\launch-debug.ps1
-```
-
-Setup notes are in [docs/development-setup.md](docs/development-setup.md).
-
-## Releases
-
-Signed APK publishing is wired through GitHub Actions. Release setup and secrets
-are documented in [docs/release-automation.md](docs/release-automation.md).
-
-Download links will point to
-[GitHub Releases](https://github.com/Jasonzhu1207/ZenConverter/releases) once a
-public alpha is ready.
-
-## Support
-
-If ZenConverter saves you time, the best support today is a star, a useful bug
-report with a sample-file description, or testing on a real Android device.
-
-Paid support and donation links are not connected yet. They will be added here
-before the public alpha so the README does not send people to a dead checkout.
+Development setup notes are in [docs/development-setup.md](docs/development-setup.md).
 
 ## Star History
 
