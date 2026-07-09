@@ -1,0 +1,219 @@
+package org.zenconverter.app.conversion
+
+import android.net.Uri
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+
+data class ConversionTaskInput(
+    val fileId: String,
+    val inputUri: Uri,
+    val displayName: String,
+    val mimeType: String?,
+    val category: ConversionMediaCategory,
+    val targetFormat: String,
+    val outputDestination: OutputDestination,
+    val videoOptions: VideoExportOptions,
+    val audioOptions: AudioExportOptions,
+    val imageOptions: ImageExportOptions
+)
+
+sealed interface OutputDestination {
+    object DefaultPublicDirectory : OutputDestination
+    data class CustomDirectory(val uri: Uri) : OutputDestination
+}
+
+enum class ConversionMediaCategory {
+    Video,
+    Audio,
+    Image
+}
+
+data class VideoExportOptions(
+    val maxShortSidePixels: Int? = null,
+    val videoBitrate: Int? = null,
+    val videoMimeType: String = VIDEO_MIME_TYPE_H264,
+    val maxFrameRate: Int? = null
+) {
+    companion object {
+        const val VIDEO_MIME_TYPE_H264 = "video/avc"
+        const val VIDEO_MIME_TYPE_H265 = "video/hevc"
+    }
+}
+
+data class AudioExportOptions(
+    val audioBitrate: Int? = null,
+    val sampleRateHz: Int? = null,
+    val channelCount: Int? = null
+)
+
+data class ImageExportOptions(
+    val quality: Int = 90
+)
+
+data class ConversionTaskState(
+    val fileId: String,
+    val displayName: String,
+    val targetFormat: String,
+    val status: ConversionTaskStatus,
+    val progress: Float,
+    val message: String,
+    val outputUri: Uri? = null
+)
+
+enum class ConversionTaskStatus {
+    Queued,
+    Running,
+    Completed,
+    Cancelled,
+    Failed
+}
+
+object ConversionTaskStore {
+    val tasks = mutableStateListOf<ConversionTaskState>()
+    val summaryMessage = mutableStateOf<String?>(null)
+    val isRunning = mutableStateOf(false)
+
+    private val inputs = mutableListOf<ConversionTaskInput>()
+    private var cancelled = false
+
+    fun prepareRun(nextInputs: List<ConversionTaskInput>) {
+        cancelled = false
+        inputs.clear()
+        inputs.addAll(nextInputs)
+        isRunning.value = nextInputs.isNotEmpty()
+        summaryMessage.value = if (nextInputs.isEmpty()) null else "Processing"
+        tasks.clear()
+        tasks.addAll(
+            nextInputs.map { input ->
+                ConversionTaskState(
+                    fileId = input.fileId,
+                    displayName = input.displayName,
+                    targetFormat = input.targetFormat,
+                    status = ConversionTaskStatus.Queued,
+                    progress = 0f,
+                    message = "Queued"
+                )
+            }
+        )
+    }
+
+    fun showMessage(message: String) {
+        summaryMessage.value = message
+    }
+
+    fun taskCount(): Int = tasks.size
+
+    fun inputAt(index: Int): ConversionTaskInput? = inputs.getOrNull(index)
+
+    fun isCancelled(): Boolean = cancelled
+
+    fun markRunning(index: Int) {
+        updateTask(index) { task ->
+            task.copy(
+                status = ConversionTaskStatus.Running,
+                progress = 0f,
+                message = "Processing"
+            )
+        }
+        summaryMessage.value = "Processing"
+        isRunning.value = true
+    }
+
+    fun markSaving(index: Int) {
+        updateTask(index) { task ->
+            task.copy(
+                status = ConversionTaskStatus.Running,
+                progress = task.progress.coerceAtLeast(0.98f),
+                message = "Saving"
+            )
+        }
+        summaryMessage.value = "Saving"
+        isRunning.value = true
+    }
+
+    fun updateProgress(index: Int, progress: Float) {
+        updateTask(index) { task ->
+            task.copy(
+                status = ConversionTaskStatus.Running,
+                progress = progress.coerceIn(0f, 1f),
+                message = "Processing"
+            )
+        }
+    }
+
+    fun markCompleted(index: Int, outputUri: Uri? = null) {
+        updateTask(index) { task ->
+            task.copy(
+                status = ConversionTaskStatus.Completed,
+                progress = 1f,
+                message = "Conversion complete",
+                outputUri = outputUri
+            )
+        }
+    }
+
+    fun markFailed(index: Int, message: String) {
+        updateTask(index) { task ->
+            task.copy(
+                status = ConversionTaskStatus.Failed,
+                message = message
+            )
+        }
+        summaryMessage.value = message
+    }
+
+    fun markRunFinished() {
+        isRunning.value = false
+        summaryMessage.value = tasks.lastOrNull { it.status == ConversionTaskStatus.Failed }
+            ?.message
+            ?: "Conversion complete"
+    }
+
+    fun cancelAll() {
+        cancelled = true
+        isRunning.value = false
+        summaryMessage.value = "Cancelled"
+        for (index in tasks.indices) {
+            val task = tasks[index]
+            if (task.status == ConversionTaskStatus.Queued || task.status == ConversionTaskStatus.Running) {
+                tasks[index] = task.copy(
+                    status = ConversionTaskStatus.Cancelled,
+                    message = "Cancelled"
+                )
+            }
+        }
+    }
+
+    fun failRunning(message: String) {
+        isRunning.value = false
+        summaryMessage.value = message
+        val index = tasks.indexOfFirst { it.status == ConversionTaskStatus.Running }
+        if (index >= 0) {
+            tasks[index] = tasks[index].copy(
+                status = ConversionTaskStatus.Failed,
+                message = message
+            )
+        }
+    }
+
+    fun clear() {
+        cancelled = false
+        isRunning.value = false
+        summaryMessage.value = null
+        inputs.clear()
+        tasks.clear()
+    }
+
+    fun aggregateProgress(): Float {
+        if (tasks.isEmpty()) return 0f
+        return tasks.sumOf { it.progress.toDouble() }.toFloat() / tasks.size
+    }
+
+    private fun updateTask(
+        index: Int,
+        transform: (ConversionTaskState) -> ConversionTaskState
+    ) {
+        if (index !in tasks.indices) return
+        tasks[index] = transform(tasks[index])
+    }
+}

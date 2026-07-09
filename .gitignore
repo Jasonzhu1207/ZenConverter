@@ -1,0 +1,58 @@
+# Gradle / Android build output
+/.gradle/
+/.kotlin/
+/build/
+**/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+
+# Android Studio / IntelliJ local state
+/.idea/
+*.iml
+
+# Local Android/Gradle machine config
+local.properties
+gradle.properties
+/.android/
+/.android-sdk/
+/.gradle-user-home/
+
+# Local binary dependency fallbacks
+app/libs/*.aar
+app/libs/*.jar
+
+# Signing and release secrets
+*.jks
+ZenConverter.jks
+*.keystore
+*.p12
+*.pem
+keystore.properties
+signing.properties
+
+# Generated packages and reports
+*.apk
+*.apks
+*.aab
+*.idsig
+/outputs/
+/reports/
+/app/release/
+
+# Local workspaces, samples, and agent runtime state
+/work/
+/samples/
+/sample-files/
+/.tooling/
+/.agents/
+/.codex/
+/agent.md
+/AGENT.md
+/AGENTS.md
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

@@ -1,0 +1,139 @@
+version: 0
+policy:
+  unsupported_behavior: "Show explicitly. Do not imply full support."
+  local_processing: "Required unless a future feature is clearly marked online."
+
+groups:
+  media:
+    planned:
+      - from: mp4
+        to: mp3
+        engine: ffmpeg-compatible
+        status: planned
+      - from: mp4
+        to: mp4
+        engine: media3-transformer
+        status: experimental
+        note: "Native MP4 output path. Default settings preserve where possible; explicit options may transcode."
+      - from: mkv
+        to: mp4
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "FFmpeg Free tier remux path. Copies one video track and optional first audio track; codecs must already be MP4-compatible."
+      - from: webm
+        to: mp4
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "FFmpeg Free tier remux path. Fails clearly when streams cannot be copied into MP4."
+      - from: avi
+        to: mp4
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "FFmpeg Free tier remux path. Copies compatible streams without video re-encoding."
+      - from: 3gp
+        to: mp4
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "FFmpeg Free tier remux path. Copies compatible streams without video re-encoding."
+      - from: 3gpp
+        to: mp4
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Alias of 3GP for routing. Copies compatible streams without video re-encoding."
+      - from: ts
+        to: mp4
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "FFmpeg Free tier remux path. Copies compatible streams without video re-encoding."
+      - from: mts
+        to: mp4
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "TS-family alias for routing. Copies compatible streams without video re-encoding."
+      - from: mp3
+        to: m4a
+        engine: media3-transformer
+        status: experimental
+        note: "AAC in M4A. Bitrate, sample rate, and channel controls are best-effort native settings."
+      - from: m4a
+        to: m4a
+        engine: media3-transformer
+        status: experimental
+        note: "Can preserve compatible AAC where possible; explicit audio options may transcode."
+      - from: flac
+        to: m4a
+        engine: media3-transformer
+        status: experimental
+        note: "AAC in M4A. Depends on device decode support."
+      - from: wav
+        to: m4a
+        engine: media3-transformer
+        status: experimental
+        note: "AAC in M4A. Depends on device decode support."
+      - from: ogg
+        to: m4a
+        engine: media3-transformer
+        status: experimental
+        note: "AAC in M4A. Depends on device decode support."
+      - from: video
+        to: m4a
+        engine: media3-transformer-or-ffmpeg-compatible
+        status: experimental
+        note: "MP4 video sources use Media3 AAC output. Non-MP4 video sources use FFmpeg audio-track copy and currently require an M4A-compatible AAC stream."
+  image:
+    planned:
+      - from: jpg
+        to: jpg
+        engine: native-bitmap
+        status: experimental
+        note: "Static image decode/encode through Android Bitmap APIs. Original quality is value 100 re-encode, not same-file FastCopy yet."
+      - from: jpg
+        to: png
+        engine: native-bitmap
+        status: experimental
+        note: "Static image decode/encode through Android Bitmap APIs. Metadata is not copied; JPEG EXIF orientation is applied best-effort."
+      - from: jpg
+        to: webp
+        engine: native-bitmap
+        status: experimental
+        note: "Static image decode/encode through Android Bitmap APIs. WEBP output is lossy in this milestone."
+      - from: png
+        to: jpg
+        engine: native-bitmap
+        status: experimental
+        note: "Transparency is flattened to white for JPG output."
+      - from: png
+        to: png
+        engine: native-bitmap
+        status: experimental
+        note: "PNG output is written losslessly through the platform encoder."
+      - from: png
+        to: webp
+        engine: native-bitmap
+        status: experimental
+        note: "Static image decode/encode through Android Bitmap APIs. WEBP output is lossy in this milestone."
+      - from: webp
+        to: jpg
+        engine: native-bitmap
+        status: experimental
+        note: "Static WEBP only; animated WEBP is not preserved as animation."
+      - from: webp
+        to: png
+        engine: native-bitmap
+        status: experimental
+        note: "Static WEBP only; animated WEBP is not preserved as animation."
+      - from: webp
+        to: webp
+        engine: native-bitmap
+        status: experimental
+        note: "Static WEBP only; Original quality is value 100 re-encode, not same-file FastCopy yet."
+  pdf:
+    planned:
+      - from: image
+        to: pdf
+        engine: pdf-library
+        status: planned
+      - from: pdf
+        to: image
+        engine: pdf-renderer
+        status: planned

@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.ZenConverter" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:fontFamily">sans</item>
+    </style>
+</resources>
