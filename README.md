@@ -29,3 +29,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-debug.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\install-debug.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\launch-debug.ps1
 ```
+
+## Releases
+
+Signed APK publishing is handled by GitHub Actions. See
+[docs/release-automation.md](docs/release-automation.md) for required secrets
+and release triggers.

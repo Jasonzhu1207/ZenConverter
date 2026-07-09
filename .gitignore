@@ -13,7 +13,6 @@
 
 # Local Android/Gradle machine config
 local.properties
-gradle.properties
 /.android/
 /.android-sdk/
 /.gradle-user-home/

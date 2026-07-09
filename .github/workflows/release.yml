@@ -1,0 +1,163 @@
+name: Android Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  signed-apk:
+    name: Build and publish signed APK
+    runs-on: ubuntu-latest
+
+    env:
+      APP_NAME: ZenConverter
+      PRE_RELEASE_TAG: pre-release
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools platforms;android-36 build-tools;36.0.0
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Validate release signing secrets
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing required signing secret: $name"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Restore release signing config
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > ci-release.jks
+          {
+            echo "RELEASE_STORE_FILE=ci-release.jks"
+            echo "RELEASE_STORE_PASSWORD=$STORE_PASSWORD"
+            echo "RELEASE_KEY_ALIAS=$KEY_ALIAS"
+            echo "RELEASE_KEY_PASSWORD=$KEY_PASSWORD"
+          } > local.properties
+
+      - name: Allow Gradle wrapper execution
+        run: chmod +x ./gradlew
+
+      - name: Build signed release APK
+        run: ./gradlew --no-daemon clean assembleRelease
+
+      - name: Prepare release asset
+        id: package
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            release_tag="${GITHUB_REF_NAME}"
+          else
+            release_tag="${PRE_RELEASE_TAG}"
+          fi
+          apk_source="$(find app/build/outputs/apk/release -type f -name '*.apk' | head -n 1)"
+          if [ -z "$apk_source" ]; then
+            echo "::error::No release APK found under app/build/outputs/apk/release"
+            exit 1
+          fi
+          asset_name="${APP_NAME}-${release_tag}-universal.apk"
+          cp "$apk_source" "dist/$asset_name"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+          echo "asset_name=$asset_name" >> "$GITHUB_OUTPUT"
+          echo "asset_path=dist/$asset_name" >> "$GITHUB_OUTPUT"
+
+      - name: Publish continuous pre-release
+        if: github.ref_type != 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ASSET_PATH: ${{ steps.package.outputs.asset_path }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -f "$PRE_RELEASE_TAG" "$GITHUB_SHA"
+          git push --force origin "refs/tags/$PRE_RELEASE_TAG"
+
+          cat > release-notes.md <<EOF
+          Continuous pre-release build from main.
+
+          Commit: ${GITHUB_SHA}
+          EOF
+
+          if gh release view "$PRE_RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$PRE_RELEASE_TAG" \
+              --title "Continuous pre-release" \
+              --notes-file release-notes.md \
+              --prerelease
+          else
+            gh release create "$PRE_RELEASE_TAG" \
+              --title "Continuous pre-release" \
+              --notes-file release-notes.md \
+              --prerelease \
+              --target "$GITHUB_SHA"
+          fi
+          gh release upload "$PRE_RELEASE_TAG" "$ASSET_PATH" --clobber
+
+      - name: Publish tagged release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.package.outputs.release_tag }}
+          ASSET_PATH: ${{ steps.package.outputs.asset_path }}
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<EOF
+          Signed APK for ${RELEASE_TAG}.
+
+          Commit: ${GITHUB_SHA}
+          EOF
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" \
+              --title "$RELEASE_TAG" \
+              --notes-file release-notes.md
+          else
+            gh release create "$RELEASE_TAG" \
+              --title "$RELEASE_TAG" \
+              --notes-file release-notes.md \
+              --verify-tag
+          fi
+          gh release upload "$RELEASE_TAG" "$ASSET_PATH" --clobber
