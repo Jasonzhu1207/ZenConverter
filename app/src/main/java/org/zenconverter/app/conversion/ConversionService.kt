@@ -83,10 +83,11 @@ class ConversionService : Service() {
     private var activeTempFile: File? = null
     private var progressRunnable: Runnable? = null
     private var copyThread: Thread? = null
+    private var ffmpegKitReady = false
+    private var ffmpegKitLoadFailure: Throwable? = null
 
     override fun onCreate() {
         super.onCreate()
-        FFmpegKitConfig.enableRedirection()
         ensureNotificationChannel()
     }
 
@@ -703,7 +704,7 @@ class ConversionService : Service() {
                     return@onFailure
                 }
                 Log.e(TAG, "Could not run FFmpeg compatibility export", exception)
-                failCurrentTask("Compatibility engine failed before export")
+                failCurrentTask(compatibilityStartupFailureMessageFor(exception))
             }
         }
     }
@@ -712,6 +713,15 @@ class ConversionService : Service() {
         input: ConversionTaskInput,
         tempFile: File
     ): FfmpegRunResult = withContext(Dispatchers.IO) {
+        val ffmpegLoadFailure = ensureFfmpegKitReady()
+        if (ffmpegLoadFailure != null) {
+            return@withContext FfmpegRunResult(
+                success = false,
+                cancelled = false,
+                message = compatibilityStartupFailureMessageFor(ffmpegLoadFailure)
+            )
+        }
+
         val durationMs = readDurationMs(input.inputUri)
         val logTail = mutableListOf<String>()
 
@@ -891,7 +901,11 @@ class ConversionService : Service() {
         )
         activeFfmpegSession = session
         continuation.invokeOnCancellation {
-            FFmpegKit.cancel(session.sessionId)
+            runCatching {
+                FFmpegKit.cancel(session.sessionId)
+            }.onFailure { exception ->
+                Log.w(TAG, "Could not cancel FFmpeg session", exception)
+            }
         }
     }
 
@@ -1006,6 +1020,49 @@ class ConversionService : Service() {
         }
     }
 
+    private fun ensureFfmpegKitReady(): Throwable? {
+        if (ffmpegKitReady) return null
+        ffmpegKitLoadFailure?.let { return it }
+
+        return runCatching {
+            FFmpegKitConfig.enableRedirection()
+        }.fold(
+            onSuccess = {
+                ffmpegKitReady = true
+                null
+            },
+            onFailure = { exception ->
+                ffmpegKitLoadFailure = exception
+                Log.e(TAG, "FFmpegKit could not start", exception)
+                exception
+            }
+        )
+    }
+
+    private fun compatibilityStartupFailureMessageFor(exception: Throwable): String {
+        return if (isFfmpegKitStartupFailure(exception)) {
+            "Compatibility engine could not start on this device"
+        } else {
+            "Compatibility engine failed before export"
+        }
+    }
+
+    private fun isFfmpegKitStartupFailure(exception: Throwable): Boolean {
+        var current: Throwable? = exception
+        while (current != null) {
+            if (
+                current is UnsatisfiedLinkError ||
+                current is ExceptionInInitializerError ||
+                current is NoClassDefFoundError ||
+                current.message?.contains("FFmpegKit failed to start", ignoreCase = true) == true
+            ) {
+                return true
+            }
+            current = current.cause
+        }
+        return false
+    }
+
     private fun readDurationMs(uri: Uri): Long? {
         val retriever = MediaMetadataRetriever()
         return runCatching {
@@ -1044,10 +1101,15 @@ class ConversionService : Service() {
         get() = displayName.substringAfterLast('.', missingDelimiterValue = "")
 
     private fun cancelActiveFfmpegSession() {
-        activeFfmpegSession?.sessionId?.let { sessionId ->
-            FFmpegKit.cancel(sessionId)
-        }
+        val sessionId = activeFfmpegSession?.sessionId
         activeFfmpegSession = null
+        if (sessionId != null) {
+            runCatching {
+                FFmpegKit.cancel(sessionId)
+            }.onFailure { exception ->
+                Log.w(TAG, "Could not cancel active FFmpeg session", exception)
+            }
+        }
     }
 
     private fun formatFfmpegArguments(arguments: List<String>): String {

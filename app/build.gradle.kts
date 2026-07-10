@@ -76,6 +76,14 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    packaging {
+        jniLibs {
+            // Some vendor linkers fail RELRO setup when FFmpegKit libs are mmap'ed
+            // directly from base.apk. Extracting them avoids that device-specific path.
+            useLegacyPackaging = true
+        }
+    }
 }
 
 kotlin {

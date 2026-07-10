@@ -55,6 +55,10 @@ Wire the first compatibility operations:
   updated through FFmpegKit statistics plus log time parsing.
 - Cancellation calls `FFmpegKit.cancel(sessionId)` and still updates the
   existing foreground-service task state.
+- FFmpegKit initializes lazily when a compatibility job actually starts, not
+  when the foreground service is created.
+- FFmpeg native libraries use Gradle `jniLibs.useLegacyPackaging = true`, so
+  they are extracted on install instead of loaded directly from `base.apk`.
 
 ## Consequences
 
@@ -74,3 +78,8 @@ Wire the first compatibility operations:
 - The local AAR/JAR files are ignored by git; they are development build inputs,
   not source files. A clean environment should either resolve Maven Central or
   place the recorded release files under `app/libs`.
+- Extracted native libraries use more installed storage, but avoid device
+  linker failures seen as RELRO `Out of memory` while loading FFmpegKit from
+  `base.apk!/lib/...`.
+- If FFmpegKit still cannot start on a device, the active task should fail with
+  a compatibility-engine message instead of crashing the process.
