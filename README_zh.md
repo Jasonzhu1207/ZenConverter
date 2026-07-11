@@ -45,11 +45,12 @@ ZenConverter 选择本地优先：
 | --- | --- | --- |
 | 原生 Android 外壳 | 已完成 | Kotlin、Compose、Material 3、前台服务管线。 |
 | 空转换任务流 | 已完成 | 文件选择、任务状态、进度、取消、失败状态。 |
-| MP4 转 MP4/MP3 | 实验性 | Media3 Transformer 路径，还需要更多真机样本验证，可能存在爆内存问题。 |
+| MP4 转 MP4 | 实验性 | Media3 Transformer 路径，还需要更多真机样本验证，可能存在爆内存问题。 |
+| MP4 转 MP3 | 实验性 | FFmpeg 兼容路径，提取第一条音轨并编码 MP3，还需要真机样本验证。 |
 | MKV / WEBM / AVI等 转 MP4 | 实验性 | FFmpeg 兼容路径，当前是 stream-copy remux，只适合已经兼容 MP4 的音视频流。 |
-| 音频 / 视频提取音频到 M4A | 实验性 | 支持范围受 Media3、设备编解码器和当前 FFmpeg free tier 限制。 |
+| 音频格式互转 | 实验性 | 已接入 MP3 / M4A / WAV / FLAC / WMA 目标；支持范围受 Media3、FFmpeg 编码器和设备样本限制。 |
 | JPG / PNG / WEBP 图片互转 | 已完成 | 使用 Android 原生 bitmap 路径。只处理静态图，不复制元数据。 |
-| 更多音视频格式支持 | 计划中 | -
+| 更多视频格式支持 | 计划中 | -
 | 文档、压缩包相关功能 | 计划中 | -
 
 ## 架构

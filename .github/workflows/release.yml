@@ -164,7 +164,7 @@ jobs:
             echo "::error::No release APK found under app/build/outputs/apk/release"
             exit 1
           fi
-          asset_name="${APP_NAME}-${release_tag}-universal.apk"
+          asset_name="${APP_NAME}-${release_tag}-arm64-v8a.apk"
           cp "$apk_source" "dist/$asset_name"
           echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
           echo "asset_name=$asset_name" >> "$GITHUB_OUTPUT"
@@ -200,6 +200,7 @@ jobs:
               --prerelease \
               --target "$GITHUB_SHA"
           fi
+          gh release delete-asset "$PRE_RELEASE_TAG" "${APP_NAME}-${PRE_RELEASE_TAG}-universal.apk" --yes >/dev/null 2>&1 || true
           gh release upload "$PRE_RELEASE_TAG" "$ASSET_PATH" --clobber
 
       - name: Publish tagged release
@@ -226,4 +227,5 @@ jobs:
               --notes-file release-notes.md \
               --verify-tag
           fi
+          gh release delete-asset "$RELEASE_TAG" "${APP_NAME}-${RELEASE_TAG}-universal.apk" --yes >/dev/null 2>&1 || true
           gh release upload "$RELEASE_TAG" "$ASSET_PATH" --clobber

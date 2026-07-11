@@ -31,6 +31,7 @@ import org.zenconverter.app.ui.QueuedFile
 import org.zenconverter.app.ui.TaskProgress
 import org.zenconverter.app.ui.TaskProgressStatus
 import org.zenconverter.app.ui.TargetFormat
+import java.util.Locale
 import java.util.UUID
 
 class MainActivity : ComponentActivity() {
@@ -180,7 +181,7 @@ class MainActivity : ComponentActivity() {
         }
 
         if (queuedFiles.any { !it.hasConnectedNativeTarget() }) {
-            ConversionTaskStore.showMessage("Only video MP4, audio M4A, and JPG/PNG/WEBP images are connected")
+            ConversionTaskStore.showMessage("Only video MP4, audio MP3/M4A/WAV/FLAC/WMA, and JPG/PNG/WEBP images are connected")
             return
         }
 
@@ -285,11 +286,22 @@ private data class OpenableMetadata(
 private fun QueuedFile.hasConnectedNativeTarget(): Boolean {
     return when (category) {
         FileCategory.Video -> targetFormat.equals("MP4", ignoreCase = true)
-        FileCategory.Audio -> targetFormat.contains("M4A", ignoreCase = true) ||
-            targetFormat.contains("AAC", ignoreCase = true)
+        FileCategory.Audio -> audioTargetExtensionFor(targetFormat) in CONNECTED_AUDIO_TARGETS
         FileCategory.Image -> targetFormat.equals("JPG", ignoreCase = true) ||
             targetFormat.equals("PNG", ignoreCase = true) ||
             targetFormat.equals("WEBP", ignoreCase = true)
+    }
+}
+
+private fun audioTargetExtensionFor(targetFormat: String): String? {
+    val normalized = targetFormat.lowercase(Locale.US)
+    return when {
+        normalized.contains("mp3") -> "mp3"
+        normalized.contains("m4a") || normalized.contains("aac") -> "m4a"
+        normalized.contains("wav") -> "wav"
+        normalized.contains("flac") -> "flac"
+        normalized.contains("wma") -> "wma"
+        else -> null
     }
 }
 
@@ -315,3 +327,5 @@ private fun ConversionTaskState.toUiProgress(): TaskProgress {
         message = message
     )
 }
+
+private val CONNECTED_AUDIO_TARGETS = setOf("mp3", "m4a", "wav", "flac", "wma")

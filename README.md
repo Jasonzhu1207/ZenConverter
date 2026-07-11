@@ -58,11 +58,11 @@ ZenConverter is the local-first Android converter I wanted to use:
 | Native Android shell | Done | Kotlin, Compose, Material 3, foreground service pipeline. |
 | No-op conversion jobs | Done | File selection, task state, progress, cancel, and failure states. |
 | MP4 to MP4 | Experimental | Media3 Transformer path. Needs more physical-device samples, and large files can still hit memory limits. |
-| MP4 to MP3 | Planned | A near-term media target, but not connected in current app builds yet. |
+| MP4 to MP3 | Experimental | FFmpeg-compatible audio extraction and MP3 encode; needs physical-device sample testing. |
 | MKV / WEBM / AVI and similar containers to MP4 | Experimental | FFmpeg-compatible stream-copy remux. It only works when the streams already fit MP4. |
-| Audio / video audio to M4A | Experimental | Media3 for supported native inputs; FFmpeg copy path for compatible non-MP4 audio tracks. |
+| Audio format conversion | Experimental | MP3 / M4A / WAV / FLAC / WMA targets are wired; support depends on Media3, FFmpeg codecs, and device samples. |
 | JPG / PNG / WEBP image conversion | Implemented | Native Android bitmap path. Static images only; metadata is not copied. |
-| More audio/video formats | Planned | Added only after the current paths are easier to trust. |
+| More video formats | Planned | Added only after the current paths are easier to trust. |
 | Documents and archives | Planned | PDF and archive work comes later. |
 
 ## Architecture

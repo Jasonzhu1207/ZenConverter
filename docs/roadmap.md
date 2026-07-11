@@ -33,7 +33,11 @@
   physical-device smoke testing across samples.
 - Non-MP4 video-file audio extraction to M4A. Implemented as FFmpeg audio-track
   copy only; non-AAC tracks need a later AAC-capable compatibility build.
-- MP4 to MP3.
+- MP4 to MP3. Routing and argument generation are connected, but the default
+  Free FFmpegKit AAR lacks `libmp3lame`; a recorded MP3-capable package is
+  needed before this can be treated as working.
+- MP3/M4A/WAV/FLAC/WMA audio target conversion. Implemented as experimental
+  routing and argument generation; needs physical-device sample coverage.
 - ffprobe metadata read.
 
 ## Milestone 4: Non-media Formats

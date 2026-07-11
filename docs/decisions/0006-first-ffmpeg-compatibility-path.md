@@ -69,6 +69,10 @@ Wire the first compatibility operations:
   depends on Media3 reading the container, but the first Free-tier path can only
   copy a compatible source audio stream into M4A. WebM Vorbis/Opus and AVI
   MP3/PCM need a later AAC-capable compatibility build.
+- MP3 output is not available with the default Free-tier AAR. Physical-device
+  logs on July 11, 2026 showed `Unknown encoder 'libmp3lame'`; MP3 export now
+  probes for that encoder and requires an MP3-capable FFmpegKit tier or a later
+  self-built LGPL FFmpeg package.
 - The Free tier does not include Android `MediaCodec` hardware acceleration and
   does not add H.264/H.265/AAC encoders. If future work needs broad H.264/AAC
   transcoding, choose an LGPL Basic/Full tier or a self-built LGPL FFmpeg AAR

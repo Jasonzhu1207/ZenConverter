@@ -9,7 +9,8 @@ groups:
       - from: mp4
         to: mp3
         engine: ffmpeg-compatible
-        status: planned
+        status: experimental
+        note: "Extracts the first audio track and encodes MP3 only when the bundled FFmpeg package includes libmp3lame. The default Free AAR does not."
       - from: mp4
         to: mp4
         engine: media3-transformer
@@ -51,6 +52,31 @@ groups:
         status: experimental
         note: "TS-family alias for routing. Copies compatible streams without video re-encoding."
       - from: mp3
+        to: mp3
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Re-encodes MP3 only when the bundled FFmpeg package includes libmp3lame. Bitrate, sample rate, and channel controls are passed when selected."
+      - from: m4a
+        to: mp3
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Encodes MP3 only when the bundled FFmpeg package includes libmp3lame. The default Free AAR does not."
+      - from: flac
+        to: mp3
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Encodes MP3 only when the bundled FFmpeg package includes libmp3lame. The default Free AAR does not."
+      - from: wav
+        to: mp3
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Encodes MP3 only when the bundled FFmpeg package includes libmp3lame. The default Free AAR does not."
+      - from: wma
+        to: mp3
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Decodes WMA through FFmpeg and encodes MP3 only when the bundled package includes libmp3lame."
+      - from: mp3
         to: m4a
         engine: media3-transformer
         status: experimental
@@ -70,16 +96,116 @@ groups:
         engine: media3-transformer
         status: experimental
         note: "AAC in M4A. Depends on device decode support."
+      - from: wma
+        to: m4a
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Attempts AAC in M4A through FFmpeg compatibility mode; may fail if the package lacks AAC encoding."
       - from: ogg
         to: m4a
         engine: media3-transformer
         status: experimental
         note: "AAC in M4A. Depends on device decode support."
+      - from: mp3
+        to: wav
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Writes PCM WAV. Sample rate and channel controls are passed when selected; bitrate is not used."
+      - from: m4a
+        to: wav
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Writes PCM WAV through FFmpeg compatibility mode."
+      - from: flac
+        to: wav
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Writes PCM WAV through FFmpeg compatibility mode."
+      - from: wav
+        to: wav
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Rewrites PCM WAV; bitrate is not used."
+      - from: wma
+        to: wav
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Decodes WMA through FFmpeg and writes PCM WAV when the bundled codecs are available."
+      - from: mp3
+        to: flac
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Encodes FLAC. Sample rate and channel controls are passed when selected; bitrate is not used."
+      - from: m4a
+        to: flac
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Encodes FLAC through FFmpeg compatibility mode."
+      - from: flac
+        to: flac
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Re-encodes FLAC; bitrate is not used."
+      - from: wav
+        to: flac
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Encodes FLAC through FFmpeg compatibility mode."
+      - from: wma
+        to: flac
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Decodes WMA through FFmpeg and encodes FLAC when the bundled codecs are available."
+      - from: mp3
+        to: wma
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Encodes WMA v2 in an ASF/WMA container through FFmpeg compatibility mode."
+      - from: m4a
+        to: wma
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Encodes WMA v2 in an ASF/WMA container through FFmpeg compatibility mode."
+      - from: flac
+        to: wma
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Encodes WMA v2 in an ASF/WMA container through FFmpeg compatibility mode."
+      - from: wav
+        to: wma
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Encodes WMA v2 in an ASF/WMA container through FFmpeg compatibility mode."
+      - from: wma
+        to: wma
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Re-encodes WMA v2 in an ASF/WMA container."
       - from: video
         to: m4a
         engine: media3-transformer-or-ffmpeg-compatible
         status: experimental
         note: "MP4 video sources use Media3 AAC output. Non-MP4 video sources use FFmpeg audio-track copy and currently require an M4A-compatible AAC stream."
+      - from: video
+        to: mp3
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Extracts the first audio track and encodes MP3 only when the bundled package includes libmp3lame. The default Free AAR does not."
+      - from: video
+        to: wav
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Extracts the first audio track and writes PCM WAV through FFmpeg compatibility mode."
+      - from: video
+        to: flac
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Extracts the first audio track and encodes FLAC through FFmpeg compatibility mode."
+      - from: video
+        to: wma
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "Extracts the first audio track and encodes WMA v2 through FFmpeg compatibility mode."
   image:
     planned:
       - from: jpg

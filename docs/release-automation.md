@@ -36,17 +36,28 @@ Paste the command output into `ANDROID_RELEASE_KEYSTORE_BASE64`.
 
 ## Outputs
 
-The workflow currently publishes one signed universal APK:
+The workflow currently publishes one signed arm64-v8a APK:
 
 ```text
-ZenConverter-pre-release-universal.apk
-ZenConverter-vX.Y.Z-universal.apk
+ZenConverter-pre-release-arm64-v8a.apk
+ZenConverter-vX.Y.Z-arm64-v8a.apk
 ```
 
-ABI-specific APKs can be added later if FFmpeg/native libraries make the
-universal APK too large.
+The current FFmpegKit Free fallback AAR is arm64-v8a only, so release builds
+intentionally filter native libraries to `arm64-v8a`. A true universal APK can
+be added later only after the compatibility FFmpeg dependency provides matching
+native libraries for every advertised ABI.
+
+When publishing, the workflow also removes older `*-universal.apk` assets from
+the same release to avoid leaving a misleading download beside the current
+arm64-v8a build.
 
 The CI job downloads the documented FFmpegKit local fallback AAR into `app/libs`
 and verifies its SHA-256 checksum before running Gradle. The small
 `smart-exception` helper dependencies are resolved by Gradle from Maven Central.
 Binary fallback files stay ignored by git.
+
+The documented CI fallback is the Free tier, which does not include the
+`libmp3lame` MP3 encoder. Publishing an MP3-capable APK requires replacing that
+CI input with a recorded non-GPL MP3-capable AAR or a self-built LGPL FFmpeg
+package and updating the license/SHA records first.

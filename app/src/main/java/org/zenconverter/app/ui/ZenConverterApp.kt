@@ -104,7 +104,11 @@ enum class FileCategory(
     Audio(
         mimeTypes = listOf("audio/*", "video/*"),
         formats = listOf(
-            TargetFormat("M4A (AAC)", "m4a", "Auto engine")
+            TargetFormat("M4A (AAC)", "m4a", "Auto engine"),
+            TargetFormat("MP3", "mp3", "Compatibility"),
+            TargetFormat("WAV", "wav", "Compatibility"),
+            TargetFormat("FLAC", "flac", "Compatibility"),
+            TargetFormat("WMA", "wma", "Compatibility")
         )
     ),
     Image(
@@ -468,6 +472,7 @@ private fun ZenConverterContent(
                     audioBitrate = audioBitrate,
                     audioSampleRate = audioSampleRate,
                     audioChannels = audioChannels,
+                    audioTarget = audioTarget,
                     imageTarget = imageTarget,
                     imageQuality = imageQuality,
                     openMenuId = openMenuId,
@@ -837,6 +842,7 @@ private fun EncodingPanel(
     audioBitrate: String,
     audioSampleRate: String,
     audioChannels: String,
+    audioTarget: TargetFormat,
     imageTarget: TargetFormat,
     imageQuality: String,
     openMenuId: String?,
@@ -883,6 +889,7 @@ private fun EncodingPanel(
                 bitrate = audioBitrate,
                 sampleRate = audioSampleRate,
                 channels = audioChannels,
+                targetFormat = audioTarget,
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
                 onBitrateChange = onAudioBitrateChange,
@@ -966,6 +973,7 @@ private fun AudioOptions(
     bitrate: String,
     sampleRate: String,
     channels: String,
+    targetFormat: TargetFormat,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onBitrateChange: (String) -> Unit,
@@ -973,9 +981,44 @@ private fun AudioOptions(
     onChannelsChange: (String) -> Unit
 ) {
     OptionGrid {
-        OptionDropdown("audio-bitrate", texts.bitrate, bitrate, AUDIO_BITRATE_OPTIONS, texts, openMenuId, onOpenMenuChange, onBitrateChange)
-        OptionDropdown("audio-sample-rate", texts.sampleRate, sampleRate, AUDIO_SAMPLE_RATE_OPTIONS, texts, openMenuId, onOpenMenuChange, onSampleRateChange)
-        OptionDropdown("audio-channels", texts.channels, channels, AUDIO_CHANNEL_OPTIONS, texts, openMenuId, onOpenMenuChange, onChannelsChange)
+        if (audioSupportsBitrateOption(targetFormat)) {
+            OptionDropdown(
+                "audio-bitrate",
+                texts.bitrate,
+                bitrate,
+                AUDIO_BITRATE_OPTIONS,
+                texts,
+                openMenuId,
+                onOpenMenuChange,
+                onBitrateChange
+            )
+        } else {
+            Text(
+                text = texts.optionValue("Lossless output"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        OptionDropdown(
+            "audio-sample-rate",
+            texts.sampleRate,
+            sampleRate,
+            AUDIO_SAMPLE_RATE_OPTIONS,
+            texts,
+            openMenuId,
+            onOpenMenuChange,
+            onSampleRateChange
+        )
+        OptionDropdown(
+            "audio-channels",
+            texts.channels,
+            channels,
+            AUDIO_CHANNEL_OPTIONS,
+            texts,
+            openMenuId,
+            onOpenMenuChange,
+            onChannelsChange
+        )
     }
 }
 
@@ -1689,6 +1732,10 @@ private fun audioChannelsToCount(value: String): Int? {
     }
 }
 
+private fun audioSupportsBitrateOption(targetFormat: TargetFormat): Boolean {
+    return targetFormat.extension.lowercase(Locale.US) !in AUDIO_LOSSLESS_OUTPUT_EXTENSIONS
+}
+
 private fun imageQualityToPercent(value: String): Int {
     return when (value) {
         IMAGE_QUALITY_ORIGINAL -> 100
@@ -1698,6 +1745,8 @@ private fun imageQualityToPercent(value: String): Int {
         else -> 85
     }
 }
+
+private val AUDIO_LOSSLESS_OUTPUT_EXTENSIONS = setOf("wav", "flac")
 
 private data class UiText(
     val tagline: String,
@@ -1757,6 +1806,7 @@ private data class UiText(
             "Only MP4 video is connected" -> failed
             "Only video MP4 and audio M4A are connected" -> failed
             "Only video MP4, audio M4A, and JPG/PNG/WEBP images are connected" -> failed
+            "Only video MP4, audio MP3/M4A/WAV/FLAC/WMA, and JPG/PNG/WEBP images are connected" -> failed
             "Default output needs storage permission on this Android version" -> storagePermissionRequired
             "Selected video encoder is not supported on this device" -> videoEncoderUnsupported
             "Native engine timed out before writing output" -> when (this) {
@@ -1823,6 +1873,26 @@ private data class UiText(
                 englishText -> "Compatibility engine could not extract AAC M4A audio"
                 simplifiedChineseText -> "兼容引擎无法提取 AAC/M4A 音频"
                 else -> "相容引擎無法提取 AAC/M4A 音訊"
+            }
+            "Compatibility engine could not convert this audio" -> when (this) {
+                englishText -> "Compatibility engine could not convert this audio"
+                simplifiedChineseText -> "兼容引擎无法转换这段音频"
+                else -> "相容引擎無法轉換這段音訊"
+            }
+            "Compatibility engine cannot encode this audio format yet" -> when (this) {
+                englishText -> "Compatibility engine cannot encode this audio format yet"
+                simplifiedChineseText -> "当前兼容包暂时不能编码这个音频格式"
+                else -> "目前相容包暫時不能編碼這個音訊格式"
+            }
+            "Compatibility engine needs an MP3-capable FFmpeg package" -> when (this) {
+                englishText -> "Compatibility engine needs an MP3-capable FFmpeg package"
+                simplifiedChineseText -> "当前兼容包不包含 MP3 编码器"
+                else -> "目前相容包不包含 MP3 編碼器"
+            }
+            "Compatibility engine could not write this audio container" -> when (this) {
+                englishText -> "Compatibility engine could not write this audio container"
+                simplifiedChineseText -> "兼容引擎无法写出这个音频容器"
+                else -> "相容引擎無法寫出這個音訊容器"
             }
             "Compatibility engine needs an AAC audio stream for M4A copy" -> when (this) {
                 englishText -> "Compatibility engine needs an AAC audio stream for M4A copy"

@@ -59,12 +59,15 @@ Success: FFmpeg jobs run from Kotlin, report progress, and do not require
 duplicating normal local files into cache.
 
 Current first step: `dev.ffmpegkit-maintained:ffmpeg-kit-free-71:7.1.5` is
-wired for non-MP4 video container remux to MP4 and non-MP4 video-file audio
-extraction to M4A by FFmpeg audio-track copy. A local GitHub Release AAR
+wired for non-MP4 video container remux to MP4, non-MP4 video-file audio
+extraction to M4A by FFmpeg audio-track copy, and experimental audio targets
+for MP3/WAV/FLAC/WMA through FFmpeg arguments. A local GitHub Release AAR
 fallback is used for machines where Maven Central blocks the coordinate. This
-is a Free-tier LGPL remux/extract path, not universal video or audio
-transcoding. WebM Vorbis/Opus to M4A and AVI MP3/PCM to M4A need a later
-AAC-capable compatibility build before they should be advertised.
+is still not universal video or audio transcoding: July 11, 2026 device logs
+confirmed that the default Free AAR lacks `libmp3lame`, so MP3 output requires
+an MP3-capable FFmpegKit tier or a later self-built LGPL FFmpeg package. WebM
+Vorbis/Opus to M4A plus AVI MP3/PCM to M4A need a later AAC-capable
+compatibility build before they should be advertised as broadly supported.
 
 ## Phase 4: Image, PDF, Archive
 

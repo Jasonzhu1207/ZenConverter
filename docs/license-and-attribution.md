@@ -32,13 +32,17 @@ Before a dependency becomes core:
 
 - Dependency: Gradle prefers local release files under `app/libs` when present,
   then falls back to `dev.ffmpegkit-maintained:ffmpeg-kit-free-71:7.1.5`.
+  Local preference order is `ffmpeg-kit-basic71-7.1.5-arm64-v8a.aar`,
+  `ffmpeg-kit-full71-7.1.5-arm64-v8a.aar`, then
+  `ffmpeg-kit-free71-7.1.5-arm64-v8a.aar`.
 - Package type: Android AAR.
 - Upstream source: `https://github.com/ffmpegkit-maintained/ffmpeg`.
 - Maven POM URL:
   `https://repo1.maven.org/maven2/dev/ffmpegkit-maintained/ffmpeg-kit-free-71/7.1.5/ffmpeg-kit-free-71-7.1.5.pom`.
 - License recorded by the POM: GNU Lesser General Public License v3.0.
-- Selected tier: 7.1 LTS Free. Do not replace it with a `-gpl` artifact by
-  default.
+- Selected default tier: 7.1 LTS Free. Do not replace it with a `-gpl` artifact
+  by default. MP3-capable local Basic/Full tier files are development inputs
+  only until their source, license terms, and SHA-256 are recorded here.
 - Release asset: `ffmpeg-kit-free71-7.1.5-arm64-v8a.aar`.
 - Reason platform APIs are not enough: physical-device logs on July 5, 2026
   showed Media3 timing out on MKV before writing any muxer sample, while the
@@ -63,8 +67,9 @@ Build record for the selected binary:
   --disable-arm-v7a-neon --disable-x86 --disable-x86-64`.
 - Upstream workflow verifies 16 KB page-size alignment before upload.
 - Free-tier limitation: no Android `MediaCodec` hardware acceleration and no
-  H.264/H.265/AAC encoders; the first ZenConverter path uses MP4 remux or
-  compatible audio-track copy rather than universal video/audio transcoding.
+  H.264/H.265/AAC encoders. Physical-device logs on July 11, 2026 also confirm
+  that the local Free AAR lacks `libmp3lame`, so MP3 output requires an
+  MP3-capable FFmpegKit tier or a later self-built LGPL FFmpeg package.
 - Release AAR SHA-256:
   `78b57215ca8790264cf48ea755ca4629ccebe79660d37ab14f41d8077e9dece7`.
 

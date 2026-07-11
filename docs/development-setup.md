@@ -37,7 +37,16 @@ resolution.
 
 FFmpegKit local fallback: this machine currently receives `403 Forbidden` from
 Maven Central for `dev.ffmpegkit-maintained:ffmpeg-kit-free-71:7.1.5`, so
-`app/build.gradle.kts` prefers local files when they exist:
+`app/build.gradle.kts` prefers local files when they exist. Gradle checks for
+locally supplied non-GPL MP3-capable tiers first, then falls back to the Free
+tier:
+
+- `app/libs/ffmpeg-kit-basic71-7.1.5-arm64-v8a.aar`
+  - optional local input for MP3/AAC-capable development builds
+  - record source, license terms, and SHA-256 before shipping a build with it
+- `app/libs/ffmpeg-kit-full71-7.1.5-arm64-v8a.aar`
+  - optional local input for broader non-GPL codec coverage
+  - record source, license terms, and SHA-256 before shipping a build with it
 
 - `app/libs/ffmpeg-kit-free71-7.1.5-arm64-v8a.aar`
   - source: `https://github.com/ffmpegkit-maintained/ffmpeg/releases/download/v7.1.5-lts-android/ffmpeg-kit-free71-7.1.5-arm64-v8a.aar`
@@ -51,6 +60,11 @@ Maven Central for `dev.ffmpegkit-maintained:ffmpeg-kit-free-71:7.1.5`, so
 
 The `app/libs` binary files are local build inputs and are ignored by git. If
 they are absent, Gradle falls back to the normal Maven coordinate.
+
+MP3 output needs `libmp3lame`. The documented Free AAR does not include that
+encoder, so physical-device MP3 exports fail fast with a specific message unless
+an MP3-capable FFmpegKit AAR is supplied locally or the project later moves to a
+self-built LGPL FFmpeg package.
 
 `settings.gradle.kts` maps the `com.android.application` plugin id to
 `com.android.tools.build:gradle` through `pluginManagement.resolutionStrategy`.

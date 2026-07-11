@@ -6,7 +6,11 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-val ffmpegKitLocalAar = file("libs/ffmpeg-kit-free71-7.1.5-arm64-v8a.aar")
+val ffmpegKitLocalAar = listOf(
+    file("libs/ffmpeg-kit-basic71-7.1.5-arm64-v8a.aar"),
+    file("libs/ffmpeg-kit-full71-7.1.5-arm64-v8a.aar"),
+    file("libs/ffmpeg-kit-free71-7.1.5-arm64-v8a.aar")
+).firstOrNull { it.isFile }
 val smartExceptionCommonLocalJar = file("libs/smart-exception-common-0.2.1.jar")
 val smartExceptionJavaLocalJar = file("libs/smart-exception-java-0.2.1.jar")
 
@@ -20,6 +24,10 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0-dev"
+
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
     }
 
     val localProperties = Properties()
@@ -103,15 +111,15 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.media3:media3-transformer:1.10.1")
-    if (ffmpegKitLocalAar.isFile) {
-        implementation(files(ffmpegKitLocalAar))
+    ffmpegKitLocalAar?.let { localAar ->
+        implementation(files(localAar))
         if (smartExceptionCommonLocalJar.isFile && smartExceptionJavaLocalJar.isFile) {
             implementation(files(smartExceptionCommonLocalJar, smartExceptionJavaLocalJar))
         } else {
             implementation("com.arthenica:smart-exception-common:0.2.1")
             implementation("com.arthenica:smart-exception-java:0.2.1")
         }
-    } else {
+    } ?: run {
         implementation("dev.ffmpegkit-maintained:ffmpeg-kit-free-71:7.1.5")
     }
 
