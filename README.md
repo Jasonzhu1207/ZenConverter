@@ -92,6 +92,11 @@ More detail lives in [docs/architecture.md](docs/architecture.md) and
 
 Development setup notes are in [docs/development-setup.md](docs/development-setup.md).
 
+## Acknowledgements
+
+- [OhMyGPT](https://www.ohmygpt.com/) provides AI API support.
+- [**ForZTN**](https://sponsorship.forztn.com/github/Jasonzhu1207/ZenConverter) provides the kernel compilation server.
+
 ## Star History
 
 <a href="https://www.star-history.com/?repos=Jasonzhu1207%2FZenConverter&type=date&legend=top-left">
