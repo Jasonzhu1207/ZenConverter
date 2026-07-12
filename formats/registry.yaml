@@ -10,7 +10,7 @@ groups:
         to: mp3
         engine: ffmpeg-compatible
         status: experimental
-        note: "Extracts the first audio track and encodes MP3 only when the bundled FFmpeg package includes libmp3lame. The default Free AAR does not."
+        note: "Extracts the first audio track and encodes MP3 through libmp3lame in the current self-built FFmpegKitNext AAR. Physical-device sample verification is still pending."
       - from: mp4
         to: mp4
         engine: media3-transformer
@@ -55,27 +55,27 @@ groups:
         to: mp3
         engine: ffmpeg-compatible
         status: experimental
-        note: "Re-encodes MP3 only when the bundled FFmpeg package includes libmp3lame. Bitrate, sample rate, and channel controls are passed when selected."
+        note: "Re-encodes MP3 through libmp3lame in the current self-built FFmpegKitNext AAR. Bitrate, sample rate, and channel controls are passed when selected."
       - from: m4a
         to: mp3
         engine: ffmpeg-compatible
         status: experimental
-        note: "Encodes MP3 only when the bundled FFmpeg package includes libmp3lame. The default Free AAR does not."
+        note: "Encodes MP3 through libmp3lame in the current self-built FFmpegKitNext AAR. Physical-device sample verification is still pending."
       - from: flac
         to: mp3
         engine: ffmpeg-compatible
         status: experimental
-        note: "Encodes MP3 only when the bundled FFmpeg package includes libmp3lame. The default Free AAR does not."
+        note: "Encodes MP3 through libmp3lame in the current self-built FFmpegKitNext AAR. Physical-device sample verification is still pending."
       - from: wav
         to: mp3
         engine: ffmpeg-compatible
         status: experimental
-        note: "Encodes MP3 only when the bundled FFmpeg package includes libmp3lame. The default Free AAR does not."
+        note: "Encodes MP3 through libmp3lame in the current self-built FFmpegKitNext AAR. Physical-device sample verification is still pending."
       - from: wma
         to: mp3
         engine: ffmpeg-compatible
         status: experimental
-        note: "Decodes WMA through FFmpeg and encodes MP3 only when the bundled package includes libmp3lame."
+        note: "Decodes WMA through FFmpeg and encodes MP3 through libmp3lame in the current self-built FFmpegKitNext AAR."
       - from: mp3
         to: m4a
         engine: media3-transformer
@@ -190,7 +190,7 @@ groups:
         to: mp3
         engine: ffmpeg-compatible
         status: experimental
-        note: "Extracts the first audio track and encodes MP3 only when the bundled package includes libmp3lame. The default Free AAR does not."
+        note: "Extracts the first audio track and encodes MP3 through libmp3lame in the current self-built FFmpegKitNext AAR. Physical-device sample verification is still pending."
       - from: video
         to: wav
         engine: ffmpeg-compatible

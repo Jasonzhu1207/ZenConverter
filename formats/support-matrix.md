@@ -16,10 +16,10 @@ as supported until it has a tested path, sample files, and failure behavior.
 | Input | Output | Status | Engine | Notes |
 | --- | --- | --- | --- | --- |
 | Any | Any | Planned | None | Do not imply universal support. |
-| MP4 / other video audio tracks | MP3 / WAV / FLAC / WMA | Experimental | FFmpeg compatible | Extracts the first audio track and encodes the selected audio target. MP3 requires an MP3-capable FFmpeg package; the default Free AAR does not provide it. Subtitle, attachment, and extra audio tracks are not copied. |
+| MP4 / other video audio tracks | MP3 / WAV / FLAC / WMA | Experimental | FFmpeg compatible | Extracts the first audio track and encodes the selected audio target. The current self-built FFmpegKitNext AAR includes `libmp3lame`; MP3 still needs physical-device sample verification. Subtitle, attachment, and extra audio tracks are not copied. |
 | MP4 | MP4 | Experimental | Media3 Transformer | Native MP4 output path; physical-device verification still required across samples. |
 | MKV / WEBM / AVI / 3GP / 3GPP / TS / MTS | MP4 | Experimental | FFmpeg compatible | Stream-copy remux to MP4. Success requires MP4-compatible video/audio streams; incompatible codecs fail clearly instead of re-encoding. |
-| MP3 / M4A / FLAC / WAV / WMA | MP3 / WAV / FLAC / WMA | Experimental | FFmpeg compatible | Common audio conversion path. MP3 requires an MP3-capable FFmpeg package; the default Free AAR does not provide it. WMA uses bitrate when selected; WAV/FLAC ignore bitrate and accept sample-rate/channel controls. |
+| MP3 / M4A / FLAC / WAV / WMA | MP3 / WAV / FLAC / WMA | Experimental | FFmpeg compatible | Common audio conversion path. The current self-built FFmpegKitNext AAR includes `libmp3lame`; MP3 still needs physical-device sample verification. WMA uses bitrate when selected; WAV/FLAC ignore bitrate and accept sample-rate/channel controls. |
 | MP3 / M4A / FLAC / WAV / OGG | M4A | Experimental | Media3 Transformer | Output is AAC in M4A. Bitrate, sample-rate, and channel controls are best-effort native settings. |
 | WMA | M4A | Experimental | FFmpeg compatible | Attempts AAC/M4A through FFmpeg compatibility mode; fails clearly if the bundled FFmpeg package lacks AAC encoding. |
 | MP4 video audio tracks | M4A | Experimental | Media3 Transformer | Audio extraction to AAC/M4A through the native path. Bitrate, sample-rate, and channel controls are best-effort native settings. |
@@ -30,9 +30,10 @@ as supported until it has a tested path, sample files, and failure behavior.
 ## Current Native Media Limits
 
 - Video targets are intentionally limited to MP4.
-- Audio targets are connected for MP3, M4A, WAV, FLAC, and WMA. MP3 additionally
-  requires an MP3-capable FFmpeg package. These paths remain experimental until
-  physical-device sample tests cover the new combinations.
+- Audio targets are connected for MP3, M4A, WAV, FLAC, and WMA. The current
+  self-built FFmpegKitNext package includes `libmp3lame` for MP3 output. These
+  paths remain experimental until physical-device sample tests cover the new
+  combinations.
 - MP3, M4A, WAV, FLAC, and OGG inputs targeting M4A are not universal promises. They
   stay on the AndroidX Media3 path and may fail on files whose codec, DRM,
   timestamp layout, or device codec support falls outside Media3 and platform
@@ -47,10 +48,11 @@ as supported until it has a tested path, sample files, and failure behavior.
 
 ## Current FFmpeg Compatibility Limits
 
-- The first FFmpeg path uses
-  `dev.ffmpegkit-maintained:ffmpeg-kit-free-71:7.1.5` or the matching local
-  Release AAR fallback, the LGPL-3.0 Free tier of the maintained Android-only
-  FFmpegKit fork.
+- The FFmpeg path uses the local self-built
+  `app/libs/ffmpeg-kit-next-7.1.0-lame-arm64-v8a.aar`, built from
+  `arthenica/ffmpeg-kit-next` tag `v7.1.0`, commit
+  `1e64a8cdda1b045b014c0a54e9d395929c7b6ccc`, with SHA-256
+  `14fb12d5868b23b7e16a7f17b268364973f5acca059505a42ccdcb6cba1ac9b0`.
 - Video compatibility output is currently a stream-copy remux to MP4:
   `-map 0:v:0 -map 0:a:0? -c copy`. It does not re-encode H.264/H.265.
 - Subtitles, attachments, extra audio tracks, and unknown streams are not copied
@@ -59,15 +61,14 @@ as supported until it has a tested path, sample files, and failure behavior.
   `libmp3lame`, `pcm_s16le`, `flac`, and `wmav2` respectively. MP3/WMA pass
   selected bitrate, sample-rate, and channel options. WAV/FLAC pass sample-rate
   and channel options, but intentionally do not pass bitrate.
-- Physical-device logs on July 11, 2026 confirmed that the default local Free
-  AAR returns `Unknown encoder 'libmp3lame'`; MP3 output therefore needs an
-  MP3-capable FFmpegKit tier or a later self-built LGPL FFmpeg package. The app
+- Physical-device logs on July 11, 2026 confirmed that the earlier local Free
+  AAR returned `Unknown encoder 'libmp3lame'`. The current self-built AAR has
+  `CONFIG_LIBMP3LAME` and `CONFIG_LIBMP3LAME_ENCODER` enabled. The app still
   probes for `libmp3lame` before MP3 export and fails with a specific message
-  when the bundled package cannot encode MP3.
+  if the wrong FFmpeg package is bundled.
 - MP4 video-file audio extraction to M4A remains on Media3. Non-MP4 video-file
-  audio extraction to M4A uses FFmpeg stream copy only. The Free-tier AAR does
-  not provide AAC encoding in the documented local setup, so non-AAC audio still
-  needs a future compatibility build.
+  audio extraction to M4A uses FFmpeg stream copy only, so non-AAC audio still
+  needs a future route that transcodes to AAC instead of only copying streams.
 - WMA to M4A is routed through FFmpeg because Android native decode support is
   not reliable. It attempts AAC output and fails with a specific encoder message
   if the bundled package cannot encode AAC.

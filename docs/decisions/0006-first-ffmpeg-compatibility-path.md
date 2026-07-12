@@ -2,7 +2,11 @@
 
 ## Status
 
-Accepted.
+Superseded by [0007 Self-Built FFmpegKitNext Android Core](0007-self-built-ffmpegkit-next.md).
+
+This record remains as the historical first integration decision. The active
+FFmpeg binary dependency is now the self-built FFmpegKitNext AAR recorded in
+ADR 0007, not the `ffmpegkit-maintained/ffmpeg` prebuilt Free AAR.
 
 ## Context
 

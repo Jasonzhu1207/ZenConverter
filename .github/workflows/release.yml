@@ -23,6 +23,8 @@ jobs:
     env:
       APP_NAME: ZenConverter
       PRE_RELEASE_TAG: pre-release
+      FFMPEG_AAR: app/libs/ffmpeg-kit-next-7.1.0-lame-arm64-v8a.aar
+      FFMPEG_AAR_SHA256: 14fb12d5868b23b7e16a7f17b268364973f5acca059505a42ccdcb6cba1ac9b0
 
     steps:
       - name: Check out repository
@@ -44,31 +46,21 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Restore local FFmpeg fallback AAR
+      - name: Verify self-built FFmpegKitNext AAR
         run: |
           set -euo pipefail
-          mkdir -p app/libs
-
-          download_checked() {
-            url="$1"
-            output="$2"
-            sha256="$3"
-            echo "Downloading $output"
-            curl -fsSL --retry 3 --retry-all-errors --retry-delay 5 "$url" -o "$output"
-            actual_sha256="$(sha256sum "$output" | awk '{ print $1 }')"
-            if [ "$actual_sha256" != "$sha256" ]; then
-              echo "::error::SHA-256 mismatch for $output"
-              echo "Expected: $sha256"
-              echo "Actual:   $actual_sha256"
-              exit 1
-            fi
-          }
-
-          download_checked \
-            "https://github.com/ffmpegkit-maintained/ffmpeg/releases/download/v7.1.5-lts-android/ffmpeg-kit-free71-7.1.5-arm64-v8a.aar" \
-            "app/libs/ffmpeg-kit-free71-7.1.5-arm64-v8a.aar" \
-            "78b57215ca8790264cf48ea755ca4629ccebe79660d37ab14f41d8077e9dece7"
-
+          if [ ! -f "$FFMPEG_AAR" ]; then
+            echo "::error::Missing self-built FFmpegKitNext AAR: $FFMPEG_AAR"
+            echo "::error::Build arthenica/ffmpeg-kit-next v7.1.0 with the recorded flags and provide this AAR before release."
+            exit 1
+          fi
+          actual_sha256="$(sha256sum "$FFMPEG_AAR" | awk '{ print $1 }')"
+          if [ "$actual_sha256" != "$FFMPEG_AAR_SHA256" ]; then
+            echo "::error::SHA-256 mismatch for $FFMPEG_AAR"
+            echo "Expected: $FFMPEG_AAR_SHA256"
+            echo "Actual:   $actual_sha256"
+            exit 1
+          fi
           ls -lh app/libs
 
       - name: Validate release signing secrets

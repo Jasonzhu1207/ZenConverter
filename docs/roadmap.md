@@ -25,17 +25,17 @@
 ## Milestone 3: FFmpeg Compatibility
 
 - Select maintained FFmpeg strategy. Done for first path:
-  `dev.ffmpegkit-maintained:ffmpeg-kit-free-71:7.1.5` LGPL Free tier, with a
-  matching local Release AAR fallback when Maven Central is blocked.
+  self-built `arthenica/ffmpeg-kit-next` `v7.1.0` AAR with `--enable-lame`,
+  arm64-v8a only, recorded in ADR 0007.
 - MKV/WebM/3GP/TS to MP4 stream copy. Implemented, needs physical-device smoke
   testing across samples.
 - MP4 video-file audio extraction to M4A. Implemented through Media3, needs
   physical-device smoke testing across samples.
 - Non-MP4 video-file audio extraction to M4A. Implemented as FFmpeg audio-track
   copy only; non-AAC tracks need a later AAC-capable compatibility build.
-- MP4 to MP3. Routing and argument generation are connected, but the default
-  Free FFmpegKit AAR lacks `libmp3lame`; a recorded MP3-capable package is
-  needed before this can be treated as working.
+- MP4 to MP3. Routing and argument generation are connected, and the current
+  self-built FFmpegKitNext AAR includes `libmp3lame`; physical-device sample
+  verification is still required before this can be treated as working.
 - MP3/M4A/WAV/FLAC/WMA audio target conversion. Implemented as experimental
   routing and argument generation; needs physical-device sample coverage.
 - ffprobe metadata read.

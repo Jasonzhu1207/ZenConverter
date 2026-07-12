@@ -33,12 +33,7 @@ dependencyResolutionManagement {
                 includeGroupByRegex("com\\.google.*")
             }
         }
-        maven {
-            url = uri("https://maven.aliyun.com/repository/public")
-            content {
-                excludeGroup("dev.ffmpegkit-maintained")
-            }
-        }
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
     }
 }
 

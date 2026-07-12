@@ -30,50 +30,59 @@ Before a dependency becomes core:
 
 ## Current FFmpeg Dependency
 
-- Dependency: Gradle prefers local release files under `app/libs` when present,
-  then falls back to `dev.ffmpegkit-maintained:ffmpeg-kit-free-71:7.1.5`.
-  Local preference order is `ffmpeg-kit-basic71-7.1.5-arm64-v8a.aar`,
-  `ffmpeg-kit-full71-7.1.5-arm64-v8a.aar`, then
-  `ffmpeg-kit-free71-7.1.5-arm64-v8a.aar`.
+- Dependency: Gradle requires the local self-built AAR
+  `app/libs/ffmpeg-kit-next-7.1.0-lame-arm64-v8a.aar`.
+- No Maven fallback is configured for FFmpegKit. In particular, release builds
+  must not download binaries from `ffmpegkit-maintained/ffmpeg`.
 - Package type: Android AAR.
-- Upstream source: `https://github.com/ffmpegkit-maintained/ffmpeg`.
-- Maven POM URL:
-  `https://repo1.maven.org/maven2/dev/ffmpegkit-maintained/ffmpeg-kit-free-71/7.1.5/ffmpeg-kit-free-71-7.1.5.pom`.
-- License recorded by the POM: GNU Lesser General Public License v3.0.
-- Selected default tier: 7.1 LTS Free. Do not replace it with a `-gpl` artifact
-  by default. MP3-capable local Basic/Full tier files are development inputs
-  only until their source, license terms, and SHA-256 are recorded here.
-- Release asset: `ffmpeg-kit-free71-7.1.5-arm64-v8a.aar`.
+- Upstream source: `https://github.com/arthenica/ffmpeg-kit-next`.
+- Upstream tag: `v7.1.0`.
+- Source commit: `1e64a8cdda1b045b014c0a54e9d395929c7b6ccc`.
+- License files packaged in the AAR:
+  - FFmpegKitNext main license: GNU Lesser General Public License v3.0.
+  - LAME license file: GNU Library General Public License v2.
+  - libiconv license file packaged by the build: GNU General Public License v3.0.
+  - cpu-features license file: Apache License 2.0.
+- Project compatibility: the app's proposed license is already
+  `GPL-3.0-or-later`, so the packaged libiconv GPLv3 text is compatible with
+  the current project direction. Revisit this before any non-GPL distribution.
 - Reason platform APIs are not enough: physical-device logs on July 5, 2026
   showed Media3 timing out on MKV before writing any muxer sample, while the
-  same service pipeline completed MP4/M4A work.
-- Maintenance check: the original `arthenica/ffmpeg-kit` repo is archived; the
-  selected fork is not archived and publishes Android-only SDK 35 / 16 KB page
-  aligned releases.
-- Local fallback reason: on this development machine, Gradle receives
-  `403 Forbidden` from Maven Central for the selected FFmpegKit coordinate.
-  The checked build therefore uses the official GitHub Release AAR when present.
+  same service pipeline completed MP4/M4A work. Physical-device logs on
+  July 11, 2026 showed the earlier Free FFmpegKit AAR lacked `libmp3lame`.
+- Maintenance check: the original `arthenica/ffmpeg-kit` repo is archived, but
+  `arthenica/ffmpeg-kit-next` is the upstream successor used as source for this
+  self-built binary. Third-party prebuilt fork binaries are not trusted by
+  default.
 
 Build record for the selected binary:
 
-- Upstream workflow:
-  `https://github.com/ffmpegkit-maintained/ffmpeg/blob/main/.github/workflows/build-71-free.yml`.
-- NDK line: r26c.
-- Android SDK line: compileSdk/targetSdk 35, minSdk 24.
-- ABI published by upstream CI: `arm64-v8a` only.
-- Free-tier flags recorded from the workflow:
-  `--enable-libaom --enable-dav1d --enable-libvpx --enable-opus
-  --enable-libvorbis --enable-speex --disable-arm-v7a
-  --disable-arm-v7a-neon --disable-x86 --disable-x86-64`.
-- Upstream workflow verifies 16 KB page-size alignment before upload.
-- Free-tier limitation: no Android `MediaCodec` hardware acceleration and no
-  H.264/H.265/AAC encoders. Physical-device logs on July 11, 2026 also confirm
-  that the local Free AAR lacks `libmp3lame`, so MP3 output requires an
-  MP3-capable FFmpegKit tier or a later self-built LGPL FFmpeg package.
-- Release AAR SHA-256:
-  `78b57215ca8790264cf48ea755ca4629ccebe79660d37ab14f41d8077e9dece7`.
+- Build date: July 12, 2026.
+- Build host: Ubuntu 24.04.4 LTS x86_64, 4 vCPU, 7.6 GiB RAM, 12 GiB swap.
+- Build wrapper: `./nix-android.sh`.
+- Nix profile: `android-r27d`.
+- NDK from the flake: `27.3.13750724`.
+- Android API level used by the build: 24.
+- Build command:
+  `./nix-android.sh -p android-r27d --jobs=2 --enable-lame
+  --disable-arm-v7a --disable-arm-v7a-neon --disable-x86 --disable-x86-64`.
+- Enabled external libraries reported by the build: `lame`, `libiconv`.
+- ABI included in the AAR: `arm64-v8a` only.
+- AAR file name: `ffmpeg-kit-next-7.1.0-lame-arm64-v8a.aar`.
+- AAR size: `9,073,515` bytes.
+- AAR SHA-256:
+  `14fb12d5868b23b7e16a7f17b268364973f5acca059505a42ccdcb6cba1ac9b0`.
+- Verification evidence:
+  - AAR `classes.jar` contains `com/arthenica/ffmpegkit/FFmpegKit.class` and
+    `FFmpegKitConfig.class`.
+  - AAR contains only `jni/arm64-v8a` native libraries.
+  - FFmpeg `config.h` contains `#define CONFIG_LIBMP3LAME 1`.
+  - FFmpeg `config_components.h` contains
+    `#define CONFIG_LIBMP3LAME_ENCODER 1`.
+  - `libavcodec.so` contains the `libmp3lame` string.
 
-Transitive dependencies recorded from the POM:
+Transitive dependencies required when consuming the local AAR through
+`implementation(files(...))`:
 
 - `com.arthenica:smart-exception-java:0.2.1`, BSD-3-Clause, local JAR SHA-256:
   `5b96aaa5f191dedbef72fb0c38f1a2b01807920afc0d92a75a2acd6e0cc7703c`.

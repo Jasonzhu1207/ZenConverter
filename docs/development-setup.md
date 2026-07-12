@@ -30,27 +30,21 @@ Current project toolchain:
 
 Repository order matters. `settings.gradle.kts` keeps official `google()` and
 `mavenCentral()` before the Aliyun mirrors, limits `google()` to Android/Google
-groups, and excludes `dev.ffmpegkit-maintained` from the Aliyun public fallback.
-The maintained FFmpeg AAR can appear as metadata on mirrors before the `.aar`
-itself is available, which makes Gradle stop at the mirror and fail artifact
-resolution.
+groups, and leaves the Aliyun public mirror last.
 
-FFmpegKit local fallback: this machine currently receives `403 Forbidden` from
-Maven Central for `dev.ffmpegkit-maintained:ffmpeg-kit-free-71:7.1.5`, so
-`app/build.gradle.kts` prefers local files when they exist. Gradle checks for
-locally supplied non-GPL MP3-capable tiers first, then falls back to the Free
-tier:
+FFmpegKit local core: `app/build.gradle.kts` requires the self-built local AAR
+below. There is no Maven fallback for FFmpegKit, and release CI verifies the
+recorded SHA-256 instead of downloading a prebuilt third-party fork artifact.
 
-- `app/libs/ffmpeg-kit-basic71-7.1.5-arm64-v8a.aar`
-  - optional local input for MP3/AAC-capable development builds
-  - record source, license terms, and SHA-256 before shipping a build with it
-- `app/libs/ffmpeg-kit-full71-7.1.5-arm64-v8a.aar`
-  - optional local input for broader non-GPL codec coverage
-  - record source, license terms, and SHA-256 before shipping a build with it
-
-- `app/libs/ffmpeg-kit-free71-7.1.5-arm64-v8a.aar`
-  - source: `https://github.com/ffmpegkit-maintained/ffmpeg/releases/download/v7.1.5-lts-android/ffmpeg-kit-free71-7.1.5-arm64-v8a.aar`
-  - SHA-256: `78b57215ca8790264cf48ea755ca4629ccebe79660d37ab14f41d8077e9dece7`
+- `app/libs/ffmpeg-kit-next-7.1.0-lame-arm64-v8a.aar`
+  - source: `https://github.com/arthenica/ffmpeg-kit-next`
+  - tag: `v7.1.0`
+  - commit: `1e64a8cdda1b045b014c0a54e9d395929c7b6ccc`
+  - build command: `./nix-android.sh -p android-r27d --jobs=2 --enable-lame --disable-arm-v7a --disable-arm-v7a-neon --disable-x86 --disable-x86-64`
+  - SHA-256: `14fb12d5868b23b7e16a7f17b268364973f5acca059505a42ccdcb6cba1ac9b0`
+  - ABI: `arm64-v8a` only
+  - MP3 evidence: generated config contains `CONFIG_LIBMP3LAME` and
+    `CONFIG_LIBMP3LAME_ENCODER`
 - `app/libs/smart-exception-common-0.2.1.jar`
   - source: `https://repo1.maven.org/maven2/com/arthenica/smart-exception-common/0.2.1/smart-exception-common-0.2.1.jar`
   - SHA-256: `1cad0fb4dfa01755a014331b5ed199281d2c3fab5aca5c9d7abd0b41d0ec3f7b`
@@ -59,12 +53,11 @@ tier:
   - SHA-256: `5b96aaa5f191dedbef72fb0c38f1a2b01807920afc0d92a75a2acd6e0cc7703c`
 
 The `app/libs` binary files are local build inputs and are ignored by git. If
-they are absent, Gradle falls back to the normal Maven coordinate.
+the FFmpegKitNext AAR is absent, Gradle fails during configuration with a clear
+message.
 
-MP3 output needs `libmp3lame`. The documented Free AAR does not include that
-encoder, so physical-device MP3 exports fail fast with a specific message unless
-an MP3-capable FFmpegKit AAR is supplied locally or the project later moves to a
-self-built LGPL FFmpeg package.
+MP3 output needs `libmp3lame`. The recorded self-built AAR includes the encoder,
+but the MP3 rows remain experimental until physical-device samples pass.
 
 `settings.gradle.kts` maps the `com.android.application` plugin id to
 `com.android.tools.build:gradle` through `pluginManagement.resolutionStrategy`.
@@ -101,7 +94,10 @@ Expected practical minimum: 4 to 6 GB.
 Recommended breathing room: 8 to 10 GB.
 
 Do not install the Android emulator or NDK until the project explicitly needs
-them. Self-building FFmpeg can raise the disk requirement to 20 to 40 GB.
+them. Self-building FFmpeg can raise the disk requirement to 20 to 40 GB. The
+July 12, 2026 FFmpegKitNext build succeeded on a 4 vCPU / 7.6 GiB RAM Ubuntu
+24.04 server after adding a 12 GiB swap file; peak root filesystem usage was
+about 24 GB.
 
 ## First Build Checklist
 

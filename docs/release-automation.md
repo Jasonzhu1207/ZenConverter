@@ -43,7 +43,7 @@ ZenConverter-pre-release-arm64-v8a.apk
 ZenConverter-vX.Y.Z-arm64-v8a.apk
 ```
 
-The current FFmpegKit Free fallback AAR is arm64-v8a only, so release builds
+The current self-built FFmpegKitNext AAR is arm64-v8a only, so release builds
 intentionally filter native libraries to `arm64-v8a`. A true universal APK can
 be added later only after the compatibility FFmpeg dependency provides matching
 native libraries for every advertised ABI.
@@ -52,12 +52,18 @@ When publishing, the workflow also removes older `*-universal.apk` assets from
 the same release to avoid leaving a misleading download beside the current
 arm64-v8a build.
 
-The CI job downloads the documented FFmpegKit local fallback AAR into `app/libs`
-and verifies its SHA-256 checksum before running Gradle. The small
-`smart-exception` helper dependencies are resolved by Gradle from Maven Central.
-Binary fallback files stay ignored by git.
+The CI job verifies that the recorded self-built FFmpegKitNext AAR is already
+present under `app/libs` and that its SHA-256 is:
 
-The documented CI fallback is the Free tier, which does not include the
-`libmp3lame` MP3 encoder. Publishing an MP3-capable APK requires replacing that
-CI input with a recorded non-GPL MP3-capable AAR or a self-built LGPL FFmpeg
-package and updating the license/SHA records first.
+```text
+14fb12d5868b23b7e16a7f17b268364973f5acca059505a42ccdcb6cba1ac9b0
+```
+
+It does not download FFmpegKit binaries from third-party forks. The small
+`smart-exception` helper dependencies are resolved by Gradle from Maven Central
+unless their local JARs are supplied. Binary files under `app/libs` stay ignored
+by git, so release automation needs a trusted pre-step or repository policy for
+providing the recorded AAR before `assembleRelease`.
+
+The documented AAR includes `libmp3lame`, but MP3 output remains experimental
+until physical-device sample conversion passes.

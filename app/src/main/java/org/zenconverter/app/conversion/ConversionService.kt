@@ -28,6 +28,7 @@ import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.util.Log
 import androidx.annotation.OptIn
+import androidx.annotation.RequiresApi
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.FFmpegKitConfig
 import com.arthenica.ffmpegkit.FFmpegSession
@@ -416,6 +417,7 @@ class ConversionService : Service() {
         return decodeImageBitmapWithBitmapFactory(uri, maxLongSidePixels)
     }
 
+    @RequiresApi(Build.VERSION_CODES.P)
     private fun decodeImageBitmapWithImageDecoder(
         uri: Uri,
         maxLongSidePixels: Int?
@@ -919,7 +921,7 @@ class ConversionService : Service() {
             { session ->
                 if (resumed.compareAndSet(false, true)) {
                     activeFfmpegSession = null
-                    val returnCode = session.returnCode
+                    val returnCode = session.getReturnCode()
                     val result = when {
                         ReturnCode.isSuccess(returnCode) -> {
                             Log.i(
@@ -981,7 +983,7 @@ class ConversionService : Service() {
         activeFfmpegSession = session
         continuation.invokeOnCancellation {
             runCatching {
-                FFmpegKit.cancel(session.sessionId)
+                FFmpegKit.cancel(session.getSessionId())
             }.onFailure { exception ->
                 Log.w(TAG, "Could not cancel FFmpeg session", exception)
             }
@@ -1086,7 +1088,7 @@ class ConversionService : Service() {
             val session = FFmpegKit.executeWithArguments(
                 arrayOf("-hide_banner", "-encoders")
             )
-            if (ReturnCode.isSuccess(session.returnCode)) {
+            if (ReturnCode.isSuccess(session.getReturnCode())) {
                 session.getAllLogsAsString(FFMPEG_ENCODER_PROBE_TIMEOUT_MS).orEmpty()
             } else {
                 ""
@@ -1274,7 +1276,7 @@ class ConversionService : Service() {
         get() = displayName.substringAfterLast('.', missingDelimiterValue = "")
 
     private fun cancelActiveFfmpegSession() {
-        val sessionId = activeFfmpegSession?.sessionId
+        val sessionId = activeFfmpegSession?.getSessionId()
         activeFfmpegSession = null
         if (sessionId != null) {
             runCatching {
