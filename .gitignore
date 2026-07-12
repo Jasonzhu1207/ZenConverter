@@ -20,7 +20,7 @@ local.properties
 # Local binary dependency inputs
 app/libs/*.aar
 app/libs/*.jar
-!app/libs/ffmpeg-kit-next-7.1.0-lame-arm64-v8a.aar
+!app/libs/ffmpeg-kit-next-7.1.0-lame-armeabi-v7a-arm64-v8a.aar
 
 # Signing and release secrets
 *.jks

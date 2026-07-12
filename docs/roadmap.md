@@ -26,7 +26,7 @@
 
 - Select maintained FFmpeg strategy. Done for first path:
   self-built `arthenica/ffmpeg-kit-next` `v7.1.0` AAR with `--enable-lame`,
-  arm64-v8a only, recorded in ADR 0007.
+  `armeabi-v7a` and `arm64-v8a`, recorded in ADR 0007.
 - MKV/WebM/3GP/TS to MP4 stream copy. Implemented, needs physical-device smoke
   testing across samples.
 - MP4 video-file audio extraction to M4A. Implemented through Media3, needs

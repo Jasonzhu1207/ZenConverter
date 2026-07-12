@@ -31,7 +31,7 @@ Before a dependency becomes core:
 ## Current FFmpeg Dependency
 
 - Dependency: Gradle requires the local self-built AAR
-  `app/libs/ffmpeg-kit-next-7.1.0-lame-arm64-v8a.aar`.
+  `app/libs/ffmpeg-kit-next-7.1.0-lame-armeabi-v7a-arm64-v8a.aar`.
 - No Maven fallback is configured for FFmpegKit. In particular, release builds
   must not download binaries from `ffmpegkit-maintained/ffmpeg`.
 - Package type: Android AAR.
@@ -65,21 +65,24 @@ Build record for the selected binary:
 - Android API level used by the build: 24.
 - Build command:
   `./nix-android.sh -p android-r27d --jobs=2 --enable-lame
-  --disable-arm-v7a --disable-arm-v7a-neon --disable-x86 --disable-x86-64`.
+  --disable-x86 --disable-x86-64`.
 - Enabled external libraries reported by the build: `lame`, `libiconv`.
-- ABI included in the AAR: `arm64-v8a` only.
-- AAR file name: `ffmpeg-kit-next-7.1.0-lame-arm64-v8a.aar`.
-- AAR size: `9,073,515` bytes.
+- Build targets included: `arm-v7a`, `arm-v7a-neon`, and `arm64-v8a`.
+- Android ABIs included in the AAR: `armeabi-v7a` and `arm64-v8a`.
+- AAR file name: `ffmpeg-kit-next-7.1.0-lame-armeabi-v7a-arm64-v8a.aar`.
+- AAR size: `26,384,826` bytes.
 - AAR SHA-256:
-  `14fb12d5868b23b7e16a7f17b268364973f5acca059505a42ccdcb6cba1ac9b0`.
+  `6f3bb932ba76ff2627bef6cbfd77fa24bb7186afe27d88da37f69cd60c207602`.
 - Verification evidence:
   - AAR `classes.jar` contains `com/arthenica/ffmpegkit/FFmpegKit.class` and
     `FFmpegKitConfig.class`.
-  - AAR contains only `jni/arm64-v8a` native libraries.
-  - FFmpeg `config.h` contains `#define CONFIG_LIBMP3LAME 1`.
+  - AAR contains `jni/armeabi-v7a` and `jni/arm64-v8a` native libraries.
+  - AAR contains `jni/armeabi-v7a/libffmpegkit_armv7a_neon.so` for the
+    FFmpegKit ARMv7 NEON loader path.
+  - FFmpeg `config.h` contains `#define CONFIG_LIBMP3LAME 1` for
+    `android-arm-24`, `android-arm-neon-24`, and `android-arm64-24`.
   - FFmpeg `config_components.h` contains
-    `#define CONFIG_LIBMP3LAME_ENCODER 1`.
-  - `libavcodec.so` contains the `libmp3lame` string.
+    `#define CONFIG_LIBMP3LAME_ENCODER 1` for all three build targets.
 
 Transitive dependencies required when consuming the local AAR through
 `implementation(files(...))`:

@@ -23,8 +23,8 @@ jobs:
     env:
       APP_NAME: ZenConverter
       PRE_RELEASE_TAG: pre-release
-      FFMPEG_AAR: app/libs/ffmpeg-kit-next-7.1.0-lame-arm64-v8a.aar
-      FFMPEG_AAR_SHA256: 14fb12d5868b23b7e16a7f17b268364973f5acca059505a42ccdcb6cba1ac9b0
+      FFMPEG_AAR: app/libs/ffmpeg-kit-next-7.1.0-lame-armeabi-v7a-arm64-v8a.aar
+      FFMPEG_AAR_SHA256: 6f3bb932ba76ff2627bef6cbfd77fa24bb7186afe27d88da37f69cd60c207602
 
     steps:
       - name: Check out repository
@@ -156,7 +156,7 @@ jobs:
             echo "::error::No release APK found under app/build/outputs/apk/release"
             exit 1
           fi
-          asset_name="${APP_NAME}-${release_tag}-arm64-v8a.apk"
+          asset_name="${APP_NAME}-${release_tag}-armeabi-v7a-arm64-v8a.apk"
           cp "$apk_source" "dist/$asset_name"
           echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
           echo "asset_name=$asset_name" >> "$GITHUB_OUTPUT"
@@ -192,6 +192,7 @@ jobs:
               --prerelease \
               --target "$GITHUB_SHA"
           fi
+          gh release delete-asset "$PRE_RELEASE_TAG" "${APP_NAME}-${PRE_RELEASE_TAG}-arm64-v8a.apk" --yes >/dev/null 2>&1 || true
           gh release delete-asset "$PRE_RELEASE_TAG" "${APP_NAME}-${PRE_RELEASE_TAG}-universal.apk" --yes >/dev/null 2>&1 || true
           gh release upload "$PRE_RELEASE_TAG" "$ASSET_PATH" --clobber
 
@@ -219,5 +220,6 @@ jobs:
               --notes-file release-notes.md \
               --verify-tag
           fi
+          gh release delete-asset "$RELEASE_TAG" "${APP_NAME}-${RELEASE_TAG}-arm64-v8a.apk" --yes >/dev/null 2>&1 || true
           gh release delete-asset "$RELEASE_TAG" "${APP_NAME}-${RELEASE_TAG}-universal.apk" --yes >/dev/null 2>&1 || true
           gh release upload "$RELEASE_TAG" "$ASSET_PATH" --clobber
