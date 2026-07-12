@@ -59,11 +59,11 @@ present under `app/libs` and that its SHA-256 is:
 14fb12d5868b23b7e16a7f17b268364973f5acca059505a42ccdcb6cba1ac9b0
 ```
 
-It does not download FFmpegKit binaries from third-party forks. The small
+It does not download FFmpegKit binaries from third-party forks. The recorded AAR
+is checked into the repository as a vetted release input. The small
 `smart-exception` helper dependencies are resolved by Gradle from Maven Central
-unless their local JARs are supplied. Binary files under `app/libs` stay ignored
-by git, so release automation needs a trusted pre-step or repository policy for
-providing the recorded AAR before `assembleRelease`.
+unless their local JARs are supplied; those optional local JAR caches stay
+ignored by git.
 
 The documented AAR includes `libmp3lame`, but MP3 output remains experimental
 until physical-device sample conversion passes.

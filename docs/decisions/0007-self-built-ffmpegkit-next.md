@@ -51,8 +51,8 @@ download `ffmpegkit-maintained/ffmpeg` assets as a fallback.
 
 - MP3 export can move from "package missing encoder" to physical-device sample
   verification.
-- Clean checkouts need the recorded local AAR before Gradle sync or release
-  builds can complete.
+- Clean checkouts include the recorded AAR, and release CI verifies its SHA-256
+  before Gradle builds.
 - The current AAR includes only `arm64-v8a`; emulator/x86 support remains out of
   scope.
 - The AAR packages LGPLv3, LAME LGPLv2-style, libiconv GPLv3, and Apache-2.0

@@ -52,9 +52,11 @@ recorded SHA-256 instead of downloading a prebuilt third-party fork artifact.
   - source: `https://repo1.maven.org/maven2/com/arthenica/smart-exception-java/0.2.1/smart-exception-java-0.2.1.jar`
   - SHA-256: `5b96aaa5f191dedbef72fb0c38f1a2b01807920afc0d92a75a2acd6e0cc7703c`
 
-The `app/libs` binary files are local build inputs and are ignored by git. If
-the FFmpegKitNext AAR is absent, Gradle fails during configuration with a clear
-message.
+The recorded FFmpegKitNext AAR is a checked-in release input so clean CI
+checkouts can build without downloading a third-party fork artifact. Other
+`app/libs` binaries, including optional smart-exception JAR caches, stay ignored
+by git. If the FFmpegKitNext AAR is absent, Gradle fails during configuration
+with a clear message.
 
 MP3 output needs `libmp3lame`. The recorded self-built AAR includes the encoder,
 but the MP3 rows remain experimental until physical-device samples pass.

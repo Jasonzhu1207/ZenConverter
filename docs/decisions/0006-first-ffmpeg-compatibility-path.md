@@ -83,9 +83,9 @@ Wire the first compatibility operations:
   deliberately and record the exact flags again.
 - Because the AAR is arm64-only, emulator/x86 support is not a goal for this
   milestone.
-- The local AAR/JAR files are ignored by git; they are development build inputs,
-  not source files. A clean environment should either resolve Maven Central or
-  place the recorded release files under `app/libs`.
+- The old local AAR/JAR policy has been superseded by ADR 0007. The vetted
+  FFmpegKitNext AAR is tracked as a release input; optional helper JAR caches
+  remain ignored and can resolve from Maven Central.
 - Extracted native libraries use more installed storage, but avoid device
   linker failures seen as RELRO `Out of memory` while loading FFmpegKit from
   `base.apk!/lib/...`.
