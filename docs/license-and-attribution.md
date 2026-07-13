@@ -54,7 +54,9 @@ Before a dependency becomes core:
   PDF utility, not general document-conversion infrastructure.
 - Scope limits: PDF merge is best-effort for complex forms, bookmarks,
   attachments, and metadata. PDF to TXT extracts selectable text only; it does
-  not do OCR.
+  not do OCR. PDFBox-Android's optional Gemalto JPEG2000 helper classes are not
+  bundled because the current PDFBox scope does not include JPEG2000 image
+  encode/decode.
 
 Transitive dependencies required by the PDFBox-Android POM are also local JARs:
 

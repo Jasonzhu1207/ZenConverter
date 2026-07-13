@@ -55,5 +55,9 @@ bundle the PDFBox-Android POM dependencies as local JARs:
   archival merge.
 - PDF to TXT is not OCR. Scanned PDFs or image-only pages without selectable
   text fail with `PDF has no selectable text; OCR is not included`.
+- PDFBox-Android references optional Gemalto JPEG2000 helper classes from its
+  JPX filter. The app does not use PDFBox for JPEG2000 image encode/decode, so
+  release shrinking suppresses those missing optional classes instead of adding
+  another binary dependency for a path outside the current feature scope.
 - This dependency does not change the existing Android `PdfDocument` and
   `PdfRenderer` image/PDF paths.
