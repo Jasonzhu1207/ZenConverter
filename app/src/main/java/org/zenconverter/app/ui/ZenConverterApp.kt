@@ -74,8 +74,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -411,7 +415,7 @@ private fun ZenConverterContent(
             contentPadding = PaddingValues(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item {
+            item(key = "header") {
                 Header(
                     texts = texts,
                     showSettings = showSettings,
@@ -422,7 +426,7 @@ private fun ZenConverterContent(
                 )
             }
 
-            item {
+            item(key = "settings") {
                 AnimatedVisibility(
                     visible = showSettings,
                     enter = fadeIn() + expandVertically(
@@ -442,7 +446,7 @@ private fun ZenConverterContent(
                 }
             }
 
-            item {
+            item(key = "conversion-lanes") {
                 ConversionLanes(
                     texts = texts,
                     activeCategory = activeCategory,
@@ -460,7 +464,7 @@ private fun ZenConverterContent(
                 )
             }
 
-            item {
+            item(key = "encoding-panel") {
                 EncodingPanel(
                     texts = texts,
                     category = activeCategory,
@@ -488,7 +492,7 @@ private fun ZenConverterContent(
                 )
             }
 
-            item {
+            item(key = "output-panel") {
                 OutputPanel(
                     texts = texts,
                     outputLocationMode = outputLocationMode,
@@ -498,7 +502,7 @@ private fun ZenConverterContent(
                 )
             }
 
-            item {
+            item(key = "queue-actions") {
                 QueueActions(
                     texts = texts,
                     hasFiles = queuedFiles.isNotEmpty(),
@@ -525,12 +529,12 @@ private fun ZenConverterContent(
             }
 
             (conversionSummary ?: queueMessage)?.let { message ->
-                item {
+                item(key = "status-line") {
                     StatusLine(text = texts.taskMessage(message))
                 }
             }
 
-            item {
+            item(key = "file-queue") {
                 FileQueue(
                     texts = texts,
                     files = queuedFiles,
@@ -555,7 +559,9 @@ private fun Header(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .semantics(mergeDescendants = true) {},
             verticalAlignment = Alignment.CenterVertically
         ) {
             BrandImage(
@@ -591,13 +597,6 @@ private fun Header(
             modifier = Modifier
                 .size(44.dp)
                 .border(1.dp, Color(0xFFE7E7E7), CircleShape)
-                .semantics {
-                    contentDescription = if (showSettings) {
-                        texts.closeSettings
-                    } else {
-                        texts.openSettings
-                    }
-                }
         ) {
             AppIcon(
                 icon = if (showSettings) Icons.Rounded.Close else Icons.Rounded.Settings,
@@ -675,6 +674,7 @@ private fun AccentSwatch(
     selected: Boolean,
     onSelected: () -> Unit
 ) {
+    val label = texts.accentLabel(option)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -690,15 +690,24 @@ private fun AccentSwatch(
                     color = if (selected) Color(0xFF111111) else Color(0xFFE2E2E2),
                     shape = CircleShape
                 )
-                .clickable { onSelected() }
-                .semantics { contentDescription = texts.accentLabel(option) }
+                .clickable(
+                    onClickLabel = label,
+                    role = Role.Button,
+                    onClick = onSelected
+                )
+                .semantics {
+                    contentDescription = label
+                    role = Role.Button
+                    this.selected = selected
+                }
         )
         Text(
-            text = texts.accentLabel(option),
+            text = label,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.clearAndSetSemantics {}
         )
     }
 }
@@ -755,7 +764,9 @@ private fun ConversionLane(
         borderColor = if (selected) MaterialTheme.colorScheme.primary else Color(0xFFE7E7E7)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics(mergeDescendants = true) {},
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1068,7 +1079,9 @@ private fun OutputPanel(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .semantics(mergeDescendants = true) {},
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 AppIcon(
@@ -1206,7 +1219,9 @@ private fun FileQueue(
 ) {
     QuietPanel {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics(mergeDescendants = true) {},
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
