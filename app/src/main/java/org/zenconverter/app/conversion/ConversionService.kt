@@ -14,6 +14,11 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ImageDecoder
 import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.pdf.LoadParams
+import android.graphics.pdf.PdfDocument
+import android.graphics.pdf.PdfRenderer
 import android.media.ExifInterface
 import android.media.MediaMetadataRetriever
 import android.media.MediaScannerConnection
@@ -24,8 +29,10 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.os.ext.SdkExtensions
 import android.provider.DocumentsContract
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import android.util.Log
 import androidx.annotation.OptIn
 import androidx.annotation.RequiresApi
@@ -64,6 +71,7 @@ import androidx.media3.transformer.TransformationRequest
 import androidx.media3.transformer.VideoEncoderSettings
 import org.zenconverter.app.MainActivity
 import org.zenconverter.app.R
+import java.io.IOException
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -144,7 +152,7 @@ class ConversionService : Service() {
 
         val outputProfile = outputProfileFor(input)
         if (outputProfile == null) {
-            failCurrentTask("Only video MP4, audio MP3/M4A/WAV/FLAC/WMA, and JPG/PNG/WEBP images are connected")
+            failCurrentTask("Only connected video, audio, image, and PDF targets can run")
             return
         }
 
@@ -157,6 +165,7 @@ class ConversionService : Service() {
                 "engine=${
                     when {
                         input.category == ConversionMediaCategory.Image -> "NativeBitmap"
+                        input.category == ConversionMediaCategory.Pdf -> "NativePdf"
                         useCompatibilityEngine -> "Compatibility"
                         else -> "Hardware"
                     }
@@ -178,6 +187,11 @@ class ConversionService : Service() {
 
         if (input.category == ConversionMediaCategory.Image) {
             startImageExport(input, tempFile, outputProfile)
+            return
+        }
+
+        if (input.category == ConversionMediaCategory.Pdf) {
+            startPdfImageExport(input, tempFile, outputProfile)
             return
         }
 
@@ -363,18 +377,304 @@ class ConversionService : Service() {
         }
     }
 
+    private fun startPdfImageExport(
+        input: ConversionTaskInput,
+        firstTempFile: File,
+        outputProfile: OutputProfile
+    ) {
+        serviceScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    writePdfToImageFiles(input, firstTempFile, outputProfile)
+                }
+            }.onSuccess { tempFiles ->
+                if (ConversionTaskStore.isCancelled()) {
+                    tempFiles.forEach { it.delete() }
+                    cancelRun()
+                    return@onSuccess
+                }
+                ConversionTaskStore.updateProgress(taskIndex, PROGRESS_BEFORE_SAVE)
+                saveCompletedExportFiles(input, tempFiles, outputProfile)
+            }.onFailure { exception ->
+                firstTempFile.delete()
+                if (exception is CancellationException) {
+                    return@onFailure
+                }
+                Log.w(TAG, "Could not run PDF image export", exception)
+                failCurrentTask(pdfFailureMessageFor(exception))
+            }
+        }
+    }
+
+    private fun writePdfToImageFiles(
+        input: ConversionTaskInput,
+        firstTempFile: File,
+        outputProfile: OutputProfile
+    ): List<File> {
+        throwIfConversionCancelled()
+        val rendererSource = openPdfRendererSource(input)
+        val tempFiles = mutableListOf<File>()
+        var reusableBitmap: Bitmap? = null
+        try {
+            val renderer = rendererSource.renderer
+            val pageCount = renderer.pageCount
+            if (pageCount <= 0) error("PDF has no pages")
+
+            val pageSizes = mutableListOf<PdfPageSize>()
+            for (pageIndex in 0 until pageCount) {
+                throwIfConversionCancelled()
+                val page = renderer.openPage(pageIndex)
+                try {
+                    pageSizes.add(PdfPageSize(width = page.width, height = page.height))
+                } finally {
+                    page.close()
+                }
+                updateImageProgress(progressForIndexedWork(pageIndex, pageCount, 0.03f, 0.18f))
+            }
+
+            val renderSize = pdfRenderBitmapSizeFor(pageSizes, input.pdfOptions.renderQuality)
+            reusableBitmap = Bitmap.createBitmap(
+                renderSize.width,
+                renderSize.height,
+                Bitmap.Config.ARGB_8888
+            ).apply {
+                setHasAlpha(false)
+            }
+
+            for (pageIndex in 0 until pageCount) {
+                throwIfConversionCancelled()
+                val page = renderer.openPage(pageIndex)
+                try {
+                    reusableBitmap.eraseColor(Color.WHITE)
+                    page.render(
+                        reusableBitmap,
+                        null,
+                        pdfRenderMatrixFor(page, renderSize),
+                        PdfRenderer.Page.RENDER_MODE_FOR_PRINT
+                    )
+                    throwIfConversionCancelled()
+                    val outputFile = if (pageIndex == 0) {
+                        firstTempFile.apply { if (exists()) delete() }
+                    } else {
+                        createTempFileForPdfPage(input, outputProfile.extension, pageIndex)
+                    }
+                    throwIfConversionCancelled()
+                    tempFiles.add(outputFile)
+                    writeBitmapImageFile(
+                        reusableBitmap,
+                        outputFile,
+                        outputProfile,
+                        input.imageOptions.quality
+                    )
+                    throwIfConversionCancelled()
+                } finally {
+                    page.close()
+                }
+                updateImageProgress(progressForIndexedWork(pageIndex, pageCount, 0.20f, 0.95f))
+            }
+
+            return tempFiles
+        } catch (throwable: Throwable) {
+            tempFiles.forEach { it.delete() }
+            throw throwable
+        } finally {
+            reusableBitmap?.recycle()
+            rendererSource.close()
+        }
+    }
+
+    private fun openPdfRendererSource(input: ConversionTaskInput): PdfRendererSource {
+        return try {
+            PdfRendererSource(renderer = openPdfRenderer(input.inputUri, input.pdfPassword))
+        } catch (exception: IllegalArgumentException) {
+            Log.i(TAG, "PDF input descriptor is not seekable; trying SafeCache", exception)
+            val cachedPdf = cachePdfInputForRenderer(input)
+            try {
+                PdfRendererSource(
+                    renderer = openPdfRenderer(Uri.fromFile(cachedPdf), input.pdfPassword),
+                    cacheFile = cachedPdf
+                )
+            } catch (throwable: Throwable) {
+                cachedPdf.delete()
+                throw throwable
+            }
+        }
+    }
+
+    private fun openPdfRenderer(uri: Uri, password: String?): PdfRenderer {
+        val descriptor = if (uri.scheme == URI_SCHEME_FILE) {
+            ParcelFileDescriptor.open(
+                File(uri.path ?: throw IOException("Could not open PDF")),
+                ParcelFileDescriptor.MODE_READ_ONLY
+            )
+        } else {
+            contentResolver.openFileDescriptor(uri, "r")
+        } ?: throw IOException("Could not open PDF")
+
+        return try {
+            if (password != null) {
+                if (!supportsPdfPassword()) {
+                    throw SecurityException("Password-protected PDFs need Android 15 or PDF extension 13")
+                }
+                PdfRenderer(
+                    descriptor,
+                    LoadParams.Builder()
+                        .setPassword(password)
+                        .build()
+                )
+            } else {
+                PdfRenderer(descriptor)
+            }
+        } catch (throwable: Throwable) {
+            runCatching { descriptor.close() }
+            throw throwable
+        }
+    }
+
+    private fun cachePdfInputForRenderer(input: ConversionTaskInput): File {
+        throwIfConversionCancelled()
+        val cacheRoot = externalCacheDir ?: cacheDir
+        val cacheDirectory = File(cacheRoot, "pdf-safe-cache").apply { mkdirs() }
+        val inputSize = queryOpenableSize(input.inputUri)
+        if (inputSize != null) {
+            val requiredBytes = inputSize + PDF_CACHE_HEADROOM_BYTES
+            if (cacheDirectory.usableSpace < requiredBytes) {
+                error("Not enough cache space for this PDF")
+            }
+        } else if (cacheDirectory.usableSpace < PDF_UNKNOWN_CACHE_MIN_FREE_BYTES) {
+            error("Not enough cache space for this PDF")
+        }
+
+        val cachedPdf = File(cacheDirectory, "${input.fileId}.pdf").apply {
+            if (exists()) delete()
+        }
+        try {
+            contentResolver.openInputStream(input.inputUri)?.use { source ->
+                cachedPdf.outputStream().use { output ->
+                    val buffer = ByteArray(COPY_BUFFER_SIZE)
+                    while (true) {
+                        throwIfConversionCancelled()
+                        val read = source.read(buffer)
+                        if (read == -1) break
+                        output.write(buffer, 0, read)
+                    }
+                    output.flush()
+                }
+            } ?: error("Could not open PDF")
+            return cachedPdf
+        } catch (throwable: Throwable) {
+            cachedPdf.delete()
+            throw throwable
+        }
+    }
+
+    private fun queryOpenableSize(uri: Uri): Long? {
+        return runCatching {
+            contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.SIZE),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (!cursor.moveToFirst()) return@use null
+                val index = cursor.getColumnIndex(OpenableColumns.SIZE)
+                if (index < 0 || cursor.isNull(index)) return@use null
+                cursor.getLong(index).takeIf { it >= 0L }
+            }
+        }.getOrNull()
+    }
+
+    private fun supportsPdfPassword(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) return true
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
+        return SdkExtensions.getExtensionVersion(Build.VERSION_CODES.S) >= PDF_PASSWORD_EXTENSION
+    }
+
+    private fun pdfRenderBitmapSizeFor(
+        pageSizes: List<PdfPageSize>,
+        quality: PdfRenderQuality
+    ): PdfBitmapSize {
+        val profile = pdfRenderProfileFor(quality)
+        val maxPageWidth = pageSizes.maxOf { it.width }.coerceAtLeast(1)
+        val maxPageHeight = pageSizes.maxOf { it.height }.coerceAtLeast(1)
+        val scale = profile.dpi / PDF_POINTS_PER_INCH
+        var width = (maxPageWidth * scale).roundToInt().coerceAtLeast(1)
+        var height = (maxPageHeight * scale).roundToInt().coerceAtLeast(1)
+
+        val longSideScale = profile.maxLongSidePixels.toFloat() / maxOf(width, height).toFloat()
+        if (longSideScale < 1f) {
+            width = (width * longSideScale).roundToInt().coerceAtLeast(1)
+            height = (height * longSideScale).roundToInt().coerceAtLeast(1)
+        }
+
+        val pixels = width.toLong() * height.toLong()
+        if (pixels > profile.maxPixels) {
+            val pixelScale = kotlin.math.sqrt(profile.maxPixels.toDouble() / pixels.toDouble())
+            width = (width * pixelScale).toInt().coerceAtLeast(1)
+            height = (height * pixelScale).toInt().coerceAtLeast(1)
+        }
+        return PdfBitmapSize(width = width, height = height)
+    }
+
+    private fun pdfRenderProfileFor(quality: PdfRenderQuality): PdfRenderProfile {
+        return when (quality) {
+            PdfRenderQuality.LowResolution -> PdfRenderProfile(
+                dpi = 96f,
+                maxLongSidePixels = 1600,
+                maxPixels = 6_000_000L
+            )
+            PdfRenderQuality.HighDetail -> PdfRenderProfile(
+                dpi = 288f,
+                maxLongSidePixels = 4096,
+                maxPixels = 32_000_000L
+            )
+            PdfRenderQuality.Balanced -> PdfRenderProfile(
+                dpi = 144f,
+                maxLongSidePixels = 2400,
+                maxPixels = 16_000_000L
+            )
+        }
+    }
+
+    private fun pdfRenderMatrixFor(
+        page: PdfRenderer.Page,
+        renderSize: PdfBitmapSize
+    ): Matrix {
+        val targetRect = centeredFitRect(
+            sourceWidth = page.width,
+            sourceHeight = page.height,
+            targetWidth = renderSize.width,
+            targetHeight = renderSize.height
+        )
+        val scale = minOf(
+            targetRect.width() / page.width.toFloat(),
+            targetRect.height() / page.height.toFloat()
+        )
+        return Matrix().apply {
+            postScale(scale, scale)
+            postTranslate(targetRect.left, targetRect.top)
+        }
+    }
+
     private fun writeImageExport(
         input: ConversionTaskInput,
         outputFile: File,
         outputProfile: OutputProfile
     ) {
-        if (ConversionTaskStore.isCancelled()) throw CancellationException()
+        if (outputProfile.extension.equals("pdf", ignoreCase = true)) {
+            writeImagesToPdf(input, outputFile)
+            return
+        }
+
+        throwIfConversionCancelled()
         updateImageProgress(0.15f)
 
         val decodedBitmap = decodeImageBitmap(
             input.inputUri,
             maxLongSidePixels = null
         ) ?: error("Image engine could not decode this input")
+        throwIfConversionCancelled()
         updateImageProgress(0.55f)
 
         val bitmapForOutput = bitmapForImageOutput(
@@ -387,12 +687,14 @@ class ConversionService : Service() {
         val quality = imageQualityFor(outputProfile.extension, input.imageOptions.quality)
 
         try {
+            throwIfConversionCancelled()
             outputFile.outputStream().use { output ->
                 if (!bitmapForOutput.compress(compressFormat, quality, output)) {
                     error("Image engine could not write this output")
                 }
                 output.flush()
             }
+            throwIfConversionCancelled()
             updateImageProgress(0.95f)
         } finally {
             if (bitmapForOutput !== decodedBitmap) {
@@ -402,25 +704,163 @@ class ConversionService : Service() {
         }
     }
 
+    private fun writeBitmapImageFile(
+        bitmap: Bitmap,
+        outputFile: File,
+        outputProfile: OutputProfile,
+        requestedQuality: Int
+    ) {
+        val bitmapForOutput = bitmapForImageOutput(
+            bitmap,
+            outputProfile.extension,
+            flattenTransparency = false
+        )
+        val compressFormat = imageCompressFormatFor(outputProfile.extension)
+            ?: error("Image engine could not write this output")
+        val quality = imageQualityFor(outputProfile.extension, requestedQuality)
+
+        try {
+            throwIfConversionCancelled()
+            outputFile.outputStream().use { output ->
+                if (!bitmapForOutput.compress(compressFormat, quality, output)) {
+                    error("Image engine could not write this output")
+                }
+                output.flush()
+            }
+            throwIfConversionCancelled()
+        } finally {
+            if (bitmapForOutput !== bitmap) {
+                bitmapForOutput.recycle()
+            }
+        }
+    }
+
+    private fun writeImagesToPdf(
+        input: ConversionTaskInput,
+        outputFile: File
+    ) {
+        val inputUris = input.inputUris.ifEmpty { listOf(input.inputUri) }
+        if (inputUris.isEmpty()) error("Image engine could not decode this input")
+
+        val pdfDocument = PdfDocument()
+        try {
+            inputUris.forEachIndexed { index, uri ->
+                throwIfConversionCancelled()
+                updateImageProgress(progressForIndexedWork(index, inputUris.size, 0.05f, 0.85f))
+
+                val bitmap = decodeImageBitmap(
+                    uri,
+                    maxLongSidePixels = PDF_IMAGE_MAX_LONG_SIDE_PIXELS,
+                    maxPixels = PDF_IMAGE_MAX_PIXELS
+                ) ?: error("Image engine could not decode this input")
+
+                try {
+                    throwIfConversionCancelled()
+                    val pageSize = pdfPageSizeFor(bitmap, input.pdfOptions.imagePageMode)
+                    val pageInfo = PdfDocument.PageInfo.Builder(
+                        pageSize.width,
+                        pageSize.height,
+                        index + 1
+                    ).create()
+                    val page = pdfDocument.startPage(pageInfo)
+                    try {
+                        page.canvas.drawColor(Color.WHITE)
+                        page.canvas.drawBitmap(
+                            bitmap,
+                            null,
+                            centeredFitRect(
+                                sourceWidth = bitmap.width,
+                                sourceHeight = bitmap.height,
+                                targetWidth = pageSize.width,
+                                targetHeight = pageSize.height
+                            ),
+                            PDF_BITMAP_PAINT
+                        )
+                    } finally {
+                        pdfDocument.finishPage(page)
+                    }
+                    throwIfConversionCancelled()
+                } finally {
+                    bitmap.recycle()
+                }
+            }
+
+            throwIfConversionCancelled()
+            outputFile.outputStream().use { output ->
+                pdfDocument.writeTo(output)
+                output.flush()
+            }
+            throwIfConversionCancelled()
+            updateImageProgress(0.95f)
+        } finally {
+            pdfDocument.close()
+        }
+    }
+
+    private fun pdfPageSizeFor(
+        bitmap: Bitmap,
+        pageMode: PdfImagePageMode
+    ): PdfPageSize {
+        if (pageMode == PdfImagePageMode.A4Fit) {
+            return if (bitmap.width >= bitmap.height) {
+                PdfPageSize(width = PDF_A4_LONG_EDGE_PT, height = PDF_A4_SHORT_EDGE_PT)
+            } else {
+                PdfPageSize(width = PDF_A4_SHORT_EDGE_PT, height = PDF_A4_LONG_EDGE_PT)
+            }
+        }
+
+        val aspectRatio = bitmap.width.toFloat() / bitmap.height.toFloat()
+        return if (bitmap.width >= bitmap.height) {
+            PdfPageSize(
+                width = PDF_A4_LONG_EDGE_PT,
+                height = (PDF_A4_LONG_EDGE_PT / aspectRatio).roundToInt().coerceAtLeast(1)
+            )
+        } else {
+            PdfPageSize(
+                width = (PDF_A4_LONG_EDGE_PT * aspectRatio).roundToInt().coerceAtLeast(1),
+                height = PDF_A4_LONG_EDGE_PT
+            )
+        }
+    }
+
+    private fun centeredFitRect(
+        sourceWidth: Int,
+        sourceHeight: Int,
+        targetWidth: Int,
+        targetHeight: Int
+    ): RectF {
+        val scale = minOf(
+            targetWidth.toFloat() / sourceWidth.toFloat(),
+            targetHeight.toFloat() / sourceHeight.toFloat()
+        )
+        val width = sourceWidth * scale
+        val height = sourceHeight * scale
+        val left = (targetWidth - width) / 2f
+        val top = (targetHeight - height) / 2f
+        return RectF(left, top, left + width, top + height)
+    }
+
     private fun decodeImageBitmap(
         uri: Uri,
-        maxLongSidePixels: Int?
+        maxLongSidePixels: Int?,
+        maxPixels: Long = MAX_IMAGE_DECODE_PIXELS
     ): Bitmap? {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            decodeImageBitmapWithImageDecoder(uri, maxLongSidePixels)?.let { bitmap ->
+            decodeImageBitmapWithImageDecoder(uri, maxLongSidePixels, maxPixels)?.let { bitmap ->
                 return scaleBitmapIfNeeded(bitmap, maxLongSidePixels)
             }
         }
-        decodeImageBitmapWithFileDescriptor(uri, maxLongSidePixels)?.let { bitmap ->
+        decodeImageBitmapWithFileDescriptor(uri, maxLongSidePixels, maxPixels)?.let { bitmap ->
             return bitmap
         }
-        return decodeImageBitmapWithBitmapFactory(uri, maxLongSidePixels)
+        return decodeImageBitmapWithBitmapFactory(uri, maxLongSidePixels, maxPixels)
     }
 
     @RequiresApi(Build.VERSION_CODES.P)
     private fun decodeImageBitmapWithImageDecoder(
         uri: Uri,
-        maxLongSidePixels: Int?
+        maxLongSidePixels: Int?,
+        maxPixels: Long
     ): Bitmap? {
         return runCatching {
             val source = ImageDecoder.createSource(contentResolver, uri)
@@ -430,7 +870,8 @@ class ConversionService : Service() {
                     val targetSize = imageDecodeSizeFor(
                         info.size.width,
                         info.size.height,
-                        maxLongSidePixels
+                        maxLongSidePixels,
+                        maxPixels
                     )
                     decoder.setTargetSize(targetSize.width, targetSize.height)
                 }
@@ -442,7 +883,8 @@ class ConversionService : Service() {
 
     private fun decodeImageBitmapWithFileDescriptor(
         uri: Uri,
-        maxLongSidePixels: Int?
+        maxLongSidePixels: Int?,
+        maxPixels: Long
     ): Bitmap? {
         val bounds = BitmapFactory.Options().apply {
             inJustDecodeBounds = true
@@ -465,7 +907,7 @@ class ConversionService : Service() {
 
         val options = BitmapFactory.Options().apply {
             inPreferredConfig = Bitmap.Config.ARGB_8888
-            inSampleSize = imageSampleSize(width, height, maxLongSidePixels)
+            inSampleSize = imageSampleSize(width, height, maxLongSidePixels, maxPixels)
         }
         val decoded = runCatching {
             contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
@@ -484,7 +926,8 @@ class ConversionService : Service() {
 
     private fun decodeImageBitmapWithBitmapFactory(
         uri: Uri,
-        maxLongSidePixels: Int?
+        maxLongSidePixels: Int?,
+        maxPixels: Long
     ): Bitmap? {
         val bounds = BitmapFactory.Options().apply {
             inJustDecodeBounds = true
@@ -506,7 +949,7 @@ class ConversionService : Service() {
 
         val options = BitmapFactory.Options().apply {
             inPreferredConfig = Bitmap.Config.ARGB_8888
-            inSampleSize = imageSampleSize(width, height, maxLongSidePixels)
+            inSampleSize = imageSampleSize(width, height, maxLongSidePixels, maxPixels)
         }
         val decoded = contentResolver.openInputStream(uri)?.use { input ->
             BitmapFactory.decodeStream(input, null, options)
@@ -533,11 +976,12 @@ class ConversionService : Service() {
     private fun imageSampleSize(
         width: Int,
         height: Int,
-        maxLongSidePixels: Int?
+        maxLongSidePixels: Int?,
+        maxPixels: Long = MAX_IMAGE_DECODE_PIXELS
     ): Int {
         var sampleSize = 1
         while (
-            imagePixelsAtSample(width, height, sampleSize) > MAX_IMAGE_DECODE_PIXELS ||
+            imagePixelsAtSample(width, height, sampleSize) > maxPixels ||
             (
                 maxLongSidePixels != null &&
                     maxOf(width, height) / sampleSize > maxLongSidePixels * 2
@@ -557,9 +1001,10 @@ class ConversionService : Service() {
     private fun imageDecodeSizeFor(
         width: Int,
         height: Int,
-        maxLongSidePixels: Int?
+        maxLongSidePixels: Int?,
+        maxPixels: Long = MAX_IMAGE_DECODE_PIXELS
     ): ImageDecodeSize {
-        val sampleSize = imageSampleSize(width, height, maxLongSidePixels)
+        val sampleSize = imageSampleSize(width, height, maxLongSidePixels, maxPixels)
         return ImageDecodeSize(
             width = (width / sampleSize).coerceAtLeast(1),
             height = (height / sampleSize).coerceAtLeast(1)
@@ -669,9 +1114,41 @@ class ConversionService : Service() {
         }
     }
 
+    private fun throwIfConversionCancelled() {
+        if (ConversionTaskStore.isCancelled() || Thread.currentThread().isInterrupted) {
+            throw CancellationException()
+        }
+    }
+
+    private fun progressForIndexedWork(
+        index: Int,
+        count: Int,
+        start: Float,
+        end: Float
+    ): Float {
+        if (count <= 0) return start
+        val completed = (index + 1).toFloat() / count.toFloat()
+        return start + (end - start) * completed
+    }
+
     private fun imageFailureMessageFor(exception: Throwable): String {
         return exception.message?.takeIf { it.startsWith("Image engine") }
             ?: "Image conversion failed"
+    }
+
+    private fun pdfFailureMessageFor(exception: Throwable): String {
+        return when {
+            exception is SecurityException ->
+                exception.message?.takeIf { it.contains("Password-protected") }
+                    ?: "Password-protected or unsupported PDF security"
+            exception.message == "PDF has no pages" -> "PDF has no pages"
+            exception.message == "Not enough cache space for this PDF" ->
+                "Not enough cache space for this PDF"
+            exception.message == "Could not open PDF" -> "Input file could not be opened"
+            else -> exception.message?.takeIf {
+                it.startsWith("Image engine") || it.startsWith("PDF")
+            } ?: "PDF conversion failed"
+        }
     }
 
     private fun startCompatibilityExport(
@@ -851,6 +1328,7 @@ class ConversionService : Service() {
                 add(outputFile.absolutePath)
             }
             ConversionMediaCategory.Image -> error("Compatibility engine is not connected for images")
+            ConversionMediaCategory.Pdf -> error("Compatibility engine is not connected for PDFs")
         }
     }
 
@@ -1182,6 +1660,8 @@ class ConversionService : Service() {
                 "Compatibility engine could not convert this audio"
             ConversionMediaCategory.Image ->
                 "Compatibility engine is not connected for images"
+            ConversionMediaCategory.Pdf ->
+                "Compatibility engine is not connected for PDFs"
         }
     }
 
@@ -1249,6 +1729,7 @@ class ConversionService : Service() {
                     isLikelyWmaAudioInput(input) ||
                     (isLikelyVideoInput(input) && !isLikelyMp4VideoInput(input))
             ConversionMediaCategory.Image -> false
+            ConversionMediaCategory.Pdf -> false
         }
     }
 
@@ -1394,7 +1875,7 @@ class ConversionService : Service() {
                 val createdOutputUri = createOutput(
                     input,
                     outputNameFor(input, outputProfile.extension),
-                    outputProfile.mimeType
+                    outputProfile
                 )
                 outputUri = createdOutputUri
                 copyFileToOutput(tempFile, createdOutputUri)
@@ -1419,6 +1900,65 @@ class ConversionService : Service() {
                 Log.w(TAG, "Could not save export", exception)
                 deleteOutputQuietly(outputUri)
                 tempFile.delete()
+                handler.post {
+                    activeTempFile = null
+                    failCurrentTask("Could not save output file")
+                }
+            }
+        }.also { it.start() }
+    }
+
+    private fun saveCompletedExportFiles(
+        input: ConversionTaskInput,
+        tempFiles: List<File>,
+        outputProfile: OutputProfile
+    ) {
+        stopProgressPolling()
+        activeTransformer = null
+        ConversionTaskStore.markSaving(taskIndex)
+        updateNotification("Saving", (ConversionTaskStore.aggregateProgress() * 100).toInt())
+
+        copyThread = Thread {
+            val outputUris = mutableListOf<Uri>()
+            try {
+                tempFiles.forEachIndexed { index, tempFile ->
+                    if (Thread.currentThread().isInterrupted || ConversionTaskStore.isCancelled()) {
+                        throw InterruptedException()
+                    }
+                    val createdOutputUri = createOutput(
+                        input,
+                        outputNameForPage(
+                            input = input,
+                            extension = outputProfile.extension,
+                            pageIndex = index,
+                            pageCount = tempFiles.size
+                        ),
+                        outputProfile
+                    )
+                    outputUris.add(createdOutputUri)
+                    copyFileToOutput(tempFile, createdOutputUri)
+                    finalizeOutput(input, createdOutputUri, outputProfile.mimeType)
+                    tempFile.delete()
+                }
+                handler.post {
+                    if (ConversionTaskStore.isCancelled()) {
+                        outputUris.forEach { deleteOutputQuietly(it) }
+                        cancelRun()
+                        return@post
+                    }
+                    activeTempFile = null
+                    ConversionTaskStore.markCompleted(taskIndex, outputUris.firstOrNull())
+                    taskIndex += 1
+                    processNextTask()
+                }
+            } catch (exception: InterruptedException) {
+                outputUris.forEach { deleteOutputQuietly(it) }
+                tempFiles.forEach { it.delete() }
+                handler.post { cancelRun() }
+            } catch (exception: Throwable) {
+                Log.w(TAG, "Could not save PDF image export", exception)
+                outputUris.forEach { deleteOutputQuietly(it) }
+                tempFiles.forEach { it.delete() }
                 handler.post {
                     activeTempFile = null
                     failCurrentTask("Could not save output file")
@@ -1505,54 +2045,64 @@ class ConversionService : Service() {
         }
     }
 
+    private fun createTempFileForPdfPage(
+        input: ConversionTaskInput,
+        extension: String,
+        pageIndex: Int
+    ): File {
+        val cacheRoot = externalCacheDir ?: cacheDir
+        val tempDirectory = File(cacheRoot, "exports").apply { mkdirs() }
+        return File(tempDirectory, "${input.fileId}_page_${pageIndex + 1}.$extension").apply {
+            if (exists()) delete()
+        }
+    }
+
     private fun createOutput(
         input: ConversionTaskInput,
         displayName: String,
-        mimeType: String
+        outputProfile: OutputProfile
     ): Uri {
         return when (val destination = input.outputDestination) {
             OutputDestination.DefaultPublicDirectory -> createDefaultOutput(
-                input,
                 displayName,
-                mimeType
+                outputProfile
             )
             is OutputDestination.CustomDirectory -> createOutputDocument(
                 destination.uri,
                 displayName,
-                mimeType
+                outputProfile.mimeType
             )
         }
     }
 
     private fun createDefaultOutput(
-        input: ConversionTaskInput,
         displayName: String,
-        mimeType: String
+        outputProfile: OutputProfile
     ): Uri {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            return createLegacyDefaultOutput(input, displayName)
+            return createLegacyDefaultOutput(outputProfile, displayName)
         }
 
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
-            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+            put(MediaStore.MediaColumns.MIME_TYPE, outputProfile.mimeType)
             put(
                 MediaStore.MediaColumns.RELATIVE_PATH,
-                "${defaultPublicDirectoryFor(input)}/$DEFAULT_OUTPUT_DIRECTORY"
+                "${defaultPublicDirectoryFor(outputProfile)}/$DEFAULT_OUTPUT_DIRECTORY"
             )
             put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
-        return contentResolver.insert(defaultCollectionFor(input), values)
+        return contentResolver.insert(defaultCollectionFor(outputProfile), values)
             ?: error("Could not create output file")
     }
 
     @Suppress("DEPRECATION")
     private fun createLegacyDefaultOutput(
-        input: ConversionTaskInput,
+        outputProfile: OutputProfile,
         displayName: String
     ): Uri {
         val publicDirectory = Environment.getExternalStoragePublicDirectory(
-            defaultPublicDirectoryFor(input)
+            defaultPublicDirectoryFor(outputProfile)
         )
         val outputDirectory = File(publicDirectory, DEFAULT_OUTPUT_DIRECTORY)
         if (!outputDirectory.exists() && !outputDirectory.mkdirs()) {
@@ -1561,19 +2111,21 @@ class ConversionService : Service() {
         return Uri.fromFile(File(outputDirectory, displayName))
     }
 
-    private fun defaultCollectionFor(input: ConversionTaskInput): Uri {
-        return when (input.category) {
-            ConversionMediaCategory.Audio -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-            ConversionMediaCategory.Image -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-            ConversionMediaCategory.Video -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+    private fun defaultCollectionFor(outputProfile: OutputProfile): Uri {
+        return when (outputProfile.kind) {
+            OutputMediaKind.Audio -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+            OutputMediaKind.Image -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            OutputMediaKind.Video -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            OutputMediaKind.Document -> MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         }
     }
 
-    private fun defaultPublicDirectoryFor(input: ConversionTaskInput): String {
-        return when (input.category) {
-            ConversionMediaCategory.Audio -> Environment.DIRECTORY_MUSIC
-            ConversionMediaCategory.Image -> Environment.DIRECTORY_PICTURES
-            ConversionMediaCategory.Video -> Environment.DIRECTORY_MOVIES
+    private fun defaultPublicDirectoryFor(outputProfile: OutputProfile): String {
+        return when (outputProfile.kind) {
+            OutputMediaKind.Audio -> Environment.DIRECTORY_MUSIC
+            OutputMediaKind.Document -> Environment.DIRECTORY_DOCUMENTS
+            OutputMediaKind.Image -> Environment.DIRECTORY_PICTURES
+            OutputMediaKind.Video -> Environment.DIRECTORY_MOVIES
         }
     }
 
@@ -1676,18 +2228,18 @@ class ConversionService : Service() {
         return when (input.category) {
             ConversionMediaCategory.Video -> {
                 if (input.targetFormat.equals("MP4", ignoreCase = true)) {
-                    OutputProfile(extension = "mp4", mimeType = MIME_TYPE_MP4)
+                    OutputProfile(extension = "mp4", mimeType = MIME_TYPE_MP4, kind = OutputMediaKind.Video)
                 } else {
                     null
                 }
             }
             ConversionMediaCategory.Audio -> {
                 when (audioTargetExtensionFor(input.targetFormat)) {
-                    "mp3" -> OutputProfile(extension = "mp3", mimeType = MIME_TYPE_MP3)
-                    "m4a" -> OutputProfile(extension = "m4a", mimeType = MIME_TYPE_M4A)
-                    "wav" -> OutputProfile(extension = "wav", mimeType = MIME_TYPE_WAV)
-                    "flac" -> OutputProfile(extension = "flac", mimeType = MIME_TYPE_FLAC)
-                    "wma" -> OutputProfile(extension = "wma", mimeType = MIME_TYPE_WMA)
+                    "mp3" -> OutputProfile(extension = "mp3", mimeType = MIME_TYPE_MP3, kind = OutputMediaKind.Audio)
+                    "m4a" -> OutputProfile(extension = "m4a", mimeType = MIME_TYPE_M4A, kind = OutputMediaKind.Audio)
+                    "wav" -> OutputProfile(extension = "wav", mimeType = MIME_TYPE_WAV, kind = OutputMediaKind.Audio)
+                    "flac" -> OutputProfile(extension = "flac", mimeType = MIME_TYPE_FLAC, kind = OutputMediaKind.Audio)
+                    "wma" -> OutputProfile(extension = "wma", mimeType = MIME_TYPE_WMA, kind = OutputMediaKind.Audio)
                     else -> null
                 }
             }
@@ -1695,11 +2247,25 @@ class ConversionService : Service() {
                 when {
                     input.targetFormat.equals("JPG", ignoreCase = true) ||
                         input.targetFormat.equals("JPEG", ignoreCase = true) ->
-                        OutputProfile(extension = "jpg", mimeType = MIME_TYPE_JPEG)
+                        OutputProfile(extension = "jpg", mimeType = MIME_TYPE_JPEG, kind = OutputMediaKind.Image)
                     input.targetFormat.equals("PNG", ignoreCase = true) ->
-                        OutputProfile(extension = "png", mimeType = MIME_TYPE_PNG)
+                        OutputProfile(extension = "png", mimeType = MIME_TYPE_PNG, kind = OutputMediaKind.Image)
                     input.targetFormat.equals("WEBP", ignoreCase = true) ->
-                        OutputProfile(extension = "webp", mimeType = MIME_TYPE_WEBP)
+                        OutputProfile(extension = "webp", mimeType = MIME_TYPE_WEBP, kind = OutputMediaKind.Image)
+                    input.targetFormat.equals("PDF", ignoreCase = true) ->
+                        OutputProfile(extension = "pdf", mimeType = MIME_TYPE_PDF, kind = OutputMediaKind.Document)
+                    else -> null
+                }
+            }
+            ConversionMediaCategory.Pdf -> {
+                when {
+                    input.targetFormat.equals("JPG", ignoreCase = true) ||
+                        input.targetFormat.equals("JPEG", ignoreCase = true) ->
+                        OutputProfile(extension = "jpg", mimeType = MIME_TYPE_JPEG, kind = OutputMediaKind.Image)
+                    input.targetFormat.equals("PNG", ignoreCase = true) ->
+                        OutputProfile(extension = "png", mimeType = MIME_TYPE_PNG, kind = OutputMediaKind.Image)
+                    input.targetFormat.equals("WEBP", ignoreCase = true) ->
+                        OutputProfile(extension = "webp", mimeType = MIME_TYPE_WEBP, kind = OutputMediaKind.Image)
                     else -> null
                 }
             }
@@ -1720,8 +2286,16 @@ class ConversionService : Service() {
 
     private data class OutputProfile(
         val extension: String,
-        val mimeType: String
+        val mimeType: String,
+        val kind: OutputMediaKind
     )
+
+    private enum class OutputMediaKind {
+        Audio,
+        Document,
+        Image,
+        Video
+    }
 
     private data class FfmpegAudioProfile(
         val codec: String,
@@ -1762,15 +2336,59 @@ class ConversionService : Service() {
         val height: Int
     )
 
+    private data class PdfPageSize(
+        val width: Int,
+        val height: Int
+    )
+
+    private data class PdfBitmapSize(
+        val width: Int,
+        val height: Int
+    )
+
+    private data class PdfRenderProfile(
+        val dpi: Float,
+        val maxLongSidePixels: Int,
+        val maxPixels: Long
+    )
+
+    private data class PdfRendererSource(
+        val renderer: PdfRenderer,
+        val cacheFile: File? = null
+    ) {
+        fun close() {
+            runCatching { renderer.close() }
+            cacheFile?.delete()
+        }
+    }
+
     private fun outputNameFor(input: ConversionTaskInput, extension: String): String {
-        val baseName = input.displayName
+        val baseName = sanitizedBaseNameFor(input)
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val shortId = input.fileId.take(8)
+        return "${baseName}_converted_${timestamp}_$shortId.$extension"
+    }
+
+    private fun outputNameForPage(
+        input: ConversionTaskInput,
+        extension: String,
+        pageIndex: Int,
+        pageCount: Int
+    ): String {
+        val baseName = sanitizedBaseNameFor(input)
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val shortId = input.fileId.take(8)
+        val width = pageCount.toString().length.coerceAtLeast(3)
+        val pageNumber = (pageIndex + 1).toString().padStart(width, '0')
+        return "${baseName}_page_${pageNumber}_${timestamp}_$shortId.$extension"
+    }
+
+    private fun sanitizedBaseNameFor(input: ConversionTaskInput): String {
+        return input.displayName
             .substringBeforeLast('.', input.displayName)
             .replace(Regex("""[\\/:*?"<>|]"""), "_")
             .trim()
             .ifBlank { "ZenConverter" }
-        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val shortId = input.fileId.take(8)
-        return "${baseName}_converted_${timestamp}_$shortId.$extension"
     }
 
     private fun updateNotification(title: String, progress: Int) {
@@ -1839,6 +2457,14 @@ class ConversionService : Service() {
         private const val COPY_BUFFER_SIZE = 1024 * 1024
         private const val PROGRESS_BEFORE_SAVE = 0.98f
         private const val MAX_IMAGE_DECODE_PIXELS = 64_000_000L
+        private const val PDF_IMAGE_MAX_LONG_SIDE_PIXELS = 4096
+        private const val PDF_IMAGE_MAX_PIXELS = 16_000_000L
+        private const val PDF_A4_SHORT_EDGE_PT = 595
+        private const val PDF_A4_LONG_EDGE_PT = 842
+        private const val PDF_POINTS_PER_INCH = 72f
+        private const val PDF_PASSWORD_EXTENSION = 13
+        private const val PDF_CACHE_HEADROOM_BYTES = 16L * 1024L * 1024L
+        private const val PDF_UNKNOWN_CACHE_MIN_FREE_BYTES = 256L * 1024L * 1024L
         private const val FFMPEG_MAX_PROGRESS_BEFORE_SAVE = 0.98f
         private const val FFMPEG_LOG_DRAIN_TIMEOUT_MS = 1_000
         private const val FFMPEG_ENCODER_PROBE_TIMEOUT_MS = 2_000
@@ -1853,6 +2479,7 @@ class ConversionService : Service() {
         private const val MIME_TYPE_JPEG = "image/jpeg"
         private const val MIME_TYPE_PNG = "image/png"
         private const val MIME_TYPE_WEBP = "image/webp"
+        private const val MIME_TYPE_PDF = "application/pdf"
         private const val DEFAULT_OUTPUT_DIRECTORY = "ZenConverter"
         private const val URI_SCHEME_FILE = "file"
         private const val MIN_MIXABLE_CHANNEL_COUNT = 1
@@ -1879,6 +2506,9 @@ class ConversionService : Service() {
             "ogv"
         )
         private val WMA_AUDIO_INPUT_EXTENSIONS = setOf("wma", "asf")
+        private val PDF_BITMAP_PAINT = Paint(
+            Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG or Paint.DITHER_FLAG
+        )
         private val WHITESPACE_REGEX = Regex("\\s+")
         private val FFMPEG_TIME_REGEX = Regex("""time=(\d+:\d{2}:\d{2}(?:\.\d+)?)""")
         private val FFMPEG_TIMESTAMP_REGEX = Regex("""(\d+):(\d{2}):(\d{2}(?:\.\d+)?)""")

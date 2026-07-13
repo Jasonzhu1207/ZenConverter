@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 data class ConversionTaskInput(
     val fileId: String,
     val inputUri: Uri,
+    val inputUris: List<Uri>,
     val displayName: String,
     val mimeType: String?,
     val category: ConversionMediaCategory,
@@ -14,7 +15,9 @@ data class ConversionTaskInput(
     val outputDestination: OutputDestination,
     val videoOptions: VideoExportOptions,
     val audioOptions: AudioExportOptions,
-    val imageOptions: ImageExportOptions
+    val imageOptions: ImageExportOptions,
+    val pdfOptions: PdfExportOptions,
+    val pdfPassword: String? = null
 )
 
 sealed interface OutputDestination {
@@ -25,7 +28,8 @@ sealed interface OutputDestination {
 enum class ConversionMediaCategory {
     Video,
     Audio,
-    Image
+    Image,
+    Pdf
 }
 
 data class VideoExportOptions(
@@ -49,6 +53,22 @@ data class AudioExportOptions(
 data class ImageExportOptions(
     val quality: Int = 90
 )
+
+data class PdfExportOptions(
+    val imagePageMode: PdfImagePageMode = PdfImagePageMode.A4Fit,
+    val renderQuality: PdfRenderQuality = PdfRenderQuality.Balanced
+)
+
+enum class PdfImagePageMode {
+    A4Fit,
+    OriginalRatio
+}
+
+enum class PdfRenderQuality {
+    LowResolution,
+    Balanced,
+    HighDetail
+}
 
 data class ConversionTaskState(
     val fileId: String,
@@ -167,6 +187,7 @@ object ConversionTaskStore {
         summaryMessage.value = tasks.lastOrNull { it.status == ConversionTaskStatus.Failed }
             ?.message
             ?: "Conversion complete"
+        clearSensitiveInputs()
     }
 
     fun cancelAll() {
@@ -182,6 +203,7 @@ object ConversionTaskStore {
                 )
             }
         }
+        clearSensitiveInputs()
     }
 
     fun failRunning(message: String) {
@@ -194,6 +216,7 @@ object ConversionTaskStore {
                 message = message
             )
         }
+        clearSensitiveInputs()
     }
 
     fun clear() {
@@ -215,5 +238,14 @@ object ConversionTaskStore {
     ) {
         if (index !in tasks.indices) return
         tasks[index] = transform(tasks[index])
+    }
+
+    private fun clearSensitiveInputs() {
+        for (index in inputs.indices) {
+            val input = inputs[index]
+            if (input.pdfPassword != null) {
+                inputs[index] = input.copy(pdfPassword = null)
+            }
+        }
     }
 }

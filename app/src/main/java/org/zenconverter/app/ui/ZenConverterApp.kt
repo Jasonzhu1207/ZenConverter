@@ -44,9 +44,11 @@ import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.PictureAsPdf
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Videocam
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -56,6 +58,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -81,10 +84,14 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.zenconverter.app.conversion.AudioExportOptions
 import org.zenconverter.app.conversion.ImageExportOptions
+import org.zenconverter.app.conversion.PdfExportOptions
+import org.zenconverter.app.conversion.PdfImagePageMode
+import org.zenconverter.app.conversion.PdfRenderQuality
 import org.zenconverter.app.conversion.VideoExportOptions
 import org.zenconverter.app.R
 import java.util.Locale
@@ -120,7 +127,16 @@ enum class FileCategory(
         formats = listOf(
             TargetFormat("JPG", "jpg", "Batch"),
             TargetFormat("PNG", "png", "Supports transparency"),
-            TargetFormat("WEBP", "webp", "Supports transparency")
+            TargetFormat("WEBP", "webp", "Supports transparency"),
+            TargetFormat("PDF", "pdf", "PDF")
+        )
+    ),
+    Pdf(
+        mimeTypes = listOf("application/pdf"),
+        formats = listOf(
+            TargetFormat("PNG", "png", "Page rasterization"),
+            TargetFormat("JPG", "jpg", "Page rasterization"),
+            TargetFormat("WEBP", "webp", "Page rasterization")
         )
     )
 }
@@ -128,11 +144,21 @@ enum class FileCategory(
 data class QueuedFile(
     val id: String,
     val uri: Uri,
+    val inputUris: List<Uri>,
     val displayName: String,
     val sizeBytes: Long?,
     val mimeType: String?,
     val category: FileCategory,
-    val targetFormat: String
+    val targetFormat: String,
+    val pdfPassword: String? = null
+)
+
+data class ImagePdfMergePrompt(
+    val fileCount: Int
+)
+
+data class PdfPasswordPrompt(
+    val displayName: String
 )
 
 data class OutputDirectory(
@@ -279,6 +305,22 @@ private val IMAGE_QUALITY_OPTIONS = listOf(
     IMAGE_QUALITY_SMALL
 )
 
+private const val PDF_PAGE_MODE_A4_FIT = "A4 fit"
+private const val PDF_PAGE_MODE_ORIGINAL_RATIO = "Original ratio"
+private val PDF_PAGE_MODE_OPTIONS = listOf(
+    PDF_PAGE_MODE_A4_FIT,
+    PDF_PAGE_MODE_ORIGINAL_RATIO
+)
+
+private const val PDF_RENDER_QUALITY_LOW = "Low resolution"
+private const val PDF_RENDER_QUALITY_BALANCED = "Balanced"
+private const val PDF_RENDER_QUALITY_HIGH = "High detail"
+private val PDF_RENDER_QUALITY_OPTIONS = listOf(
+    PDF_RENDER_QUALITY_BALANCED,
+    PDF_RENDER_QUALITY_LOW,
+    PDF_RENDER_QUALITY_HIGH
+)
+
 @Composable
 fun ZenConverterApp(
     queuedFiles: List<QueuedFile>,
@@ -293,7 +335,14 @@ fun ZenConverterApp(
     onPickOutputDirectory: () -> Unit,
     onRemoveFile: (String) -> Unit,
     onClearQueue: () -> Unit,
-    onStartConversion: (VideoExportOptions, AudioExportOptions, ImageExportOptions) -> Unit,
+    imagePdfMergePrompt: ImagePdfMergePrompt?,
+    pdfPasswordPrompt: PdfPasswordPrompt?,
+    onChooseSinglePdf: () -> Unit,
+    onChooseOnePdfPerImage: () -> Unit,
+    onDismissImagePdfPrompt: () -> Unit,
+    onSubmitPdfPassword: (String) -> Unit,
+    onCancelPdfPassword: () -> Unit,
+    onStartConversion: (VideoExportOptions, AudioExportOptions, ImageExportOptions, PdfExportOptions) -> Unit,
     onCancelConversion: () -> Unit
 ) {
     var accent by remember { mutableStateOf(AccentColorOption.Charcoal) }
@@ -326,6 +375,23 @@ fun ZenConverterApp(
                 onStartConversion = onStartConversion,
                 onCancelConversion = onCancelConversion
             )
+            imagePdfMergePrompt?.let { prompt ->
+                ImagePdfMergeDialog(
+                    texts = texts,
+                    prompt = prompt,
+                    onSinglePdf = onChooseSinglePdf,
+                    onOnePdfPerImage = onChooseOnePdfPerImage,
+                    onDismiss = onDismissImagePdfPrompt
+                )
+            }
+            pdfPasswordPrompt?.let { prompt ->
+                PdfPasswordDialog(
+                    texts = texts,
+                    prompt = prompt,
+                    onSubmit = onSubmitPdfPassword,
+                    onCancel = onCancelPdfPassword
+                )
+            }
         }
     }
 }
@@ -349,7 +415,7 @@ private fun ZenConverterContent(
     onPickOutputDirectory: () -> Unit,
     onRemoveFile: (String) -> Unit,
     onClearQueue: () -> Unit,
-    onStartConversion: (VideoExportOptions, AudioExportOptions, ImageExportOptions) -> Unit,
+    onStartConversion: (VideoExportOptions, AudioExportOptions, ImageExportOptions, PdfExportOptions) -> Unit,
     onCancelConversion: () -> Unit
 ) {
     var showSettings by remember { mutableStateOf(false) }
@@ -357,6 +423,7 @@ private fun ZenConverterContent(
     var videoTarget by remember { mutableStateOf(FileCategory.Video.formats.first()) }
     var audioTarget by remember { mutableStateOf(FileCategory.Audio.formats.first()) }
     var imageTarget by remember { mutableStateOf(FileCategory.Image.formats.first()) }
+    var pdfTarget by remember { mutableStateOf(FileCategory.Pdf.formats.first()) }
     var queueMessage by remember { mutableStateOf<String?>(null) }
     var openMenuId by remember { mutableStateOf<String?>(null) }
     var videoResolution by remember { mutableStateOf(VIDEO_RESOLUTION_ORIGINAL) }
@@ -369,11 +436,14 @@ private fun ZenConverterContent(
     var audioSampleRate by remember { mutableStateOf(AUDIO_SAMPLE_RATE_ORIGINAL) }
     var audioChannels by remember { mutableStateOf(AUDIO_CHANNELS_ORIGINAL) }
     var imageQuality by remember { mutableStateOf(IMAGE_QUALITY_BALANCED) }
+    var pdfPageMode by remember { mutableStateOf(PDF_PAGE_MODE_A4_FIT) }
+    var pdfRenderQuality by remember { mutableStateOf(PDF_RENDER_QUALITY_BALANCED) }
 
     fun targetFor(category: FileCategory): TargetFormat = when (category) {
         FileCategory.Video -> videoTarget
         FileCategory.Audio -> audioTarget
         FileCategory.Image -> imageTarget
+        FileCategory.Pdf -> pdfTarget
     }
 
     fun setTarget(category: FileCategory, targetFormat: TargetFormat) {
@@ -381,6 +451,7 @@ private fun ZenConverterContent(
             FileCategory.Video -> videoTarget = targetFormat
             FileCategory.Audio -> audioTarget = targetFormat
             FileCategory.Image -> imageTarget = targetFormat
+            FileCategory.Pdf -> pdfTarget = targetFormat
         }
     }
 
@@ -404,6 +475,13 @@ private fun ZenConverterContent(
     fun currentImageOptions(): ImageExportOptions {
         return ImageExportOptions(
             quality = imageQualityToPercent(imageQuality)
+        )
+    }
+
+    fun currentPdfOptions(): PdfExportOptions {
+        return PdfExportOptions(
+            imagePageMode = pdfPageModeToOption(pdfPageMode),
+            renderQuality = pdfRenderQualityToOption(pdfRenderQuality)
         )
     }
 
@@ -479,6 +557,8 @@ private fun ZenConverterContent(
                     audioTarget = audioTarget,
                     imageTarget = imageTarget,
                     imageQuality = imageQuality,
+                    pdfPageMode = pdfPageMode,
+                    pdfRenderQuality = pdfRenderQuality,
                     openMenuId = openMenuId,
                     onOpenMenuChange = { openMenuId = it },
                     onVideoResolutionChange = { videoResolution = it },
@@ -488,7 +568,9 @@ private fun ZenConverterContent(
                     onAudioBitrateChange = { audioBitrate = it },
                     onAudioSampleRateChange = { audioSampleRate = it },
                     onAudioChannelsChange = { audioChannels = it },
-                    onImageQualityChange = { imageQuality = it }
+                    onImageQualityChange = { imageQuality = it },
+                    onPdfPageModeChange = { pdfPageMode = it },
+                    onPdfRenderQualityChange = { pdfRenderQuality = it }
                 )
             }
 
@@ -513,7 +595,8 @@ private fun ZenConverterContent(
                         onStartConversion(
                             currentVideoOptions(),
                             currentAudioOptions(),
-                            currentImageOptions()
+                            currentImageOptions(),
+                            currentPdfOptions()
                         )
                     },
                     onCancel = {
@@ -545,6 +628,67 @@ private fun ZenConverterContent(
             }
         }
     }
+}
+
+@Composable
+private fun ImagePdfMergeDialog(
+    texts: UiText,
+    prompt: ImagePdfMergePrompt,
+    onSinglePdf: () -> Unit,
+    onOnePdfPerImage: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(texts.imagePdfPromptTitle) },
+        text = { Text(texts.imagePdfPromptMessage(prompt.fileCount)) },
+        confirmButton = {
+            TextButton(onClick = onSinglePdf) {
+                Text(texts.optionValue("Single PDF"))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onOnePdfPerImage) {
+                Text(texts.optionValue("One PDF per image"))
+            }
+        }
+    )
+}
+
+@Composable
+private fun PdfPasswordDialog(
+    texts: UiText,
+    prompt: PdfPasswordPrompt,
+    onSubmit: (String) -> Unit,
+    onCancel: () -> Unit
+) {
+    var password by remember(prompt.displayName) { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(texts.pdfPasswordTitle) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(texts.pdfPasswordMessage(prompt.displayName))
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    singleLine = true,
+                    label = { Text(texts.password) },
+                    visualTransformation = PasswordVisualTransformation()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSubmit(password) }) {
+                Text(texts.choose)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) {
+                Text(texts.skip)
+            }
+        }
+    )
 }
 
 @Composable
@@ -856,6 +1000,8 @@ private fun EncodingPanel(
     audioTarget: TargetFormat,
     imageTarget: TargetFormat,
     imageQuality: String,
+    pdfPageMode: String,
+    pdfRenderQuality: String,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onVideoResolutionChange: (String) -> Unit,
@@ -865,7 +1011,9 @@ private fun EncodingPanel(
     onAudioBitrateChange: (String) -> Unit,
     onAudioSampleRateChange: (String) -> Unit,
     onAudioChannelsChange: (String) -> Unit,
-    onImageQualityChange: (String) -> Unit
+    onImageQualityChange: (String) -> Unit,
+    onPdfPageModeChange: (String) -> Unit,
+    onPdfRenderQualityChange: (String) -> Unit
 ) {
     QuietPanel {
         Text(
@@ -911,9 +1059,18 @@ private fun EncodingPanel(
                 texts = texts,
                 targetFormat = imageTarget,
                 quality = imageQuality,
+                pdfPageMode = pdfPageMode,
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
-                onQualityChange = onImageQualityChange
+                onQualityChange = onImageQualityChange,
+                onPdfPageModeChange = onPdfPageModeChange
+            )
+            FileCategory.Pdf -> PdfOptions(
+                texts = texts,
+                renderQuality = pdfRenderQuality,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                onRenderQualityChange = onPdfRenderQualityChange
             )
         }
     }
@@ -1038,10 +1195,28 @@ private fun ImageOptions(
     texts: UiText,
     targetFormat: TargetFormat,
     quality: String,
+    pdfPageMode: String,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
-    onQualityChange: (String) -> Unit
+    onQualityChange: (String) -> Unit,
+    onPdfPageModeChange: (String) -> Unit
 ) {
+    if (targetFormat.extension.equals("pdf", ignoreCase = true)) {
+        OptionGrid {
+            OptionDropdown(
+                "image-pdf-page-mode",
+                texts.pageSize,
+                pdfPageMode,
+                PDF_PAGE_MODE_OPTIONS,
+                texts,
+                openMenuId,
+                onOpenMenuChange,
+                onPdfPageModeChange
+            )
+        }
+        return
+    }
+
     if (targetFormat.extension.equals("png", ignoreCase = true)) {
         Text(
             text = texts.optionValue("Lossless output"),
@@ -1053,6 +1228,28 @@ private fun ImageOptions(
 
     OptionGrid {
         OptionDropdown("image-quality", texts.quality, quality, IMAGE_QUALITY_OPTIONS, texts, openMenuId, onOpenMenuChange, onQualityChange)
+    }
+}
+
+@Composable
+private fun PdfOptions(
+    texts: UiText,
+    renderQuality: String,
+    openMenuId: String?,
+    onOpenMenuChange: (String?) -> Unit,
+    onRenderQualityChange: (String) -> Unit
+) {
+    OptionGrid {
+        OptionDropdown(
+            "pdf-render-quality",
+            texts.renderQuality,
+            renderQuality,
+            PDF_RENDER_QUALITY_OPTIONS,
+            texts,
+            openMenuId,
+            onOpenMenuChange,
+            onRenderQualityChange
+        )
     }
 }
 
@@ -1618,6 +1815,7 @@ private fun FileCategory.icon(): ImageVector {
         FileCategory.Video -> Icons.Rounded.Videocam
         FileCategory.Audio -> Icons.Rounded.AudioFile
         FileCategory.Image -> Icons.Rounded.Image
+        FileCategory.Pdf -> Icons.Rounded.PictureAsPdf
     }
 }
 
@@ -1761,6 +1959,21 @@ private fun imageQualityToPercent(value: String): Int {
     }
 }
 
+private fun pdfPageModeToOption(value: String): PdfImagePageMode {
+    return when (value) {
+        PDF_PAGE_MODE_ORIGINAL_RATIO -> PdfImagePageMode.OriginalRatio
+        else -> PdfImagePageMode.A4Fit
+    }
+}
+
+private fun pdfRenderQualityToOption(value: String): PdfRenderQuality {
+    return when (value) {
+        PDF_RENDER_QUALITY_LOW -> PdfRenderQuality.LowResolution
+        PDF_RENDER_QUALITY_HIGH -> PdfRenderQuality.HighDetail
+        else -> PdfRenderQuality.Balanced
+    }
+}
+
 private val AUDIO_LOSSLESS_OUTPUT_EXTENSIONS = setOf("wav", "flac")
 
 private data class UiText(
@@ -1798,6 +2011,8 @@ private data class UiText(
     val cancelled: String,
     val failed: String,
     val quality: String,
+    val pageSize: String,
+    val renderQuality: String,
     val resolution: String,
     val bitrate: String,
     val codec: String,
@@ -1805,10 +2020,30 @@ private data class UiText(
     val sampleRate: String,
     val channels: String,
     val outputMode: String,
+    val password: String,
+    val skip: String,
+    val imagePdfPromptTitle: String,
+    val pdfPasswordTitle: String,
     val uiPresetSuffix: String,
     val toPrefix: String
 ) {
     fun selectedCount(count: Int): String = "$count $selectedSuffix"
+
+    fun imagePdfPromptMessage(count: Int): String {
+        return when (this) {
+            englishText -> "Create one PDF from $count selected images, or one PDF per image?"
+            simplifiedChineseText -> "已选择 $count 张图片。要合并成一个 PDF，还是每张图片各生成一个 PDF？"
+            else -> "已選擇 $count 張圖片。要合併成一個 PDF，還是每張圖片各生成一個 PDF？"
+        }
+    }
+
+    fun pdfPasswordMessage(fileName: String): String {
+        return when (this) {
+            englishText -> "$fileName is password-protected. Enter the password to add it."
+            simplifiedChineseText -> "$fileName 受密码保护。输入密码后再加入队列。"
+            else -> "$fileName 受密碼保護。輸入密碼後再加入佇列。"
+        }
+    }
 
     fun taskMessage(value: String): String {
         return when (value) {
@@ -1822,6 +2057,57 @@ private data class UiText(
             "Only video MP4 and audio M4A are connected" -> failed
             "Only video MP4, audio M4A, and JPG/PNG/WEBP images are connected" -> failed
             "Only video MP4, audio MP3/M4A/WAV/FLAC/WMA, and JPG/PNG/WEBP images are connected" -> failed
+            "Only connected video, audio, image, and PDF targets can run" -> failed
+            "Password-protected PDFs need Android 15 or PDF extension 13" -> when (this) {
+                englishText -> "Password-protected PDFs need Android 15 or PDF extension 13"
+                simplifiedChineseText -> "受密码保护的 PDF 需要 Android 15 或 PDF 扩展 13"
+                else -> "受密碼保護的 PDF 需要 Android 15 或 PDF 擴充 13"
+            }
+            "Password-protected PDF was skipped" -> when (this) {
+                englishText -> "Password-protected PDF was skipped"
+                simplifiedChineseText -> "已跳过受密码保护的 PDF"
+                else -> "已略過受密碼保護的 PDF"
+            }
+            "PDF password was empty" -> when (this) {
+                englishText -> "PDF password was empty"
+                simplifiedChineseText -> "PDF 密码不能为空"
+                else -> "PDF 密碼不能為空"
+            }
+            "PDF password was incorrect or unsupported" -> when (this) {
+                englishText -> "PDF password was incorrect or unsupported"
+                simplifiedChineseText -> "PDF 密码不正确，或该保护方式不受支持"
+                else -> "PDF 密碼不正確，或該保護方式不受支援"
+            }
+            "Password-protected or unsupported PDF security" -> when (this) {
+                englishText -> "Password-protected or unsupported PDF security"
+                simplifiedChineseText -> "PDF 受密码保护，或使用了不受支持的安全方式"
+                else -> "PDF 受密碼保護，或使用了不受支援的安全方式"
+            }
+            "PDF has no pages" -> when (this) {
+                englishText -> "PDF has no pages"
+                simplifiedChineseText -> "PDF 没有可渲染页面"
+                else -> "PDF 沒有可渲染頁面"
+            }
+            "Not enough cache space for this PDF" -> when (this) {
+                englishText -> "Not enough cache space for this PDF"
+                simplifiedChineseText -> "缓存空间不足，无法处理这个 PDF"
+                else -> "快取空間不足，無法處理這個 PDF"
+            }
+            "PDF conversion failed" -> when (this) {
+                englishText -> "PDF conversion failed"
+                simplifiedChineseText -> "PDF 转换失败"
+                else -> "PDF 轉換失敗"
+            }
+            "Could not open this PDF" -> when (this) {
+                englishText -> "Could not open this PDF"
+                simplifiedChineseText -> "无法打开这个 PDF"
+                else -> "無法開啟這個 PDF"
+            }
+            "Could not read this PDF" -> when (this) {
+                englishText -> "Could not read this PDF"
+                simplifiedChineseText -> "无法读取这个 PDF"
+                else -> "無法讀取這個 PDF"
+            }
             "Default output needs storage permission on this Android version" -> storagePermissionRequired
             "Selected video encoder is not supported on this device" -> videoEncoderUnsupported
             "Native engine timed out before writing output" -> when (this) {
@@ -1957,6 +2243,7 @@ private data class UiText(
             FileCategory.Video -> optionValue("Video")
             FileCategory.Audio -> optionValue("Audio")
             FileCategory.Image -> optionValue("Image")
+            FileCategory.Pdf -> optionValue("PDF")
         }
     }
 
@@ -1976,6 +2263,11 @@ private data class UiText(
                 englishText -> "Convert image formats"
                 simplifiedChineseText -> "转换图片格式"
                 else -> "轉換圖片格式"
+            }
+            FileCategory.Pdf -> when (this) {
+                englishText -> "Render PDF pages"
+                simplifiedChineseText -> "渲染 PDF 页面"
+                else -> "渲染 PDF 頁面"
             }
         }
     }
@@ -2004,6 +2296,11 @@ private data class UiText(
                 englishText -> "Set quality when available"
                 simplifiedChineseText -> "可用时调整输出质量"
                 else -> "可用時調整輸出品質"
+            }
+            FileCategory.Pdf -> when (this) {
+                englishText -> "Set page render size"
+                simplifiedChineseText -> "设置页面渲染尺寸"
+                else -> "設定頁面渲染尺寸"
             }
         }
     }
@@ -2060,6 +2357,11 @@ private data class UiText(
                 else -> "原生或相容引擎"
             }
             "PDF" -> "PDF"
+            "Page rasterization" -> when (this) {
+                englishText -> "Page rasterization"
+                simplifiedChineseText -> "页面栅格化"
+                else -> "頁面柵格化"
+            }
             "Batch" -> when (this) {
                 englishText -> "Batch processing"
                 simplifiedChineseText -> "批量处理"
@@ -2226,6 +2528,31 @@ private data class UiText(
                 simplifiedChineseText -> "合并为 PDF"
                 else -> "合併為 PDF"
             }
+            "One PDF per image" -> when (this) {
+                englishText -> "One PDF per image"
+                simplifiedChineseText -> "每张图一个 PDF"
+                else -> "每張圖一個 PDF"
+            }
+            "A4 fit" -> when (this) {
+                englishText -> "A4 fit"
+                simplifiedChineseText -> "适配 A4"
+                else -> "適配 A4"
+            }
+            "Original ratio" -> when (this) {
+                englishText -> "Original ratio"
+                simplifiedChineseText -> "原图比例"
+                else -> "原圖比例"
+            }
+            "Low resolution" -> when (this) {
+                englishText -> "Low resolution"
+                simplifiedChineseText -> "低分辨率"
+                else -> "低解析度"
+            }
+            "High detail" -> when (this) {
+                englishText -> "High detail"
+                simplifiedChineseText -> "高清细节"
+                else -> "高清細節"
+            }
             "Charcoal" -> when (this) {
                 englishText -> "Charcoal"
                 simplifiedChineseText -> "炭黑"
@@ -2295,7 +2622,7 @@ private val englishText = UiText(
     chooseDirectory = "Choose folder",
     chooseFolderBeforeConversion = "Choose where to save results",
     defaultOutputLocation = "Default folder",
-    defaultOutputNote = "Videos save to Movies/ZenConverter; audio to Music/ZenConverter; images to Pictures/ZenConverter",
+    defaultOutputNote = "Videos save to Movies/ZenConverter; audio to Music/ZenConverter; images to Pictures/ZenConverter; PDFs to Documents/ZenConverter",
     customOutputLocation = "Custom folder",
     storagePermissionRequired = "Allow storage permission or choose a folder",
     videoEncoderUnsupported = "This device does not support the selected video encoder",
@@ -2316,6 +2643,8 @@ private val englishText = UiText(
     cancelled = "Cancelled",
     failed = "Failed",
     quality = "Quality",
+    pageSize = "Page size",
+    renderQuality = "Render quality",
     resolution = "Resolution",
     bitrate = "Bitrate",
     codec = "Codec",
@@ -2323,6 +2652,10 @@ private val englishText = UiText(
     sampleRate = "Sample rate",
     channels = "Channels",
     outputMode = "Output",
+    password = "Password",
+    skip = "Skip",
+    imagePdfPromptTitle = "Image to PDF",
+    pdfPasswordTitle = "PDF password",
     uiPresetSuffix = "",
     toPrefix = "to"
 )
@@ -2341,7 +2674,7 @@ private val simplifiedChineseText = UiText(
     chooseDirectory = "选择目录",
     chooseFolderBeforeConversion = "选择处理后文件的保存位置",
     defaultOutputLocation = "默认文件夹",
-    defaultOutputNote = "视频保存到 Movies/ZenConverter；音频到 Music/ZenConverter；图片到 Pictures/ZenConverter",
+    defaultOutputNote = "视频保存到 Movies/ZenConverter；音频到 Music/ZenConverter；图片到 Pictures/ZenConverter；PDF 到 Documents/ZenConverter",
     customOutputLocation = "自定义文件夹",
     storagePermissionRequired = "请允许存储权限，或改选自定义文件夹",
     videoEncoderUnsupported = "当前设备不支持所选视频编码",
@@ -2362,6 +2695,8 @@ private val simplifiedChineseText = UiText(
     cancelled = "已取消",
     failed = "失败",
     quality = "质量",
+    pageSize = "页面尺寸",
+    renderQuality = "渲染质量",
     resolution = "分辨率",
     bitrate = "码率",
     codec = "编码",
@@ -2369,6 +2704,10 @@ private val simplifiedChineseText = UiText(
     sampleRate = "采样率",
     channels = "声道",
     outputMode = "输出方式",
+    password = "密码",
+    skip = "跳过",
+    imagePdfPromptTitle = "图片转 PDF",
+    pdfPasswordTitle = "PDF 密码",
     uiPresetSuffix = "",
     toPrefix = "转为"
 )
@@ -2387,7 +2726,7 @@ private val traditionalChineseText = UiText(
     chooseDirectory = "選擇資料夾",
     chooseFolderBeforeConversion = "選擇處理後檔案的儲存位置",
     defaultOutputLocation = "預設資料夾",
-    defaultOutputNote = "影片儲存到 Movies/ZenConverter；音訊到 Music/ZenConverter；圖片到 Pictures/ZenConverter",
+    defaultOutputNote = "影片儲存到 Movies/ZenConverter；音訊到 Music/ZenConverter；圖片到 Pictures/ZenConverter；PDF 到 Documents/ZenConverter",
     customOutputLocation = "自訂資料夾",
     storagePermissionRequired = "請允許儲存權限，或改選自訂資料夾",
     videoEncoderUnsupported = "目前裝置不支援所選影片編碼",
@@ -2408,6 +2747,8 @@ private val traditionalChineseText = UiText(
     cancelled = "已取消",
     failed = "失敗",
     quality = "品質",
+    pageSize = "頁面尺寸",
+    renderQuality = "渲染品質",
     resolution = "解析度",
     bitrate = "位元率",
     codec = "編碼",
@@ -2415,6 +2756,10 @@ private val traditionalChineseText = UiText(
     sampleRate = "取樣率",
     channels = "聲道",
     outputMode = "輸出方式",
+    password = "密碼",
+    skip = "略過",
+    imagePdfPromptTitle = "圖片轉 PDF",
+    pdfPasswordTitle = "PDF 密碼",
     uiPresetSuffix = "",
     toPrefix = "轉為"
 )

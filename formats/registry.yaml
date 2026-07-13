@@ -255,11 +255,33 @@ groups:
         note: "Static WEBP only; Original quality is value 100 re-encode, not same-file FastCopy yet."
   pdf:
     planned:
-      - from: image
+      - from: jpg
         to: pdf
-        engine: pdf-library
-        status: planned
+        engine: native-pdfdocument
+        status: experimental
+        note: "Creates one image-backed PDF page per input image through Android PdfDocument. A4-fit and original-ratio page modes are supported; source image decode is capped for memory safety."
+      - from: png
+        to: pdf
+        engine: native-pdfdocument
+        status: experimental
+        note: "Creates one image-backed PDF page per input image through Android PdfDocument. Transparency is flattened onto a white page background."
+      - from: webp
+        to: pdf
+        engine: native-pdfdocument
+        status: experimental
+        note: "Static WEBP only; animated WEBP is not preserved as animation."
       - from: pdf
-        to: image
-        engine: pdf-renderer
-        status: planned
+        to: png
+        engine: native-pdfrenderer
+        status: experimental
+        note: "Renders each PDF page to a same-sized PNG bitmap through Android PdfRenderer. This is rasterization, not OCR or embedded-image extraction."
+      - from: pdf
+        to: jpg
+        engine: native-pdfrenderer
+        status: experimental
+        note: "Renders each PDF page to a same-sized JPG bitmap through Android PdfRenderer. Password support depends on Android 15 or PDF extension 13."
+      - from: pdf
+        to: webp
+        engine: native-pdfrenderer
+        status: experimental
+        note: "Renders each PDF page to a same-sized WEBP bitmap through Android PdfRenderer with low, balanced, and high-detail render presets."
