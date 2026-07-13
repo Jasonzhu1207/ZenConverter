@@ -285,3 +285,13 @@ groups:
         engine: native-pdfrenderer
         status: experimental
         note: "Renders each PDF page to a same-sized WEBP bitmap through Android PdfRenderer with low, balanced, and high-detail render presets."
+      - from: pdf
+        to: pdf
+        engine: pdfbox-android
+        status: experimental
+        note: "True PDF merge for multiple selected PDFs. Preserves normal page objects, vector content, and selectable text best-effort; complex forms, bookmarks, attachments, and metadata are not guaranteed. Password-protected source PDFs can be loaded with transient passwords."
+      - from: pdf
+        to: txt
+        engine: pdfbox-android
+        status: experimental
+        note: "Extracts selectable text with page separators through PDFBox-Android. This is not OCR; scanned PDFs without a text layer fail clearly. Password-protected source PDFs can be loaded with transient passwords."

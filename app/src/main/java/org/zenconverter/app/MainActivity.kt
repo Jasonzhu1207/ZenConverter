@@ -16,6 +16,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
+import com.tom_roush.pdfbox.io.MemoryUsageSetting
+import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.pdmodel.encryption.InvalidPasswordException
 import org.zenconverter.app.conversion.AudioExportOptions
 import org.zenconverter.app.conversion.ConversionMediaCategory
 import org.zenconverter.app.conversion.ConversionService
@@ -58,6 +62,7 @@ class MainActivity : ComponentActivity() {
     private var pendingImageOptions: ImageExportOptions = ImageExportOptions()
     private var pendingPdfOptions: PdfExportOptions = PdfExportOptions()
     private var pdfProbeRunning = false
+    private var pdfBoxReady = false
     private var pdfSelectionGeneration = 0
     private val supportedVideoMimeTypes by lazy { VideoEncoderSupport.supportedMimeTypes() }
 
@@ -192,10 +197,15 @@ class MainActivity : ComponentActivity() {
                     }
                 },
                 onCancelPdfPassword = {
+                    val selection = activePdfPasswordSelection
                     pdfPasswordPrompt.value = null
                     activePdfPasswordSelection = null
                     ConversionTaskStore.showMessage("Password-protected PDF was skipped")
-                    processNextPendingPdfSelection()
+                    if (selection != null) {
+                        finishPendingPdfSelection(selection)
+                    } else {
+                        processNextPendingPdfSelection()
+                    }
                 },
                 onStartConversion = { videoOptions, audioOptions, imageOptions, pdfOptions ->
                     pendingVideoOptions = videoOptions
@@ -280,7 +290,7 @@ class MainActivity : ComponentActivity() {
                     audioOptions = pendingAudioOptions,
                     imageOptions = pendingImageOptions,
                     pdfOptions = pendingPdfOptions,
-                    pdfPassword = file.pdfPassword
+                    pdfPasswords = file.pdfPasswords
                 )
             }
         )
@@ -355,8 +365,29 @@ class MainActivity : ComponentActivity() {
         request: PendingSelection,
         documents: List<SelectedDocument>
     ) {
+        if (request.isPdfMergeTarget() && documents.size < 2) {
+            ConversionTaskStore.showMessage("Select at least two PDFs to merge")
+            return
+        }
+
+        val batch = if (request.isPdfMergeTarget()) {
+            PendingPdfBatch(
+                request = request,
+                documents = documents,
+                generation = pdfSelectionGeneration
+            )
+        } else {
+            null
+        }
         pendingPdfSelections.addAll(
-            documents.map { PendingPdfSelection(request, it, pdfSelectionGeneration) }
+            documents.map { document ->
+                PendingPdfSelection(
+                    request = request,
+                    document = document,
+                    generation = pdfSelectionGeneration,
+                    batch = batch
+                )
+            }
         )
         processNextPendingPdfSelection()
     }
@@ -370,7 +401,7 @@ class MainActivity : ComponentActivity() {
         }
         pdfProbeRunning = true
         Thread {
-            val result = probePdf(selection.document.uri, password = null)
+            val result = probePdf(selection, password = null)
             runOnUiThread {
                 pdfProbeRunning = false
                 if (selection.generation != pdfSelectionGeneration) {
@@ -379,23 +410,23 @@ class MainActivity : ComponentActivity() {
                 }
                 when (result) {
                     PdfProbeResult.Opened -> {
-                        queuedFiles.add(selection.document.toQueuedFile(selection.request))
-                        processNextPendingPdfSelection()
+                        recordOpenedPdfSelection(selection, pdfPassword = null)
+                        finishPendingPdfSelection(selection)
                     }
                     PdfProbeResult.PasswordRequired -> {
-                        if (supportsPdfPassword()) {
+                        if (selection.request.usesPdfBoxTarget() || supportsPdfPassword()) {
                             activePdfPasswordSelection = selection
                             pdfPasswordPrompt.value = PdfPasswordPrompt(selection.document.displayName)
                         } else {
                             ConversionTaskStore.showMessage(
                                 "Password-protected PDFs need Android 15 or PDF extension 13"
                             )
-                            processNextPendingPdfSelection()
+                            finishPendingPdfSelection(selection)
                         }
                     }
                     is PdfProbeResult.Failed -> {
                         ConversionTaskStore.showMessage(result.message)
-                        processNextPendingPdfSelection()
+                        finishPendingPdfSelection(selection)
                     }
                 }
             }
@@ -405,12 +436,12 @@ class MainActivity : ComponentActivity() {
     private fun retryPdfWithPassword(selection: PendingPdfSelection, password: String) {
         if (password.isBlank()) {
             ConversionTaskStore.showMessage("PDF password was empty")
-            processNextPendingPdfSelection()
+            finishPendingPdfSelection(selection)
             return
         }
         pdfProbeRunning = true
         Thread {
-            val result = probePdf(selection.document.uri, password)
+            val result = probePdf(selection, password)
             runOnUiThread {
                 pdfProbeRunning = false
                 if (selection.generation != pdfSelectionGeneration) {
@@ -419,24 +450,59 @@ class MainActivity : ComponentActivity() {
                 }
                 when (result) {
                     PdfProbeResult.Opened -> {
-                        queuedFiles.add(
-                            selection.document.toQueuedFile(
-                                request = selection.request,
-                                pdfPassword = password
-                            )
-                        )
+                        recordOpenedPdfSelection(selection, pdfPassword = password)
                     }
                     PdfProbeResult.PasswordRequired ->
                         ConversionTaskStore.showMessage("PDF password was incorrect or unsupported")
                     is PdfProbeResult.Failed ->
                         ConversionTaskStore.showMessage(result.message)
                 }
-                processNextPendingPdfSelection()
+                finishPendingPdfSelection(selection)
             }
         }.start()
     }
 
-    private fun probePdf(uri: Uri, password: String?): PdfProbeResult {
+    private fun recordOpenedPdfSelection(selection: PendingPdfSelection, pdfPassword: String?) {
+        val batch = selection.batch
+        if (batch == null) {
+            queuedFiles.add(
+                selection.document.toQueuedFile(
+                    request = selection.request,
+                    pdfPassword = pdfPassword
+                )
+            )
+            return
+        }
+
+        batch.openedDocuments.add(selection.document)
+        batch.pdfPasswords.add(pdfPassword)
+    }
+
+    private fun finishPendingPdfSelection(selection: PendingPdfSelection) {
+        selection.batch?.let { batch ->
+            batch.processedCount += 1
+            if (
+                batch.processedCount == batch.documents.size &&
+                batch.generation == pdfSelectionGeneration
+            ) {
+                if (batch.openedDocuments.size >= 2) {
+                    queuedFiles.add(batch.toMergedPdfQueuedFile())
+                } else {
+                    ConversionTaskStore.showMessage("Select at least two PDFs to merge")
+                }
+            }
+        }
+        processNextPendingPdfSelection()
+    }
+
+    private fun probePdf(selection: PendingPdfSelection, password: String?): PdfProbeResult {
+        if (password != null && selection.request.usesPdfBoxTarget()) {
+            return probePdfWithPdfBox(selection.document.uri, password)
+        }
+        return probePdfWithRenderer(selection.document.uri, password)
+    }
+
+    private fun probePdfWithRenderer(uri: Uri, password: String?): PdfProbeResult {
         return try {
             val renderer = openPdfRenderer(uri, password)
             renderer.close()
@@ -449,6 +515,29 @@ class MainActivity : ComponentActivity() {
             PdfProbeResult.Failed("Could not open this PDF")
         } catch (exception: Throwable) {
             Log.w(TAG, "PDF probe failed", exception)
+            PdfProbeResult.Failed("Could not read this PDF")
+        }
+    }
+
+    private fun probePdfWithPdfBox(uri: Uri, password: String): PdfProbeResult {
+        return try {
+            ensurePdfBoxReady()
+            val memoryUsage = MemoryUsageSetting.setupTempFileOnly()
+            contentResolver.openInputStream(uri)?.use { input ->
+                PDDocument.load(input, password, memoryUsage).use { document ->
+                    if (document.numberOfPages <= 0) {
+                        PdfProbeResult.Failed("PDF has no pages")
+                    } else {
+                        PdfProbeResult.Opened
+                    }
+                }
+            } ?: PdfProbeResult.Failed("Could not open this PDF")
+        } catch (exception: InvalidPasswordException) {
+            PdfProbeResult.PasswordRequired
+        } catch (exception: IOException) {
+            PdfProbeResult.Failed("Could not open this PDF")
+        } catch (exception: Throwable) {
+            Log.w(TAG, "PDFBox probe failed", exception)
             PdfProbeResult.Failed("Could not read this PDF")
         }
     }
@@ -479,11 +568,18 @@ class MainActivity : ComponentActivity() {
         return SdkExtensions.getExtensionVersion(Build.VERSION_CODES.S) >= PDF_PASSWORD_EXTENSION
     }
 
+    @Synchronized
+    private fun ensurePdfBoxReady() {
+        if (pdfBoxReady) return
+        PDFBoxResourceLoader.init(applicationContext)
+        pdfBoxReady = true
+    }
+
     private fun clearQueuedPdfPasswords() {
         for (index in queuedFiles.indices) {
             val file = queuedFiles[index]
-            if (file.pdfPassword != null) {
-                queuedFiles[index] = file.copy(pdfPassword = null)
+            if (file.pdfPasswords.any { it != null }) {
+                queuedFiles[index] = file.copy(pdfPasswords = emptyList())
             }
         }
     }
@@ -514,7 +610,17 @@ private data class PendingImagePdfSelection(
 private data class PendingPdfSelection(
     val request: PendingSelection,
     val document: SelectedDocument,
-    val generation: Int
+    val generation: Int,
+    val batch: PendingPdfBatch? = null
+)
+
+private data class PendingPdfBatch(
+    val request: PendingSelection,
+    val documents: List<SelectedDocument>,
+    val generation: Int,
+    val openedDocuments: MutableList<SelectedDocument> = mutableListOf(),
+    val pdfPasswords: MutableList<String?> = mutableListOf(),
+    var processedCount: Int = 0
 )
 
 private data class OpenableMetadata(
@@ -541,7 +647,25 @@ private fun SelectedDocument.toQueuedFile(
         mimeType = mimeType,
         category = request.category,
         targetFormat = request.targetFormat.label,
-        pdfPassword = pdfPassword
+        pdfPasswords = listOf(pdfPassword)
+    )
+}
+
+private fun PendingPdfBatch.toMergedPdfQueuedFile(): QueuedFile {
+    val first = openedDocuments.first()
+    val totalSize = openedDocuments.mapNotNull { it.sizeBytes }
+        .takeIf { it.size == openedDocuments.size }
+        ?.sum()
+    return QueuedFile(
+        id = UUID.randomUUID().toString(),
+        uri = first.uri,
+        inputUris = openedDocuments.map { it.uri },
+        displayName = "${openedDocuments.size} PDFs",
+        sizeBytes = totalSize,
+        mimeType = MIME_TYPE_PDF,
+        category = request.category,
+        targetFormat = request.targetFormat.label,
+        pdfPasswords = pdfPasswords.toList()
     )
 }
 
@@ -571,8 +695,22 @@ private fun QueuedFile.hasConnectedNativeTarget(): Boolean {
             targetFormat.equals("PDF", ignoreCase = true)
         FileCategory.Pdf -> targetFormat.equals("JPG", ignoreCase = true) ||
             targetFormat.equals("PNG", ignoreCase = true) ||
-            targetFormat.equals("WEBP", ignoreCase = true)
+            targetFormat.equals("WEBP", ignoreCase = true) ||
+            targetFormat.equals("PDF", ignoreCase = true) ||
+            targetFormat.equals("TXT", ignoreCase = true)
     }
+}
+
+private fun PendingSelection.isPdfMergeTarget(): Boolean {
+    return category == FileCategory.Pdf && targetFormat.extension.equals("pdf", ignoreCase = true)
+}
+
+private fun PendingSelection.usesPdfBoxTarget(): Boolean {
+    return category == FileCategory.Pdf &&
+        (
+            targetFormat.extension.equals("pdf", ignoreCase = true) ||
+                targetFormat.extension.equals("txt", ignoreCase = true)
+            )
 }
 
 private fun audioTargetExtensionFor(targetFormat: String): String? {
@@ -612,3 +750,4 @@ private fun ConversionTaskState.toUiProgress(): TaskProgress {
 }
 
 private val CONNECTED_AUDIO_TARGETS = setOf("mp3", "m4a", "wav", "flac", "wma")
+private const val MIME_TYPE_PDF = "application/pdf"

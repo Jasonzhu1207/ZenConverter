@@ -13,6 +13,21 @@ check(ffmpegKitLocalAar.isFile) {
 }
 val smartExceptionCommonLocalJar = file("libs/smart-exception-common-0.2.1.jar")
 val smartExceptionJavaLocalJar = file("libs/smart-exception-java-0.2.1.jar")
+val pdfBoxAndroidLocalAar = file("libs/pdfbox-android-2.0.27.0.aar")
+val bouncyCastleProvLocalJar = file("libs/bcprov-jdk15to18-1.72.jar")
+val bouncyCastlePkixLocalJar = file("libs/bcpkix-jdk15to18-1.72.jar")
+val bouncyCastleUtilLocalJar = file("libs/bcutil-jdk15to18-1.72.jar")
+check(pdfBoxAndroidLocalAar.isFile) {
+    "Missing PDFBox-Android AAR at ${pdfBoxAndroidLocalAar.path}. " +
+        "Download com.tom-roush:pdfbox-android:2.0.27.0 before Gradle sync."
+}
+check(
+    bouncyCastleProvLocalJar.isFile &&
+        bouncyCastlePkixLocalJar.isFile &&
+        bouncyCastleUtilLocalJar.isFile
+) {
+    "Missing Bouncy Castle jars required by PDFBox-Android under app/libs."
+}
 
 android {
     namespace = "org.zenconverter.app"
@@ -112,6 +127,14 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.media3:media3-transformer:1.10.1")
+    implementation(files(pdfBoxAndroidLocalAar))
+    implementation(
+        files(
+            bouncyCastleProvLocalJar,
+            bouncyCastlePkixLocalJar,
+            bouncyCastleUtilLocalJar
+        )
+    )
     implementation(files(ffmpegKitLocalAar))
     if (smartExceptionCommonLocalJar.isFile && smartExceptionJavaLocalJar.isFile) {
         implementation(files(smartExceptionCommonLocalJar, smartExceptionJavaLocalJar))

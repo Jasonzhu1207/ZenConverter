@@ -136,7 +136,9 @@ enum class FileCategory(
         formats = listOf(
             TargetFormat("PNG", "png", "Page rasterization"),
             TargetFormat("JPG", "jpg", "Page rasterization"),
-            TargetFormat("WEBP", "webp", "Page rasterization")
+            TargetFormat("WEBP", "webp", "Page rasterization"),
+            TargetFormat("PDF", "pdf", "Merge PDFs"),
+            TargetFormat("TXT", "txt", "Text layer")
         )
     )
 }
@@ -150,7 +152,7 @@ data class QueuedFile(
     val mimeType: String?,
     val category: FileCategory,
     val targetFormat: String,
-    val pdfPassword: String? = null
+    val pdfPasswords: List<String?> = emptyList()
 )
 
 data class ImagePdfMergePrompt(
@@ -553,12 +555,13 @@ private fun ZenConverterContent(
                     videoFrameRate = videoFrameRate,
                     audioBitrate = audioBitrate,
                     audioSampleRate = audioSampleRate,
-                    audioChannels = audioChannels,
-                    audioTarget = audioTarget,
-                    imageTarget = imageTarget,
-                    imageQuality = imageQuality,
-                    pdfPageMode = pdfPageMode,
-                    pdfRenderQuality = pdfRenderQuality,
+                audioChannels = audioChannels,
+                audioTarget = audioTarget,
+                imageTarget = imageTarget,
+                pdfTarget = pdfTarget,
+                imageQuality = imageQuality,
+                pdfPageMode = pdfPageMode,
+                pdfRenderQuality = pdfRenderQuality,
                     openMenuId = openMenuId,
                     onOpenMenuChange = { openMenuId = it },
                     onVideoResolutionChange = { videoResolution = it },
@@ -999,6 +1002,7 @@ private fun EncodingPanel(
     audioChannels: String,
     audioTarget: TargetFormat,
     imageTarget: TargetFormat,
+    pdfTarget: TargetFormat,
     imageQuality: String,
     pdfPageMode: String,
     pdfRenderQuality: String,
@@ -1067,6 +1071,7 @@ private fun EncodingPanel(
             )
             FileCategory.Pdf -> PdfOptions(
                 texts = texts,
+                targetFormat = pdfTarget,
                 renderQuality = pdfRenderQuality,
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
@@ -1234,11 +1239,24 @@ private fun ImageOptions(
 @Composable
 private fun PdfOptions(
     texts: UiText,
+    targetFormat: TargetFormat,
     renderQuality: String,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onRenderQualityChange: (String) -> Unit
 ) {
+    if (
+        targetFormat.extension.equals("pdf", ignoreCase = true) ||
+        targetFormat.extension.equals("txt", ignoreCase = true)
+    ) {
+        Text(
+            text = texts.optionValue(targetFormat.modeHint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        return
+    }
+
     OptionGrid {
         OptionDropdown(
             "pdf-render-quality",
@@ -2093,6 +2111,26 @@ private data class UiText(
                 simplifiedChineseText -> "缓存空间不足，无法处理这个 PDF"
                 else -> "快取空間不足，無法處理這個 PDF"
             }
+            "Select at least two PDFs to merge" -> when (this) {
+                englishText -> "Select at least two PDFs to merge"
+                simplifiedChineseText -> "请选择至少两个 PDF 来合并"
+                else -> "請選擇至少兩個 PDF 來合併"
+            }
+            "PDF has no selectable text; OCR is not included" -> when (this) {
+                englishText -> "PDF has no selectable text; OCR is not included"
+                simplifiedChineseText -> "PDF 没有可选择文本；当前不包含 OCR"
+                else -> "PDF 沒有可選取文字；目前不包含 OCR"
+            }
+            "PDF merge failed" -> when (this) {
+                englishText -> "PDF merge failed"
+                simplifiedChineseText -> "PDF 合并失败"
+                else -> "PDF 合併失敗"
+            }
+            "PDF text extraction failed" -> when (this) {
+                englishText -> "PDF text extraction failed"
+                simplifiedChineseText -> "PDF 文本提取失败"
+                else -> "PDF 文字提取失敗"
+            }
             "PDF conversion failed" -> when (this) {
                 englishText -> "PDF conversion failed"
                 simplifiedChineseText -> "PDF 转换失败"
@@ -2361,6 +2399,16 @@ private data class UiText(
                 englishText -> "Page rasterization"
                 simplifiedChineseText -> "页面栅格化"
                 else -> "頁面柵格化"
+            }
+            "Merge PDFs" -> when (this) {
+                englishText -> "Merge PDFs"
+                simplifiedChineseText -> "合并 PDF"
+                else -> "合併 PDF"
+            }
+            "Text layer" -> when (this) {
+                englishText -> "Text layer"
+                simplifiedChineseText -> "文本层提取"
+                else -> "文字層提取"
             }
             "Batch" -> when (this) {
                 englishText -> "Batch processing"

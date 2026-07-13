@@ -27,6 +27,8 @@ as supported until it has a tested path, sample files, and failure behavior.
 | JPG / JPEG / PNG / WEBP | JPG / PNG / WEBP | Experimental | Native Bitmap | Static image conversion through Android platform bitmap APIs; physical-device smoke testing is still pending. JPG/WEBP quality presets are Original 100, High 95, Balanced 85, Small 60. PNG is written as lossless output. Transparency is preserved for PNG/WEBP and flattened to white for JPG. Metadata is not copied, though JPEG EXIF orientation is applied best-effort; animated WEBP is not preserved as animation. |
 | JPG / JPEG / PNG / WEBP | PDF | Experimental | Android PdfDocument | Creates one PDF page per image. A4-fit and original-ratio page modes preserve image ratio and use a white page background. Multiple selected images can become one multi-page PDF or one PDF per image. |
 | PDF | JPG / PNG / WEBP | Experimental | Android PdfRenderer | Renders each PDF page to one image file. This is page rasterization, not OCR, text extraction, or embedded-image extraction. Multi-page outputs use one task and same-sized page images. |
+| Multiple PDFs | PDF | Experimental | PDFBox-Android | Merges selected PDFs as page objects instead of rasterizing them. Normal text layers and vector content are preserved best-effort; complex forms, bookmarks, attachments, and metadata are not guaranteed. |
+| PDF | TXT | Experimental | PDFBox-Android | Extracts selectable text with page separators. This is not OCR; scanned PDFs without a text layer fail clearly. |
 
 ## Current Native Media Limits
 
@@ -100,7 +102,9 @@ as supported until it has a tested path, sample files, and failure behavior.
 ## Current Native PDF Limits
 
 - Image to PDF uses Android `PdfDocument`; PDF to image uses Android
-  `PdfRenderer`. No third-party PDF dependency is bundled for this path.
+  `PdfRenderer`. PDF merge and PDF to TXT use PDFBox-Android because Android
+  platform APIs do not provide broad true PDF merge or cross-version text
+  extraction.
 - Image to PDF decodes one image at a time, caps source decode to a 4096 px long
   side and 16 MP, applies JPEG orientation best-effort, and flattens the page
   onto white.
@@ -109,9 +113,23 @@ as supported until it has a tested path, sample files, and failure behavior.
   size so multi-page outputs have consistent dimensions.
 - PDF render presets are Low resolution, Balanced, and High detail. High detail
   is still rasterization and is not lossless.
-- Password-protected PDFs can be retried with an in-memory password only on
-  Android 15 or devices with PDF extension 13. Older devices fail clearly.
+- Password-protected PDFs on the `PdfRenderer` image path can be retried with
+  an in-memory password only on Android 15 or devices with PDF extension 13.
+  Older devices fail clearly for that path.
 - Non-seekable PDF providers use SafeCache only when direct `PdfRenderer`
   opening fails, and cache space is checked before copying.
 - PDF to image does not do OCR, selectable text extraction, or extraction of
   embedded images.
+- PDF merge copies each source PDF to task cache first, then merges with
+  PDFBox-Android. The output is not re-encrypted. Advanced structures such as
+  complex forms, bookmarks, attachments, and metadata are best-effort only.
+- PDF to TXT extracts selectable text with PDFBox-Android and inserts stable
+  page separators. It does not do OCR, so scanned PDFs without a text layer fail
+  with a clear no-selectable-text message.
+- PDFBox-backed PDF merge and PDF to TXT can load password-protected source PDFs
+  with transient in-memory passwords. Passwords are not logged or persisted.
+
+Manual PDF sample coverage should include ordinary multi-PDF merge, mixed
+text/scanned/image PDFs, mixed page sizes, large PDFs, cancellation during cache
+or write, password-protected sources, text-layer PDF to TXT, mixed-content PDF to
+TXT, and scanned PDF to TXT with the no-selectable-text failure.

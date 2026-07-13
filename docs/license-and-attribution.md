@@ -28,6 +28,49 @@ Before a dependency becomes core:
 - AndroidX Media3 Transformer `1.10.1` is an Apache-2.0 dependency used for the
   first real MP4 export path.
 
+## Current PDF Dependency
+
+- Dependency: local Maven Central AAR
+  `app/libs/pdfbox-android-2.0.27.0.aar`.
+- Coordinates: `com.tom-roush:pdfbox-android:2.0.27.0`.
+- Package type: Android AAR.
+- Upstream source: `https://github.com/TomRoush/PdfBox-Android`.
+- License: Apache License 2.0, compatible with the current
+  `GPL-3.0-or-later` project direction.
+- Local file size: `3,254,019` bytes.
+- Local SHA-256:
+  `30277f879cfd571db2a137582c95516a0d4ea6778e945519bc58ca93d57d88c7`.
+- Gradle consumes the AAR through `implementation(files(...))` so Android
+  Studio builds do not depend on resolving this artifact from Maven during
+  every sync/build.
+- Reason platform APIs are not enough: Android has `PdfDocument` for simple PDF
+  writing and `PdfRenderer` for rasterizing pages, but no broad platform API for
+  true multi-PDF merge that preserves normal page objects. Platform text
+  extraction is only available through newer Android/PDF extension APIs, so it
+  is not suitable as the first all-supported-device PDF to TXT experiment.
+- Maintenance check: the repo is not archived, but release cadence is low. The
+  selected `2.0.27.0` release was published on January 2, 2023, and the latest
+  observed upstream push was March 18, 2024. Treat this dependency as a focused
+  PDF utility, not general document-conversion infrastructure.
+- Scope limits: PDF merge is best-effort for complex forms, bookmarks,
+  attachments, and metadata. PDF to TXT extracts selectable text only; it does
+  not do OCR.
+
+Transitive dependencies required by the PDFBox-Android POM are also local JARs:
+
+- `org.bouncycastle:bcprov-jdk15to18:1.72`, Bouncy Castle License, size
+  `9,342,484` bytes, SHA-256
+  `ea66ea8a450810b2193e8bf9a7ad3e46307c9896224c0f407d1b7d96ba1221cc`.
+- `org.bouncycastle:bcpkix-jdk15to18:1.72`, Bouncy Castle License, size
+  `1,022,720` bytes, SHA-256
+  `d9b97477b72499bcee02f5a906510810257ff36a94bf69fbca0b1e65e7ffdb6e`.
+- `org.bouncycastle:bcutil-jdk15to18:1.72`, Bouncy Castle License, size
+  `677,620` bytes, SHA-256
+  `d92184bdeb3105a11ad9e36acbd66b5f8eed091b08b9c8f3e2549e42b7f131f1`.
+- Reason included: PDFBox-Android declares these libraries for PDF
+  security/encryption support. They are consumed as local JARs because local AAR
+  dependencies do not bring Maven transitive dependencies with them.
+
 ## Current FFmpeg Dependency
 
 - Dependency: Gradle requires the local self-built AAR

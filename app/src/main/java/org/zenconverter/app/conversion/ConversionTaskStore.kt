@@ -17,7 +17,7 @@ data class ConversionTaskInput(
     val audioOptions: AudioExportOptions,
     val imageOptions: ImageExportOptions,
     val pdfOptions: PdfExportOptions,
-    val pdfPassword: String? = null
+    val pdfPasswords: List<String?> = emptyList()
 )
 
 sealed interface OutputDestination {
@@ -243,8 +243,8 @@ object ConversionTaskStore {
     private fun clearSensitiveInputs() {
         for (index in inputs.indices) {
             val input = inputs[index]
-            if (input.pdfPassword != null) {
-                inputs[index] = input.copy(pdfPassword = null)
+            if (input.pdfPasswords.any { it != null }) {
+                inputs[index] = input.copy(pdfPasswords = emptyList())
             }
         }
     }

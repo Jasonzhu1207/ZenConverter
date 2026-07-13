@@ -21,6 +21,10 @@ local.properties
 app/libs/*.aar
 app/libs/*.jar
 !app/libs/ffmpeg-kit-next-7.1.0-lame-armeabi-v7a-arm64-v8a.aar
+!app/libs/pdfbox-android-2.0.27.0.aar
+!app/libs/bcprov-jdk15to18-1.72.jar
+!app/libs/bcpkix-jdk15to18-1.72.jar
+!app/libs/bcutil-jdk15to18-1.72.jar
 
 # Signing and release secrets
 *.jks

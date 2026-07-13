@@ -69,6 +69,12 @@ import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import androidx.media3.transformer.TransformationRequest
 import androidx.media3.transformer.VideoEncoderSettings
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
+import com.tom_roush.pdfbox.io.MemoryUsageSetting
+import com.tom_roush.pdfbox.multipdf.PDFMergerUtility
+import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.pdmodel.encryption.InvalidPasswordException
+import com.tom_roush.pdfbox.text.PDFTextStripper
 import org.zenconverter.app.MainActivity
 import org.zenconverter.app.R
 import java.io.IOException
@@ -94,6 +100,7 @@ class ConversionService : Service() {
     private var copyThread: Thread? = null
     private var ffmpegKitReady = false
     private var ffmpegKitLoadFailure: Throwable? = null
+    private var pdfBoxReady = false
     private val ffmpegEncoderAvailability = mutableMapOf<String, Boolean>()
 
     override fun onCreate() {
@@ -191,7 +198,14 @@ class ConversionService : Service() {
         }
 
         if (input.category == ConversionMediaCategory.Pdf) {
-            startPdfImageExport(input, tempFile, outputProfile)
+            if (
+                outputProfile.extension.equals("pdf", ignoreCase = true) ||
+                outputProfile.extension.equals("txt", ignoreCase = true)
+            ) {
+                startPdfDocumentExport(input, tempFile, outputProfile)
+            } else {
+                startPdfImageExport(input, tempFile, outputProfile)
+            }
             return
         }
 
@@ -406,6 +420,152 @@ class ConversionService : Service() {
         }
     }
 
+    private fun startPdfDocumentExport(
+        input: ConversionTaskInput,
+        tempFile: File,
+        outputProfile: OutputProfile
+    ) {
+        serviceScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    writePdfDocumentExport(input, tempFile, outputProfile)
+                }
+            }.onSuccess {
+                if (ConversionTaskStore.isCancelled()) {
+                    tempFile.delete()
+                    cancelRun()
+                    return@onSuccess
+                }
+                ConversionTaskStore.updateProgress(taskIndex, PROGRESS_BEFORE_SAVE)
+                saveCompletedExport(input, tempFile)
+            }.onFailure { exception ->
+                tempFile.delete()
+                if (exception is CancellationException) {
+                    return@onFailure
+                }
+                Log.w(TAG, "Could not run PDF document export", exception)
+                failCurrentTask(pdfDocumentFailureMessageFor(exception, outputProfile))
+            }
+        }
+    }
+
+    private fun writePdfDocumentExport(
+        input: ConversionTaskInput,
+        outputFile: File,
+        outputProfile: OutputProfile
+    ) {
+        when (outputProfile.extension.lowercase(Locale.US)) {
+            "pdf" -> writeMergedPdf(input, outputFile)
+            "txt" -> writePdfTextFile(input, outputFile)
+            else -> error("PDF conversion failed")
+        }
+    }
+
+    private fun writeMergedPdf(
+        input: ConversionTaskInput,
+        outputFile: File
+    ) {
+        val inputUris = input.inputUris.ifEmpty { listOf(input.inputUri) }
+        if (inputUris.size < 2) error("Select at least two PDFs to merge")
+
+        throwIfConversionCancelled()
+        ensurePdfBoxReady()
+        val cachedInputs = cachePdfInputsForPdfBox(input, inputUris)
+        val destination = PDDocument(MemoryUsageSetting.setupTempFileOnly())
+        val merger = PDFMergerUtility()
+
+        try {
+            cachedInputs.files.forEachIndexed { index, cachedPdf ->
+                throwIfConversionCancelled()
+                val source = loadPdfBoxDocument(
+                    cachedPdf,
+                    input.pdfPasswordAt(index)
+                )
+                try {
+                    if (source.numberOfPages <= 0) error("PDF has no pages")
+                    merger.appendDocument(destination, source)
+                    throwIfConversionCancelled()
+                } finally {
+                    runCatching { source.close() }
+                }
+                updateImageProgress(
+                    progressForIndexedWork(index, cachedInputs.files.size, 0.08f, 0.85f)
+                )
+            }
+
+            throwIfConversionCancelled()
+            destination.save(outputFile)
+            throwIfConversionCancelled()
+            updateImageProgress(0.95f)
+        } catch (throwable: Throwable) {
+            outputFile.delete()
+            throw throwable
+        } finally {
+            runCatching { destination.close() }
+            cachedInputs.delete()
+        }
+    }
+
+    private fun writePdfTextFile(
+        input: ConversionTaskInput,
+        outputFile: File
+    ) {
+        val inputUris = input.inputUris.ifEmpty { listOf(input.inputUri) }
+        if (inputUris.size != 1) error("PDF text extraction failed")
+
+        throwIfConversionCancelled()
+        ensurePdfBoxReady()
+        val cachedInputs = cachePdfInputsForPdfBox(input, inputUris)
+        var document: PDDocument? = null
+
+        try {
+            document = loadPdfBoxDocument(cachedInputs.files.first(), input.pdfPasswordAt(0))
+            val pageCount = document.numberOfPages
+            if (pageCount <= 0) error("PDF has no pages")
+
+            val stripper = PDFTextStripper()
+            var hasSelectableText = false
+
+            outputFile.outputStream().bufferedWriter(Charsets.UTF_8).use { writer ->
+                for (pageIndex in 0 until pageCount) {
+                    throwIfConversionCancelled()
+                    stripper.startPage = pageIndex + 1
+                    stripper.endPage = pageIndex + 1
+                    val pageText = stripper.getText(document).trimEnd()
+                    throwIfConversionCancelled()
+
+                    if (pageText.isNotBlank()) {
+                        hasSelectableText = true
+                    }
+
+                    writer.write("--- Page ${pageNumberForTextOutput(pageIndex)} ---")
+                    writer.newLine()
+                    if (pageText.isNotEmpty()) {
+                        writer.write(pageText)
+                        writer.newLine()
+                    }
+                    writer.newLine()
+                    writer.flush()
+                    throwIfConversionCancelled()
+
+                    updateImageProgress(progressForIndexedWork(pageIndex, pageCount, 0.08f, 0.92f))
+                }
+            }
+
+            throwIfConversionCancelled()
+            if (!hasSelectableText) {
+                error("PDF has no selectable text; OCR is not included")
+            }
+            updateImageProgress(0.95f)
+        } catch (throwable: Throwable) {
+            outputFile.delete()
+            throw throwable
+        } finally {
+            runCatching { document?.close() }
+            cachedInputs.delete()
+        }
+    }
+
     private fun writePdfToImageFiles(
         input: ConversionTaskInput,
         firstTempFile: File,
@@ -484,14 +644,15 @@ class ConversionService : Service() {
     }
 
     private fun openPdfRendererSource(input: ConversionTaskInput): PdfRendererSource {
+        val password = input.pdfPasswordAt(0)
         return try {
-            PdfRendererSource(renderer = openPdfRenderer(input.inputUri, input.pdfPassword))
+            PdfRendererSource(renderer = openPdfRenderer(input.inputUri, password))
         } catch (exception: IllegalArgumentException) {
             Log.i(TAG, "PDF input descriptor is not seekable; trying SafeCache", exception)
             val cachedPdf = cachePdfInputForRenderer(input)
             try {
                 PdfRendererSource(
-                    renderer = openPdfRenderer(Uri.fromFile(cachedPdf), input.pdfPassword),
+                    renderer = openPdfRenderer(Uri.fromFile(cachedPdf), password),
                     cacheFile = cachedPdf
                 )
             } catch (throwable: Throwable) {
@@ -568,6 +729,79 @@ class ConversionService : Service() {
         }
     }
 
+    private fun cachePdfInputsForPdfBox(
+        input: ConversionTaskInput,
+        inputUris: List<Uri>
+    ): PdfBoxCachedInputs {
+        throwIfConversionCancelled()
+        val cacheRoot = externalCacheDir ?: cacheDir
+        val cacheDirectory = File(cacheRoot, "pdfbox-cache/${input.fileId}").apply {
+            if (exists()) deleteRecursively()
+            mkdirs()
+        }
+        val cachedFiles = mutableListOf<File>()
+
+        try {
+            inputUris.forEachIndexed { index, uri ->
+                throwIfConversionCancelled()
+                val inputSize = queryOpenableSize(uri)
+                if (inputSize != null) {
+                    val requiredBytes = inputSize + PDF_CACHE_HEADROOM_BYTES
+                    if (cacheDirectory.usableSpace < requiredBytes) {
+                        error("Not enough cache space for this PDF")
+                    }
+                } else if (cacheDirectory.usableSpace < PDF_UNKNOWN_CACHE_MIN_FREE_BYTES) {
+                    error("Not enough cache space for this PDF")
+                }
+
+                val cachedPdf = File(
+                    cacheDirectory,
+                    "input_${(index + 1).toString().padStart(3, '0')}.pdf"
+                ).apply {
+                    if (exists()) delete()
+                }
+                copyPdfInputToCache(uri, cachedPdf)
+                cachedFiles.add(cachedPdf)
+                updateImageProgress(progressForIndexedWork(index, inputUris.size, 0.01f, 0.07f))
+            }
+
+            return PdfBoxCachedInputs(cacheDirectory, cachedFiles)
+        } catch (throwable: Throwable) {
+            cacheDirectory.deleteRecursively()
+            throw throwable
+        }
+    }
+
+    private fun copyPdfInputToCache(uri: Uri, cachedPdf: File) {
+        try {
+            contentResolver.openInputStream(uri)?.use { source ->
+                cachedPdf.outputStream().use { output ->
+                    val buffer = ByteArray(COPY_BUFFER_SIZE)
+                    while (true) {
+                        throwIfConversionCancelled()
+                        val read = source.read(buffer)
+                        if (read == -1) break
+                        output.write(buffer, 0, read)
+                    }
+                    output.flush()
+                }
+            } ?: error("Could not open PDF")
+            throwIfConversionCancelled()
+        } catch (throwable: Throwable) {
+            cachedPdf.delete()
+            throw throwable
+        }
+    }
+
+    private fun loadPdfBoxDocument(file: File, password: String?): PDDocument {
+        throwIfConversionCancelled()
+        return if (password.isNullOrEmpty()) {
+            PDDocument.load(file, MemoryUsageSetting.setupTempFileOnly())
+        } else {
+            PDDocument.load(file, password, MemoryUsageSetting.setupTempFileOnly())
+        }
+    }
+
     private fun queryOpenableSize(uri: Uri): Long? {
         return runCatching {
             contentResolver.query(
@@ -589,6 +823,13 @@ class ConversionService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) return true
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
         return SdkExtensions.getExtensionVersion(Build.VERSION_CODES.S) >= PDF_PASSWORD_EXTENSION
+    }
+
+    @Synchronized
+    private fun ensurePdfBoxReady() {
+        if (pdfBoxReady) return
+        PDFBoxResourceLoader.init(applicationContext)
+        pdfBoxReady = true
     }
 
     private fun pdfRenderBitmapSizeFor(
@@ -1138,16 +1379,34 @@ class ConversionService : Service() {
 
     private fun pdfFailureMessageFor(exception: Throwable): String {
         return when {
+            exception is InvalidPasswordException -> "PDF password was incorrect or unsupported"
             exception is SecurityException ->
                 exception.message?.takeIf { it.contains("Password-protected") }
                     ?: "Password-protected or unsupported PDF security"
             exception.message == "PDF has no pages" -> "PDF has no pages"
             exception.message == "Not enough cache space for this PDF" ->
                 "Not enough cache space for this PDF"
+            exception.message == "Select at least two PDFs to merge" ->
+                "Select at least two PDFs to merge"
+            exception.message == "PDF has no selectable text; OCR is not included" ->
+                "PDF has no selectable text; OCR is not included"
             exception.message == "Could not open PDF" -> "Input file could not be opened"
             else -> exception.message?.takeIf {
                 it.startsWith("Image engine") || it.startsWith("PDF")
             } ?: "PDF conversion failed"
+        }
+    }
+
+    private fun pdfDocumentFailureMessageFor(
+        exception: Throwable,
+        outputProfile: OutputProfile
+    ): String {
+        val message = pdfFailureMessageFor(exception)
+        if (message != "PDF conversion failed") return message
+        return when (outputProfile.extension.lowercase(Locale.US)) {
+            "pdf" -> "PDF merge failed"
+            "txt" -> "PDF text extraction failed"
+            else -> message
         }
     }
 
@@ -2266,6 +2525,10 @@ class ConversionService : Service() {
                         OutputProfile(extension = "png", mimeType = MIME_TYPE_PNG, kind = OutputMediaKind.Image)
                     input.targetFormat.equals("WEBP", ignoreCase = true) ->
                         OutputProfile(extension = "webp", mimeType = MIME_TYPE_WEBP, kind = OutputMediaKind.Image)
+                    input.targetFormat.equals("PDF", ignoreCase = true) ->
+                        OutputProfile(extension = "pdf", mimeType = MIME_TYPE_PDF, kind = OutputMediaKind.Document)
+                    input.targetFormat.equals("TXT", ignoreCase = true) ->
+                        OutputProfile(extension = "txt", mimeType = MIME_TYPE_TEXT, kind = OutputMediaKind.Document)
                     else -> null
                 }
             }
@@ -2360,6 +2623,23 @@ class ConversionService : Service() {
             runCatching { renderer.close() }
             cacheFile?.delete()
         }
+    }
+
+    private data class PdfBoxCachedInputs(
+        val directory: File,
+        val files: List<File>
+    ) {
+        fun delete() {
+            directory.deleteRecursively()
+        }
+    }
+
+    private fun ConversionTaskInput.pdfPasswordAt(index: Int): String? {
+        return pdfPasswords.getOrNull(index)
+    }
+
+    private fun pageNumberForTextOutput(pageIndex: Int): String {
+        return (pageIndex + 1).toString().padStart(3, '0')
     }
 
     private fun outputNameFor(input: ConversionTaskInput, extension: String): String {
@@ -2480,6 +2760,7 @@ class ConversionService : Service() {
         private const val MIME_TYPE_PNG = "image/png"
         private const val MIME_TYPE_WEBP = "image/webp"
         private const val MIME_TYPE_PDF = "application/pdf"
+        private const val MIME_TYPE_TEXT = "text/plain"
         private const val DEFAULT_OUTPUT_DIRECTORY = "ZenConverter"
         private const val URI_SCHEME_FILE = "file"
         private const val MIN_MIXABLE_CHANNEL_COUNT = 1
