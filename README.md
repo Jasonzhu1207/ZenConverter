@@ -57,13 +57,14 @@ ZenConverter is the local-first Android converter I wanted to use:
 | --- | --- | --- |
 | Native Android shell | Done | Kotlin, Compose, Material 3, foreground service pipeline. |
 | No-op conversion jobs | Done | File selection, task state, progress, cancel, and failure states. |
-| MP4 to MP4 | Experimental | Media3 Transformer path. Needs more physical-device samples, and large files can still hit memory limits. |
-| MP4 to MP3 | Experimental | FFmpeg-compatible audio extraction and MP3 encode; needs physical-device sample testing. |
+| MP4 to MP4 | Done | Media3 Transformer path is connected and has passed current physical-device testing. Large files should still be tested carefully. |
+| MP4 to MP3 | Done | FFmpeg-compatible audio extraction and MP3 encode are connected and have passed current physical-device testing. |
 | MKV / WEBM / AVI and similar containers to MP4 | Experimental | FFmpeg-compatible stream-copy remux. It only works when the streams already fit MP4. |
-| Audio format conversion | Experimental | MP3 / M4A / WAV / FLAC / WMA targets are wired; support depends on Media3, FFmpeg codecs, and device samples. |
+| Audio format conversion | Done | MP3 / M4A / WAV / FLAC / WMA targets are connected and have passed current testing. Edge cases still depend on device codecs and the bundled FFmpeg build. |
 | JPG / PNG / WEBP image conversion | Implemented | Native Android bitmap path. Static images only; metadata is not copied. |
+| Image and PDF conversion | Experimental | Image to PDF uses Android `PdfDocument`; PDF to image uses Android `PdfRenderer`. It works one image/page at a time with bounded bitmap sizes. PDF output is page rasterization, not OCR or text extraction. |
 | More video formats | Planned | Added only after the current paths are easier to trust. |
-| Documents and archives | Planned | PDF and archive work comes later. |
+| Archives | Planned | Archive work comes later. |
 
 ## Architecture
 

@@ -45,13 +45,14 @@ ZenConverter 选择本地优先：
 | --- | --- | --- |
 | 原生 Android 外壳 | 已完成 | Kotlin、Compose、Material 3、前台服务管线。 |
 | 空转换任务流 | 已完成 | 文件选择、任务状态、进度、取消、失败状态。 |
-| MP4 转 MP4 | 实验性 | Media3 Transformer 路径，还需要更多真机样本验证，可能存在爆内存问题。 |
-| MP4 转 MP3 | 实验性 | FFmpeg 兼容路径，提取第一条音轨并编码 MP3，还需要真机样本验证。 |
+| MP4 转 MP4 | 已完成 | Media3 Transformer 路径已接通，并通过当前真机测试；大文件仍建议谨慎测试。 |
+| MP4 转 MP3 | 已完成 | FFmpeg 兼容路径已接通，可提取第一条音轨并编码 MP3，已通过当前真机测试。 |
 | MKV / WEBM / AVI等 转 MP4 | 实验性 | FFmpeg 兼容路径，当前是 stream-copy remux，只适合已经兼容 MP4 的音视频流。 |
-| 音频格式互转 | 实验性 | 已接入 MP3 / M4A / WAV / FLAC / WMA 目标；支持范围受 Media3、FFmpeg 编码器和设备样本限制。 |
+| 音频格式互转 | 已完成 | MP3 / M4A / WAV / FLAC / WMA 目标已接通，并通过当前测试；边缘文件仍受设备编解码能力和内置 FFmpeg 构建影响。 |
 | JPG / PNG / WEBP 图片互转 | 已完成 | 使用 Android 原生 bitmap 路径。只处理静态图，不复制元数据。 |
+| 图片与 PDF 互转 | 实验性 | 图片转 PDF 使用 Android `PdfDocument`，PDF 转图片使用 Android `PdfRenderer`；按图片/页面逐个处理，并限制 bitmap 尺寸。PDF 转图片是页面栅格化，不是 OCR、文本提取或嵌入图片提取。 |
 | 更多视频格式支持 | 计划中 | -
-| 文档、压缩包相关功能 | 计划中 | -
+| 压缩包相关功能 | 计划中 | -
 
 ## 架构
 
