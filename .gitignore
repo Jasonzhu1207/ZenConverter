@@ -46,6 +46,9 @@ signing.properties
 
 # Local workspaces, samples, and agent runtime state
 /work/
+/built-jniLibs/
+/.codex_tmp_office2pdf_build/
+/native/office2pdf-jni/target/
 /samples/
 /sample-files/
 /.tooling/

@@ -1,0 +1,16 @@
+[package]
+name = "zen-office2pdf-jni"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+publish = false
+
+[lib]
+name = "zen_office2pdf"
+crate-type = ["cdylib"]
+
+[dependencies]
+jni = "=0.21.1"
+office2pdf = { git = "https://github.com/developer0hye/office2pdf.git", rev = "e9129b3558f7d758922a5530766d19545ebaa28c" }
+
+[workspace]

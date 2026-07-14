@@ -39,6 +39,7 @@ import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Image
@@ -139,6 +140,16 @@ enum class FileCategory(
             TargetFormat("WEBP", "webp", "Page rasterization"),
             TargetFormat("PDF", "pdf", "Merge PDFs"),
             TargetFormat("TXT", "txt", "Text layer")
+        )
+    ),
+    Document(
+        mimeTypes = listOf(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+        formats = listOf(
+            TargetFormat("PDF", "pdf", "Office to PDF")
         )
     )
 }
@@ -426,6 +437,7 @@ private fun ZenConverterContent(
     var audioTarget by remember { mutableStateOf(FileCategory.Audio.formats.first()) }
     var imageTarget by remember { mutableStateOf(FileCategory.Image.formats.first()) }
     var pdfTarget by remember { mutableStateOf(FileCategory.Pdf.formats.first()) }
+    var documentTarget by remember { mutableStateOf(FileCategory.Document.formats.first()) }
     var queueMessage by remember { mutableStateOf<String?>(null) }
     var openMenuId by remember { mutableStateOf<String?>(null) }
     var videoResolution by remember { mutableStateOf(VIDEO_RESOLUTION_ORIGINAL) }
@@ -446,6 +458,7 @@ private fun ZenConverterContent(
         FileCategory.Audio -> audioTarget
         FileCategory.Image -> imageTarget
         FileCategory.Pdf -> pdfTarget
+        FileCategory.Document -> documentTarget
     }
 
     fun setTarget(category: FileCategory, targetFormat: TargetFormat) {
@@ -454,6 +467,7 @@ private fun ZenConverterContent(
             FileCategory.Audio -> audioTarget = targetFormat
             FileCategory.Image -> imageTarget = targetFormat
             FileCategory.Pdf -> pdfTarget = targetFormat
+            FileCategory.Document -> documentTarget = targetFormat
         }
     }
 
@@ -1076,6 +1090,11 @@ private fun EncodingPanel(
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
                 onRenderQualityChange = onPdfRenderQualityChange
+            )
+            FileCategory.Document -> Text(
+                text = texts.optionValue("Office to PDF"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -1834,6 +1853,7 @@ private fun FileCategory.icon(): ImageVector {
         FileCategory.Audio -> Icons.Rounded.AudioFile
         FileCategory.Image -> Icons.Rounded.Image
         FileCategory.Pdf -> Icons.Rounded.PictureAsPdf
+        FileCategory.Document -> Icons.Rounded.Description
     }
 }
 
@@ -2076,6 +2096,7 @@ private data class UiText(
             "Only video MP4, audio M4A, and JPG/PNG/WEBP images are connected" -> failed
             "Only video MP4, audio MP3/M4A/WAV/FLAC/WMA, and JPG/PNG/WEBP images are connected" -> failed
             "Only connected video, audio, image, and PDF targets can run" -> failed
+            "Only connected video, audio, image, PDF, and document targets can run" -> failed
             "Password-protected PDFs need Android 15 or PDF extension 13" -> when (this) {
                 englishText -> "Password-protected PDFs need Android 15 or PDF extension 13"
                 simplifiedChineseText -> "受密码保护的 PDF 需要 Android 15 或 PDF 扩展 13"
@@ -2135,6 +2156,36 @@ private data class UiText(
                 englishText -> "PDF conversion failed"
                 simplifiedChineseText -> "PDF 转换失败"
                 else -> "PDF 轉換失敗"
+            }
+            "Unsupported Office document" -> when (this) {
+                englishText -> "Unsupported Office document"
+                simplifiedChineseText -> "不支持这个 Office 文档"
+                else -> "不支援這個 Office 文件"
+            }
+            "Input file is empty" -> when (this) {
+                englishText -> "Input file is empty"
+                simplifiedChineseText -> "输入文件为空"
+                else -> "輸入檔案為空"
+            }
+            "Office converter is only available on arm64-v8a devices" -> when (this) {
+                englishText -> "Office converter is only available on arm64-v8a devices"
+                simplifiedChineseText -> "Office 转 PDF 暂时仅支持 arm64-v8a 设备"
+                else -> "Office 轉 PDF 暫時僅支援 arm64-v8a 裝置"
+            }
+            "Office converter could not start on this device" -> when (this) {
+                englishText -> "Office converter could not start on this device"
+                simplifiedChineseText -> "Office 转 PDF 引擎无法在此设备启动"
+                else -> "Office 轉 PDF 引擎無法在此裝置啟動"
+            }
+            "Office file is too large for this experimental converter" -> when (this) {
+                englishText -> "Office file is too large for this experimental converter"
+                simplifiedChineseText -> "Office 文件过大，超过当前实验转换上限"
+                else -> "Office 檔案過大，超過目前實驗轉換上限"
+            }
+            "Office conversion failed" -> when (this) {
+                englishText -> "Office conversion failed"
+                simplifiedChineseText -> "Office 转 PDF 失败"
+                else -> "Office 轉 PDF 失敗"
             }
             "Could not open this PDF" -> when (this) {
                 englishText -> "Could not open this PDF"
@@ -2282,6 +2333,7 @@ private data class UiText(
             FileCategory.Audio -> optionValue("Audio")
             FileCategory.Image -> optionValue("Image")
             FileCategory.Pdf -> optionValue("PDF")
+            FileCategory.Document -> optionValue("Document")
         }
     }
 
@@ -2306,6 +2358,11 @@ private data class UiText(
                 englishText -> "Render PDF pages"
                 simplifiedChineseText -> "渲染 PDF 页面"
                 else -> "渲染 PDF 頁面"
+            }
+            FileCategory.Document -> when (this) {
+                englishText -> "Convert Office files"
+                simplifiedChineseText -> "转换 Office 文档"
+                else -> "轉換 Office 文件"
             }
         }
     }
@@ -2339,6 +2396,11 @@ private data class UiText(
                 englishText -> "Set page render size"
                 simplifiedChineseText -> "设置页面渲染尺寸"
                 else -> "設定頁面渲染尺寸"
+            }
+            FileCategory.Document -> when (this) {
+                englishText -> "Experimental DOCX, PPTX, and XLSX path"
+                simplifiedChineseText -> "DOCX、PPTX、XLSX 实验转换"
+                else -> "DOCX、PPTX、XLSX 實驗轉換"
             }
         }
     }
@@ -2379,6 +2441,11 @@ private data class UiText(
                 simplifiedChineseText -> "图片"
                 else -> "圖片"
             }
+            "Document" -> when (this) {
+                englishText -> "Document"
+                simplifiedChineseText -> "文档"
+                else -> "文件"
+            }
             "Hardware" -> when (this) {
                 englishText -> "Hardware accelerated"
                 simplifiedChineseText -> "硬件加速"
@@ -2409,6 +2476,11 @@ private data class UiText(
                 englishText -> "Text layer"
                 simplifiedChineseText -> "文本层提取"
                 else -> "文字層提取"
+            }
+            "Office to PDF" -> when (this) {
+                englishText -> "Office to PDF"
+                simplifiedChineseText -> "Office 转 PDF"
+                else -> "Office 轉 PDF"
             }
             "Batch" -> when (this) {
                 englishText -> "Batch processing"

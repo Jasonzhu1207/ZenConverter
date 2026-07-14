@@ -137,6 +137,64 @@ Transitive dependencies required when consuming the local AAR through
 - `com.arthenica:smart-exception-common:0.2.1`, BSD-3-Clause, local JAR
   SHA-256: `1cad0fb4dfa01755a014331b5ed199281d2c3fab5aca5c9d7abd0b41d0ec3f7b`.
 
+## Current Office Document Native Binary
+
+- Runtime path: local native library
+  `app/src/main/jniLibs/arm64-v8a/libzen_office2pdf.so` for `arm64-v8a` only.
+- Reproducible source: `native/office2pdf-jni`.
+- Upstream source dependency: `developer0hye/office2pdf` commit
+  `e9129b3558f7d758922a5530766d19545ebaa28c`, crate version `0.6.1`,
+  Apache License 2.0. The local Apache text is at
+  `third_party/licenses/office2pdf/Apache-2.0.txt`.
+- JNI binding dependency: `jni` version `0.21.1`, Apache-2.0 OR MIT.
+- JNI symbols consumed by the app:
+  `Java_org_zenconverter_app_office_Office2PdfNative_convertBytesWithFontPaths`
+  and `Java_org_zenconverter_app_office_Office2PdfNative_convertBytes`.
+- Preferred native API: `convertBytesWithFontPaths`. It receives explicit font
+  directories and assigns them to `office2pdf::config::ConvertOptions.font_paths`;
+  this is required for Typst to search app-private CJK font files on Android.
+- Current binary: rebuilt on July 14, 2026, `72,348,456` bytes with SHA-256
+  `46779f04fc231fb1b1104ba766636e372a1be7cd49b71909346953e512a8e09c`.
+  It exports both `convertBytesWithFontPaths` and the legacy `convertBytes`
+  entry. The legacy entry is retained only as a compatibility fallback for
+  older local test binaries; it cannot use the bundled CJK font directory.
+- Reason platform APIs are not enough: Android platform APIs do not provide a
+  DOCX/PPTX/XLSX to PDF renderer.
+- Current scope: experimental local DOCX/PPTX/XLSX to PDF conversion. The
+  Kotlin service reads each input into memory and caps the source file at
+  64 MiB before calling the native library.
+- Release guardrail: generate and record a full transitive Cargo dependency
+  license inventory and broader sample results before raising this path beyond
+  experimental.
+
+## Bundled Office CJK Font
+
+- Dependencies: Noto Sans CJK Regular and Noto Serif CJK Regular.
+- Package paths: `app/src/main/assets/fonts/NotoSansCJK-Regular.ttc` and
+  `app/src/main/assets/fonts/NotoSerifCJK-Regular.ttc`.
+- Package type: TrueType Collection fonts copied at runtime to app-private
+  storage and passed directly to the native font search API.
+- Source snapshots: Android Studio layoutlib fonts at
+  `E:\AndroidDev\android-studio\plugins\design-tools\resources\layoutlib\data\fonts\NotoSansCJK-Regular.ttc` and
+  `E:\AndroidDev\android-studio\plugins\design-tools\resources\layoutlib\data\fonts\NotoSerifCJK-Regular.ttc`.
+- Upstream project: Noto CJK / notofonts.
+- Maintenance status: active upstream font family.
+- License: SIL Open Font License 1.1; local copy at
+  `third_party/licenses/noto-cjk/OFL-1.1.txt`.
+- Local files:
+  - `NotoSansCJK-Regular.ttc`: `32,355,424` bytes, SHA-256
+    `3e7e5afaac2c6d872592d76abedac03a51c6f0fc42d11e311ff2816a6c368afe`.
+  - `NotoSerifCJK-Regular.ttc`: `26,273,008` bytes, SHA-256
+    `5dec6bbce13a3bbf1487a022392c23e571abd0696a102f3715697420dd94b47a`.
+- Reason platform APIs are not enough: Android devices expose CJK-capable system
+  fonts under vendor-specific family names. `office2pdf` maps Microsoft YaHei
+  to Noto Sans CJK SC and SimSun to Noto Serif CJK SC, so bundling both fonts
+  provides a predictable local fallback for those common Chinese Office fonts.
+- Manual verification note: Simplified Chinese text rendered visibly after the
+  July 14, 2026 arm64 physical-device rebuild. Layout fidelity remains limited;
+  overlapping text and shifted Office shapes are still expected for complex
+  DOCX/PPTX/XLSX files.
+
 ## Commercial License Guardrail
 
 The project may later be commercialized. Avoid GPL-only media packages unless

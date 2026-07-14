@@ -61,6 +61,33 @@ with a clear message.
 MP3 output needs `libmp3lame`. The recorded self-built AAR includes the encoder,
 but the MP3 rows remain experimental until physical-device samples pass.
 
+## Office2PDF Native Rebuild
+
+The experimental Office renderer is reproducible from
+`native/office2pdf-jni`. It pins `developer0hye/office2pdf` at commit
+`e9129b3558f7d758922a5530766d19545ebaa28c` and exposes
+`convertBytesWithFontPaths`, which passes app-private CJK font directories
+through `ConvertOptions.font_paths`.
+
+This rebuild needs the Android Rust target, an installed Android NDK, and
+`cargo-ndk`. Run it manually from the native source directory only when the
+toolchain is ready:
+
+```powershell
+cargo ndk -t arm64-v8a -o ../../app/src/main/jniLibs build --release
+```
+
+The command replaces
+`app/src/main/jniLibs/arm64-v8a/libzen_office2pdf.so`. The checked-in July 14,
+2026 rebuild is `72,348,456` bytes with SHA-256
+`46779f04fc231fb1b1104ba766636e372a1be7cd49b71909346953e512a8e09c`
+and exports `convertBytesWithFontPaths`. Do not validate the CJK fix with a
+Kotlin-only build: an older shared library can still start through the legacy
+`convertBytes` fallback, but it cannot pass the bundled CJK font directory.
+Chinese text rendering has been manually verified on an arm64 physical device;
+layout fidelity remains experimental. Codex does not run this build or install
+step.
+
 `settings.gradle.kts` maps the `com.android.application` plugin id to
 `com.android.tools.build:gradle` through `pluginManagement.resolutionStrategy`.
 Keep that mapping while using AGP 9.x, because the plugin marker may not resolve

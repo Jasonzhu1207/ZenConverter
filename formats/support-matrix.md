@@ -29,6 +29,7 @@ as supported until it has a tested path, sample files, and failure behavior.
 | PDF | JPG / PNG / WEBP | Experimental | Android PdfRenderer | Renders each PDF page to one image file. This is page rasterization, not OCR, text extraction, or embedded-image extraction. Multi-page outputs use one task and same-sized page images. |
 | Multiple PDFs | PDF | Experimental | PDFBox-Android | Merges selected PDFs as page objects instead of rasterizing them. Normal text layers and vector content are preserved best-effort; complex forms, bookmarks, attachments, and metadata are not guaranteed. |
 | PDF | TXT | Experimental | PDFBox-Android | Extracts selectable text with page separators. This is not OCR; scanned PDFs without a text layer fail clearly. |
+| DOCX / PPTX / XLSX | PDF | Experimental | office2pdf native | Converts OOXML Office files to PDF through the bundled `arm64-v8a` `libzen_office2pdf.so`. The current rebuilt library receives bundled Noto Sans and Noto Serif CJK directories through the explicit font-path JNI entry, and Simplified Chinese text rendering has been verified on an arm64 physical device. This path reads each whole input into memory, caps source files at 64 MiB, and does not promise Microsoft Office layout fidelity; overlapping text, shifted shapes, and degraded slide/spreadsheet layout remain expected on complex files. |
 
 ## Current Native Media Limits
 
@@ -133,3 +134,33 @@ Manual PDF sample coverage should include ordinary multi-PDF merge, mixed
 text/scanned/image PDFs, mixed page sizes, large PDFs, cancellation during cache
 or write, password-protected sources, text-layer PDF to TXT, mixed-content PDF to
 TXT, and scanned PDF to TXT with the no-selectable-text failure.
+
+## Current Office Document Limits
+
+- Office document targets are intentionally limited to DOCX, PPTX, and XLSX to
+  PDF. Legacy DOC, PPT, XLS, ODT, RTF, and encrypted/password-protected Office
+  files are not connected.
+- The native library is currently bundled only at
+  `app/src/main/jniLibs/arm64-v8a/libzen_office2pdf.so`. 32-bit ARM devices
+  fail clearly instead of attempting this path. Its reproducible source is at
+  `native/office2pdf-jni`. The July 14, 2026 bundled build exports the explicit
+  font-path JNI entry used for CJK fonts; the older legacy conversion entry is
+  retained only so older local test binaries can still start.
+- The JNI surface accepts and returns byte arrays. The service therefore reads
+  the whole OOXML source into memory, rejects files larger than 64 MiB, and then
+  writes the returned PDF bytes to the normal output flow.
+- Before conversion, the Kotlin wrapper copies bundled Noto Sans CJK and Noto
+  Serif CJK into app-private storage and passes that directory to the JNI v2
+  `ConvertOptions.font_paths` API when the native library exports it. This
+  avoids relying on Android vendor font names or a CLI-only `TYPST_FONT_PATHS`
+  environment convention; the legacy JNI fallback cannot use this directory.
+- Layout fidelity, fonts, charts, comments, slide effects, spreadsheet print
+  areas, and advanced Office features are experimental. Manual testing showed
+  that Chinese text renders after the CJK rebuild, but complex pages can still
+  show overlapping text, shifted Office shapes, and degraded slide layout. Treat
+  this as a local first-pass renderer, not a replacement for Microsoft Office
+  export.
+- Manual sample coverage should include small and large DOCX, PPTX, and XLSX
+  files, Simplified Chinese text, missing fonts, embedded images, charts,
+  cancellation, unsupported legacy formats, oversized files, and an arm32-device
+  startup failure check.

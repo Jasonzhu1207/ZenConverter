@@ -295,3 +295,20 @@ groups:
         engine: pdfbox-android
         status: experimental
         note: "Extracts selectable text with page separators through PDFBox-Android. This is not OCR; scanned PDFs without a text layer fail clearly. Password-protected source PDFs can be loaded with transient passwords."
+  document:
+    planned:
+      - from: docx
+        to: pdf
+        engine: office2pdf-native
+        status: experimental
+        note: "Converts OOXML Word documents to PDF through the bundled arm64-v8a libzen_office2pdf.so. The current JNI build passes bundled Noto Sans and Noto Serif CJK through explicit native font paths; Chinese text renders on an arm64 physical device, but layout fidelity remains experimental."
+      - from: pptx
+        to: pdf
+        engine: office2pdf-native
+        status: experimental
+        note: "Converts OOXML PowerPoint presentations to PDF through the bundled arm64-v8a libzen_office2pdf.so. The current JNI build passes bundled Noto Sans and Noto Serif CJK through explicit native font paths; Chinese text renders on an arm64 physical device, but slide layout fidelity remains experimental."
+      - from: xlsx
+        to: pdf
+        engine: office2pdf-native
+        status: experimental
+        note: "Converts OOXML Excel workbooks to PDF through the bundled arm64-v8a libzen_office2pdf.so. The current JNI build passes bundled Noto Sans and Noto Serif CJK through explicit native font paths; Chinese text renders on an arm64 physical device, but spreadsheet pagination and layout fidelity remain experimental."

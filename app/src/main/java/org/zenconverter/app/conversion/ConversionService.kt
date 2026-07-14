@@ -77,6 +77,10 @@ import com.tom_roush.pdfbox.pdmodel.encryption.InvalidPasswordException
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import org.zenconverter.app.MainActivity
 import org.zenconverter.app.R
+import org.zenconverter.app.office.Office2PdfNative
+import org.zenconverter.app.office.Office2PdfUnavailableException
+import org.zenconverter.app.office.Office2PdfUnsupportedAbiException
+import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.File
 import java.text.SimpleDateFormat
@@ -159,7 +163,7 @@ class ConversionService : Service() {
 
         val outputProfile = outputProfileFor(input)
         if (outputProfile == null) {
-            failCurrentTask("Only connected video, audio, image, and PDF targets can run")
+            failCurrentTask("Only connected video, audio, image, PDF, and document targets can run")
             return
         }
 
@@ -173,6 +177,7 @@ class ConversionService : Service() {
                     when {
                         input.category == ConversionMediaCategory.Image -> "NativeBitmap"
                         input.category == ConversionMediaCategory.Pdf -> "NativePdf"
+                        input.category == ConversionMediaCategory.Document -> "Office2Pdf"
                         useCompatibilityEngine -> "Compatibility"
                         else -> "Hardware"
                     }
@@ -206,6 +211,11 @@ class ConversionService : Service() {
             } else {
                 startPdfImageExport(input, tempFile, outputProfile)
             }
+            return
+        }
+
+        if (input.category == ConversionMediaCategory.Document) {
+            startOfficeDocumentExport(input, tempFile)
             return
         }
 
@@ -447,6 +457,61 @@ class ConversionService : Service() {
                 failCurrentTask(pdfDocumentFailureMessageFor(exception, outputProfile))
             }
         }
+    }
+
+    private fun startOfficeDocumentExport(
+        input: ConversionTaskInput,
+        tempFile: File
+    ) {
+        serviceScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    writeOfficeDocumentExport(input, tempFile)
+                }
+            }.onSuccess {
+                if (ConversionTaskStore.isCancelled()) {
+                    tempFile.delete()
+                    cancelRun()
+                    return@onSuccess
+                }
+                ConversionTaskStore.updateProgress(taskIndex, PROGRESS_BEFORE_SAVE)
+                saveCompletedExport(input, tempFile)
+            }.onFailure { exception ->
+                tempFile.delete()
+                if (exception is CancellationException) {
+                    return@onFailure
+                }
+                Log.w(TAG, "Could not run Office document export", exception)
+                failCurrentTask(officeFailureMessageFor(exception))
+            }
+        }
+    }
+
+    private fun writeOfficeDocumentExport(
+        input: ConversionTaskInput,
+        outputFile: File
+    ) {
+        val extension = officeInputExtensionFor(input)
+            ?: error("Unsupported Office document")
+
+        throwIfConversionCancelled()
+        val inputBytes = readOfficeInputBytes(input)
+        updateImageProgress(0.25f)
+
+        throwIfConversionCancelled()
+        val pdfBytes = Office2PdfNative.convert(this, inputBytes, extension)
+        throwIfConversionCancelled()
+
+        if (!looksLikePdf(pdfBytes)) {
+            error("Office engine did not return a PDF")
+        }
+
+        outputFile.outputStream().use { output ->
+            output.write(pdfBytes)
+            output.flush()
+        }
+        throwIfConversionCancelled()
+        updateImageProgress(0.95f)
     }
 
     private fun writePdfDocumentExport(
@@ -1410,6 +1475,78 @@ class ConversionService : Service() {
         }
     }
 
+    private fun officeFailureMessageFor(exception: Throwable): String {
+        val message = exception.message.orEmpty()
+        return when {
+            exception is Office2PdfUnsupportedAbiException ->
+                "Office converter is only available on arm64-v8a devices"
+            exception is Office2PdfUnavailableException ->
+                "Office converter could not start on this device"
+            exception is UnsatisfiedLinkError ->
+                "Office converter could not start on this device"
+            message == "Unsupported Office document" ->
+                "Unsupported Office document"
+            message == "Input file is empty" ->
+                "Input file is empty"
+            message == "Input file could not be opened" ->
+                "Input file could not be opened"
+            message == "Office file is too large for this experimental converter" ->
+                "Office file is too large for this experimental converter"
+            message == "Office engine did not return a PDF" ->
+                "Office conversion failed"
+            message.contains("unsupported Office format", ignoreCase = true) ->
+                "Unsupported Office document"
+            message.startsWith("Office", ignoreCase = true) ->
+                message
+            else -> "Office conversion failed"
+        }
+    }
+
+    private fun readOfficeInputBytes(input: ConversionTaskInput): ByteArray {
+        val sourceSize = queryOpenableSize(input.inputUri)
+        sourceSize?.let { sizeBytes ->
+            if (sizeBytes > OFFICE_MAX_INPUT_BYTES) {
+                error("Office file is too large for this experimental converter")
+            }
+        }
+
+        val initialCapacity = sourceSize
+            ?.coerceAtMost(OFFICE_MAX_INPUT_BYTES)
+            ?.toInt()
+            ?: COPY_BUFFER_SIZE
+        val output = ByteArrayOutputStream(initialCapacity.coerceAtLeast(0))
+
+        contentResolver.openInputStream(input.inputUri)?.use { inputStream ->
+            val buffer = ByteArray(COPY_BUFFER_SIZE)
+            var totalBytes = 0L
+            while (true) {
+                throwIfConversionCancelled()
+                val read = inputStream.read(buffer)
+                if (read == -1) break
+                totalBytes += read.toLong()
+                if (totalBytes > OFFICE_MAX_INPUT_BYTES) {
+                    error("Office file is too large for this experimental converter")
+                }
+                output.write(buffer, 0, read)
+            }
+        } ?: error("Input file could not be opened")
+
+        if (output.size() == 0) error("Input file is empty")
+        return output.toByteArray()
+    }
+
+    private fun officeInputExtensionFor(input: ConversionTaskInput): String? {
+        val extension = input.extension.lowercase(Locale.US)
+        if (extension in OFFICE_INPUT_EXTENSIONS) return extension
+        val mimeType = input.mimeType.orEmpty().lowercase(Locale.US)
+        return OFFICE_MIME_TYPES[mimeType]
+    }
+
+    private fun looksLikePdf(bytes: ByteArray): Boolean {
+        return bytes.size >= PDF_HEADER.size &&
+            PDF_HEADER.indices.all { index -> bytes[index] == PDF_HEADER[index] }
+    }
+
     private fun startCompatibilityExport(
         input: ConversionTaskInput,
         tempFile: File
@@ -1588,6 +1725,7 @@ class ConversionService : Service() {
             }
             ConversionMediaCategory.Image -> error("Compatibility engine is not connected for images")
             ConversionMediaCategory.Pdf -> error("Compatibility engine is not connected for PDFs")
+            ConversionMediaCategory.Document -> error("Compatibility engine is not connected for documents")
         }
     }
 
@@ -1921,6 +2059,8 @@ class ConversionService : Service() {
                 "Compatibility engine is not connected for images"
             ConversionMediaCategory.Pdf ->
                 "Compatibility engine is not connected for PDFs"
+            ConversionMediaCategory.Document ->
+                "Compatibility engine is not connected for documents"
         }
     }
 
@@ -1989,6 +2129,7 @@ class ConversionService : Service() {
                     (isLikelyVideoInput(input) && !isLikelyMp4VideoInput(input))
             ConversionMediaCategory.Image -> false
             ConversionMediaCategory.Pdf -> false
+            ConversionMediaCategory.Document -> false
         }
     }
 
@@ -2532,6 +2673,13 @@ class ConversionService : Service() {
                     else -> null
                 }
             }
+            ConversionMediaCategory.Document -> {
+                if (input.targetFormat.equals("PDF", ignoreCase = true)) {
+                    OutputProfile(extension = "pdf", mimeType = MIME_TYPE_PDF, kind = OutputMediaKind.Document)
+                } else {
+                    null
+                }
+            }
         }
     }
 
@@ -2745,6 +2893,7 @@ class ConversionService : Service() {
         private const val PDF_PASSWORD_EXTENSION = 13
         private const val PDF_CACHE_HEADROOM_BYTES = 16L * 1024L * 1024L
         private const val PDF_UNKNOWN_CACHE_MIN_FREE_BYTES = 256L * 1024L * 1024L
+        private const val OFFICE_MAX_INPUT_BYTES = 64L * 1024L * 1024L
         private const val FFMPEG_MAX_PROGRESS_BEFORE_SAVE = 0.98f
         private const val FFMPEG_LOG_DRAIN_TIMEOUT_MS = 1_000
         private const val FFMPEG_ENCODER_PROBE_TIMEOUT_MS = 2_000
@@ -2761,6 +2910,12 @@ class ConversionService : Service() {
         private const val MIME_TYPE_WEBP = "image/webp"
         private const val MIME_TYPE_PDF = "application/pdf"
         private const val MIME_TYPE_TEXT = "text/plain"
+        private const val MIME_TYPE_DOCX =
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        private const val MIME_TYPE_PPTX =
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        private const val MIME_TYPE_XLSX =
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         private const val DEFAULT_OUTPUT_DIRECTORY = "ZenConverter"
         private const val URI_SCHEME_FILE = "file"
         private const val MIN_MIXABLE_CHANNEL_COUNT = 1
@@ -2787,6 +2942,13 @@ class ConversionService : Service() {
             "ogv"
         )
         private val WMA_AUDIO_INPUT_EXTENSIONS = setOf("wma", "asf")
+        private val OFFICE_INPUT_EXTENSIONS = setOf("docx", "pptx", "xlsx")
+        private val OFFICE_MIME_TYPES = mapOf(
+            MIME_TYPE_DOCX to "docx",
+            MIME_TYPE_PPTX to "pptx",
+            MIME_TYPE_XLSX to "xlsx"
+        )
+        private val PDF_HEADER = "%PDF-".encodeToByteArray()
         private val PDF_BITMAP_PAINT = Paint(
             Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG or Paint.DITHER_FLAG
         )

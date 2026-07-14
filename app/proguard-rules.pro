@@ -5,3 +5,6 @@
 # Current PDFBox use is true PDF merge and selectable-text extraction, not
 # JPEG2000 image encode/decode, so do not add another binary just for this path.
 -dontwarn com.gemalto.jp2.**
+
+# JNI symbol names in libzen_office2pdf.so reference this exact class/method.
+-keep class org.zenconverter.app.office.Office2PdfNative { *; }

@@ -29,7 +29,8 @@ enum class ConversionMediaCategory {
     Video,
     Audio,
     Image,
-    Pdf
+    Pdf,
+    Document
 }
 
 data class VideoExportOptions(

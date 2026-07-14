@@ -266,7 +266,7 @@ class MainActivity : ComponentActivity() {
         }
 
         if (queuedFiles.any { !it.hasConnectedNativeTarget() }) {
-            ConversionTaskStore.showMessage("Only connected video, audio, image, and PDF targets can run")
+            ConversionTaskStore.showMessage("Only connected video, audio, image, PDF, and document targets can run")
             return
         }
 
@@ -698,6 +698,7 @@ private fun QueuedFile.hasConnectedNativeTarget(): Boolean {
             targetFormat.equals("WEBP", ignoreCase = true) ||
             targetFormat.equals("PDF", ignoreCase = true) ||
             targetFormat.equals("TXT", ignoreCase = true)
+        FileCategory.Document -> targetFormat.equals("PDF", ignoreCase = true)
     }
 }
 
@@ -731,6 +732,7 @@ private fun FileCategory.toConversionCategory(): ConversionMediaCategory {
         FileCategory.Audio -> ConversionMediaCategory.Audio
         FileCategory.Image -> ConversionMediaCategory.Image
         FileCategory.Pdf -> ConversionMediaCategory.Pdf
+        FileCategory.Document -> ConversionMediaCategory.Document
     }
 }
 
