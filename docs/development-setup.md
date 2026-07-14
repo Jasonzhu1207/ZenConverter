@@ -45,6 +45,11 @@ recorded SHA-256 instead of downloading a prebuilt third-party fork artifact.
   - ABI: `armeabi-v7a` and `arm64-v8a`
   - MP3 evidence: generated config contains `CONFIG_LIBMP3LAME` and
     `CONFIG_LIBMP3LAME_ENCODER`
+
+The AAR still records both ARM ABIs for provenance, but the app's Gradle
+configuration filters packaged native libraries to `arm64-v8a` only. The
+published APK is arm64-only to keep size down and match the Office2PDF native
+library.
 - `app/libs/smart-exception-common-0.2.1.jar`
   - source: `https://repo1.maven.org/maven2/com/arthenica/smart-exception-common/0.2.1/smart-exception-common-0.2.1.jar`
   - SHA-256: `1cad0fb4dfa01755a014331b5ed199281d2c3fab5aca5c9d7abd0b41d0ec3f7b`

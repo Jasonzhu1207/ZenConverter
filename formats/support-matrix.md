@@ -57,6 +57,8 @@ as supported until it has a tested path, sample files, and failure behavior.
   `arthenica/ffmpeg-kit-next` tag `v7.1.0`, commit
   `1e64a8cdda1b045b014c0a54e9d395929c7b6ccc`, with SHA-256
   `6f3bb932ba76ff2627bef6cbfd77fa24bb7186afe27d88da37f69cd60c207602`.
+  The AAR contains `armeabi-v7a` and `arm64-v8a`, but the app packages only
+  `arm64-v8a` native libraries.
 - Video compatibility output is currently a stream-copy remux to MP4:
   `-map 0:v:0 -map 0:a:0? -c copy`. It does not re-encode H.264/H.265.
 - Subtitles, attachments, extra audio tracks, and unknown streams are not copied
@@ -141,9 +143,10 @@ TXT, and scanned PDF to TXT with the no-selectable-text failure.
   PDF. Legacy DOC, PPT, XLS, ODT, RTF, and encrypted/password-protected Office
   files are not connected.
 - The native library is currently bundled only at
-  `app/src/main/jniLibs/arm64-v8a/libzen_office2pdf.so`. 32-bit ARM devices
-  fail clearly instead of attempting this path. Its reproducible source is at
-  `native/office2pdf-jni`. The July 14, 2026 bundled build exports the explicit
+  `app/src/main/jniLibs/arm64-v8a/libzen_office2pdf.so`. Published APKs are
+  arm64-only, so 32-bit ARM devices are not supported by the release package.
+  Its reproducible source is at `native/office2pdf-jni`. The July 14, 2026
+  bundled build exports the explicit
   font-path JNI entry used for CJK fonts; the older legacy conversion entry is
   retained only so older local test binaries can still start.
 - The JNI surface accepts and returns byte arrays. The service therefore reads

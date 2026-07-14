@@ -41,7 +41,9 @@ android {
         versionName = "0.1.0-dev"
 
         ndk {
-            abiFilters += "armeabi-v7a"
+            // Release APKs are arm64-only. The recorded FFmpeg AAR also
+            // contains armeabi-v7a, but Office2PDF is arm64-v8a only and the
+            // extra 32-bit media libs make the single APK much larger.
             abiFilters += "arm64-v8a"
         }
     }

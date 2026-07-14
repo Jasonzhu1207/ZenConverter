@@ -114,6 +114,9 @@ Build record for the selected binary:
 - Enabled external libraries reported by the build: `lame`, `libiconv`.
 - Build targets included: `arm-v7a`, `arm-v7a-neon`, and `arm64-v8a`.
 - Android ABIs included in the AAR: `armeabi-v7a` and `arm64-v8a`.
+- Android ABIs packaged in the app: `arm64-v8a` only, via Gradle `abiFilters`.
+  The `armeabi-v7a` libraries remain in the recorded AAR but are not shipped in
+  the release APK.
 - AAR file name: `ffmpeg-kit-next-7.1.0-lame-armeabi-v7a-arm64-v8a.aar`.
 - AAR size: `26,384,826` bytes.
 - AAR SHA-256:

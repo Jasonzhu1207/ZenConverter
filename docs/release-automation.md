@@ -36,21 +36,22 @@ Paste the command output into `ANDROID_RELEASE_KEYSTORE_BASE64`.
 
 ## Outputs
 
-The workflow currently publishes one signed ARM APK containing `armeabi-v7a`
-and `arm64-v8a` native libraries:
+The workflow currently publishes one signed `arm64-v8a` APK:
 
 ```text
-ZenConverter-pre-release-armeabi-v7a-arm64-v8a.apk
-ZenConverter-vX.Y.Z-armeabi-v7a-arm64-v8a.apk
+ZenConverter-pre-release-arm64-v8a.apk
+ZenConverter-vX.Y.Z-arm64-v8a.apk
 ```
 
-The current self-built FFmpegKitNext AAR includes only ARM native libraries, so
-release builds intentionally filter native libraries to `armeabi-v7a` and
-`arm64-v8a`. x86 and x86_64 emulator/Chromebook APKs are not published yet.
+The current self-built FFmpegKitNext AAR contains `armeabi-v7a` and
+`arm64-v8a` native libraries, but release builds intentionally filter packaged
+native libraries to `arm64-v8a` only. This keeps the single APK smaller and
+matches the Office2PDF native renderer, which is currently bundled only for
+`arm64-v8a`. 32-bit ARM, x86, and x86_64 APKs are not published.
 
-When publishing, the workflow also removes older `*-arm64-v8a.apk` and
-`*-universal.apk` assets from the same release to avoid leaving misleading
-downloads beside the current ARM build.
+When publishing, the workflow also removes older `*-armeabi-v7a-arm64-v8a.apk`,
+`*-arm64-v8a.apk`, and `*-universal.apk` assets from the same release to avoid
+leaving misleading downloads beside the current arm64 build.
 
 The CI job verifies that the recorded self-built FFmpegKitNext AAR is already
 present under `app/libs` and that its SHA-256 is:
