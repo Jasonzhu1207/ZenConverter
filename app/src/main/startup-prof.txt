@@ -1,0 +1,6 @@
+# Startup profile rules for ZenConverter launch classes.
+Lorg/zenconverter/app/MainActivity;
+Lorg/zenconverter/app/MainActivity$**;
+Lorg/zenconverter/app/ui/**;
+Lorg/zenconverter/app/conversion/ConversionTaskStore**;
+Lorg/zenconverter/app/conversion/VideoExportOptions;

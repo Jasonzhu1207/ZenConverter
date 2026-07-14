@@ -12,7 +12,9 @@ import android.os.ext.SdkExtensions
 import android.provider.OpenableColumns
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -64,7 +66,9 @@ class MainActivity : ComponentActivity() {
     private var pdfProbeRunning = false
     private var pdfBoxReady = false
     private var pdfSelectionGeneration = 0
-    private val supportedVideoMimeTypes by lazy { VideoEncoderSupport.supportedMimeTypes() }
+    private val supportedVideoMimeTypes = mutableStateOf(
+        setOf(VideoExportOptions.VIDEO_MIME_TYPE_H264)
+    )
 
     private val requestNotificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -129,11 +133,21 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT
+            ),
+            navigationBarStyle = SystemBarStyle.light(
+                android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT
+            )
+        )
         super.onCreate(savedInstanceState)
         setContent {
             ZenConverterApp(
                 queuedFiles = queuedFiles,
-                supportedVideoMimeTypes = supportedVideoMimeTypes,
+                supportedVideoMimeTypes = supportedVideoMimeTypes.value,
                 outputLocationMode = outputLocationMode.value,
                 outputDirectory = outputDirectory.value,
                 onOutputLocationModeChange = { mode ->
@@ -218,6 +232,29 @@ class MainActivity : ComponentActivity() {
                     ConversionService.cancel(this)
                 }
             )
+        }
+        probeVideoEncoderSupportAsync()
+    }
+
+    private fun probeVideoEncoderSupportAsync() {
+        // Vendor codec enumeration can stall first composition, so keep it off the launch path.
+        Thread {
+            val mimeTypes = runCatching {
+                Thread.sleep(VIDEO_ENCODER_PROBE_DELAY_MILLIS)
+                VideoEncoderSupport.supportedMimeTypes()
+            }.getOrElse { exception ->
+                Log.w(TAG, "Video encoder support probe failed", exception)
+                return@Thread
+            }
+            runOnUiThread {
+                if (!isDestroyed && supportedVideoMimeTypes.value != mimeTypes) {
+                    supportedVideoMimeTypes.value = mimeTypes
+                }
+            }
+        }.apply {
+            name = "ZenVideoEncoderProbe"
+            isDaemon = true
+            start()
         }
     }
 
@@ -587,6 +624,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val TAG = "MainActivity"
         private const val PDF_PASSWORD_EXTENSION = 13
+        private const val VIDEO_ENCODER_PROBE_DELAY_MILLIS = 2_000L
     }
 }
 

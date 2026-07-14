@@ -1,0 +1,11 @@
+# Baseline profile rules for ZenConverter first open and home scrolling.
+HSPLorg/zenconverter/app/MainActivity;->**(**)**
+HSPLorg/zenconverter/app/MainActivity$**;->**(**)**
+HSPLorg/zenconverter/app/ui/**->**(**)**
+HSPLorg/zenconverter/app/conversion/ConversionTaskStore**;->**(**)**
+HSPLorg/zenconverter/app/conversion/VideoEncoderSupport;->**(**)**
+Lorg/zenconverter/app/MainActivity;
+Lorg/zenconverter/app/MainActivity$**;
+Lorg/zenconverter/app/ui/**;
+Lorg/zenconverter/app/conversion/ConversionTaskStore**;
+Lorg/zenconverter/app/conversion/VideoEncoderSupport;
