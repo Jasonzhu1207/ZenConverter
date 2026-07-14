@@ -61,9 +61,8 @@ duplicating normal local files into cache.
 Current first step: a self-built `arthenica/ffmpeg-kit-next` `v7.1.0` AAR is
 wired for non-MP4 video container remux to MP4, non-MP4 video-file audio
 extraction to M4A by FFmpeg audio-track copy, and experimental audio targets for
-MP3/WAV/FLAC/WMA through FFmpeg arguments. The AAR includes `armeabi-v7a` and
-`arm64-v8a` and was built with `--enable-lame`, so the package now contains the
-`libmp3lame` encoder
+MP3/WAV/FLAC/WMA through FFmpeg arguments. The current AAR is `arm64-v8a` only
+and was built with `--enable-lame`, so the package now contains the `libmp3lame` encoder
 that the earlier Free AAR lacked. This is still not universal video or audio
 transcoding: MP3 output needs physical-device sample verification, and WebM
 Vorbis/Opus to M4A plus AVI MP3/PCM to M4A need a later route that actually

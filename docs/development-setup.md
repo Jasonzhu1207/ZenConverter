@@ -36,20 +36,18 @@ FFmpegKit local core: `app/build.gradle.kts` requires the self-built local AAR
 below. There is no Maven fallback for FFmpegKit, and release CI verifies the
 recorded SHA-256 instead of downloading a prebuilt third-party fork artifact.
 
-- `app/libs/ffmpeg-kit-next-7.1.0-lame-armeabi-v7a-arm64-v8a.aar`
+- `app/libs/ffmpeg-kit-next-7.1.0-lame-arm64-v8a.aar`
   - source: `https://github.com/arthenica/ffmpeg-kit-next`
   - tag: `v7.1.0`
   - commit: `1e64a8cdda1b045b014c0a54e9d395929c7b6ccc`
-  - build command: `./nix-android.sh -p android-r27d --jobs=2 --enable-lame --disable-x86 --disable-x86-64`
-  - SHA-256: `6f3bb932ba76ff2627bef6cbfd77fa24bb7186afe27d88da37f69cd60c207602`
-  - ABI: `armeabi-v7a` and `arm64-v8a`
+  - build command: `./nix-android.sh -p android-r27d --jobs=2 --enable-lame --disable-arm-v7a --disable-arm-v7a-neon --disable-x86 --disable-x86-64`
+  - SHA-256: `14fb12d5868b23b7e16a7f17b268364973f5acca059505a42ccdcb6cba1ac9b0`
+  - ABI: `arm64-v8a`
   - MP3 evidence: generated config contains `CONFIG_LIBMP3LAME` and
     `CONFIG_LIBMP3LAME_ENCODER`
 
-The AAR still records both ARM ABIs for provenance, but the app's Gradle
-configuration filters packaged native libraries to `arm64-v8a` only. The
-published APK is arm64-only to keep size down and match the Office2PDF native
-library.
+The published APK is arm64-only to keep size down and match the Office2PDF
+native library.
 - `app/libs/smart-exception-common-0.2.1.jar`
   - source: `https://repo1.maven.org/maven2/com/arthenica/smart-exception-common/0.2.1/smart-exception-common-0.2.1.jar`
   - SHA-256: `1cad0fb4dfa01755a014331b5ed199281d2c3fab5aca5c9d7abd0b41d0ec3f7b`

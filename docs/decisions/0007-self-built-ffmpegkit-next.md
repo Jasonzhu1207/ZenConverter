@@ -35,13 +35,13 @@ Recorded source and build:
 - Nix profile: `android-r27d`.
 - Command:
   `./nix-android.sh -p android-r27d --jobs=2 --enable-lame
-  --disable-x86 --disable-x86-64`.
+  --disable-arm-v7a --disable-arm-v7a-neon --disable-x86 --disable-x86-64`.
 - Output AAR:
-  `app/libs/ffmpeg-kit-next-7.1.0-lame-armeabi-v7a-arm64-v8a.aar`.
+  `app/libs/ffmpeg-kit-next-7.1.0-lame-arm64-v8a.aar`.
 - SHA-256:
-  `6f3bb932ba76ff2627bef6cbfd77fa24bb7186afe27d88da37f69cd60c207602`.
-- Build targets: `arm-v7a`, `arm-v7a-neon`, and `arm64-v8a`.
-- Android ABIs: `armeabi-v7a` and `arm64-v8a`.
+  `14fb12d5868b23b7e16a7f17b268364973f5acca059505a42ccdcb6cba1ac9b0`.
+- Build targets: `arm64-v8a`.
+- Android ABIs: `arm64-v8a`.
 - FFmpegKit package namespace remains `com.arthenica.ffmpegkit`.
 - MP3 evidence: `CONFIG_LIBMP3LAME=1` and
   `CONFIG_LIBMP3LAME_ENCODER=1` are present in the generated FFmpeg config for
@@ -56,8 +56,8 @@ download `ffmpegkit-maintained/ffmpeg` assets as a fallback.
   verification.
 - Clean checkouts include the recorded AAR, and release CI verifies its SHA-256
   before Gradle builds.
-- The current AAR includes ARM ABIs only; emulator/x86 support remains out of
-  scope.
+- The current AAR includes `arm64-v8a` only; 32-bit ARM and emulator/x86
+  support remain out of scope.
 - The AAR packages LGPLv3, LAME LGPLv2-style, libiconv GPLv3, and Apache-2.0
   cpu-features license texts. This is compatible with the project's proposed
   `GPL-3.0-or-later` license, but must be revisited before any non-GPL

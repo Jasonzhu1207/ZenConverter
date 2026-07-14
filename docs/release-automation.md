@@ -43,11 +43,10 @@ ZenConverter-pre-release-arm64-v8a.apk
 ZenConverter-vX.Y.Z-arm64-v8a.apk
 ```
 
-The current self-built FFmpegKitNext AAR contains `armeabi-v7a` and
-`arm64-v8a` native libraries, but release builds intentionally filter packaged
-native libraries to `arm64-v8a` only. This keeps the single APK smaller and
-matches the Office2PDF native renderer, which is currently bundled only for
-`arm64-v8a`. 32-bit ARM, x86, and x86_64 APKs are not published.
+The current self-built FFmpegKitNext AAR contains `arm64-v8a` native libraries
+only. This keeps the single APK smaller and matches the Office2PDF native
+renderer, which is currently bundled only for `arm64-v8a`. 32-bit ARM, x86, and
+x86_64 APKs are not published.
 
 When publishing, the workflow also removes older `*-armeabi-v7a-arm64-v8a.apk`,
 `*-arm64-v8a.apk`, and `*-universal.apk` assets from the same release to avoid
@@ -57,7 +56,7 @@ The CI job verifies that the recorded self-built FFmpegKitNext AAR is already
 present under `app/libs` and that its SHA-256 is:
 
 ```text
-6f3bb932ba76ff2627bef6cbfd77fa24bb7186afe27d88da37f69cd60c207602
+14fb12d5868b23b7e16a7f17b268364973f5acca059505a42ccdcb6cba1ac9b0
 ```
 
 It does not download FFmpegKit binaries from third-party forks. The recorded AAR

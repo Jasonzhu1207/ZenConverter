@@ -53,12 +53,11 @@ as supported until it has a tested path, sample files, and failure behavior.
 ## Current FFmpeg Compatibility Limits
 
 - The FFmpeg path uses the local self-built
-  `app/libs/ffmpeg-kit-next-7.1.0-lame-armeabi-v7a-arm64-v8a.aar`, built from
+  `app/libs/ffmpeg-kit-next-7.1.0-lame-arm64-v8a.aar`, built from
   `arthenica/ffmpeg-kit-next` tag `v7.1.0`, commit
   `1e64a8cdda1b045b014c0a54e9d395929c7b6ccc`, with SHA-256
-  `6f3bb932ba76ff2627bef6cbfd77fa24bb7186afe27d88da37f69cd60c207602`.
-  The AAR contains `armeabi-v7a` and `arm64-v8a`, but the app packages only
-  `arm64-v8a` native libraries.
+  `14fb12d5868b23b7e16a7f17b268364973f5acca059505a42ccdcb6cba1ac9b0`.
+  The AAR contains only `arm64-v8a` native libraries.
 - Video compatibility output is currently a stream-copy remux to MP4:
   `-map 0:v:0 -map 0:a:0? -c copy`. It does not re-encode H.264/H.265.
 - Subtitles, attachments, extra audio tracks, and unknown streams are not copied
