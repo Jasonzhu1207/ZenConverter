@@ -6,8 +6,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-0.1.0--dev-0A7E8C">
-  <img alt="WIP" src="https://img.shields.io/badge/%F0%9F%9A%A7%20WIP-Work%20in%20Progress-F59E0B">
+  <img alt="Version" src="https://img.shields.io/badge/version-0.1.0-0A7E8C">
   <img alt="Platform" src="https://img.shields.io/badge/platform-Android-3DDC84?logo=android&logoColor=white">
   <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?logo=kotlin&logoColor=white">
   <img alt="Jetpack Compose" src="https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4">

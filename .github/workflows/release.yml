@@ -132,14 +132,71 @@ jobs:
               >/tmp/keytool-alias.txt 2>/tmp/keytool-alias.err; then
             echo "::error::Keystore opens, but RELEASE_KEY_ALIAS was not found."
             sed -n '1,5p' /tmp/keytool-alias.err
+              exit 1
+          fi
+
+      - name: Resolve app version
+        id: app_version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            source_tag="${GITHUB_REF_NAME}"
+            commits_since_tag=0
+            has_source_tag=true
+            channel="release"
+          else
+            source_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1 || true)"
+            if [ -z "$source_tag" ]; then
+              source_tag="v0.1.0"
+              commits_since_tag=0
+              has_source_tag=false
+            else
+              commits_since_tag="$(git rev-list "${source_tag}..HEAD" --count)"
+              has_source_tag=true
+            fi
+            channel="pre-release"
+          fi
+
+          version_name="${source_tag#v}"
+          if ! [[ "$version_name" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Release tag must look like vMAJOR.MINOR.PATCH, got: $source_tag"
             exit 1
           fi
+
+          IFS=. read -r major minor patch <<< "$version_name"
+          version_base=$((10#$major * 100000000 + 10#$minor * 1000000 + 10#$patch * 10000))
+          if [ "$channel" = "release" ]; then
+            version_code=$((version_base + 1))
+          elif [ "$has_source_tag" = "false" ]; then
+            version_code=$version_base
+          else
+            version_offset=$((commits_since_tag + 2))
+            if [ "$version_offset" -gt 9999 ]; then
+              echo "::error::Too many pre-release commits after $source_tag for this versionCode scheme"
+              exit 1
+            fi
+            version_code=$((version_base + version_offset))
+          fi
+
+          echo "version_name=$version_name" >> "$GITHUB_OUTPUT"
+          echo "version_code=$version_code" >> "$GITHUB_OUTPUT"
+          echo "source_tag=$source_tag" >> "$GITHUB_OUTPUT"
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+
+          echo "Resolved Android versionName=$version_name"
+          echo "Resolved Android versionCode=$version_code"
+          echo "Version source tag=$source_tag ($channel)"
 
       - name: Allow Gradle wrapper execution
         run: chmod +x ./gradlew
 
       - name: Build signed release APK
-        run: ./gradlew --no-daemon clean assembleRelease
+        run: |
+          ./gradlew --no-daemon clean assembleRelease \
+            -Pzenconverter.versionName="${{ steps.app_version.outputs.version_name }}" \
+            -Pzenconverter.versionCode="${{ steps.app_version.outputs.version_code }}"
 
       - name: Prepare release asset
         id: package
@@ -177,17 +234,20 @@ jobs:
           cat > release-notes.md <<EOF
           Continuous pre-release build from main.
 
+          Android version: ${{ steps.app_version.outputs.version_name }} (${{ steps.app_version.outputs.version_code }})
+          Version source tag: ${{ steps.app_version.outputs.source_tag }}
+
           Commit: ${GITHUB_SHA}
           EOF
 
           if gh release view "$PRE_RELEASE_TAG" >/dev/null 2>&1; then
             gh release edit "$PRE_RELEASE_TAG" \
-              --title "Continuous pre-release" \
+              --title "Continuous pre-release for ${{ steps.app_version.outputs.source_tag }}" \
               --notes-file release-notes.md \
               --prerelease
           else
             gh release create "$PRE_RELEASE_TAG" \
-              --title "Continuous pre-release" \
+              --title "Continuous pre-release for ${{ steps.app_version.outputs.source_tag }}" \
               --notes-file release-notes.md \
               --prerelease \
               --target "$GITHUB_SHA"
@@ -207,6 +267,8 @@ jobs:
           set -euo pipefail
           cat > release-notes.md <<EOF
           Signed APK for ${RELEASE_TAG}.
+
+          Android version: ${{ steps.app_version.outputs.version_name }} (${{ steps.app_version.outputs.version_code }})
 
           Commit: ${GITHUB_SHA}
           EOF

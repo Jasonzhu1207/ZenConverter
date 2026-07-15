@@ -9,6 +9,37 @@ GitHub Actions builds signed release APKs from repository secrets.
   Release.
 - The workflow can also be started manually with `workflow_dispatch`.
 
+## Versioning
+
+Android has two version fields:
+
+- `versionName`: user-facing text such as `0.1.0`.
+- `versionCode`: an integer used by Android to decide whether one APK can update
+  another APK. It must increase over time for normal updates.
+
+The app defaults to `versionName=0.1.0` and `versionCode=1000001` for local
+builds. Release CI overrides both values without editing source files:
+
+- Tag builds use the pushed release tag. For example, `v0.1.0` becomes
+  `versionName=0.1.0`.
+- Main-branch pre-release builds use the latest semantic release tag, so the
+  permanent `pre-release` asset stays on the same visible version as the latest
+  formal release.
+- `versionCode` is derived from the semantic version plus the number of commits
+  since the latest release tag for pre-release builds. This keeps repeated
+  pre-release APKs installable over earlier pre-release APKs while the next
+  formal version tag still moves to a higher range.
+- Before the first semantic release tag exists, pre-release builds use
+  `versionName=0.1.0` with a lower bootstrap `versionCode`, so the first
+  `v0.1.0` release can still install over them.
+
+To publish the first formal release, create and push a tag such as:
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
+```
+
 ## Required Repository Secrets
 
 Create these under GitHub repository settings:

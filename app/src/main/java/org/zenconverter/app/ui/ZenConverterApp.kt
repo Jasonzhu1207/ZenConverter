@@ -1,6 +1,12 @@
 package org.zenconverter.app.ui
 
+import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -9,6 +15,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,6 +23,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -37,18 +45,23 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image as BrandImage
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PictureAsPdf
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -61,7 +74,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -80,9 +92,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -91,9 +106,12 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import org.zenconverter.app.conversion.AudioExportOptions
 import org.zenconverter.app.conversion.ImageExportOptions
 import org.zenconverter.app.conversion.PdfExportOptions
@@ -205,6 +223,30 @@ enum class TaskProgressStatus {
     Cancelled,
     Failed
 }
+
+private enum class SupportTargetType {
+    Link,
+    Wallet
+}
+
+private data class SupportTarget(
+    val title: String,
+    val value: String,
+    val type: SupportTargetType
+)
+
+private const val ZENCONVERTER_REPOSITORY_URL = "https://github.com/Jasonzhu1207/ZenConverter"
+private const val AFDIAN_URL = "https://afdian.com/a/Jason1207"
+private const val USDT_TRC20_ADDRESS = "TL88m9Wfdy4dAGhkLQ5jn9g8kZBTkRKrwf"
+private const val BTC_ADDRESS = "bc1p4s8e4pgwse4336vtwuqrxs58jdwkyaqcxtg0txg2xjzxpls07zjsjamy77"
+private const val ETH_ERC20_ADDRESS = "0x53a2d13bf808AC104cB09C722f01Ad68AFc9Da1F"
+
+private val supportTargets = listOf(
+    SupportTarget("Afdian", AFDIAN_URL, SupportTargetType.Link),
+    SupportTarget("USDT (TRC-20)", USDT_TRC20_ADDRESS, SupportTargetType.Wallet),
+    SupportTarget("Bitcoin (BTC)", BTC_ADDRESS, SupportTargetType.Wallet),
+    SupportTarget("Ethereum (ETH / ERC-20)", ETH_ERC20_ADDRESS, SupportTargetType.Wallet)
+)
 
 private enum class AccentColorOption(
     val englishLabel: String,
@@ -438,6 +480,8 @@ private fun ZenConverterContent(
     onCancelConversion: () -> Unit
 ) {
     var showSettings by remember { mutableStateOf(false) }
+    var showAbout by remember { mutableStateOf(false) }
+    var showSupport by remember { mutableStateOf(false) }
     var activeCategory by remember { mutableStateOf(FileCategory.Video) }
     var videoTarget by remember { mutableStateOf(FileCategory.Video.formats.first()) }
     var audioTarget by remember { mutableStateOf(FileCategory.Audio.formats.first()) }
@@ -517,37 +561,64 @@ private fun ZenConverterContent(
                     .fillMaxSize()
                     .padding(contentPadding)
                     .consumeWindowInsets(contentPadding),
-                contentPadding = PaddingValues(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 item(key = "header") {
-                    Header(
-                        texts = texts,
-                        showSettings = showSettings,
-                        onToggleSettings = {
-                            openMenuId = null
-                            showSettings = !showSettings
-                        }
-                    )
-                }
-
-                item(key = "settings") {
-                    AnimatedVisibility(
-                        visible = showSettings,
-                        enter = fadeIn() + expandVertically(
-                            animationSpec = spring(stiffness = 420f)
-                        ),
-                        exit = fadeOut() + shrinkVertically(
-                            animationSpec = spring(stiffness = 520f)
-                        )
-                    ) {
-                        SettingsPanel(
+                    Column {
+                        Header(
                             texts = texts,
-                            selectedAccent = accent,
-                            selectedLanguage = languageOption,
-                            onAccentSelected = onAccentSelected,
-                            onLanguageSelected = onLanguageSelected
+                            showSettings = showSettings,
+                            showAbout = showAbout,
+                            onToggleSettings = {
+                                openMenuId = null
+                                showAbout = false
+                                showSettings = !showSettings
+                            },
+                            onToggleAbout = {
+                                openMenuId = null
+                                showSettings = false
+                                showAbout = !showAbout
+                            }
                         )
+                        AnimatedVisibility(
+                            visible = showSettings,
+                            enter = fadeIn() + expandVertically(
+                                animationSpec = spring(stiffness = 420f)
+                            ),
+                            exit = fadeOut() + shrinkVertically(
+                                animationSpec = spring(stiffness = 520f)
+                            )
+                        ) {
+                            Column {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                SettingsPanel(
+                                    texts = texts,
+                                    selectedAccent = accent,
+                                    selectedLanguage = languageOption,
+                                    onAccentSelected = onAccentSelected,
+                                    onLanguageSelected = onLanguageSelected
+                                )
+                            }
+                        }
+
+                        AnimatedVisibility(
+                            visible = showAbout,
+                            enter = fadeIn() + expandVertically(
+                                animationSpec = spring(stiffness = 420f)
+                            ),
+                            exit = fadeOut() + shrinkVertically(
+                                animationSpec = spring(stiffness = 520f)
+                            )
+                        ) {
+                            Column {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                AboutPanel(
+                                    texts = texts,
+                                    onShowSupport = { showSupport = true }
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -656,6 +727,13 @@ private fun ZenConverterContent(
                 }
             }
         }
+
+        if (showSupport) {
+            SupportDialog(
+                texts = texts,
+                onDismiss = { showSupport = false }
+            )
+        }
     }
 }
 
@@ -733,7 +811,9 @@ private fun PdfPasswordDialog(
 private fun Header(
     texts: UiText,
     showSettings: Boolean,
-    onToggleSettings: () -> Unit
+    showAbout: Boolean,
+    onToggleSettings: () -> Unit,
+    onToggleAbout: () -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -751,14 +831,17 @@ private fun Header(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(40.dp)
                     .clip(RoundedCornerShape(8.dp))
             )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
                 Text(
                     text = "ZenConverter",
-                    style = MaterialTheme.typography.headlineMedium,
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onBackground,
                     maxLines = 1,
@@ -766,26 +849,57 @@ private fun Header(
                 )
                 Text(
                     text = texts.tagline,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
         }
-        Spacer(modifier = Modifier.width(10.dp))
-        IconButton(
-            onClick = onToggleSettings,
-            modifier = Modifier
-                .size(44.dp)
-                .border(1.dp, Color(0xFFE7E7E7), CircleShape)
-        ) {
-            AppIcon(
+        Spacer(modifier = Modifier.width(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            HeaderIconButton(
+                onClick = onToggleAbout,
+                icon = if (showAbout) Icons.Rounded.Close else Icons.Rounded.ErrorOutline,
+                contentDescription = if (showAbout) texts.closeAbout else texts.openAbout
+            )
+            HeaderIconButton(
+                onClick = onToggleSettings,
                 icon = if (showSettings) Icons.Rounded.Close else Icons.Rounded.Settings,
-                contentDescription = if (showSettings) texts.closeSettings else texts.openSettings,
-                tint = MaterialTheme.colorScheme.onSurface
+                contentDescription = if (showSettings) texts.closeSettings else texts.openSettings
             )
         }
+    }
+}
+
+@Composable
+private fun HeaderIconButton(
+    onClick: () -> Unit,
+    icon: ImageVector,
+    contentDescription: String
+) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .border(1.dp, Color(0xFFE7E7E7), CircleShape)
+            .clickable(
+                onClickLabel = contentDescription,
+                role = Role.Button,
+                onClick = onClick
+            )
+            .semantics {
+                this.contentDescription = contentDescription
+                role = Role.Button
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        AppIcon(
+            icon = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.size(24.dp)
+        )
     }
 }
 
@@ -846,6 +960,336 @@ private fun SettingsPanel(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AboutPanel(
+    texts: UiText,
+    onShowSupport: () -> Unit
+) {
+    val context = LocalContext.current
+    val versionName = remember(context) { appVersionName(context) }
+
+    QuietPanel {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            BrandImage(
+                painter = painterResource(id = R.drawable.zenconverter),
+                contentDescription = texts.appLogo,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(92.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .border(1.dp, Color(0xFFE4E4E4), RoundedCornerShape(20.dp))
+            )
+            Text(
+                text = "ZenConverter",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            SmallTag("${texts.appVersion} $versionName")
+            Text(
+                text = texts.aboutDescription,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        Spacer(modifier = Modifier.height(18.dp))
+
+        OutlinedButton(
+            onClick = { openExternalLink(context, ZENCONVERTER_REPOSITORY_URL, texts.linkUnavailable) },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
+        ) {
+            AppIcon(
+                icon = Icons.Rounded.Description,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = texts.githubRepository,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            AppIcon(
+                icon = Icons.Rounded.OpenInNew,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(17.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        OutlinedButton(
+            onClick = {
+                Toast.makeText(context, texts.updateCheckUnavailable, Toast.LENGTH_SHORT).show()
+            },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
+        ) {
+            AppIcon(
+                icon = Icons.Rounded.Check,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = texts.checkUpdates,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Button(
+            onClick = onShowSupport,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp),
+            shape = RoundedCornerShape(8.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF151515),
+                contentColor = Color.White
+            ),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+        ) {
+            AppIcon(
+                icon = Icons.Rounded.Favorite,
+                contentDescription = null,
+                tint = Color(0xFFFFD6C2),
+                modifier = Modifier.size(19.dp)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                text = texts.supportDevelopment,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun SupportDialog(
+    texts: UiText,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .heightIn(max = 640.dp),
+            shape = RoundedCornerShape(8.dp),
+            color = Color.White,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+            border = BorderStroke(1.dp, Color(0xFFE5E5E5))
+        ) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                SectionTitle(
+                    icon = Icons.Rounded.Favorite,
+                    title = texts.sponsorTitle
+                )
+                Text(
+                    text = texts.sponsorIntro,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 560.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    supportTargets.forEach { target ->
+                        SupportTargetCard(
+                            texts = texts,
+                            target = target
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SupportTargetCard(
+    texts: UiText,
+    target: SupportTarget
+) {
+    val context = LocalContext.current
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = Color.White,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = BorderStroke(1.dp, Color(0xFFE5E5E5))
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = target.title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            QrCodeView(
+                value = target.value,
+                contentDescription = texts.qrCodeFor(target.title)
+            )
+            when (target.type) {
+                SupportTargetType.Link -> {
+                    Text(
+                        text = target.value,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Button(
+                        onClick = { openExternalLink(context, target.value, texts.linkUnavailable) },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF151515),
+                            contentColor = Color.White
+                        ),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                    ) {
+                        AppIcon(
+                            icon = Icons.Rounded.OpenInNew,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(17.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(texts.openLink)
+                    }
+                }
+                SupportTargetType.Wallet -> {
+                    CopyableValueBox(
+                        texts = texts,
+                        label = target.title,
+                        value = target.value
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QrCodeView(
+    value: String,
+    contentDescription: String
+) {
+    val qrCode = remember(value) { QrCode.encode(value) }
+    val quietZone = 4
+
+    Canvas(
+        modifier = Modifier
+            .size(120.dp)
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White)
+            .border(1.dp, Color(0xFFE3E3E3), RoundedCornerShape(8.dp))
+            .padding(8.dp)
+            .semantics { this.contentDescription = contentDescription }
+    ) {
+        drawRect(Color.White)
+        val totalModules = qrCode.size + quietZone * 2
+        val moduleSize = minOf(size.width, size.height) / totalModules
+        val originX = (size.width - moduleSize * totalModules) / 2f
+        val originY = (size.height - moduleSize * totalModules) / 2f
+        for (y in 0 until qrCode.size) {
+            for (x in 0 until qrCode.size) {
+                if (qrCode.isDark(x, y)) {
+                    drawRect(
+                        color = Color(0xFF111111),
+                        topLeft = Offset(
+                            originX + (x + quietZone) * moduleSize,
+                            originY + (y + quietZone) * moduleSize
+                        ),
+                        size = Size(moduleSize, moduleSize)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CopyableValueBox(
+    texts: UiText,
+    label: String,
+    value: String
+) {
+    val context = LocalContext.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFFF6F7F8))
+            .border(1.dp, Color(0xFFE2E4E8), RoundedCornerShape(8.dp))
+            .clickable(
+                onClickLabel = texts.copy,
+                role = Role.Button,
+                onClick = {
+                    copyToClipboard(context, label, value, texts.copied)
+                }
+            )
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            fontFamily = FontFamily.Monospace,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        AppIcon(
+            icon = Icons.Rounded.ContentCopy,
+            contentDescription = texts.copy,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(18.dp)
+        )
     }
 }
 
@@ -973,7 +1417,7 @@ private fun ConversionLane(
                         text = texts.categoryPurpose(category),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
@@ -1360,7 +1804,7 @@ private fun OutputPanel(
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                     if (outputLocationMode == OutputLocationMode.Default) {
@@ -2037,8 +2481,23 @@ private val AUDIO_LOSSLESS_OUTPUT_EXTENSIONS = setOf("wav", "flac")
 
 private data class UiText(
     val tagline: String,
+    val openAbout: String,
+    val closeAbout: String,
     val openSettings: String,
     val closeSettings: String,
+    val appLogo: String,
+    val appVersion: String,
+    val aboutDescription: String,
+    val githubRepository: String,
+    val checkUpdates: String,
+    val updateCheckUnavailable: String,
+    val supportDevelopment: String,
+    val sponsorTitle: String,
+    val sponsorIntro: String,
+    val openLink: String,
+    val copy: String,
+    val copied: String,
+    val linkUnavailable: String,
     val accentColor: String,
     val language: String,
     val chooseConversion: String,
@@ -2087,6 +2546,14 @@ private data class UiText(
     val toPrefix: String
 ) {
     fun selectedCount(count: Int): String = "$count $selectedSuffix"
+
+    fun qrCodeFor(value: String): String {
+        return when (this) {
+            englishText -> "QR code for $value"
+            simplifiedChineseText -> "$value 的二维码"
+            else -> "$value 的 QR Code"
+        }
+    }
 
     fun imagePdfPromptMessage(count: Int): String {
         return when (this) {
@@ -2751,8 +3218,23 @@ private data class UiText(
 
 private val englishText = UiText(
     tagline = "Files stay on this device",
+    openAbout = "Open about",
+    closeAbout = "Close about",
     openSettings = "Open settings",
     closeSettings = "Close settings",
+    appLogo = "ZenConverter logo",
+    appVersion = "Version",
+    aboutDescription = "Private, local-first conversion for Android. No ads, no account, no upload-first workflow.",
+    githubRepository = "GitHub repository",
+    checkUpdates = "Check for updates",
+    updateCheckUnavailable = "Update checking is not available yet",
+    supportDevelopment = "Sponsor development",
+    sponsorTitle = "Sponsor ZenConverter",
+    sponsorIntro = "Support helps keep ZenConverter local-first, ad-free, and maintained.",
+    openLink = "Open link",
+    copy = "Copy",
+    copied = "Copied",
+    linkUnavailable = "No app can open this link",
     accentColor = "Accent color",
     language = "Language",
     chooseConversion = "Choose conversion",
@@ -2763,7 +3245,7 @@ private val englishText = UiText(
     chooseDirectory = "Choose folder",
     chooseFolderBeforeConversion = "Choose where to save results",
     defaultOutputLocation = "Default folder",
-    defaultOutputNote = "Videos save to Movies/ZenConverter; audio to Music/ZenConverter; images to Pictures/ZenConverter; PDFs to Documents/ZenConverter",
+    defaultOutputNote = "System folders / ZenConverter",
     customOutputLocation = "Custom folder",
     storagePermissionRequired = "Allow storage permission or choose a folder",
     videoEncoderUnsupported = "This device does not support the selected video encoder",
@@ -2803,8 +3285,23 @@ private val englishText = UiText(
 
 private val simplifiedChineseText = UiText(
     tagline = "本机转换，文件不上云",
+    openAbout = "打开关于",
+    closeAbout = "关闭关于",
     openSettings = "打开设置",
     closeSettings = "关闭设置",
+    appLogo = "ZenConverter 标志",
+    appVersion = "版本",
+    aboutDescription = "面向 Android 的本地优先转换工具。无广告、无账号，也不把文件先传到云端。",
+    githubRepository = "GitHub 仓库",
+    checkUpdates = "检查更新",
+    updateCheckUnavailable = "检查更新暂未接入",
+    supportDevelopment = "赞助开发",
+    sponsorTitle = "赞助 ZenConverter",
+    sponsorIntro = "赞助会用于继续维护 ZenConverter，让它保持本地优先、无广告。",
+    openLink = "打开链接",
+    copy = "复制",
+    copied = "已复制",
+    linkUnavailable = "没有可打开此链接的应用",
     accentColor = "重点色",
     language = "语言",
     chooseConversion = "选择转换",
@@ -2815,7 +3312,7 @@ private val simplifiedChineseText = UiText(
     chooseDirectory = "选择目录",
     chooseFolderBeforeConversion = "选择处理后文件的保存位置",
     defaultOutputLocation = "默认文件夹",
-    defaultOutputNote = "视频保存到 Movies/ZenConverter；音频到 Music/ZenConverter；图片到 Pictures/ZenConverter；PDF 到 Documents/ZenConverter",
+    defaultOutputNote = "系统文件夹 / ZenConverter",
     customOutputLocation = "自定义文件夹",
     storagePermissionRequired = "请允许存储权限，或改选自定义文件夹",
     videoEncoderUnsupported = "当前设备不支持所选视频编码",
@@ -2855,8 +3352,23 @@ private val simplifiedChineseText = UiText(
 
 private val traditionalChineseText = UiText(
     tagline = "本機轉換，檔案不上雲",
+    openAbout = "開啟關於",
+    closeAbout = "關閉關於",
     openSettings = "開啟設定",
     closeSettings = "關閉設定",
+    appLogo = "ZenConverter 標誌",
+    appVersion = "版本",
+    aboutDescription = "面向 Android 的本地優先轉換工具。無廣告、無帳號，也不把檔案先傳到雲端。",
+    githubRepository = "GitHub 倉庫",
+    checkUpdates = "檢查更新",
+    updateCheckUnavailable = "檢查更新尚未接入",
+    supportDevelopment = "贊助開發",
+    sponsorTitle = "贊助 ZenConverter",
+    sponsorIntro = "贊助會用於繼續維護 ZenConverter，讓它保持本地優先、無廣告。",
+    openLink = "開啟連結",
+    copy = "複製",
+    copied = "已複製",
+    linkUnavailable = "沒有可開啟此連結的應用",
     accentColor = "重點色",
     language = "語言",
     chooseConversion = "選擇轉換",
@@ -2867,7 +3379,7 @@ private val traditionalChineseText = UiText(
     chooseDirectory = "選擇資料夾",
     chooseFolderBeforeConversion = "選擇處理後檔案的儲存位置",
     defaultOutputLocation = "預設資料夾",
-    defaultOutputNote = "影片儲存到 Movies/ZenConverter；音訊到 Music/ZenConverter；圖片到 Pictures/ZenConverter；PDF 到 Documents/ZenConverter",
+    defaultOutputNote = "系統資料夾 / ZenConverter",
     customOutputLocation = "自訂資料夾",
     storagePermissionRequired = "請允許儲存權限，或改選自訂資料夾",
     videoEncoderUnsupported = "目前裝置不支援所選影片編碼",
@@ -2904,6 +3416,37 @@ private val traditionalChineseText = UiText(
     uiPresetSuffix = "",
     toPrefix = "轉為"
 )
+
+private fun appVersionName(context: Context): String {
+    return runCatching {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0.1.0"
+    }.getOrDefault("0.1.0")
+}
+
+private fun openExternalLink(
+    context: Context,
+    url: String,
+    failureMessage: String
+) {
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+    try {
+        context.startActivity(intent)
+    } catch (_: ActivityNotFoundException) {
+        Toast.makeText(context, failureMessage, Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun copyToClipboard(
+    context: Context,
+    label: String,
+    value: String,
+    copiedMessage: String
+) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText(label, value))
+    Toast.makeText(context, copiedMessage, Toast.LENGTH_SHORT).show()
+}
+
 private fun formatBytes(sizeBytes: Long?, texts: UiText): String {
     if (sizeBytes == null) return texts.unknownSize
     if (sizeBytes < 1024) return "$sizeBytes B"

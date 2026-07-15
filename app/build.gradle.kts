@@ -17,6 +17,11 @@ val pdfBoxAndroidLocalAar = file("libs/pdfbox-android-2.0.27.0.aar")
 val bouncyCastleProvLocalJar = file("libs/bcprov-jdk15to18-1.72.jar")
 val bouncyCastlePkixLocalJar = file("libs/bcpkix-jdk15to18-1.72.jar")
 val bouncyCastleUtilLocalJar = file("libs/bcutil-jdk15to18-1.72.jar")
+val appVersionName = providers.gradleProperty("zenconverter.versionName")
+    .orElse("0.1.0")
+val appVersionCode = providers.gradleProperty("zenconverter.versionCode")
+    .map { value -> value.toInt() }
+    .orElse(1_000_001)
 check(pdfBoxAndroidLocalAar.isFile) {
     "Missing PDFBox-Android AAR at ${pdfBoxAndroidLocalAar.path}. " +
         "Download com.tom-roush:pdfbox-android:2.0.27.0 before Gradle sync."
@@ -37,8 +42,8 @@ android {
         applicationId = "org.zenconverter.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-dev"
+        versionCode = appVersionCode.get()
+        versionName = appVersionName.get()
 
         ndk {
             // Release APKs are arm64-only to match the native Office2PDF and
