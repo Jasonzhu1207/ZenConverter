@@ -145,13 +145,10 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         setContent {
-            androidx.compose.runtime.CompositionLocalProvider(
-                androidx.compose.foundation.LocalOverscrollFactory provides null
-            ) {
-                ZenConverterApp(
-                    queuedFiles = queuedFiles,
-                    supportedVideoMimeTypes = supportedVideoMimeTypes.value,
-                    outputLocationMode = outputLocationMode.value,
+            ZenConverterApp(
+                queuedFiles = queuedFiles,
+                supportedVideoMimeTypes = supportedVideoMimeTypes.value,
+                outputLocationMode = outputLocationMode.value,
                 outputDirectory = outputDirectory.value,
                 onOutputLocationModeChange = { mode ->
                     outputLocationMode.value = mode
@@ -235,7 +232,6 @@ class MainActivity : ComponentActivity() {
                     ConversionService.cancel(this)
                 }
             )
-            }
         }
         probeVideoEncoderSupportAsync()
     }

@@ -511,13 +511,9 @@ private fun ZenConverterContent(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(contentPadding)
                 .consumeWindowInsets(contentPadding),
-            contentPadding = PaddingValues(
-                start = 20.dp,
-                end = 20.dp,
-                top = contentPadding.calculateTopPadding() + 20.dp,
-                bottom = contentPadding.calculateBottomPadding() + 20.dp
-            ),
+            contentPadding = PaddingValues(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item(key = "header") {
@@ -1491,10 +1487,11 @@ private fun FileQueue(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            Column(
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 300.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                files.forEach { file ->
+                items(files, key = { it.id }) { file ->
                     FileRow(
                         texts = texts,
                         file = file,
@@ -1507,6 +1504,7 @@ private fun FileQueue(
         }
     }
 }
+
 @Composable
 private fun FileRow(
     texts: UiText,
