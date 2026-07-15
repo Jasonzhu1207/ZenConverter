@@ -8,6 +8,8 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
@@ -1511,7 +1513,11 @@ private fun EncodingPanel(
         )
         Spacer(modifier = Modifier.height(12.dp))
 
-        when (category) {
+        AnimatedContent(
+            targetState = category,
+            label = "EncodingPanelCategory"
+        ) { targetCategory ->
+            when (targetCategory) {
             FileCategory.Video -> VideoOptions(
                 texts = texts,
                 resolution = videoResolution,
@@ -1562,6 +1568,7 @@ private fun EncodingPanel(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
     }
 }
 
@@ -1951,6 +1958,7 @@ private fun FileQueue(
             ) {
                 items(files, key = { it.id }) { file ->
                     FileRow(
+                        modifier = Modifier.animateItem(),
                         texts = texts,
                         file = file,
                         progress = taskProgress[file.id],
@@ -1965,6 +1973,7 @@ private fun FileQueue(
 
 @Composable
 private fun FileRow(
+    modifier: Modifier = Modifier,
     texts: UiText,
     file: QueuedFile,
     progress: TaskProgress?,
@@ -1972,8 +1981,9 @@ private fun FileRow(
     onRemove: () -> Unit
 ) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
+            .animateContentSize()
             .border(1.dp, Color(0xFFEAEAEA), RoundedCornerShape(8.dp))
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -2284,7 +2294,9 @@ private fun QuietPanel(
     content: @Composable ColumnScope.() -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, borderColor),
@@ -3224,13 +3236,13 @@ private val englishText = UiText(
     closeSettings = "Close settings",
     appLogo = "ZenConverter logo",
     appVersion = "Version",
-    aboutDescription = "Private, local-first conversion for Android. No ads, no account, no upload-first workflow.",
+    aboutDescription = "A comprehensive local format converter for Android. No ads, no fees, no internet connection required.",
     githubRepository = "GitHub repository",
     checkUpdates = "Check for updates",
     updateCheckUnavailable = "Update checking is not available yet",
     supportDevelopment = "Sponsor development",
     sponsorTitle = "Sponsor ZenConverter",
-    sponsorIntro = "Support helps keep ZenConverter local-first, ad-free, and maintained.",
+    sponsorIntro = "Sponsor to help ZenConverter stay maintained, open-source, free, and ad-free.",
     openLink = "Open link",
     copy = "Copy",
     copied = "Copied",
@@ -3291,13 +3303,13 @@ private val simplifiedChineseText = UiText(
     closeSettings = "关闭设置",
     appLogo = "ZenConverter 标志",
     appVersion = "版本",
-    aboutDescription = "面向 Android 的本地优先转换工具。无广告、无账号，也不把文件先传到云端。",
+    aboutDescription = "面向 Android 的本地综合格式转换工具，无广告、不收费、不联网",
     githubRepository = "GitHub 仓库",
     checkUpdates = "检查更新",
     updateCheckUnavailable = "检查更新暂未接入",
     supportDevelopment = "赞助开发",
     sponsorTitle = "赞助 ZenConverter",
-    sponsorIntro = "赞助会用于继续维护 ZenConverter，让它保持本地优先、无广告。",
+    sponsorIntro = "赞助以支持 ZenConverter 始终保持维护，坚持开源免费无广告",
     openLink = "打开链接",
     copy = "复制",
     copied = "已复制",
@@ -3358,13 +3370,13 @@ private val traditionalChineseText = UiText(
     closeSettings = "關閉設定",
     appLogo = "ZenConverter 標誌",
     appVersion = "版本",
-    aboutDescription = "面向 Android 的本地優先轉換工具。無廣告、無帳號，也不把檔案先傳到雲端。",
+    aboutDescription = "面向 Android 的本地綜合格式轉換工具，無廣告、不收費、不聯網",
     githubRepository = "GitHub 倉庫",
     checkUpdates = "檢查更新",
     updateCheckUnavailable = "檢查更新尚未接入",
     supportDevelopment = "贊助開發",
     sponsorTitle = "贊助 ZenConverter",
-    sponsorIntro = "贊助會用於繼續維護 ZenConverter，讓它保持本地優先、無廣告。",
+    sponsorIntro = "贊助以支持 ZenConverter 始終保持維護，堅持開源免費無廣告",
     openLink = "開啟連結",
     copy = "複製",
     copied = "已複製",
