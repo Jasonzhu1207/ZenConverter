@@ -46,7 +46,7 @@ bundle the PDFBox-Android POM dependencies as local JARs:
 
 - License: PDFBox-Android is Apache-2.0. Bouncy Castle uses the Bouncy Castle
   License, an MIT-style license. Both are compatible with the current
-  `GPL-3.0-or-later` project direction.
+  `AGPL-3.0-or-later` project license.
 - Maintenance risk: the repository is not archived, but release cadence is low.
   Version `2.0.27.0` was released on January 2, 2023, and the latest observed
   upstream push was March 18, 2024. Keep usage narrow and documented.

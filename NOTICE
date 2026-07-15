@@ -1,0 +1,9 @@
+ZenConverter
+
+Project source code: AGPL-3.0-or-later
+
+The full project license text is in LICENSE.
+
+Third-party libraries, native binaries, and bundled fonts are distributed under
+their own licenses. See docs/license-and-attribution.md and third_party/THANKS.md
+for attribution, source, and license details.

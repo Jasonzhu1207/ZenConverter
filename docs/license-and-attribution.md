@@ -2,21 +2,21 @@
 
 ## Project License Decision
 
-Proposed app license: `GPL-3.0-or-later`.
+Project source license: `AGPL-3.0-or-later`.
 
-Reason: the project is likely to ship or optionally support FFmpeg builds with
-GPL-enabled codecs. GPLv3 keeps the legal story simpler for an open-source
-converter whose trust comes from inspectable source code.
+Reason: ZenConverter's trust comes from inspectable source code and local-first
+behavior. AGPLv3 keeps the project in the GPL family required by the current
+media stack while adding a stronger copyleft boundary for modified versions
+made available over a network.
 
-If the project later commits to an LGPL-only FFmpeg build and avoids GPL media
-components, this decision can be revisited before a public release.
+The full license text is kept at the repository root in `LICENSE`.
 
 ## Dependency Intake Checklist
 
 Before a dependency becomes core:
 
 - Confirm the package is actively maintained.
-- Confirm license compatibility with `GPL-3.0-or-later`.
+- Confirm license compatibility with `AGPL-3.0-or-later`.
 - Record homepage, source URL, license, and reason for use.
 - Prefer official AndroidX APIs for platform features.
 - Avoid abandoned wrappers as core infrastructure.
@@ -36,7 +36,7 @@ Before a dependency becomes core:
 - Package type: Android AAR.
 - Upstream source: `https://github.com/TomRoush/PdfBox-Android`.
 - License: Apache License 2.0, compatible with the current
-  `GPL-3.0-or-later` project direction.
+  `AGPL-3.0-or-later` project license.
 - Local file size: `3,254,019` bytes.
 - Local SHA-256:
   `30277f879cfd571db2a137582c95516a0d4ea6778e945519bc58ca93d57d88c7`.
@@ -88,9 +88,9 @@ Transitive dependencies required by the PDFBox-Android POM are also local JARs:
   - LAME license file: GNU Library General Public License v2.
   - libiconv license file packaged by the build: GNU General Public License v3.0.
   - cpu-features license file: Apache License 2.0.
-- Project compatibility: the app's proposed license is already
-  `GPL-3.0-or-later`, so the packaged libiconv GPLv3 text is compatible with
-  the current project direction. Revisit this before any non-GPL distribution.
+- Project compatibility: the app's license is `AGPL-3.0-or-later`, so the
+  packaged libiconv GPLv3 text is compatible with the current project
+  direction. Revisit this before any non-GPL-family distribution.
 - Reason platform APIs are not enough: physical-device logs on July 5, 2026
   showed Media3 timing out on MKV before writing any muxer sample, while the
   same service pipeline completed MP4/M4A work. Physical-device logs on
@@ -194,11 +194,14 @@ Transitive dependencies required when consuming the local AAR through
   overlapping text and shifted Office shapes are still expected for complex
   DOCX/PPTX/XLSX files.
 
-## Commercial License Guardrail
+## License Guardrail
 
-The project may later be commercialized. Avoid GPL-only media packages unless
-the user explicitly changes that direction. Future FFmpeg work should prefer an
-LGPL-compatible build and must not use packages with a `-gpl` suffix by default.
+ZenConverter's own source is AGPL-licensed. Do not introduce dependencies or
+binary packages that conflict with `AGPL-3.0-or-later`, and keep third-party
+license notices separate from the project's own license grant. Future FFmpeg
+work should still prefer LGPL-compatible builds where practical, but GPL-family
+components are acceptable when they are documented and compatible with the app's
+AGPL distribution.
 
 ## FFmpeg Policy
 

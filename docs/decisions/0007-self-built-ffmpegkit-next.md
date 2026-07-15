@@ -59,8 +59,8 @@ download `ffmpegkit-maintained/ffmpeg` assets as a fallback.
 - The current AAR includes `arm64-v8a` only; 32-bit ARM and emulator/x86
   support remain out of scope.
 - The AAR packages LGPLv3, LAME LGPLv2-style, libiconv GPLv3, and Apache-2.0
-  cpu-features license texts. This is compatible with the project's proposed
-  `GPL-3.0-or-later` license, but must be revisited before any non-GPL
+  cpu-features license texts. This is compatible with the project's
+  `AGPL-3.0-or-later` license, but must be revisited before any non-GPL-family
   distribution.
 - Broader codec support should be added by another recorded self-build, not by
   silently swapping in a prebuilt fork artifact.

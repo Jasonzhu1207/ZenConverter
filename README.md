@@ -17,7 +17,7 @@
   <img alt="Jetpack Compose" src="https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4">
   <img alt="Offline first" src="https://img.shields.io/badge/default-offline--first-111827">
   <img alt="No ads" src="https://img.shields.io/badge/ads-none-16A34A">
-  <img alt="License direction" src="https://img.shields.io/badge/license-planned%20GPL--3.0--or--later-2563EB">
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-2563EB"></a>
 </p>
 
 <p align="center">
@@ -93,6 +93,16 @@ More detail lives in [docs/architecture.md](docs/architecture.md) and
 [docs/technical-route.md](docs/technical-route.md).
 
 Development setup notes are in [docs/development-setup.md](docs/development-setup.md).
+
+## License
+
+ZenConverter's own source code is licensed under the
+[GNU Affero General Public License v3.0 or later](LICENSE).
+
+Third-party libraries, native binaries, and bundled fonts keep their own
+licenses. Details are tracked in
+[docs/license-and-attribution.md](docs/license-and-attribution.md) and
+[third_party/THANKS.md](third_party/THANKS.md).
 
 ## Acknowledgements
 

@@ -995,6 +995,7 @@ private fun AboutPanel(
                 color = MaterialTheme.colorScheme.onSurface
             )
             SmallTag("${texts.appVersion} $versionName")
+            SmallTag(texts.appLicense)
             Text(
                 text = texts.aboutDescription,
                 style = MaterialTheme.typography.bodyMedium,
@@ -2499,6 +2500,7 @@ private data class UiText(
     val closeSettings: String,
     val appLogo: String,
     val appVersion: String,
+    val appLicense: String,
     val aboutDescription: String,
     val githubRepository: String,
     val checkUpdates: String,
@@ -3236,6 +3238,7 @@ private val englishText = UiText(
     closeSettings = "Close settings",
     appLogo = "ZenConverter logo",
     appVersion = "Version",
+    appLicense = "AGPL-3.0-or-later",
     aboutDescription = "A comprehensive local format converter for Android. No ads, no fees, no internet connection required.",
     githubRepository = "GitHub repository",
     checkUpdates = "Check for updates",
@@ -3303,6 +3306,7 @@ private val simplifiedChineseText = UiText(
     closeSettings = "关闭设置",
     appLogo = "ZenConverter 标志",
     appVersion = "版本",
+    appLicense = "AGPL-3.0-or-later",
     aboutDescription = "面向 Android 的本地综合格式转换工具，无广告、不收费、不联网",
     githubRepository = "GitHub 仓库",
     checkUpdates = "检查更新",
@@ -3370,6 +3374,7 @@ private val traditionalChineseText = UiText(
     closeSettings = "關閉設定",
     appLogo = "ZenConverter 標誌",
     appVersion = "版本",
+    appLicense = "AGPL-3.0-or-later",
     aboutDescription = "面向 Android 的本地綜合格式轉換工具，無廣告、不收費、不聯網",
     githubRepository = "GitHub 倉庫",
     checkUpdates = "檢查更新",
