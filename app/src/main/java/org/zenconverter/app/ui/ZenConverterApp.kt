@@ -12,7 +12,9 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -69,6 +71,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -504,154 +507,165 @@ private fun ZenConverterContent(
         )
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        contentWindowInsets = WindowInsets.safeDrawing
-    ) { contentPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(contentPadding)
-                .consumeWindowInsets(contentPadding),
-            contentPadding = PaddingValues(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            item(key = "header") {
-                Header(
-                    texts = texts,
-                    showSettings = showSettings,
-                    onToggleSettings = {
-                        openMenuId = null
-                        showSettings = !showSettings
-                    }
-                )
-            }
-
-            item(key = "settings") {
-                AnimatedVisibility(
-                    visible = showSettings,
-                    enter = fadeIn() + expandVertically(
-                        animationSpec = spring(stiffness = 420f)
-                    ),
-                    exit = fadeOut() + shrinkVertically(
-                        animationSpec = spring(stiffness = 520f)
-                    )
-                ) {
-                    SettingsPanel(
+    NoOverscroll {
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            contentWindowInsets = WindowInsets.safeDrawing
+        ) { contentPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(contentPadding)
+                    .consumeWindowInsets(contentPadding),
+                contentPadding = PaddingValues(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item(key = "header") {
+                    Header(
                         texts = texts,
-                        selectedAccent = accent,
-                        selectedLanguage = languageOption,
-                        onAccentSelected = onAccentSelected,
-                        onLanguageSelected = onLanguageSelected
+                        showSettings = showSettings,
+                        onToggleSettings = {
+                            openMenuId = null
+                            showSettings = !showSettings
+                        }
                     )
                 }
-            }
 
-            item(key = "conversion-lanes") {
-                ConversionLanes(
-                    texts = texts,
-                    activeCategory = activeCategory,
-                    targetFor = ::targetFor,
-                    onTargetChange = ::setTarget,
-                    onActivate = { activeCategory = it },
-                    openMenuId = openMenuId,
-                    onOpenMenuChange = { openMenuId = it },
-                    onPickFiles = { category, target ->
-                        activeCategory = category
-                        openMenuId = null
-                        queueMessage = null
-                        onPickFiles(category, target)
-                    }
-                )
-            }
-
-            item(key = "encoding-panel") {
-                EncodingPanel(
-                    texts = texts,
-                    category = activeCategory,
-                    videoResolution = videoResolution,
-                    videoBitrate = videoBitrate,
-                    videoCodec = videoCodec,
-                    videoCodecOptions = videoCodecOptionsFor(supportedVideoMimeTypes),
-                    videoFrameRate = videoFrameRate,
-                    audioBitrate = audioBitrate,
-                    audioSampleRate = audioSampleRate,
-                audioChannels = audioChannels,
-                audioTarget = audioTarget,
-                imageTarget = imageTarget,
-                pdfTarget = pdfTarget,
-                imageQuality = imageQuality,
-                pdfPageMode = pdfPageMode,
-                pdfRenderQuality = pdfRenderQuality,
-                    openMenuId = openMenuId,
-                    onOpenMenuChange = { openMenuId = it },
-                    onVideoResolutionChange = { videoResolution = it },
-                    onVideoBitrateChange = { videoBitrate = it },
-                    onVideoCodecChange = { videoCodec = it },
-                    onVideoFrameRateChange = { videoFrameRate = it },
-                    onAudioBitrateChange = { audioBitrate = it },
-                    onAudioSampleRateChange = { audioSampleRate = it },
-                    onAudioChannelsChange = { audioChannels = it },
-                    onImageQualityChange = { imageQuality = it },
-                    onPdfPageModeChange = { pdfPageMode = it },
-                    onPdfRenderQualityChange = { pdfRenderQuality = it }
-                )
-            }
-
-            item(key = "output-panel") {
-                OutputPanel(
-                    texts = texts,
-                    outputLocationMode = outputLocationMode,
-                    outputDirectory = outputDirectory,
-                    onOutputLocationModeChange = onOutputLocationModeChange,
-                    onPickOutputDirectory = onPickOutputDirectory
-                )
-            }
-
-            item(key = "queue-actions") {
-                QueueActions(
-                    texts = texts,
-                    hasFiles = queuedFiles.isNotEmpty(),
-                    isRunning = isConversionRunning,
-                    onStart = {
-                        openMenuId = null
-                        queueMessage = null
-                        onStartConversion(
-                            currentVideoOptions(),
-                            currentAudioOptions(),
-                            currentImageOptions(),
-                            currentPdfOptions()
+                item(key = "settings") {
+                    AnimatedVisibility(
+                        visible = showSettings,
+                        enter = fadeIn() + expandVertically(
+                            animationSpec = spring(stiffness = 420f)
+                        ),
+                        exit = fadeOut() + shrinkVertically(
+                            animationSpec = spring(stiffness = 520f)
                         )
-                    },
-                    onCancel = {
-                        openMenuId = null
-                        queueMessage = null
-                        if (isConversionRunning) {
-                            onCancelConversion()
-                        } else {
-                            onClearQueue()
-                        }
+                    ) {
+                        SettingsPanel(
+                            texts = texts,
+                            selectedAccent = accent,
+                            selectedLanguage = languageOption,
+                            onAccentSelected = onAccentSelected,
+                            onLanguageSelected = onLanguageSelected
+                        )
                     }
-                )
-            }
-
-            (conversionSummary ?: queueMessage)?.let { message ->
-                item(key = "status-line") {
-                    StatusLine(text = texts.taskMessage(message))
                 }
-            }
 
-            item(key = "file-queue") {
-                FileQueue(
-                    texts = texts,
-                    files = queuedFiles,
-                    taskProgress = conversionTasks.associateBy { it.fileId },
-                    canRemove = !isConversionRunning,
-                    onRemoveFile = onRemoveFile
-                )
+                item(key = "conversion-lanes") {
+                    ConversionLanes(
+                        texts = texts,
+                        activeCategory = activeCategory,
+                        targetFor = ::targetFor,
+                        onTargetChange = ::setTarget,
+                        onActivate = { activeCategory = it },
+                        openMenuId = openMenuId,
+                        onOpenMenuChange = { openMenuId = it },
+                        onPickFiles = { category, target ->
+                            activeCategory = category
+                            openMenuId = null
+                            queueMessage = null
+                            onPickFiles(category, target)
+                        }
+                    )
+                }
+
+                item(key = "encoding-panel") {
+                    EncodingPanel(
+                        texts = texts,
+                        category = activeCategory,
+                        videoResolution = videoResolution,
+                        videoBitrate = videoBitrate,
+                        videoCodec = videoCodec,
+                        videoCodecOptions = videoCodecOptionsFor(supportedVideoMimeTypes),
+                        videoFrameRate = videoFrameRate,
+                        audioBitrate = audioBitrate,
+                        audioSampleRate = audioSampleRate,
+                        audioChannels = audioChannels,
+                        audioTarget = audioTarget,
+                        imageTarget = imageTarget,
+                        pdfTarget = pdfTarget,
+                        imageQuality = imageQuality,
+                        pdfPageMode = pdfPageMode,
+                        pdfRenderQuality = pdfRenderQuality,
+                        openMenuId = openMenuId,
+                        onOpenMenuChange = { openMenuId = it },
+                        onVideoResolutionChange = { videoResolution = it },
+                        onVideoBitrateChange = { videoBitrate = it },
+                        onVideoCodecChange = { videoCodec = it },
+                        onVideoFrameRateChange = { videoFrameRate = it },
+                        onAudioBitrateChange = { audioBitrate = it },
+                        onAudioSampleRateChange = { audioSampleRate = it },
+                        onAudioChannelsChange = { audioChannels = it },
+                        onImageQualityChange = { imageQuality = it },
+                        onPdfPageModeChange = { pdfPageMode = it },
+                        onPdfRenderQualityChange = { pdfRenderQuality = it }
+                    )
+                }
+
+                item(key = "output-panel") {
+                    OutputPanel(
+                        texts = texts,
+                        outputLocationMode = outputLocationMode,
+                        outputDirectory = outputDirectory,
+                        onOutputLocationModeChange = onOutputLocationModeChange,
+                        onPickOutputDirectory = onPickOutputDirectory
+                    )
+                }
+
+                item(key = "queue-actions") {
+                    QueueActions(
+                        texts = texts,
+                        hasFiles = queuedFiles.isNotEmpty(),
+                        isRunning = isConversionRunning,
+                        onStart = {
+                            openMenuId = null
+                            queueMessage = null
+                            onStartConversion(
+                                currentVideoOptions(),
+                                currentAudioOptions(),
+                                currentImageOptions(),
+                                currentPdfOptions()
+                            )
+                        },
+                        onCancel = {
+                            openMenuId = null
+                            queueMessage = null
+                            if (isConversionRunning) {
+                                onCancelConversion()
+                            } else {
+                                onClearQueue()
+                            }
+                        }
+                    )
+                }
+
+                (conversionSummary ?: queueMessage)?.let { message ->
+                    item(key = "status-line") {
+                        StatusLine(text = texts.taskMessage(message))
+                    }
+                }
+
+                item(key = "file-queue") {
+                    FileQueue(
+                        texts = texts,
+                        files = queuedFiles,
+                        taskProgress = conversionTasks.associateBy { it.fileId },
+                        canRemove = !isConversionRunning,
+                        onRemoveFile = onRemoveFile
+                    )
+                }
             }
         }
     }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun NoOverscroll(content: @Composable () -> Unit) {
+    CompositionLocalProvider(
+        LocalOverscrollConfiguration provides null,
+        content = content
+    )
 }
 
 @Composable
