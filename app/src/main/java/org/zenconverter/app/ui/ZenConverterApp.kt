@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
@@ -76,6 +77,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -89,6 +91,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -120,7 +123,21 @@ import org.zenconverter.app.conversion.PdfExportOptions
 import org.zenconverter.app.conversion.PdfImagePageMode
 import org.zenconverter.app.conversion.PdfRenderQuality
 import org.zenconverter.app.conversion.VideoExportOptions
+import org.zenconverter.app.updates.ApkInstaller
+import org.zenconverter.app.updates.ApkOpenResult
+import org.zenconverter.app.updates.ApkUpdateDownloader
+import org.zenconverter.app.updates.DownloadProgress
+import org.zenconverter.app.updates.DownloadedUpdate
+import org.zenconverter.app.updates.GitHubUpdateChecker
+import org.zenconverter.app.updates.InstalledAppVersion
+import org.zenconverter.app.updates.UpdateChannel
+import org.zenconverter.app.updates.UpdateCheckResult
+import org.zenconverter.app.updates.UpdateFailureReason
+import org.zenconverter.app.updates.UpdateRelease
 import org.zenconverter.app.R
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 data class TargetFormat(
@@ -236,6 +253,24 @@ private data class SupportTarget(
     val value: String,
     val type: SupportTargetType
 )
+
+private sealed interface UpdateUiState {
+    object Idle : UpdateUiState
+    object Checking : UpdateUiState
+    data class Available(val release: UpdateRelease) : UpdateUiState
+    data class UpToDate(val latest: UpdateRelease) : UpdateUiState
+    data class Failed(
+        val reason: UpdateFailureReason,
+        val detail: String?
+    ) : UpdateUiState
+}
+
+private sealed interface UpdateDownloadUiState {
+    object Idle : UpdateDownloadUiState
+    data class Downloading(val progress: DownloadProgress) : UpdateDownloadUiState
+    data class Completed(val downloadedUpdate: DownloadedUpdate) : UpdateDownloadUiState
+    data class Failed(val message: String?) : UpdateDownloadUiState
+}
 
 private const val ZENCONVERTER_REPOSITORY_URL = "https://github.com/Jasonzhu1207/ZenConverter"
 private const val AFDIAN_URL = "https://afdian.com/a/Jason1207"
@@ -971,7 +1006,7 @@ private fun AboutPanel(
     onShowSupport: () -> Unit
 ) {
     val context = LocalContext.current
-    val versionName = remember(context) { appVersionName(context) }
+    val installedVersion = remember(context) { installedAppVersion(context) }
 
     QuietPanel {
         Column(
@@ -994,7 +1029,7 @@ private fun AboutPanel(
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            SmallTag("${texts.appVersion} $versionName")
+            SmallTag("${texts.appVersion} ${installedVersion.versionName}")
             SmallTag(texts.appLicense)
             Text(
                 text = texts.aboutDescription,
@@ -1037,28 +1072,10 @@ private fun AboutPanel(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        OutlinedButton(
-            onClick = {
-                Toast.makeText(context, texts.updateCheckUnavailable, Toast.LENGTH_SHORT).show()
-            },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(8.dp),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
-        ) {
-            AppIcon(
-                icon = Icons.Rounded.Check,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = texts.checkUpdates,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-        }
+        UpdatePanel(
+            texts = texts,
+            installedVersion = installedVersion
+        )
 
         Spacer(modifier = Modifier.height(14.dp))
 
@@ -1086,6 +1103,353 @@ private fun AboutPanel(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+        }
+    }
+}
+
+@Composable
+private fun UpdatePanel(
+    texts: UiText,
+    installedVersion: InstalledAppVersion
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var channel by remember { mutableStateOf(UpdateChannel.Stable) }
+    var updateState by remember { mutableStateOf<UpdateUiState>(UpdateUiState.Idle) }
+    var downloadState by remember {
+        mutableStateOf<UpdateDownloadUiState>(UpdateDownloadUiState.Idle)
+    }
+    var downloadJob by remember { mutableStateOf<Job?>(null) }
+
+    val isChecking = updateState is UpdateUiState.Checking
+    val isDownloading = downloadState is UpdateDownloadUiState.Downloading
+    val isBusy = isChecking || isDownloading
+    val availableRelease = (updateState as? UpdateUiState.Available)?.release
+
+    fun resetForChannel(nextChannel: UpdateChannel) {
+        if (channel == nextChannel || isBusy) return
+        channel = nextChannel
+        updateState = UpdateUiState.Idle
+        downloadState = UpdateDownloadUiState.Idle
+    }
+
+    fun checkUpdates() {
+        if (isBusy) return
+        updateState = UpdateUiState.Checking
+        downloadState = UpdateDownloadUiState.Idle
+        scope.launch {
+            when (val result = GitHubUpdateChecker.check(channel, installedVersion)) {
+                is UpdateCheckResult.Available -> {
+                    updateState = UpdateUiState.Available(result.release)
+                }
+                is UpdateCheckResult.UpToDate -> {
+                    updateState = UpdateUiState.UpToDate(result.latest)
+                }
+                is UpdateCheckResult.Failed -> {
+                    updateState = UpdateUiState.Failed(result.reason, result.detail)
+                }
+            }
+        }
+    }
+
+    fun startAppDownload(release: UpdateRelease) {
+        if (isDownloading) return
+        downloadJob?.cancel()
+        downloadState = UpdateDownloadUiState.Downloading(
+            DownloadProgress(bytesDownloaded = 0L, totalBytes = release.sizeBytes)
+        )
+        downloadJob = scope.launch {
+            try {
+                val downloadedUpdate = ApkUpdateDownloader.download(context, release) { progress ->
+                    downloadState = UpdateDownloadUiState.Downloading(progress)
+                }
+                downloadState = UpdateDownloadUiState.Completed(downloadedUpdate)
+            } catch (_: CancellationException) {
+                downloadState = UpdateDownloadUiState.Idle
+                Toast.makeText(context, texts.downloadCancelled, Toast.LENGTH_SHORT).show()
+            } catch (exception: Throwable) {
+                downloadState = UpdateDownloadUiState.Failed(exception.message)
+            } finally {
+                downloadJob = null
+            }
+        }
+    }
+
+    fun openDownloadedApk(downloadedUpdate: DownloadedUpdate) {
+        when (ApkInstaller.openDownloadedApk(context, downloadedUpdate.file)) {
+            ApkOpenResult.Started -> Unit
+            ApkOpenResult.PermissionSettingsOpened -> {
+                Toast.makeText(context, texts.installPermissionRequired, Toast.LENGTH_LONG).show()
+            }
+            ApkOpenResult.Failed -> {
+                Toast.makeText(context, texts.apkOpenFailed, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            UpdateChannelButton(
+                text = texts.updateChannelLabel(UpdateChannel.Stable),
+                selected = channel == UpdateChannel.Stable,
+                enabled = !isBusy,
+                onClick = { resetForChannel(UpdateChannel.Stable) },
+                modifier = Modifier.weight(1f)
+            )
+            UpdateChannelButton(
+                text = texts.updateChannelLabel(UpdateChannel.Preview),
+                selected = channel == UpdateChannel.Preview,
+                enabled = !isBusy,
+                onClick = { resetForChannel(UpdateChannel.Preview) },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        OutlinedButton(
+            onClick = ::checkUpdates,
+            enabled = !isBusy,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
+        ) {
+            AppIcon(
+                icon = Icons.Rounded.Check,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = if (isChecking) texts.checkingUpdates else texts.checkUpdates,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        when (val state = updateState) {
+            UpdateUiState.Idle -> Unit
+            UpdateUiState.Checking -> {
+                StatusLine(text = texts.checkingUpdates)
+            }
+            is UpdateUiState.Available -> {
+                StatusLine(text = texts.updateAvailableMessage(state.release))
+                Text(
+                    text = texts.releaseDetail(state.release),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            is UpdateUiState.UpToDate -> {
+                StatusLine(text = texts.currentIsLatest(state.latest.channel))
+            }
+            is UpdateUiState.Failed -> {
+                StatusLine(
+                    text = texts.updateFailureMessage(state.reason, state.detail),
+                    isError = true
+                )
+            }
+        }
+
+        availableRelease?.let { release ->
+            UpdateDownloadActions(
+                texts = texts,
+                downloadState = downloadState,
+                onAppDownload = { startAppDownload(release) },
+                onBrowserDownload = {
+                    openExternalLink(context, release.downloadUrl, texts.linkUnavailable)
+                },
+                onCancelDownload = { downloadJob?.cancel() },
+                onOpenDownloadedApk = ::openDownloadedApk
+            )
+        }
+    }
+}
+
+@Composable
+private fun UpdateChannelButton(
+    text: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (selected) {
+        Button(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = modifier.heightIn(min = 42.dp),
+            shape = RoundedCornerShape(8.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Text(text = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    } else {
+        OutlinedButton(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = modifier.heightIn(min = 42.dp),
+            shape = RoundedCornerShape(8.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Text(text = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun UpdateDownloadActions(
+    texts: UiText,
+    downloadState: UpdateDownloadUiState,
+    onAppDownload: () -> Unit,
+    onBrowserDownload: () -> Unit,
+    onCancelDownload: () -> Unit,
+    onOpenDownloadedApk: (DownloadedUpdate) -> Unit
+) {
+    when (downloadState) {
+        UpdateDownloadUiState.Idle -> {
+            UpdateDownloadButtons(
+                texts = texts,
+                onAppDownload = onAppDownload,
+                onBrowserDownload = onBrowserDownload
+            )
+        }
+        is UpdateDownloadUiState.Downloading -> {
+            UpdateDownloadProgress(
+                texts = texts,
+                progress = downloadState.progress,
+                onCancelDownload = onCancelDownload
+            )
+        }
+        is UpdateDownloadUiState.Completed -> {
+            StatusLine(text = texts.downloadComplete)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { onOpenDownloadedApk(downloadState.downloadedUpdate) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        text = texts.openDownloadedApk,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                OutlinedButton(
+                    onClick = onBrowserDownload,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        text = texts.browserDownload,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+        is UpdateDownloadUiState.Failed -> {
+            StatusLine(
+                text = texts.downloadFailureMessage(downloadState.message),
+                isError = true
+            )
+            UpdateDownloadButtons(
+                texts = texts,
+                onAppDownload = onAppDownload,
+                onBrowserDownload = onBrowserDownload
+            )
+        }
+    }
+}
+
+@Composable
+private fun UpdateDownloadButtons(
+    texts: UiText,
+    onAppDownload: () -> Unit,
+    onBrowserDownload: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Button(
+            onClick = onAppDownload,
+            modifier = Modifier
+                .weight(1f)
+                .heightIn(min = 48.dp),
+            shape = RoundedCornerShape(8.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+        ) {
+            Text(
+                text = texts.appDownload,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        OutlinedButton(
+            onClick = onBrowserDownload,
+            modifier = Modifier
+                .weight(1f)
+                .heightIn(min = 48.dp),
+            shape = RoundedCornerShape(8.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+        ) {
+            Text(
+                text = texts.browserDownload,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun UpdateDownloadProgress(
+    texts: UiText,
+    progress: DownloadProgress,
+    onCancelDownload: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        val fraction = progress.fraction
+        if (fraction == null) {
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        } else {
+            LinearProgressIndicator(
+                progress = fraction,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = texts.downloadProgressMessage(progress),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            TextButton(onClick = onCancelDownload) {
+                Text(texts.cancelDownload)
+            }
         }
     }
 }
@@ -2277,14 +2641,18 @@ private fun SmallTag(text: String) {
 }
 
 @Composable
-private fun StatusLine(text: String) {
+private fun StatusLine(
+    text: String,
+    isError: Boolean = false
+) {
+    val color = if (isError) Color(0xFFB3261E) else MaterialTheme.colorScheme.primary
     Text(
         text = text,
         style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.primary,
+        color = color,
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+            .background(color.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
             .padding(12.dp)
     )
 }
@@ -2504,7 +2872,18 @@ private data class UiText(
     val aboutDescription: String,
     val githubRepository: String,
     val checkUpdates: String,
-    val updateCheckUnavailable: String,
+    val stableUpdateChannel: String,
+    val previewUpdateChannel: String,
+    val checkingUpdates: String,
+    val appDownload: String,
+    val browserDownload: String,
+    val downloadComplete: String,
+    val openDownloadedApk: String,
+    val downloadFailed: String,
+    val cancelDownload: String,
+    val downloadCancelled: String,
+    val installPermissionRequired: String,
+    val apkOpenFailed: String,
     val supportDevelopment: String,
     val sponsorTitle: String,
     val sponsorIntro: String,
@@ -2926,6 +3305,86 @@ private data class UiText(
         }
     }
 
+    fun updateChannelLabel(channel: UpdateChannel): String {
+        return when (channel) {
+            UpdateChannel.Stable -> stableUpdateChannel
+            UpdateChannel.Preview -> previewUpdateChannel
+        }
+    }
+
+    fun currentIsLatest(channel: UpdateChannel): String {
+        return when (this) {
+            englishText -> "No ${updateChannelLabel(channel).lowercase(Locale.US)} update found"
+            simplifiedChineseText -> "当前已是${updateChannelLabel(channel)}最新版本"
+            else -> "目前已是${updateChannelLabel(channel)}最新版本"
+        }
+    }
+
+    fun updateAvailableMessage(release: UpdateRelease): String {
+        return when (this) {
+            englishText -> "Update ${release.versionName} is available"
+            simplifiedChineseText -> "发现新版本 ${release.versionName}"
+            else -> "發現新版本 ${release.versionName}"
+        }
+    }
+
+    fun releaseDetail(release: UpdateRelease): String {
+        return when (this) {
+            englishText -> "${release.assetName} · ${formatBytes(release.sizeBytes, this)}"
+            simplifiedChineseText -> "${release.assetName} · ${formatBytes(release.sizeBytes, this)}"
+            else -> "${release.assetName} · ${formatBytes(release.sizeBytes, this)}"
+        }
+    }
+
+    fun downloadProgressMessage(progress: DownloadProgress): String {
+        val downloaded = formatBytes(progress.bytesDownloaded, this)
+        val total = progress.totalBytes
+        return if (total == null) {
+            downloaded
+        } else {
+            "$downloaded / ${formatBytes(total, this)}"
+        }
+    }
+
+    fun downloadFailureMessage(detail: String?): String {
+        return if (detail.isNullOrBlank()) {
+            downloadFailed
+        } else {
+            "$downloadFailed: $detail"
+        }
+    }
+
+    fun updateFailureMessage(reason: UpdateFailureReason, detail: String?): String {
+        val base = when (reason) {
+            UpdateFailureReason.Network -> when (this) {
+                englishText -> "Could not connect to GitHub"
+                simplifiedChineseText -> "无法连接 GitHub"
+                else -> "無法連接 GitHub"
+            }
+            UpdateFailureReason.NoRelease -> when (this) {
+                englishText -> "No release found for this channel"
+                simplifiedChineseText -> "这个通道还没有发布版本"
+                else -> "這個通道尚未發布版本"
+            }
+            UpdateFailureReason.NoApkAsset -> when (this) {
+                englishText -> "The release has no Android APK"
+                simplifiedChineseText -> "这个发布里没有 Android APK"
+                else -> "這個發布裡沒有 Android APK"
+            }
+            UpdateFailureReason.MissingVersionMetadata -> when (this) {
+                englishText -> "The release is missing Android version metadata"
+                simplifiedChineseText -> "这个发布缺少 Android 版本信息"
+                else -> "這個發布缺少 Android 版本資訊"
+            }
+            UpdateFailureReason.InvalidResponse -> when (this) {
+                englishText -> "GitHub returned an unreadable response"
+                simplifiedChineseText -> "GitHub 返回的内容无法识别"
+                else -> "GitHub 返回的內容無法識別"
+            }
+        }
+        return if (detail.isNullOrBlank()) base else "$base: $detail"
+    }
+
     fun optionValue(value: String): String {
         return when (value) {
             "Video" -> when (this) {
@@ -3239,10 +3698,21 @@ private val englishText = UiText(
     appLogo = "ZenConverter logo",
     appVersion = "Version",
     appLicense = "AGPL-3.0-or-later",
-    aboutDescription = "A comprehensive local format converter for Android. No ads, no fees, no internet connection required.",
+    aboutDescription = "A local Android format converter. Conversions stay offline by default, with no ads, fees, or accounts.",
     githubRepository = "GitHub repository",
     checkUpdates = "Check for updates",
-    updateCheckUnavailable = "Update checking is not available yet",
+    stableUpdateChannel = "Stable",
+    previewUpdateChannel = "Preview",
+    checkingUpdates = "Checking GitHub...",
+    appDownload = "Download in app",
+    browserDownload = "Browser download",
+    downloadComplete = "Download complete",
+    openDownloadedApk = "Open APK",
+    downloadFailed = "Download failed",
+    cancelDownload = "Cancel download",
+    downloadCancelled = "Download cancelled",
+    installPermissionRequired = "Allow APK installs, then open the APK again",
+    apkOpenFailed = "Could not open APK",
     supportDevelopment = "Sponsor development",
     sponsorTitle = "Sponsor ZenConverter",
     sponsorIntro = "Sponsor to help ZenConverter stay maintained, open-source, free, and ad-free.",
@@ -3307,10 +3777,21 @@ private val simplifiedChineseText = UiText(
     appLogo = "ZenConverter 标志",
     appVersion = "版本",
     appLicense = "AGPL-3.0-or-later",
-    aboutDescription = "面向 Android 的本地综合格式转换工具，无广告、不收费、不联网",
+    aboutDescription = "面向 Android 的本地综合格式转换工具，转换默认不联网，无广告、不收费、不需要账号",
     githubRepository = "GitHub 仓库",
     checkUpdates = "检查更新",
-    updateCheckUnavailable = "检查更新暂未接入",
+    stableUpdateChannel = "正式版",
+    previewUpdateChannel = "预览版",
+    checkingUpdates = "正在检查 GitHub...",
+    appDownload = "App 内下载",
+    browserDownload = "浏览器下载",
+    downloadComplete = "下载完成",
+    openDownloadedApk = "打开安装包",
+    downloadFailed = "下载失败",
+    cancelDownload = "取消下载",
+    downloadCancelled = "下载已取消",
+    installPermissionRequired = "允许安装 APK 后，再次打开安装包",
+    apkOpenFailed = "无法打开安装包",
     supportDevelopment = "赞助开发",
     sponsorTitle = "赞助 ZenConverter",
     sponsorIntro = "赞助以支持 ZenConverter 始终保持维护，坚持开源免费无广告",
@@ -3375,10 +3856,21 @@ private val traditionalChineseText = UiText(
     appLogo = "ZenConverter 標誌",
     appVersion = "版本",
     appLicense = "AGPL-3.0-or-later",
-    aboutDescription = "面向 Android 的本地綜合格式轉換工具，無廣告、不收費、不聯網",
+    aboutDescription = "面向 Android 的本地綜合格式轉換工具，轉換預設不聯網，無廣告、不收費、不需要帳號",
     githubRepository = "GitHub 倉庫",
     checkUpdates = "檢查更新",
-    updateCheckUnavailable = "檢查更新尚未接入",
+    stableUpdateChannel = "正式版",
+    previewUpdateChannel = "預覽版",
+    checkingUpdates = "正在檢查 GitHub...",
+    appDownload = "App 內下載",
+    browserDownload = "瀏覽器下載",
+    downloadComplete = "下載完成",
+    openDownloadedApk = "開啟安裝包",
+    downloadFailed = "下載失敗",
+    cancelDownload = "取消下載",
+    downloadCancelled = "下載已取消",
+    installPermissionRequired = "允許安裝 APK 後，再次開啟安裝包",
+    apkOpenFailed = "無法開啟安裝包",
     supportDevelopment = "贊助開發",
     sponsorTitle = "贊助 ZenConverter",
     sponsorIntro = "贊助以支持 ZenConverter 始終保持維護，堅持開源免費無廣告",
@@ -3434,10 +3926,19 @@ private val traditionalChineseText = UiText(
     toPrefix = "轉為"
 )
 
-private fun appVersionName(context: Context): String {
+private fun installedAppVersion(context: Context): InstalledAppVersion {
     return runCatching {
-        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0.1.0"
-    }.getOrDefault("0.1.0")
+        val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+        InstalledAppVersion(
+            versionName = packageInfo.versionName ?: "0.1.0",
+            versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                packageInfo.longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                packageInfo.versionCode.toLong()
+            }
+        )
+    }.getOrDefault(InstalledAppVersion(versionName = "0.1.0", versionCode = 1_000_001L))
 }
 
 private fun openExternalLink(

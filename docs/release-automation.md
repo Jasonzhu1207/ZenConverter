@@ -96,5 +96,15 @@ is checked into the repository as a vetted release input. The small
 unless their local JARs are supplied; those optional local JAR caches stay
 ignored by git.
 
+Release notes include the resolved Android version line and APK SHA-256:
+
+```text
+Android version: X.Y.Z (versionCode)
+APK SHA-256: ...
+```
+
+The in-app update checker reads the Android version line and verifies downloaded
+APKs when the checksum is present.
+
 The documented AAR includes `libmp3lame`, but MP3 output remains experimental
 until physical-device sample conversion passes.

@@ -215,9 +215,11 @@ jobs:
           fi
           asset_name="${APP_NAME}-${release_tag}-arm64-v8a.apk"
           cp "$apk_source" "dist/$asset_name"
+          asset_sha256="$(sha256sum "dist/$asset_name" | awk '{ print $1 }')"
           echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
           echo "asset_name=$asset_name" >> "$GITHUB_OUTPUT"
           echo "asset_path=dist/$asset_name" >> "$GITHUB_OUTPUT"
+          echo "asset_sha256=$asset_sha256" >> "$GITHUB_OUTPUT"
 
       - name: Publish continuous pre-release
         if: github.ref_type != 'tag'
@@ -236,6 +238,7 @@ jobs:
 
           Android version: ${{ steps.app_version.outputs.version_name }} (${{ steps.app_version.outputs.version_code }})
           Version source tag: ${{ steps.app_version.outputs.source_tag }}
+          APK SHA-256: ${{ steps.package.outputs.asset_sha256 }}
 
           Commit: ${GITHUB_SHA}
           EOF
@@ -269,6 +272,7 @@ jobs:
           Signed APK for ${RELEASE_TAG}.
 
           Android version: ${{ steps.app_version.outputs.version_name }} (${{ steps.app_version.outputs.version_code }})
+          APK SHA-256: ${{ steps.package.outputs.asset_sha256 }}
 
           Commit: ${GITHUB_SHA}
           EOF
