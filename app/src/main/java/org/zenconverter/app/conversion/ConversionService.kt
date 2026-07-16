@@ -988,9 +988,14 @@ class ConversionService : Service() {
             outputProfile.extension,
             flattenTransparency = false
         )
-        val compressFormat = imageCompressFormatFor(outputProfile.extension)
+        val useWebpLossless = shouldUseWebpLossless(outputProfile, input.imageOptions)
+        val compressFormat = imageCompressFormatFor(outputProfile.extension, useWebpLossless)
             ?: error("Image engine could not write this output")
-        val quality = imageQualityFor(outputProfile.extension, input.imageOptions.quality)
+        val quality = imageQualityFor(
+            outputProfile.extension,
+            input.imageOptions.quality,
+            useWebpLossless
+        )
 
         try {
             throwIfConversionCancelled()
@@ -1375,8 +1380,13 @@ class ConversionService : Service() {
         extension: String,
         flattenTransparency: Boolean
     ): Bitmap {
+        val outputNeedsOpaqueBackground =
+            extension.equals("jpg", ignoreCase = true) ||
+                extension.equals("jpeg", ignoreCase = true) ||
+                extension.equals("jfif", ignoreCase = true) ||
+                extension.equals("jpe", ignoreCase = true)
         val shouldFlatten = flattenTransparency ||
-            (extension.equals("jpg", ignoreCase = true) && bitmap.hasAlpha())
+            (outputNeedsOpaqueBackground && bitmap.hasAlpha())
         if (!shouldFlatten) return bitmap
 
         val flattened = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
@@ -1388,25 +1398,47 @@ class ConversionService : Service() {
     }
 
     @Suppress("DEPRECATION")
-    private fun imageCompressFormatFor(extension: String): Bitmap.CompressFormat? {
+    private fun imageCompressFormatFor(
+        extension: String,
+        useWebpLossless: Boolean = false
+    ): Bitmap.CompressFormat? {
         return when (extension.lowercase(Locale.US)) {
-            "jpg", "jpeg" -> Bitmap.CompressFormat.JPEG
+            "jpg", "jpeg", "jfif", "jpe" -> Bitmap.CompressFormat.JPEG
             "png" -> Bitmap.CompressFormat.PNG
-            "webp" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                Bitmap.CompressFormat.WEBP_LOSSY
-            } else {
-                Bitmap.CompressFormat.WEBP
+            "webp" -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    if (useWebpLossless) {
+                        Bitmap.CompressFormat.WEBP_LOSSLESS
+                    } else {
+                        Bitmap.CompressFormat.WEBP_LOSSY
+                    }
+                } else {
+                    Bitmap.CompressFormat.WEBP
+                }
             }
             else -> null
         }
     }
 
-    private fun imageQualityFor(extension: String, requestedQuality: Int): Int {
-        return if (extension.equals("png", ignoreCase = true)) {
+    private fun imageQualityFor(
+        extension: String,
+        requestedQuality: Int,
+        useWebpLossless: Boolean = false
+    ): Int {
+        return if (extension.equals("png", ignoreCase = true) || useWebpLossless) {
             100
         } else {
             requestedQuality.coerceIn(1, 100)
         }
+    }
+
+    private fun shouldUseWebpLossless(
+        outputProfile: OutputProfile,
+        imageOptions: ImageExportOptions
+    ): Boolean {
+        return outputProfile.extension.equals("webp", ignoreCase = true) &&
+            imageOptions.webpLossless &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
     }
 
     private fun updateImageProgress(progress: Float) {
@@ -2648,6 +2680,8 @@ class ConversionService : Service() {
                     input.targetFormat.equals("JPG", ignoreCase = true) ||
                         input.targetFormat.equals("JPEG", ignoreCase = true) ->
                         OutputProfile(extension = "jpg", mimeType = MIME_TYPE_JPEG, kind = OutputMediaKind.Image)
+                    input.targetFormat.equals("JFIF", ignoreCase = true) ->
+                        OutputProfile(extension = "jfif", mimeType = MIME_TYPE_JPEG, kind = OutputMediaKind.Image)
                     input.targetFormat.equals("PNG", ignoreCase = true) ->
                         OutputProfile(extension = "png", mimeType = MIME_TYPE_PNG, kind = OutputMediaKind.Image)
                     input.targetFormat.equals("WEBP", ignoreCase = true) ->

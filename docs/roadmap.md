@@ -42,8 +42,9 @@
 
 ## Milestone 4: Non-media Formats
 
-- JPG/PNG/WEBP static image conversion. Implemented as an experimental native
-  bitmap path; needs physical-device smoke testing across samples.
+- JPG/JFIF/PNG/WEBP static image conversion. Implemented as an experimental
+  native bitmap path with GIF first-frame input and best-effort HEIC/HEIF input;
+  needs physical-device smoke testing across samples.
 - PDF image export/import.
 - ZIP archive handling.
 

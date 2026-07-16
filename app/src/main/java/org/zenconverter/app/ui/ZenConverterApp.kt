@@ -167,9 +167,17 @@ enum class FileCategory(
         )
     ),
     Image(
-        mimeTypes = listOf("image/jpeg", "image/png", "image/webp"),
+        mimeTypes = listOf(
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/gif",
+            "image/heic",
+            "image/heif"
+        ),
         formats = listOf(
             TargetFormat("JPG", "jpg", "Batch"),
+            TargetFormat("JFIF", "jfif", "JPEG"),
             TargetFormat("PNG", "png", "Supports transparency"),
             TargetFormat("WEBP", "webp", "Supports transparency"),
             TargetFormat("PDF", "pdf", "PDF")
@@ -393,6 +401,7 @@ private val AUDIO_CHANNEL_OPTIONS = listOf(
 )
 
 private const val IMAGE_QUALITY_ORIGINAL = "Original"
+private const val IMAGE_QUALITY_LOSSLESS = "Lossless"
 private const val IMAGE_QUALITY_HIGH = "High"
 private const val IMAGE_QUALITY_BALANCED = "Balanced"
 private const val IMAGE_QUALITY_SMALL = "Small"
@@ -552,7 +561,15 @@ private fun ZenConverterContent(
         when (category) {
             FileCategory.Video -> videoTarget = targetFormat
             FileCategory.Audio -> audioTarget = targetFormat
-            FileCategory.Image -> imageTarget = targetFormat
+            FileCategory.Image -> {
+                imageTarget = targetFormat
+                if (
+                    imageQuality == IMAGE_QUALITY_LOSSLESS &&
+                    !supportsWebpLosslessQuality(targetFormat)
+                ) {
+                    imageQuality = IMAGE_QUALITY_BALANCED
+                }
+            }
             FileCategory.Pdf -> pdfTarget = targetFormat
             FileCategory.Document -> documentTarget = targetFormat
         }
@@ -577,7 +594,9 @@ private fun ZenConverterContent(
 
     fun currentImageOptions(): ImageExportOptions {
         return ImageExportOptions(
-            quality = imageQualityToPercent(imageQuality)
+            quality = imageQualityToPercent(imageQuality),
+            webpLossless = supportsWebpLosslessQuality(imageTarget) &&
+                imageQuality == IMAGE_QUALITY_LOSSLESS
         )
     }
 
@@ -2088,7 +2107,18 @@ private fun ImageOptions(
     }
 
     OptionGrid {
-        OptionDropdown("image-quality", texts.quality, quality, IMAGE_QUALITY_OPTIONS, texts, openMenuId, onOpenMenuChange, onQualityChange)
+        val qualityOptions = imageQualityOptionsFor(targetFormat)
+        val selectedQuality = if (quality in qualityOptions) quality else IMAGE_QUALITY_BALANCED
+        OptionDropdown(
+            "image-quality",
+            texts.quality,
+            selectedQuality,
+            qualityOptions,
+            texts,
+            openMenuId,
+            onOpenMenuChange,
+            onQualityChange
+        )
     }
 }
 
@@ -2833,8 +2863,28 @@ private fun audioSupportsBitrateOption(targetFormat: TargetFormat): Boolean {
     return targetFormat.extension.lowercase(Locale.US) !in AUDIO_LOSSLESS_OUTPUT_EXTENSIONS
 }
 
+private fun imageQualityOptionsFor(targetFormat: TargetFormat): List<String> {
+    return if (supportsWebpLosslessQuality(targetFormat)) {
+        listOf(
+            IMAGE_QUALITY_LOSSLESS,
+            IMAGE_QUALITY_ORIGINAL,
+            IMAGE_QUALITY_HIGH,
+            IMAGE_QUALITY_BALANCED,
+            IMAGE_QUALITY_SMALL
+        )
+    } else {
+        IMAGE_QUALITY_OPTIONS
+    }
+}
+
+private fun supportsWebpLosslessQuality(targetFormat: TargetFormat): Boolean {
+    return targetFormat.extension.equals("webp", ignoreCase = true) &&
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+}
+
 private fun imageQualityToPercent(value: String): Int {
     return when (value) {
+        IMAGE_QUALITY_LOSSLESS -> 100
         IMAGE_QUALITY_ORIGINAL -> 100
         IMAGE_QUALITY_HIGH -> 95
         IMAGE_QUALITY_BALANCED -> 85

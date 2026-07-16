@@ -52,7 +52,8 @@ data class AudioExportOptions(
 )
 
 data class ImageExportOptions(
-    val quality: Int = 90
+    val quality: Int = 90,
+    val webpLossless: Boolean = false
 )
 
 data class PdfExportOptions(

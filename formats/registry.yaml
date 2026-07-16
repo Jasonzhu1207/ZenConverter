@@ -208,26 +208,26 @@ groups:
         note: "Extracts the first audio track and encodes WMA v2 through FFmpeg compatibility mode."
   image:
     planned:
-      - from: jpg
-        to: jpg
+      - from: jpg/jpeg/jfif/jpe
+        to: jpg/jfif
         engine: native-bitmap
         status: experimental
-        note: "Static image decode/encode through Android Bitmap APIs. Original quality is value 100 re-encode, not same-file FastCopy yet."
-      - from: jpg
+        note: "JPEG-family static image decode/encode through Android Bitmap APIs. JFIF output is JPEG-encoded pixels with a .jfif extension; metadata is not preserved."
+      - from: jpg/jpeg/jfif/jpe
         to: png
         engine: native-bitmap
         status: experimental
         note: "Static image decode/encode through Android Bitmap APIs. Metadata is not copied; JPEG EXIF orientation is applied best-effort."
-      - from: jpg
+      - from: jpg/jpeg/jfif/jpe
         to: webp
         engine: native-bitmap
         status: experimental
-        note: "Static image decode/encode through Android Bitmap APIs. WEBP output is lossy in this milestone."
+        note: "Static image decode/encode through Android Bitmap APIs. WEBP output is lossy unless the Android 11+ lossless option is selected."
       - from: png
-        to: jpg
+        to: jpg/jfif
         engine: native-bitmap
         status: experimental
-        note: "Transparency is flattened to white for JPG output."
+        note: "Transparency is flattened to white for JPEG-family output."
       - from: png
         to: png
         engine: native-bitmap
@@ -237,9 +237,9 @@ groups:
         to: webp
         engine: native-bitmap
         status: experimental
-        note: "Static image decode/encode through Android Bitmap APIs. WEBP output is lossy in this milestone."
+        note: "Static image decode/encode through Android Bitmap APIs. WEBP output is lossy unless the Android 11+ lossless option is selected."
       - from: webp
-        to: jpg
+        to: jpg/jfif
         engine: native-bitmap
         status: experimental
         note: "Static WEBP only; animated WEBP is not preserved as animation."
@@ -252,10 +252,20 @@ groups:
         to: webp
         engine: native-bitmap
         status: experimental
-        note: "Static WEBP only; Original quality is value 100 re-encode, not same-file FastCopy yet."
+        note: "Static WEBP only. Android 11+ can write WEBP lossless when selected; otherwise WEBP output is lossy."
+      - from: gif
+        to: jpg/jfif/png/webp
+        engine: native-bitmap
+        status: experimental
+        note: "Attempts first-frame decode only through Android ImageDecoder/BitmapFactory. Animated GIF timing and frames are not preserved."
+      - from: heic/heif
+        to: jpg/jfif/png/webp
+        engine: native-bitmap
+        status: experimental
+        note: "Attempts platform HEIC/HEIF decode through Android ImageDecoder/BitmapFactory. Support depends on device and Android image codec availability."
   pdf:
     planned:
-      - from: jpg
+      - from: jpg/jpeg/jfif/jpe
         to: pdf
         engine: native-pdfdocument
         status: experimental
@@ -270,6 +280,16 @@ groups:
         engine: native-pdfdocument
         status: experimental
         note: "Static WEBP only; animated WEBP is not preserved as animation."
+      - from: gif
+        to: pdf
+        engine: native-pdfdocument
+        status: experimental
+        note: "Uses only the first decoded GIF frame for each PDF page. Animated GIF timing and frames are not preserved."
+      - from: heic/heif
+        to: pdf
+        engine: native-pdfdocument
+        status: experimental
+        note: "Attempts platform HEIC/HEIF decode before placing the image on a PDF page. Support depends on device and Android image codec availability."
       - from: pdf
         to: png
         engine: native-pdfrenderer
