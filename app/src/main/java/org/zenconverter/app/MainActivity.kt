@@ -731,6 +731,7 @@ private fun QueuedFile.hasConnectedNativeTarget(): Boolean {
             targetFormat.equals("JFIF", ignoreCase = true) ||
             targetFormat.equals("PNG", ignoreCase = true) ||
             targetFormat.equals("WEBP", ignoreCase = true) ||
+            targetFormat.equals("ICO", ignoreCase = true) ||
             targetFormat.equals("PDF", ignoreCase = true)
         FileCategory.Pdf -> targetFormat.equals("JPG", ignoreCase = true) ||
             targetFormat.equals("PNG", ignoreCase = true) ||

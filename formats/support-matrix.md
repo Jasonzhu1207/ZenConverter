@@ -24,9 +24,9 @@ as supported until it has a tested path, sample files, and failure behavior.
 | WMA | M4A | Experimental | FFmpeg compatible | Attempts AAC/M4A through FFmpeg compatibility mode; fails clearly if the bundled FFmpeg package lacks AAC encoding. |
 | MP4 video audio tracks | M4A | Experimental | Media3 Transformer | Audio extraction to AAC/M4A through the native path. Bitrate, sample-rate, and channel controls are best-effort native settings. |
 | MKV / WEBM / 3GP / TS / AVI video audio tracks | M4A | Experimental | FFmpeg compatible | Audio-track copy only. Success currently requires an AAC audio stream that can be written to M4A. WebM Vorbis/Opus and AVI MP3/PCM need a future AAC-capable compatibility build. |
-| JPG / JPEG / JFIF / JPE / PNG / WEBP | JPG / JFIF / PNG / WEBP | Experimental | Native Bitmap | Static image conversion through Android platform bitmap APIs; physical-device smoke testing is still pending. JFIF output is JPEG-encoded pixels with a `.jfif` extension. JPG/JFIF/WEBP quality presets are Original 100, High 95, Balanced 85, Small 60; WEBP also offers Android 11+ lossless output. PNG is written as lossless output. Transparency is preserved for PNG/WEBP and flattened to white for JPG/JFIF. Metadata is not copied, though JPEG EXIF orientation is applied best-effort; animated WEBP is not preserved as animation. |
-| GIF | JPG / JFIF / PNG / WEBP / PDF | Experimental | Native Bitmap / Android PdfDocument | Input is first-frame only. Animated GIF timing and additional frames are not exported in this milestone. |
-| HEIC / HEIF | JPG / JFIF / PNG / WEBP / PDF | Experimental | Native Bitmap / Android PdfDocument | Attempts platform decode through Android image APIs. Support depends on the device and Android image codec availability; failures should be clear. |
+| JPG / JPEG / JFIF / JPE / PNG / WEBP | JPG / JFIF / PNG / WEBP / ICO | Experimental | Native Bitmap | Static image conversion through Android platform bitmap APIs; physical-device smoke testing is still pending. JFIF output is JPEG-encoded pixels with a `.jfif` extension. JPG/JFIF/WEBP quality presets are Original 100, High 95, Balanced 85, Small 60; WEBP also offers Android 11+ lossless output. ICO output is a multi-size PNG-in-ICO file. PNG is written as lossless output. Transparency is preserved for PNG/WEBP/ICO and flattened to white for JPG/JFIF. Metadata is not copied, though JPEG EXIF orientation is applied best-effort; animated WEBP is not preserved as animation. |
+| GIF | JPG / JFIF / PNG / WEBP / ICO / PDF | Experimental | Native Bitmap / Android PdfDocument | Input is first-frame only. Animated GIF timing and additional frames are not exported in this milestone. |
+| HEIC / HEIF | JPG / JFIF / PNG / WEBP / ICO / PDF | Experimental | Native Bitmap / Android PdfDocument | Attempts platform decode through Android image APIs. Support depends on the device and Android image codec availability; failures should be clear. |
 | JPG / JPEG / JFIF / JPE / PNG / WEBP | PDF | Experimental | Android PdfDocument | Creates one PDF page per image. A4-fit and original-ratio page modes preserve image ratio and use a white page background. Multiple selected images can become one multi-page PDF or one PDF per image. |
 | PDF | JPG / PNG / WEBP | Experimental | Android PdfRenderer | Renders each PDF page to one image file. This is page rasterization, not OCR, text extraction, or embedded-image extraction. Multi-page outputs use one task and same-sized page images. |
 | Multiple PDFs | PDF | Experimental | PDFBox-Android | Merges selected PDFs as page objects instead of rasterizing them. Normal text layers and vector content are preserved best-effort; complex forms, bookmarks, attachments, and metadata are not guaranteed. |
@@ -88,7 +88,7 @@ as supported until it has a tested path, sample files, and failure behavior.
 
 ## Current Native Image Limits
 
-- Image targets are intentionally limited to JPG, JFIF, PNG, WEBP, and PDF.
+- Image targets are intentionally limited to JPG, JFIF, PNG, WEBP, ICO, and PDF.
 - Image inputs are limited in the picker to JPG/JPEG/JFIF/JPE where providers
   expose them as JPEG images, PNG, WEBP, GIF, HEIC, and HEIF.
 - The first image path uses Android platform bitmap decode/encode APIs and does
@@ -100,6 +100,10 @@ as supported until it has a tested path, sample files, and failure behavior.
   future improvement.
 - WEBP lossless output is exposed only on Android 11/API 30 and newer. Older
   devices keep the existing lossy WEBP path.
+- ICO output is a modern PNG-in-ICO container with 16, 32, 48, 64, 128, and
+  256 px entries. Images are scaled down proportionally and centered on a
+  transparent square canvas. ICO input parsing and old BMP/DIB icon payloads
+  are not connected.
 - GIF input is first-frame only. Animated GIF timing and additional frames are
   not exported in this milestone.
 - HEIC/HEIF input is best-effort platform decode. It may fail on devices whose

@@ -83,6 +83,7 @@ import org.zenconverter.app.office.Office2PdfUnsupportedAbiException
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.File
+import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -983,6 +984,17 @@ class ConversionService : Service() {
         throwIfConversionCancelled()
         updateImageProgress(0.55f)
 
+        if (outputProfile.extension.equals("ico", ignoreCase = true)) {
+            try {
+                writeIcoImageFile(decodedBitmap, outputFile)
+                throwIfConversionCancelled()
+                updateImageProgress(0.95f)
+            } finally {
+                decodedBitmap.recycle()
+            }
+            return
+        }
+
         val bitmapForOutput = bitmapForImageOutput(
             decodedBitmap,
             outputProfile.extension,
@@ -1044,6 +1056,72 @@ class ConversionService : Service() {
                 bitmapForOutput.recycle()
             }
         }
+    }
+
+    private fun writeIcoImageFile(
+        sourceBitmap: Bitmap,
+        outputFile: File
+    ) {
+        val iconImages = ICO_IMAGE_SIZES.map { size ->
+            IcoPngImage(size = size, pngBytes = pngBytesForIcoSize(sourceBitmap, size))
+        }
+
+        outputFile.outputStream().use { output ->
+            writeLittleEndianShort(output, 0)
+            writeLittleEndianShort(output, 1)
+            writeLittleEndianShort(output, iconImages.size)
+
+            var imageOffset = ICO_HEADER_BYTES + ICO_DIRECTORY_ENTRY_BYTES * iconImages.size
+            iconImages.forEach { image ->
+                output.write(if (image.size >= ICO_MAX_DIRECTORY_SIZE) 0 else image.size)
+                output.write(if (image.size >= ICO_MAX_DIRECTORY_SIZE) 0 else image.size)
+                output.write(0)
+                output.write(0)
+                writeLittleEndianShort(output, 1)
+                writeLittleEndianShort(output, ICO_BITS_PER_PIXEL)
+                writeLittleEndianInt(output, image.pngBytes.size)
+                writeLittleEndianInt(output, imageOffset)
+                imageOffset += image.pngBytes.size
+            }
+
+            iconImages.forEach { image ->
+                output.write(image.pngBytes)
+            }
+            output.flush()
+        }
+    }
+
+    private fun pngBytesForIcoSize(sourceBitmap: Bitmap, iconSize: Int): ByteArray {
+        val iconBitmap = Bitmap.createBitmap(iconSize, iconSize, Bitmap.Config.ARGB_8888)
+        try {
+            val targetRect = centeredFitRect(
+                sourceWidth = sourceBitmap.width,
+                sourceHeight = sourceBitmap.height,
+                targetWidth = iconSize,
+                targetHeight = iconSize
+            )
+            Canvas(iconBitmap).drawBitmap(sourceBitmap, null, targetRect, ICON_BITMAP_PAINT)
+            return ByteArrayOutputStream().use { output ->
+                if (!iconBitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) {
+                    error("Image engine could not write this output")
+                }
+                output.toByteArray()
+            }
+        } finally {
+            iconBitmap.recycle()
+        }
+    }
+
+    private fun writeLittleEndianShort(output: OutputStream, value: Int) {
+        output.write(value and 0xff)
+        output.write((value ushr 8) and 0xff)
+    }
+
+    private fun writeLittleEndianInt(output: OutputStream, value: Int) {
+        output.write(value and 0xff)
+        output.write((value ushr 8) and 0xff)
+        output.write((value ushr 16) and 0xff)
+        output.write((value ushr 24) and 0xff)
     }
 
     private fun writeImagesToPdf(
@@ -2686,6 +2764,8 @@ class ConversionService : Service() {
                         OutputProfile(extension = "png", mimeType = MIME_TYPE_PNG, kind = OutputMediaKind.Image)
                     input.targetFormat.equals("WEBP", ignoreCase = true) ->
                         OutputProfile(extension = "webp", mimeType = MIME_TYPE_WEBP, kind = OutputMediaKind.Image)
+                    input.targetFormat.equals("ICO", ignoreCase = true) ->
+                        OutputProfile(extension = "ico", mimeType = MIME_TYPE_ICO, kind = OutputMediaKind.Image)
                     input.targetFormat.equals("PDF", ignoreCase = true) ->
                         OutputProfile(extension = "pdf", mimeType = MIME_TYPE_PDF, kind = OutputMediaKind.Document)
                     else -> null
@@ -2789,6 +2869,11 @@ class ConversionService : Service() {
     private data class PdfBitmapSize(
         val width: Int,
         val height: Int
+    )
+
+    private data class IcoPngImage(
+        val size: Int,
+        val pngBytes: ByteArray
     )
 
     private data class PdfRenderProfile(
@@ -2942,6 +3027,7 @@ class ConversionService : Service() {
         private const val MIME_TYPE_JPEG = "image/jpeg"
         private const val MIME_TYPE_PNG = "image/png"
         private const val MIME_TYPE_WEBP = "image/webp"
+        private const val MIME_TYPE_ICO = "image/vnd.microsoft.icon"
         private const val MIME_TYPE_PDF = "application/pdf"
         private const val MIME_TYPE_TEXT = "text/plain"
         private const val MIME_TYPE_DOCX =
@@ -2954,8 +3040,13 @@ class ConversionService : Service() {
         private const val URI_SCHEME_FILE = "file"
         private const val MIN_MIXABLE_CHANNEL_COUNT = 1
         private const val MAX_MIXABLE_CHANNEL_COUNT = 6
+        private const val ICO_HEADER_BYTES = 6
+        private const val ICO_DIRECTORY_ENTRY_BYTES = 16
+        private const val ICO_MAX_DIRECTORY_SIZE = 256
+        private const val ICO_BITS_PER_PIXEL = 32
         private const val ACTION_START = "org.zenconverter.app.conversion.START"
         private const val ACTION_CANCEL = "org.zenconverter.app.conversion.CANCEL"
+        private val ICO_IMAGE_SIZES = listOf(16, 32, 48, 64, 128, 256)
         private val VIDEO_INPUT_EXTENSIONS = setOf(
             "mp4",
             "m4v",
@@ -2984,6 +3075,9 @@ class ConversionService : Service() {
         )
         private val PDF_HEADER = "%PDF-".encodeToByteArray()
         private val PDF_BITMAP_PAINT = Paint(
+            Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG or Paint.DITHER_FLAG
+        )
+        private val ICON_BITMAP_PAINT = Paint(
             Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG or Paint.DITHER_FLAG
         )
         private val WHITESPACE_REGEX = Regex("\\s+")

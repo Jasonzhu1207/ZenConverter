@@ -219,10 +219,10 @@ groups:
         status: experimental
         note: "Static image decode/encode through Android Bitmap APIs. Metadata is not copied; JPEG EXIF orientation is applied best-effort."
       - from: jpg/jpeg/jfif/jpe
-        to: webp
+        to: webp/ico
         engine: native-bitmap
         status: experimental
-        note: "Static image decode/encode through Android Bitmap APIs. WEBP output is lossy unless the Android 11+ lossless option is selected."
+        note: "Static image decode/encode through Android Bitmap APIs. WEBP output is lossy unless the Android 11+ lossless option is selected. ICO output is a modern multi-size PNG-in-ICO file."
       - from: png
         to: jpg/jfif
         engine: native-bitmap
@@ -234,10 +234,10 @@ groups:
         status: experimental
         note: "PNG output is written losslessly through the platform encoder."
       - from: png
-        to: webp
+        to: webp/ico
         engine: native-bitmap
         status: experimental
-        note: "Static image decode/encode through Android Bitmap APIs. WEBP output is lossy unless the Android 11+ lossless option is selected."
+        note: "Static image decode/encode through Android Bitmap APIs. WEBP output is lossy unless the Android 11+ lossless option is selected. ICO output is a modern multi-size PNG-in-ICO file."
       - from: webp
         to: jpg/jfif
         engine: native-bitmap
@@ -249,20 +249,20 @@ groups:
         status: experimental
         note: "Static WEBP only; animated WEBP is not preserved as animation."
       - from: webp
-        to: webp
+        to: webp/ico
         engine: native-bitmap
         status: experimental
-        note: "Static WEBP only. Android 11+ can write WEBP lossless when selected; otherwise WEBP output is lossy."
+        note: "Static WEBP only. Android 11+ can write WEBP lossless when selected; otherwise WEBP output is lossy. ICO output is a modern multi-size PNG-in-ICO file."
       - from: gif
-        to: jpg/jfif/png/webp
+        to: jpg/jfif/png/webp/ico
         engine: native-bitmap
         status: experimental
-        note: "Attempts first-frame decode only through Android ImageDecoder/BitmapFactory. Animated GIF timing and frames are not preserved."
+        note: "Attempts first-frame decode only through Android ImageDecoder/BitmapFactory. Animated GIF timing and frames are not preserved. ICO output uses the first frame."
       - from: heic/heif
-        to: jpg/jfif/png/webp
+        to: jpg/jfif/png/webp/ico
         engine: native-bitmap
         status: experimental
-        note: "Attempts platform HEIC/HEIF decode through Android ImageDecoder/BitmapFactory. Support depends on device and Android image codec availability."
+        note: "Attempts platform HEIC/HEIF decode through Android ImageDecoder/BitmapFactory. Support depends on device and Android image codec availability. ICO output is available only after platform decode succeeds."
   pdf:
     planned:
       - from: jpg/jpeg/jfif/jpe

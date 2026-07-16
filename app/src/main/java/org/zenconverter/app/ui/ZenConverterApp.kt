@@ -180,6 +180,7 @@ enum class FileCategory(
             TargetFormat("JFIF", "jfif", "JPEG"),
             TargetFormat("PNG", "png", "Supports transparency"),
             TargetFormat("WEBP", "webp", "Supports transparency"),
+            TargetFormat("ICO", "ico", "Icon"),
             TargetFormat("PDF", "pdf", "PDF")
         )
     ),
@@ -2097,7 +2098,10 @@ private fun ImageOptions(
         return
     }
 
-    if (targetFormat.extension.equals("png", ignoreCase = true)) {
+    if (
+        targetFormat.extension.equals("png", ignoreCase = true) ||
+        targetFormat.extension.equals("ico", ignoreCase = true)
+    ) {
         Text(
             text = texts.optionValue("Lossless output"),
             style = MaterialTheme.typography.bodySmall,
