@@ -33,7 +33,7 @@ ZenConverter 想做的是一个本地优先的 Android 转换器：
 
 - 转换过程不需要网络传输，
 - 没有广告、账号、付费墙或远程上传，
-- 当前 Android manifest 没有 `INTERNET` 权限，
+- 仅申请 `INTERNET` 权限用于手动检查应用更新，
 - 不申请不必要的权限，
 - 大视频被当作真实使用场景处理，即使这条路仍然需要继续打磨，
 - 支持范围公开写在 [support matrix](formats/support-matrix.md) 中。

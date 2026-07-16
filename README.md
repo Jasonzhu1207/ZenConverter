@@ -45,7 +45,7 @@ ZenConverter is the local-first Android converter I wanted to use:
 
 - no network transfer for conversion work,
 - no ads, accounts, paywalls, or remote uploads,
-- no `INTERNET` permission in the current Android manifest,
+- `INTERNET` permission is only used for manual update checks,
 - no extra permissions unless the app actually needs them,
 - large videos are treated as real use cases, even if that path is still rough,
 - the support list lives in the public [support matrix](formats/support-matrix.md).
