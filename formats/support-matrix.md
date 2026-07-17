@@ -26,7 +26,7 @@ as supported until it has a tested path, sample files, and failure behavior.
 | MKV / WEBM / 3GP / TS / AVI video audio tracks | M4A | Experimental | FFmpeg compatible | Audio-track copy only. Success currently requires an AAC audio stream that can be written to M4A. WebM Vorbis/Opus and AVI MP3/PCM need a future AAC-capable compatibility build. |
 | JPG / JPEG / JFIF / JPE / PNG / WEBP | JPG / JFIF / PNG / WEBP / ICO | Experimental | Native Bitmap | Static image conversion through Android platform bitmap APIs; physical-device smoke testing is still pending. JFIF output is JPEG-encoded pixels with a `.jfif` extension. JPG/JFIF/WEBP quality presets are Original 100, High 95, Balanced 85, Small 60; WEBP also offers Android 11+ lossless output. ICO output is a multi-size PNG-in-ICO file. PNG is written as lossless output. Transparency is preserved for PNG/WEBP/ICO and flattened to white for JPG/JFIF. Metadata is not copied, though JPEG EXIF orientation is applied best-effort; animated WEBP is not preserved as animation. |
 | ICO | JPG / JFIF / PNG / WEBP / ICO / PDF | Experimental | Native Bitmap / Android PdfDocument | Reads the largest ICO layer only when that layer is PNG-in-ICO. Old BMP/DIB icon payloads are not decoded in this milestone. |
-| GIF | JPG / JFIF / PNG / WEBP / ICO / PDF | Experimental | Native Bitmap / Android PdfDocument | Input is first-frame only. Animated GIF timing and additional frames are not exported in this milestone. |
+| GIF | JPG / JFIF / PNG / WEBP / ICO / PDF | Experimental | Native Bitmap / FFmpeg compatible / Android PdfDocument | User can choose first-frame conversion or split-frame output. GIF split uses the FFmpeg compatibility path to decode a raw RGBA frame stream, then reuses the native image/PDF writers. Split image outputs and one-PDF-per-frame outputs are saved inside a subfolder. Animation timing, loop count, frame delay, and metadata are not preserved. |
 | HEIC / HEIF | JPG / JFIF / PNG / WEBP / ICO / PDF | Experimental | Native Bitmap / Android PdfDocument | Attempts platform decode through Android image APIs. Support depends on the device and Android image codec availability; failures should be clear. |
 | JPG / JPEG / JFIF / JPE / PNG / WEBP | PDF | Experimental | Android PdfDocument | Creates one PDF page per image. A4-fit and original-ratio page modes preserve image ratio and use a white page background. Multiple selected images can become one multi-page PDF or one PDF per image. |
 | PDF | JPG / PNG / WEBP | Experimental | Android PdfRenderer | Renders each PDF page to one image file. This is page rasterization, not OCR, text extraction, or embedded-image extraction. Multi-page outputs use one task and same-sized page images. |
@@ -107,8 +107,10 @@ as supported until it has a tested path, sample files, and failure behavior.
   transparent square canvas.
 - ICO input reads only the largest ICO layer when that layer is PNG-in-ICO. Old
   BMP/DIB icon payloads are not decoded in this milestone.
-- GIF input is first-frame only. Animated GIF timing and additional frames are
-  not exported in this milestone.
+- GIF input can be converted as first-frame only, or split into numbered frames
+  through the FFmpeg compatibility path. Split image outputs and one-PDF-per-frame
+  outputs are saved inside a subfolder. Animation timing, loop count, frame
+  delay, and metadata are not preserved.
 - HEIC/HEIF input is best-effort platform decode. It may fail on devices whose
   Android image stack cannot decode the selected file.
 - EXIF, color profile metadata, and other container metadata are not copied in

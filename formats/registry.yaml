@@ -260,9 +260,9 @@ groups:
         note: "Reads the largest ICO layer when that layer is PNG-in-ICO, then reuses the static image output path. Old BMP/DIB icon payloads are not decoded in this milestone."
       - from: gif
         to: jpg/jfif/png/webp/ico
-        engine: native-bitmap
+        engine: native-bitmap/ffmpeg-compatible
         status: experimental
-        note: "Attempts first-frame decode only through Android ImageDecoder/BitmapFactory. Animated GIF timing and frames are not preserved. ICO output uses the first frame."
+        note: "Can use the first decoded frame, or split GIF frames through the FFmpeg compatibility path as raw RGBA frames, then write numbered files inside a subfolder. Split output does not preserve animation timing, loop count, frame delay, or metadata."
       - from: heic/heif
         to: jpg/jfif/png/webp/ico
         engine: native-bitmap
@@ -292,9 +292,9 @@ groups:
         note: "Places the largest decoded ICO layer on one PDF page when that layer is PNG-in-ICO. Old BMP/DIB icon payloads are not decoded in this milestone."
       - from: gif
         to: pdf
-        engine: native-pdfdocument
+        engine: native-pdfdocument/ffmpeg-compatible
         status: experimental
-        note: "Uses only the first decoded GIF frame for each PDF page. Animated GIF timing and frames are not preserved."
+        note: "Can place only the first decoded GIF frame, expand all split frames into one PDF, or write one PDF per frame inside a subfolder. Split output does not preserve animation timing, loop count, frame delay, or metadata."
       - from: heic/heif
         to: pdf
         engine: native-pdfdocument

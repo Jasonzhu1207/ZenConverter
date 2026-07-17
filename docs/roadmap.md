@@ -43,9 +43,9 @@
 ## Milestone 4: Non-media Formats
 
 - JPG/JFIF/PNG/WEBP/ICO static image conversion. Implemented as an experimental
-  native bitmap path with GIF first-frame input, best-effort HEIC/HEIF input,
-  PNG-in-ICO output, and largest-layer PNG-in-ICO input; needs physical-device
-  smoke testing across samples.
+  native bitmap path with GIF first-frame or FFmpeg-backed split-frame input,
+  best-effort HEIC/HEIF input, PNG-in-ICO output, and largest-layer PNG-in-ICO
+  input; needs physical-device smoke testing across samples.
 - PDF image export/import.
 - ZIP archive handling.
 

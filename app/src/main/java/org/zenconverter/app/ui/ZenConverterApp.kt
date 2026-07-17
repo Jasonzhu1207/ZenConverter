@@ -70,7 +70,6 @@ import androidx.compose.material.icons.rounded.PictureAsPdf
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Videocam
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -118,6 +117,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import org.zenconverter.app.conversion.AudioExportOptions
+import org.zenconverter.app.conversion.GifFrameExportMode
 import org.zenconverter.app.conversion.ImageExportOptions
 import org.zenconverter.app.conversion.PdfExportOptions
 import org.zenconverter.app.conversion.PdfImagePageMode
@@ -218,11 +218,20 @@ data class QueuedFile(
     val mimeType: String?,
     val category: FileCategory,
     val targetFormat: String,
+    val gifFrameMode: GifFrameExportMode = GifFrameExportMode.FirstFrame,
     val pdfPasswords: List<String?> = emptyList()
 )
 
 data class ImagePdfMergePrompt(
     val fileCount: Int
+)
+
+data class GifFrameModePrompt(
+    val gifCount: Int
+)
+
+data class GifPdfFramePrompt(
+    val gifCount: Int
 )
 
 data class PdfPasswordPrompt(
@@ -447,10 +456,18 @@ fun ZenConverterApp(
     onRemoveFile: (String) -> Unit,
     onClearQueue: () -> Unit,
     imagePdfMergePrompt: ImagePdfMergePrompt?,
+    gifFrameModePrompt: GifFrameModePrompt?,
+    gifPdfFramePrompt: GifPdfFramePrompt?,
     pdfPasswordPrompt: PdfPasswordPrompt?,
     onChooseSinglePdf: () -> Unit,
     onChooseOnePdfPerImage: () -> Unit,
     onDismissImagePdfPrompt: () -> Unit,
+    onChooseGifFirstFrame: () -> Unit,
+    onChooseGifSplitFrames: () -> Unit,
+    onDismissGifFramePrompt: () -> Unit,
+    onChooseGifFramesSinglePdf: () -> Unit,
+    onChooseGifFramePdfFiles: () -> Unit,
+    onDismissGifPdfFramePrompt: () -> Unit,
     onSubmitPdfPassword: (String) -> Unit,
     onCancelPdfPassword: () -> Unit,
     onStartConversion: (VideoExportOptions, AudioExportOptions, ImageExportOptions, PdfExportOptions) -> Unit,
@@ -493,6 +510,24 @@ fun ZenConverterApp(
                     onSinglePdf = onChooseSinglePdf,
                     onOnePdfPerImage = onChooseOnePdfPerImage,
                     onDismiss = onDismissImagePdfPrompt
+                )
+            }
+            gifFrameModePrompt?.let { prompt ->
+                GifFrameModeDialog(
+                    texts = texts,
+                    prompt = prompt,
+                    onFirstFrame = onChooseGifFirstFrame,
+                    onSplitFrames = onChooseGifSplitFrames,
+                    onDismiss = onDismissGifFramePrompt
+                )
+            }
+            gifPdfFramePrompt?.let { prompt ->
+                GifPdfFrameDialog(
+                    texts = texts,
+                    prompt = prompt,
+                    onSinglePdf = onChooseGifFramesSinglePdf,
+                    onPdfFiles = onChooseGifFramePdfFiles,
+                    onDismiss = onDismissGifPdfFramePrompt
                 )
             }
             pdfPasswordPrompt?.let { prompt ->
@@ -814,20 +849,55 @@ private fun ImagePdfMergeDialog(
     onOnePdfPerImage: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(texts.imagePdfPromptTitle) },
-        text = { Text(texts.imagePdfPromptMessage(prompt.fileCount)) },
-        confirmButton = {
-            TextButton(onClick = onSinglePdf) {
-                Text(texts.optionValue("Single PDF"))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onOnePdfPerImage) {
-                Text(texts.optionValue("One PDF per image"))
-            }
-        }
+    ZenPromptDialog(
+        title = texts.imagePdfPromptTitle,
+        message = texts.imagePdfPromptMessage(prompt.fileCount),
+        icon = Icons.Rounded.PictureAsPdf,
+        confirmText = texts.optionValue("Single PDF"),
+        dismissText = texts.optionValue("One PDF per image"),
+        onConfirm = onSinglePdf,
+        onDismissAction = onOnePdfPerImage,
+        onDismissRequest = onDismiss
+    )
+}
+
+@Composable
+private fun GifFrameModeDialog(
+    texts: UiText,
+    prompt: GifFrameModePrompt,
+    onFirstFrame: () -> Unit,
+    onSplitFrames: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    ZenPromptDialog(
+        title = texts.gifFramePromptTitle,
+        message = texts.gifFramePromptMessage(prompt.gifCount),
+        icon = Icons.Rounded.Image,
+        confirmText = texts.optionValue("Split frames"),
+        dismissText = texts.optionValue("First frame"),
+        onConfirm = onSplitFrames,
+        onDismissAction = onFirstFrame,
+        onDismissRequest = onDismiss
+    )
+}
+
+@Composable
+private fun GifPdfFrameDialog(
+    texts: UiText,
+    prompt: GifPdfFramePrompt,
+    onSinglePdf: () -> Unit,
+    onPdfFiles: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    ZenPromptDialog(
+        title = texts.gifPdfFramePromptTitle,
+        message = texts.gifPdfFramePromptMessage(prompt.gifCount),
+        icon = Icons.Rounded.PictureAsPdf,
+        confirmText = texts.optionValue("All frames in one PDF"),
+        dismissText = texts.optionValue("One PDF per frame"),
+        onConfirm = onSinglePdf,
+        onDismissAction = onPdfFiles,
+        onDismissRequest = onDismiss
     )
 }
 
@@ -839,32 +909,131 @@ private fun PdfPasswordDialog(
     onCancel: () -> Unit
 ) {
     var password by remember(prompt.displayName) { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text(texts.pdfPasswordTitle) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(texts.pdfPasswordMessage(prompt.displayName))
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    singleLine = true,
-                    label = { Text(texts.password) },
-                    visualTransformation = PasswordVisualTransformation()
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onSubmit(password) }) {
-                Text(texts.choose)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onCancel) {
-                Text(texts.skip)
-            }
+    ZenPromptFrame(onDismissRequest = onCancel) {
+        SectionTitle(
+            icon = Icons.Rounded.PictureAsPdf,
+            title = texts.pdfPasswordTitle
+        )
+        Text(
+            text = texts.pdfPasswordMessage(prompt.displayName),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            singleLine = true,
+            label = { Text(texts.password) },
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth()
+        )
+        ZenPromptActions(
+            confirmText = texts.choose,
+            dismissText = texts.skip,
+            onConfirm = { onSubmit(password) },
+            onDismissAction = onCancel
+        )
+    }
+}
+
+@Composable
+private fun ZenPromptDialog(
+    title: String,
+    message: String,
+    icon: ImageVector,
+    confirmText: String,
+    dismissText: String,
+    onConfirm: () -> Unit,
+    onDismissAction: () -> Unit,
+    onDismissRequest: () -> Unit
+) {
+    ZenPromptFrame(onDismissRequest = onDismissRequest) {
+        SectionTitle(icon = icon, title = title)
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        ZenPromptActions(
+            confirmText = confirmText,
+            dismissText = dismissText,
+            onConfirm = onConfirm,
+            onDismissAction = onDismissAction
+        )
+    }
+}
+
+@Composable
+private fun ZenPromptFrame(
+    onDismissRequest: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .heightIn(max = 520.dp),
+            shape = RoundedCornerShape(8.dp),
+            color = Color.White,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+            border = BorderStroke(1.dp, Color(0xFFE5E5E5))
+        ) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                content = content
+            )
         }
-    )
+    }
+}
+
+@Composable
+private fun ZenPromptActions(
+    confirmText: String,
+    dismissText: String,
+    onConfirm: () -> Unit,
+    onDismissAction: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        OutlinedButton(
+            onClick = onDismissAction,
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(8.dp),
+            border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = Color.White,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 9.dp)
+        ) {
+            Text(dismissText, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        Button(
+            onClick = onConfirm,
+            modifier = Modifier.weight(1f),
+            shape = RoundedCornerShape(8.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 9.dp)
+        ) {
+            Text(confirmText, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+    }
 }
 
 @Composable
@@ -2991,6 +3160,8 @@ private data class UiText(
     val password: String,
     val skip: String,
     val imagePdfPromptTitle: String,
+    val gifFramePromptTitle: String,
+    val gifPdfFramePromptTitle: String,
     val pdfPasswordTitle: String,
     val uiPresetSuffix: String,
     val toPrefix: String
@@ -3010,6 +3181,32 @@ private data class UiText(
             englishText -> "Create one PDF from $count selected images, or one PDF per image?"
             simplifiedChineseText -> "已选择 $count 张图片。要合并成一个 PDF，还是每张图片各生成一个 PDF？"
             else -> "已選擇 $count 張圖片。要合併成一個 PDF，還是每張圖片各生成一個 PDF？"
+        }
+    }
+
+    fun gifFramePromptMessage(count: Int): String {
+        return when (this) {
+            englishText -> {
+                val label = if (count == 1) "GIF" else "$count GIFs"
+                "Convert only the first frame, or split $label into numbered frame files?"
+            }
+            simplifiedChineseText ->
+                "已选择 $count 个 GIF。只转换首帧，还是拆成按顺序编号的帧文件？"
+            else ->
+                "已選擇 $count 個 GIF。只轉換首幀，還是拆成按順序編號的幀檔案？"
+        }
+    }
+
+    fun gifPdfFramePromptMessage(count: Int): String {
+        return when (this) {
+            englishText -> {
+                val label = if (count == 1) "this GIF" else "each GIF"
+                "For split GIF output, put all frames from $label into one PDF, or create one PDF per frame?"
+            }
+            simplifiedChineseText ->
+                "GIF 拆帧输出到 PDF 时，全部帧放进一个 PDF，还是每帧生成一个 PDF？"
+            else ->
+                "GIF 拆幀輸出到 PDF 時，全部幀放進一個 PDF，還是每幀產生一個 PDF？"
         }
     }
 
@@ -3242,6 +3439,11 @@ private data class UiText(
                 englishText -> "Image engine could not decode this input"
                 simplifiedChineseText -> "无法解码这张图片"
                 else -> "無法解碼這張圖片"
+            }
+            "Image engine could not split GIF frames" -> when (this) {
+                englishText -> "Image engine could not split GIF frames"
+                simplifiedChineseText -> "无法拆分这个 GIF 的帧"
+                else -> "無法拆分這個 GIF 的幀"
             }
             "Image engine could not decode this ICO input" -> when (this) {
                 englishText -> "Image engine could not decode this ICO input"
@@ -3681,6 +3883,26 @@ private data class UiText(
                 simplifiedChineseText -> "每张图一个 PDF"
                 else -> "每張圖一個 PDF"
             }
+            "First frame" -> when (this) {
+                englishText -> "First frame"
+                simplifiedChineseText -> "只转首帧"
+                else -> "只轉首幀"
+            }
+            "Split frames" -> when (this) {
+                englishText -> "Split frames"
+                simplifiedChineseText -> "拆帧输出"
+                else -> "拆幀輸出"
+            }
+            "All frames in one PDF" -> when (this) {
+                englishText -> "All frames in one PDF"
+                simplifiedChineseText -> "全部帧进一个 PDF"
+                else -> "全部幀進一個 PDF"
+            }
+            "One PDF per frame" -> when (this) {
+                englishText -> "One PDF per frame"
+                simplifiedChineseText -> "一帧一个 PDF"
+                else -> "一幀一個 PDF"
+            }
             "A4 fit" -> when (this) {
                 englishText -> "A4 fit"
                 simplifiedChineseText -> "适配 A4"
@@ -3830,6 +4052,8 @@ private val englishText = UiText(
     password = "Password",
     skip = "Skip",
     imagePdfPromptTitle = "Image to PDF",
+    gifFramePromptTitle = "GIF frames",
+    gifPdfFramePromptTitle = "GIF frames to PDF",
     pdfPasswordTitle = "PDF password",
     uiPresetSuffix = "",
     toPrefix = "to"
@@ -3909,6 +4133,8 @@ private val simplifiedChineseText = UiText(
     password = "密码",
     skip = "跳过",
     imagePdfPromptTitle = "图片转 PDF",
+    gifFramePromptTitle = "GIF 拆帧",
+    gifPdfFramePromptTitle = "GIF 拆帧转 PDF",
     pdfPasswordTitle = "PDF 密码",
     uiPresetSuffix = "",
     toPrefix = "转为"
@@ -3988,6 +4214,8 @@ private val traditionalChineseText = UiText(
     password = "密碼",
     skip = "略過",
     imagePdfPromptTitle = "圖片轉 PDF",
+    gifFramePromptTitle = "GIF 拆幀",
+    gifPdfFramePromptTitle = "GIF 拆幀轉 PDF",
     pdfPasswordTitle = "PDF 密碼",
     uiPresetSuffix = "",
     toPrefix = "轉為"

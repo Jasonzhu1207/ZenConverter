@@ -29,12 +29,15 @@ import org.zenconverter.app.conversion.ConversionTaskInput
 import org.zenconverter.app.conversion.ConversionTaskState
 import org.zenconverter.app.conversion.ConversionTaskStatus
 import org.zenconverter.app.conversion.ConversionTaskStore
+import org.zenconverter.app.conversion.GifFrameExportMode
 import org.zenconverter.app.conversion.ImageExportOptions
 import org.zenconverter.app.conversion.OutputDestination
 import org.zenconverter.app.conversion.PdfExportOptions
 import org.zenconverter.app.conversion.VideoExportOptions
 import org.zenconverter.app.conversion.VideoEncoderSupport
 import org.zenconverter.app.ui.FileCategory
+import org.zenconverter.app.ui.GifFrameModePrompt
+import org.zenconverter.app.ui.GifPdfFramePrompt
 import org.zenconverter.app.ui.ImagePdfMergePrompt
 import org.zenconverter.app.ui.PdfPasswordPrompt
 import org.zenconverter.app.ui.ZenConverterApp
@@ -54,9 +57,13 @@ class MainActivity : ComponentActivity() {
     private val outputDirectory = mutableStateOf<OutputDirectory?>(null)
     private val outputLocationMode = mutableStateOf(OutputLocationMode.Default)
     private val imagePdfMergePrompt = mutableStateOf<ImagePdfMergePrompt?>(null)
+    private val gifFrameModePrompt = mutableStateOf<GifFrameModePrompt?>(null)
+    private val gifPdfFramePrompt = mutableStateOf<GifPdfFramePrompt?>(null)
     private val pdfPasswordPrompt = mutableStateOf<PdfPasswordPrompt?>(null)
     private val pendingPdfSelections = ArrayDeque<PendingPdfSelection>()
     private var pendingImagePdfSelection: PendingImagePdfSelection? = null
+    private var pendingGifFrameSelection: PendingGifFrameSelection? = null
+    private var pendingGifPdfFrameSelection: PendingGifPdfFrameSelection? = null
     private var activePdfPasswordSelection: PendingPdfSelection? = null
     private var pendingSelection: PendingSelection? = null
     private var pendingVideoOptions: VideoExportOptions = VideoExportOptions()
@@ -103,20 +110,7 @@ class MainActivity : ComponentActivity() {
             )
         }
 
-        when {
-            request.category == FileCategory.Image &&
-                request.targetFormat.extension.equals("pdf", ignoreCase = true) &&
-                documents.size > 1 -> {
-                imagePdfMergePrompt.value = ImagePdfMergePrompt(fileCount = documents.size)
-                pendingImagePdfSelection = PendingImagePdfSelection(request, documents)
-            }
-            request.category == FileCategory.Pdf -> {
-                enqueuePdfDocumentsWithProbe(request, documents)
-            }
-            else -> {
-                queuedFiles.addAll(documents.map { it.toQueuedFile(request) })
-            }
-        }
+        enqueuePickedDocuments(request, documents)
     }
 
     private val openOutputDirectory = registerForActivityResult(
@@ -168,8 +162,12 @@ class MainActivity : ComponentActivity() {
                     pendingPdfSelections.clear()
                     pendingImagePdfSelection = null
                     activePdfPasswordSelection = null
+                    pendingGifFrameSelection = null
+                    pendingGifPdfFrameSelection = null
                     pdfSelectionGeneration += 1
                     imagePdfMergePrompt.value = null
+                    gifFrameModePrompt.value = null
+                    gifPdfFramePrompt.value = null
                     pdfPasswordPrompt.value = null
                     ConversionTaskStore.clear()
                 },
@@ -177,6 +175,8 @@ class MainActivity : ComponentActivity() {
                 conversionSummary = ConversionTaskStore.summaryMessage.value,
                 isConversionRunning = ConversionTaskStore.isRunning.value,
                 imagePdfMergePrompt = imagePdfMergePrompt.value,
+                gifFrameModePrompt = gifFrameModePrompt.value,
+                gifPdfFramePrompt = gifPdfFramePrompt.value,
                 pdfPasswordPrompt = pdfPasswordPrompt.value,
                 onChooseSinglePdf = {
                     pendingImagePdfSelection?.let { selection ->
@@ -187,11 +187,15 @@ class MainActivity : ComponentActivity() {
                 },
                 onChooseOnePdfPerImage = {
                     pendingImagePdfSelection?.let { selection ->
-                        queuedFiles.addAll(
-                            selection.documents.map { document ->
-                                document.toQueuedFile(selection.request)
-                            }
-                        )
+                        if (selection.gifFrameMode == GifFrameExportMode.FramesAsSinglePdf) {
+                            promptGifPdfFrameMode(selection.request, selection.documents)
+                        } else {
+                            enqueueDocumentsOnePerImage(
+                                selection.request,
+                                selection.documents,
+                                GifFrameExportMode.FirstFrame
+                            )
+                        }
                     }
                     pendingImagePdfSelection = null
                     imagePdfMergePrompt.value = null
@@ -199,6 +203,59 @@ class MainActivity : ComponentActivity() {
                 onDismissImagePdfPrompt = {
                     pendingImagePdfSelection = null
                     imagePdfMergePrompt.value = null
+                },
+                onChooseGifFirstFrame = {
+                    val selection = pendingGifFrameSelection
+                    pendingGifFrameSelection = null
+                    gifFrameModePrompt.value = null
+                    if (selection != null) {
+                        enqueuePickedDocuments(
+                            selection.request,
+                            selection.documents,
+                            GifFrameExportMode.FirstFrame,
+                            allowGifPrompt = false
+                        )
+                    }
+                },
+                onChooseGifSplitFrames = {
+                    val selection = pendingGifFrameSelection
+                    pendingGifFrameSelection = null
+                    gifFrameModePrompt.value = null
+                    if (selection != null) {
+                        enqueueGifSplitDocuments(selection.request, selection.documents)
+                    }
+                },
+                onDismissGifFramePrompt = {
+                    pendingGifFrameSelection = null
+                    gifFrameModePrompt.value = null
+                },
+                onChooseGifFramesSinglePdf = {
+                    val selection = pendingGifPdfFrameSelection
+                    pendingGifPdfFrameSelection = null
+                    gifPdfFramePrompt.value = null
+                    if (selection != null) {
+                        enqueueDocumentsOnePerImage(
+                            selection.request,
+                            selection.documents,
+                            GifFrameExportMode.FramesAsSinglePdf
+                        )
+                    }
+                },
+                onChooseGifFramePdfFiles = {
+                    val selection = pendingGifPdfFrameSelection
+                    pendingGifPdfFrameSelection = null
+                    gifPdfFramePrompt.value = null
+                    if (selection != null) {
+                        enqueueDocumentsOnePerImage(
+                            selection.request,
+                            selection.documents,
+                            GifFrameExportMode.FramesAsPdfFiles
+                        )
+                    }
+                },
+                onDismissGifPdfFramePrompt = {
+                    pendingGifPdfFrameSelection = null
+                    gifPdfFramePrompt.value = null
                 },
                 onSubmitPdfPassword = { password ->
                     val prompt = activePdfPasswordSelection
@@ -327,6 +384,7 @@ class MainActivity : ComponentActivity() {
                     audioOptions = pendingAudioOptions,
                     imageOptions = pendingImageOptions,
                     pdfOptions = pendingPdfOptions,
+                    gifFrameMode = file.gifFrameMode,
                     pdfPasswords = file.pdfPasswords
                 )
             }
@@ -390,6 +448,102 @@ class MainActivity : ComponentActivity() {
                 Intent.FLAG_GRANT_READ_URI_PERMISSION
             )
         }
+    }
+
+    private fun enqueuePickedDocuments(
+        request: PendingSelection,
+        documents: List<SelectedDocument>,
+        gifFrameMode: GifFrameExportMode = GifFrameExportMode.FirstFrame,
+        allowGifPrompt: Boolean = true
+    ) {
+        if (documents.isEmpty()) return
+        if (
+            allowGifPrompt &&
+            request.category == FileCategory.Image &&
+            documents.any { it.isGifInput() }
+        ) {
+            pendingGifFrameSelection = PendingGifFrameSelection(request, documents)
+            gifFrameModePrompt.value = GifFrameModePrompt(
+                gifCount = documents.count { it.isGifInput() }
+            )
+            return
+        }
+
+        when {
+            request.category == FileCategory.Image &&
+                request.targetFormat.extension.equals("pdf", ignoreCase = true) &&
+                documents.size > 1 -> {
+                imagePdfMergePrompt.value = ImagePdfMergePrompt(fileCount = documents.size)
+                pendingImagePdfSelection = PendingImagePdfSelection(
+                    request = request,
+                    documents = documents,
+                    gifFrameMode = gifFrameMode
+                )
+            }
+            request.category == FileCategory.Pdf -> {
+                enqueuePdfDocumentsWithProbe(request, documents)
+            }
+            else -> {
+                enqueueDocumentsOnePerImage(request, documents, gifFrameMode)
+            }
+        }
+    }
+
+    private fun enqueueGifSplitDocuments(
+        request: PendingSelection,
+        documents: List<SelectedDocument>
+    ) {
+        if (request.targetFormat.extension.equals("pdf", ignoreCase = true)) {
+            if (documents.size > 1) {
+                imagePdfMergePrompt.value = ImagePdfMergePrompt(fileCount = documents.size)
+                pendingImagePdfSelection = PendingImagePdfSelection(
+                    request = request,
+                    documents = documents,
+                    gifFrameMode = GifFrameExportMode.FramesAsSinglePdf
+                )
+            } else {
+                promptGifPdfFrameMode(request, documents)
+            }
+            return
+        }
+
+        enqueueDocumentsOnePerImage(
+            request = request,
+            documents = documents,
+            gifFrameMode = GifFrameExportMode.FramesAsImages
+        )
+    }
+
+    private fun enqueueDocumentsOnePerImage(
+        request: PendingSelection,
+        documents: List<SelectedDocument>,
+        gifFrameMode: GifFrameExportMode
+    ) {
+        queuedFiles.addAll(
+            documents.map { document ->
+                document.toQueuedFile(
+                    request = request,
+                    gifFrameMode = if (document.isGifInput()) {
+                        gifFrameMode
+                    } else {
+                        GifFrameExportMode.FirstFrame
+                    }
+                )
+            }
+        )
+    }
+
+    private fun promptGifPdfFrameMode(
+        request: PendingSelection,
+        documents: List<SelectedDocument>
+    ) {
+        val gifCount = documents.count { it.isGifInput() }
+        if (gifCount == 0) {
+            enqueueDocumentsOnePerImage(request, documents, GifFrameExportMode.FirstFrame)
+            return
+        }
+        pendingGifPdfFrameSelection = PendingGifPdfFrameSelection(request, documents)
+        gifPdfFramePrompt.value = GifPdfFramePrompt(gifCount = gifCount)
     }
 
     private fun describeTreeUri(uri: Uri): String {
@@ -642,6 +796,17 @@ private data class SelectedDocument(
 
 private data class PendingImagePdfSelection(
     val request: PendingSelection,
+    val documents: List<SelectedDocument>,
+    val gifFrameMode: GifFrameExportMode = GifFrameExportMode.FirstFrame
+)
+
+private data class PendingGifFrameSelection(
+    val request: PendingSelection,
+    val documents: List<SelectedDocument>
+)
+
+private data class PendingGifPdfFrameSelection(
+    val request: PendingSelection,
     val documents: List<SelectedDocument>
 )
 
@@ -674,6 +839,7 @@ private sealed interface PdfProbeResult {
 
 private fun SelectedDocument.toQueuedFile(
     request: PendingSelection,
+    gifFrameMode: GifFrameExportMode = GifFrameExportMode.FirstFrame,
     pdfPassword: String? = null
 ): QueuedFile {
     return QueuedFile(
@@ -685,6 +851,7 @@ private fun SelectedDocument.toQueuedFile(
         mimeType = mimeType,
         category = request.category,
         targetFormat = request.targetFormat.label,
+        gifFrameMode = gifFrameMode,
         pdfPasswords = listOf(pdfPassword)
     )
 }
@@ -719,8 +886,15 @@ private fun PendingImagePdfSelection.toSinglePdfQueuedFile(): QueuedFile {
         sizeBytes = totalSize,
         mimeType = "image/*",
         category = request.category,
-        targetFormat = request.targetFormat.label
+        targetFormat = request.targetFormat.label,
+        gifFrameMode = gifFrameMode
     )
+}
+
+private fun SelectedDocument.isGifInput(): Boolean {
+    val normalizedMimeType = mimeType.orEmpty().lowercase(Locale.US)
+    return normalizedMimeType == "image/gif" ||
+        displayName.lowercase(Locale.US).endsWith(".gif")
 }
 
 private fun QueuedFile.hasConnectedNativeTarget(): Boolean {

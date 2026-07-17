@@ -17,6 +17,7 @@ data class ConversionTaskInput(
     val audioOptions: AudioExportOptions,
     val imageOptions: ImageExportOptions,
     val pdfOptions: PdfExportOptions,
+    val gifFrameMode: GifFrameExportMode = GifFrameExportMode.FirstFrame,
     val pdfPasswords: List<String?> = emptyList()
 )
 
@@ -70,6 +71,13 @@ enum class PdfRenderQuality {
     LowResolution,
     Balanced,
     HighDetail
+}
+
+enum class GifFrameExportMode {
+    FirstFrame,
+    FramesAsImages,
+    FramesAsSinglePdf,
+    FramesAsPdfFiles
 }
 
 data class ConversionTaskState(

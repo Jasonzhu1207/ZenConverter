@@ -382,16 +382,40 @@ class ConversionService : Service() {
         serviceScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
-                    writeImageExport(input, tempFile, outputProfile)
+                    when (input.gifFrameMode) {
+                        GifFrameExportMode.FramesAsImages -> ImageExportResult.FolderFiles(
+                            files = writeGifFramesToImageFiles(input, tempFile, outputProfile),
+                            outputProfile = outputProfile,
+                            folderName = outputFolderNameForFrames(input)
+                        )
+                        GifFrameExportMode.FramesAsPdfFiles -> ImageExportResult.FolderFiles(
+                            files = writeGifFramesToPdfFiles(input, tempFile),
+                            outputProfile = outputProfile,
+                            folderName = outputFolderNameForFrames(input)
+                        )
+                        GifFrameExportMode.FirstFrame,
+                        GifFrameExportMode.FramesAsSinglePdf -> {
+                            writeImageExport(input, tempFile, outputProfile)
+                            ImageExportResult.SingleFile(tempFile)
+                        }
+                    }
                 }
-            }.onSuccess {
+            }.onSuccess { result ->
                 if (ConversionTaskStore.isCancelled()) {
-                    tempFile.delete()
+                    result.deleteTempFiles()
                     cancelRun()
                     return@onSuccess
                 }
                 ConversionTaskStore.updateProgress(taskIndex, PROGRESS_BEFORE_SAVE)
-                saveCompletedExport(input, tempFile)
+                when (result) {
+                    is ImageExportResult.SingleFile -> saveCompletedExport(input, result.file)
+                    is ImageExportResult.FolderFiles -> saveCompletedExportFilesInFolder(
+                        input = input,
+                        tempFiles = result.files,
+                        outputProfile = result.outputProfile,
+                        folderName = result.folderName
+                    )
+                }
             }.onFailure { exception ->
                 tempFile.delete()
                 if (exception is CancellationException) {
@@ -691,7 +715,8 @@ class ConversionService : Service() {
                         reusableBitmap,
                         outputFile,
                         outputProfile,
-                        input.imageOptions.quality
+                        input.imageOptions.quality,
+                        shouldUseWebpLossless(outputProfile, input.imageOptions)
                     )
                     throwIfConversionCancelled()
                 } finally {
@@ -965,7 +990,7 @@ class ConversionService : Service() {
         }
     }
 
-    private fun writeImageExport(
+    private suspend fun writeImageExport(
         input: ConversionTaskInput,
         outputFile: File,
         outputProfile: OutputProfile
@@ -1028,20 +1053,103 @@ class ConversionService : Service() {
         }
     }
 
+    private suspend fun writeGifFramesToImageFiles(
+        input: ConversionTaskInput,
+        firstTempFile: File,
+        outputProfile: OutputProfile
+    ): List<File> {
+        throwIfConversionCancelled()
+        updateImageProgress(0.05f)
+        val extraction = extractGifFrames(input, input.inputUri)
+        val outputFiles = mutableListOf<File>()
+        try {
+            val frameCount = extraction.frameCount
+            forEachGifFrameBitmap(extraction, GIF_FRAME_MAX_PIXELS) { index, bitmap ->
+                throwIfConversionCancelled()
+                val outputFile = if (index == 0) {
+                    firstTempFile.apply { if (exists()) delete() }
+                } else {
+                    createTempFileForGifFrameOutput(input, outputProfile.extension, index)
+                }
+                outputFiles.add(outputFile)
+
+                writeFrameBitmapToImageFile(bitmap, outputFile, outputProfile, input.imageOptions)
+                updateImageProgress(progressForIndexedWork(index, frameCount, 0.25f, 0.95f))
+            }
+            return outputFiles
+        } catch (throwable: Throwable) {
+            outputFiles.forEach { it.delete() }
+            throw throwable
+        } finally {
+            extraction.delete()
+        }
+    }
+
+    private suspend fun writeGifFramesToPdfFiles(
+        input: ConversionTaskInput,
+        firstTempFile: File
+    ): List<File> {
+        throwIfConversionCancelled()
+        updateImageProgress(0.05f)
+        val extraction = extractGifFrames(input, input.inputUri)
+        val outputFiles = mutableListOf<File>()
+        try {
+            val frameCount = extraction.frameCount
+            forEachGifFrameBitmap(extraction, PDF_IMAGE_MAX_PIXELS) { index, bitmap ->
+                throwIfConversionCancelled()
+                val outputFile = if (index == 0) {
+                    firstTempFile.apply { if (exists()) delete() }
+                } else {
+                    createTempFileForGifFrameOutput(input, "pdf", index)
+                }
+                outputFiles.add(outputFile)
+
+                writeSingleBitmapPdf(bitmap, input, outputFile)
+                updateImageProgress(progressForIndexedWork(index, frameCount, 0.25f, 0.95f))
+            }
+            return outputFiles
+        } catch (throwable: Throwable) {
+            outputFiles.forEach { it.delete() }
+            throw throwable
+        } finally {
+            extraction.delete()
+        }
+    }
+
+    private fun writeFrameBitmapToImageFile(
+        bitmap: Bitmap,
+        outputFile: File,
+        outputProfile: OutputProfile,
+        imageOptions: ImageExportOptions
+    ) {
+        if (outputProfile.extension.equals("ico", ignoreCase = true)) {
+            writeIcoImageFile(bitmap, outputFile)
+            return
+        }
+        writeBitmapImageFile(
+            bitmap = bitmap,
+            outputFile = outputFile,
+            outputProfile = outputProfile,
+            requestedQuality = imageOptions.quality,
+            useWebpLossless = shouldUseWebpLossless(outputProfile, imageOptions)
+        )
+    }
+
     private fun writeBitmapImageFile(
         bitmap: Bitmap,
         outputFile: File,
         outputProfile: OutputProfile,
-        requestedQuality: Int
+        requestedQuality: Int,
+        useWebpLossless: Boolean = false
     ) {
         val bitmapForOutput = bitmapForImageOutput(
             bitmap,
             outputProfile.extension,
             flattenTransparency = false
         )
-        val compressFormat = imageCompressFormatFor(outputProfile.extension)
+        val compressFormat = imageCompressFormatFor(outputProfile.extension, useWebpLossless)
             ?: error("Image engine could not write this output")
-        val quality = imageQualityFor(outputProfile.extension, requestedQuality)
+        val quality = imageQualityFor(outputProfile.extension, requestedQuality, useWebpLossless)
 
         try {
             throwIfConversionCancelled()
@@ -1125,7 +1233,7 @@ class ConversionService : Service() {
         output.write((value ushr 24) and 0xff)
     }
 
-    private fun writeImagesToPdf(
+    private suspend fun writeImagesToPdf(
         input: ConversionTaskInput,
         outputFile: File
     ) {
@@ -1133,48 +1241,45 @@ class ConversionService : Service() {
         if (inputUris.isEmpty()) error("Image engine could not decode this input")
 
         val pdfDocument = PdfDocument()
+        var pageNumber = 1
         try {
             inputUris.forEachIndexed { index, uri ->
                 throwIfConversionCancelled()
                 updateImageProgress(progressForIndexedWork(index, inputUris.size, 0.05f, 0.85f))
 
-                val bitmap = decodeImageBitmap(
-                    uri,
-                    maxLongSidePixels = PDF_IMAGE_MAX_LONG_SIDE_PIXELS,
-                    maxPixels = PDF_IMAGE_MAX_PIXELS
-                ) ?: error("Image engine could not decode this input")
-
-                try {
-                    throwIfConversionCancelled()
-                    val pageSize = pdfPageSizeFor(bitmap, input.pdfOptions.imagePageMode)
-                    val pageInfo = PdfDocument.PageInfo.Builder(
-                        pageSize.width,
-                        pageSize.height,
-                        index + 1
-                    ).create()
-                    val page = pdfDocument.startPage(pageInfo)
+                if (
+                    input.gifFrameMode == GifFrameExportMode.FramesAsSinglePdf &&
+                    isLikelyGifInputUri(uri)
+                ) {
+                    val extraction = extractGifFrames(input, uri)
                     try {
-                        page.canvas.drawColor(Color.WHITE)
-                        page.canvas.drawBitmap(
-                            bitmap,
-                            null,
-                            centeredFitRect(
-                                sourceWidth = bitmap.width,
-                                sourceHeight = bitmap.height,
-                                targetWidth = pageSize.width,
-                                targetHeight = pageSize.height
-                            ),
-                            PDF_BITMAP_PAINT
-                        )
+                        forEachGifFrameBitmap(extraction, PDF_IMAGE_MAX_PIXELS) { _, bitmap ->
+                            throwIfConversionCancelled()
+                            addBitmapPageToPdf(pdfDocument, bitmap, input, pageNumber)
+                            pageNumber += 1
+                        }
                     } finally {
-                        pdfDocument.finishPage(page)
+                        extraction.delete()
                     }
-                    throwIfConversionCancelled()
-                } finally {
-                    bitmap.recycle()
+                } else {
+                    val bitmap = decodeImageBitmap(
+                        uri,
+                        maxLongSidePixels = PDF_IMAGE_MAX_LONG_SIDE_PIXELS,
+                        maxPixels = PDF_IMAGE_MAX_PIXELS
+                    ) ?: error("Image engine could not decode this input")
+
+                    try {
+                        throwIfConversionCancelled()
+                        addBitmapPageToPdf(pdfDocument, bitmap, input, pageNumber)
+                        pageNumber += 1
+                        throwIfConversionCancelled()
+                    } finally {
+                        bitmap.recycle()
+                    }
                 }
             }
 
+            if (pageNumber == 1) error("Image engine could not decode this input")
             throwIfConversionCancelled()
             outputFile.outputStream().use { output ->
                 pdfDocument.writeTo(output)
@@ -1184,6 +1289,56 @@ class ConversionService : Service() {
             updateImageProgress(0.95f)
         } finally {
             pdfDocument.close()
+        }
+    }
+
+    private fun writeSingleBitmapPdf(
+        bitmap: Bitmap,
+        input: ConversionTaskInput,
+        outputFile: File
+    ) {
+        val pdfDocument = PdfDocument()
+        try {
+            addBitmapPageToPdf(pdfDocument, bitmap, input, pageNumber = 1)
+            throwIfConversionCancelled()
+            outputFile.outputStream().use { output ->
+                pdfDocument.writeTo(output)
+                output.flush()
+            }
+            throwIfConversionCancelled()
+        } finally {
+            pdfDocument.close()
+        }
+    }
+
+    private fun addBitmapPageToPdf(
+        pdfDocument: PdfDocument,
+        bitmap: Bitmap,
+        input: ConversionTaskInput,
+        pageNumber: Int
+    ) {
+        val pageSize = pdfPageSizeFor(bitmap, input.pdfOptions.imagePageMode)
+        val pageInfo = PdfDocument.PageInfo.Builder(
+            pageSize.width,
+            pageSize.height,
+            pageNumber
+        ).create()
+        val page = pdfDocument.startPage(pageInfo)
+        try {
+            page.canvas.drawColor(Color.WHITE)
+            page.canvas.drawBitmap(
+                bitmap,
+                null,
+                centeredFitRect(
+                    sourceWidth = bitmap.width,
+                    sourceHeight = bitmap.height,
+                    targetWidth = pageSize.width,
+                    targetHeight = pageSize.height
+                ),
+                PDF_BITMAP_PAINT
+            )
+        } finally {
+            pdfDocument.finishPage(page)
         }
     }
 
@@ -1703,7 +1858,9 @@ class ConversionService : Service() {
     }
 
     private fun imageFailureMessageFor(exception: Throwable): String {
-        return exception.message?.takeIf { it.startsWith("Image engine") }
+        return exception.message?.takeIf {
+            it.startsWith("Image engine") || it.startsWith("Compatibility engine")
+        }
             ?: "Image conversion failed"
     }
 
@@ -1910,6 +2067,195 @@ class ConversionService : Service() {
             path = "/proc/self/fd/${inputDescriptor.fd}",
             descriptor = inputDescriptor
         )
+    }
+
+    private suspend fun extractGifFrames(
+        input: ConversionTaskInput,
+        uri: Uri
+    ): GifFrameExtraction {
+        val ffmpegLoadFailure = ensureFfmpegKitReady()
+        if (ffmpegLoadFailure != null) {
+            error(compatibilityStartupFailureMessageFor(ffmpegLoadFailure))
+        }
+
+        val frameSize = readGifLogicalScreenSize(uri)
+            ?: error("Image engine could not decode this input")
+        validateGifFrameSize(frameSize, GIF_FRAME_MAX_PIXELS)
+
+        val frameDirectory = createGifFrameTempDirectory(input)
+        val inputSource = openFfmpegInputSource(uri)
+        if (inputSource == null) {
+            frameDirectory.deleteRecursively()
+            error("Compatibility engine could not open SAF input")
+        }
+
+        val logTail = mutableListOf<String>()
+        try {
+            val rawFrameFile = File(frameDirectory, GIF_RAW_FRAME_FILE_NAME)
+            val arguments = listOf(
+                "-hide_banner",
+                "-nostdin",
+                "-y",
+                "-i",
+                inputSource.path,
+                "-map",
+                "0:v:0",
+                "-an",
+                "-sn",
+                "-dn",
+                "-fps_mode",
+                "passthrough",
+                "-pix_fmt",
+                "rgba",
+                "-c:v",
+                "rawvideo",
+                "-f",
+                "rawvideo",
+                rawFrameFile.absolutePath
+            )
+            val result = executeFfmpeg(
+                input = input,
+                arguments = arguments,
+                durationMs = null,
+                logTail = logTail,
+                inputSourceLabel = inputSource.label
+            )
+            if (result.cancelled || ConversionTaskStore.isCancelled()) {
+                throw CancellationException()
+            }
+            if (!result.success) {
+                Log.e(
+                    TAG,
+                    "GIF frame extraction failed displayName=${input.displayName} " +
+                        "outputTail=${result.outputTail.orEmpty()}"
+                )
+                error("Image engine could not split GIF frames")
+            }
+
+            val frameByteCount = gifRawFrameByteCount(frameSize)
+            val rawLength = rawFrameFile.length()
+            if (rawLength <= 0L || rawLength % frameByteCount != 0L) {
+                Log.e(TAG, "GIF frame extraction produced no frames displayName=${input.displayName}")
+                error("Image engine could not split GIF frames")
+            }
+            val frameCountLong = rawLength / frameByteCount
+            if (frameCountLong <= 0L || frameCountLong > Int.MAX_VALUE) {
+                Log.e(TAG, "GIF frame extraction produced no frames displayName=${input.displayName}")
+                error("Image engine could not split GIF frames")
+            }
+            val frameCount = frameCountLong.toInt()
+            return GifFrameExtraction(
+                directory = frameDirectory,
+                rawFrameFile = rawFrameFile,
+                width = frameSize.width,
+                height = frameSize.height,
+                frameCount = frameCount,
+                frameByteCount = frameByteCount.toInt()
+            )
+        } catch (throwable: Throwable) {
+            frameDirectory.deleteRecursively()
+            throw throwable
+        } finally {
+            inputSource.close()
+        }
+    }
+
+    private fun readGifLogicalScreenSize(uri: Uri): ImageDecodeSize? {
+        return runCatching {
+            contentResolver.openInputStream(uri)?.use { input ->
+                val header = input.readExactByteArrayOrNull(GIF_HEADER_BYTES) ?: return@use null
+                val signature = String(header, 0, GIF_SIGNATURE_BYTES, Charsets.US_ASCII)
+                if (signature != "GIF87a" && signature != "GIF89a") return@use null
+                val width = header.readLittleEndianUnsignedShort(GIF_WIDTH_OFFSET)
+                val height = header.readLittleEndianUnsignedShort(GIF_HEIGHT_OFFSET)
+                if (width <= 0 || height <= 0) null else ImageDecodeSize(width, height)
+            }
+        }.onFailure { exception ->
+            Log.w(TAG, "GIF header read failed", exception)
+        }.getOrNull()
+    }
+
+    private fun validateGifFrameSize(size: ImageDecodeSize, maxPixels: Long) {
+        val pixels = size.width.toLong() * size.height.toLong()
+        if (pixels <= 0L || pixels > maxPixels) {
+            Log.w(TAG, "GIF frame size is too large width=${size.width} height=${size.height}")
+            error("Image engine could not decode this input")
+        }
+        gifRawFrameByteCount(size)
+    }
+
+    private fun gifRawFrameByteCount(size: ImageDecodeSize): Long {
+        val byteCount = size.width.toLong() * size.height.toLong() * RGBA_BYTES_PER_PIXEL
+        if (byteCount <= 0L || byteCount > Int.MAX_VALUE) {
+            error("Image engine could not decode this input")
+        }
+        return byteCount
+    }
+
+    private fun createGifFrameTempDirectory(input: ConversionTaskInput): File {
+        val cacheRoot = externalCacheDir ?: cacheDir
+        val tempRoot = File(cacheRoot, GIF_FRAME_TEMP_DIRECTORY).apply { mkdirs() }
+        return File(tempRoot, "${input.fileId}_${System.nanoTime()}").apply {
+            if (exists()) deleteRecursively()
+            if (!mkdirs()) error("Image engine could not split GIF frames")
+        }
+    }
+
+    private fun forEachGifFrameBitmap(
+        extraction: GifFrameExtraction,
+        maxPixels: Long,
+        onFrame: (Int, Bitmap) -> Unit
+    ) {
+        validateGifFrameSize(ImageDecodeSize(extraction.width, extraction.height), maxPixels)
+        val frameBytes = ByteArray(extraction.frameByteCount)
+        extraction.rawFrameFile.inputStream().use { input ->
+            for (frameIndex in 0 until extraction.frameCount) {
+                throwIfConversionCancelled()
+                if (!input.readExactByteArray(frameBytes)) {
+                    error("Image engine could not split GIF frames")
+                }
+                val bitmap = bitmapFromRgbaFrameBytes(
+                    frameBytes,
+                    extraction.width,
+                    extraction.height
+                )
+                try {
+                    onFrame(frameIndex, bitmap)
+                } finally {
+                    bitmap.recycle()
+                }
+            }
+        }
+    }
+
+    private fun InputStream.readExactByteArray(buffer: ByteArray): Boolean {
+        var offset = 0
+        while (offset < buffer.size) {
+            val read = read(buffer, offset, buffer.size - offset)
+            if (read < 0) return false
+            offset += read
+        }
+        return true
+    }
+
+    private fun bitmapFromRgbaFrameBytes(
+        frameBytes: ByteArray,
+        width: Int,
+        height: Int
+    ): Bitmap {
+        val pixels = IntArray(width * height)
+        var byteIndex = 0
+        for (pixelIndex in pixels.indices) {
+            val red = frameBytes[byteIndex].toInt() and 0xff
+            val green = frameBytes[byteIndex + 1].toInt() and 0xff
+            val blue = frameBytes[byteIndex + 2].toInt() and 0xff
+            val alpha = frameBytes[byteIndex + 3].toInt() and 0xff
+            pixels[pixelIndex] = (alpha shl 24) or (red shl 16) or (green shl 8) or blue
+            byteIndex += RGBA_BYTES_PER_PIXEL
+        }
+        return Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply {
+            setPixels(pixels, 0, width, 0, 0, width, height)
+        }
     }
 
     private fun openInputDescriptor(uri: Uri): ParcelFileDescriptor? {
@@ -2418,6 +2764,39 @@ class ConversionService : Service() {
             mimeType.contains("x-ms-asf")
     }
 
+    private fun isLikelyGifInputUri(uri: Uri): Boolean {
+        val mimeType = runCatching {
+            contentResolver.getType(uri).orEmpty().lowercase(Locale.US)
+        }.getOrDefault("")
+        if (mimeType == MIME_TYPE_GIF) return true
+
+        val displayName = displayNameForUri(uri).orEmpty().lowercase(Locale.US)
+        return displayName.endsWith(".gif")
+    }
+
+    private fun displayNameForUri(uri: Uri): String? {
+        if (uri.scheme == URI_SCHEME_FILE) {
+            return uri.lastPathSegment
+        }
+        return runCatching {
+            contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (!cursor.moveToFirst()) return@use null
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (nameIndex >= 0 && !cursor.isNull(nameIndex)) {
+                    cursor.getString(nameIndex)
+                } else {
+                    null
+                }
+            }
+        }.getOrNull()
+    }
+
     private val ConversionTaskInput.extension: String
         get() = displayName.substringAfterLast('.', missingDelimiterValue = "")
 
@@ -2632,6 +3011,72 @@ class ConversionService : Service() {
         }.also { it.start() }
     }
 
+    private fun saveCompletedExportFilesInFolder(
+        input: ConversionTaskInput,
+        tempFiles: List<File>,
+        outputProfile: OutputProfile,
+        folderName: String
+    ) {
+        stopProgressPolling()
+        activeTransformer = null
+        ConversionTaskStore.markSaving(taskIndex)
+        updateNotification("Saving", (ConversionTaskStore.aggregateProgress() * 100).toInt())
+
+        copyThread = Thread {
+            val outputUris = mutableListOf<Uri>()
+            var outputFolder: OutputFolder? = null
+            try {
+                val folder = createOutputFolder(input, folderName, outputProfile)
+                outputFolder = folder
+                tempFiles.forEachIndexed { index, tempFile ->
+                    if (Thread.currentThread().isInterrupted || ConversionTaskStore.isCancelled()) {
+                        throw InterruptedException()
+                    }
+                    val createdOutputUri = createOutputInFolder(
+                        folder = folder,
+                        displayName = outputNameForFrame(
+                            input = input,
+                            extension = outputProfile.extension,
+                            frameIndex = index,
+                            frameCount = tempFiles.size
+                        ),
+                        outputProfile = outputProfile
+                    )
+                    outputUris.add(createdOutputUri)
+                    copyFileToOutput(tempFile, createdOutputUri)
+                    finalizeOutput(input, createdOutputUri, outputProfile.mimeType)
+                    tempFile.delete()
+                }
+                handler.post {
+                    if (ConversionTaskStore.isCancelled()) {
+                        outputUris.forEach { deleteOutputQuietly(it) }
+                        deleteOutputFolderQuietly(outputFolder)
+                        cancelRun()
+                        return@post
+                    }
+                    activeTempFile = null
+                    ConversionTaskStore.markCompleted(taskIndex, outputUris.firstOrNull())
+                    taskIndex += 1
+                    processNextTask()
+                }
+            } catch (exception: InterruptedException) {
+                outputUris.forEach { deleteOutputQuietly(it) }
+                deleteOutputFolderQuietly(outputFolder)
+                tempFiles.forEach { it.delete() }
+                handler.post { cancelRun() }
+            } catch (exception: Throwable) {
+                Log.w(TAG, "Could not save GIF frame export", exception)
+                outputUris.forEach { deleteOutputQuietly(it) }
+                deleteOutputFolderQuietly(outputFolder)
+                tempFiles.forEach { it.delete() }
+                handler.post {
+                    activeTempFile = null
+                    failCurrentTask("Could not save output file")
+                }
+            }
+        }.also { it.start() }
+    }
+
     private fun failureMessageFor(exportException: ExportException): String {
         return when (exportException.errorCode) {
             ExportException.ERROR_CODE_MUXING_TIMEOUT ->
@@ -2722,6 +3167,18 @@ class ConversionService : Service() {
         }
     }
 
+    private fun createTempFileForGifFrameOutput(
+        input: ConversionTaskInput,
+        extension: String,
+        frameIndex: Int
+    ): File {
+        val cacheRoot = externalCacheDir ?: cacheDir
+        val tempDirectory = File(cacheRoot, "exports").apply { mkdirs() }
+        return File(tempDirectory, "${input.fileId}_frame_${frameIndex + 1}.$extension").apply {
+            if (exists()) delete()
+        }
+    }
+
     private fun createOutput(
         input: ConversionTaskInput,
         displayName: String,
@@ -2740,21 +3197,77 @@ class ConversionService : Service() {
         }
     }
 
-    private fun createDefaultOutput(
+    private fun createOutputFolder(
+        input: ConversionTaskInput,
+        folderName: String,
+        outputProfile: OutputProfile
+    ): OutputFolder {
+        return when (val destination = input.outputDestination) {
+            OutputDestination.DefaultPublicDirectory -> {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                    val publicDirectory = Environment.getExternalStoragePublicDirectory(
+                        defaultPublicDirectoryFor(outputProfile)
+                    )
+                    val folder = File(File(publicDirectory, DEFAULT_OUTPUT_DIRECTORY), folderName)
+                    if (!folder.exists() && !folder.mkdirs()) {
+                        error("Could not create output directory")
+                    }
+                    OutputFolder(fileDirectory = folder)
+                } else {
+                    OutputFolder(defaultRelativeSubdirectory = folderName)
+                }
+            }
+            is OutputDestination.CustomDirectory -> {
+                val folderUri = createOutputDirectoryDocument(destination.uri, folderName)
+                OutputFolder(documentDirectoryUri = folderUri)
+            }
+        }
+    }
+
+    private fun createOutputInFolder(
+        folder: OutputFolder,
         displayName: String,
         outputProfile: OutputProfile
     ): Uri {
+        folder.fileDirectory?.let { directory ->
+            return Uri.fromFile(File(directory, displayName))
+        }
+        folder.documentDirectoryUri?.let { directoryUri ->
+            return DocumentsContract.createDocument(
+                contentResolver,
+                directoryUri,
+                outputProfile.mimeType,
+                displayName
+            ) ?: error("Could not create output file")
+        }
+        folder.defaultRelativeSubdirectory?.let { subdirectory ->
+            return createDefaultOutput(displayName, outputProfile, subdirectory)
+        }
+        error("Could not create output directory")
+    }
+
+    private fun createDefaultOutput(
+        displayName: String,
+        outputProfile: OutputProfile,
+        relativeSubdirectory: String? = null
+    ): Uri {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            return createLegacyDefaultOutput(outputProfile, displayName)
+            return createLegacyDefaultOutput(outputProfile, displayName, relativeSubdirectory)
         }
 
+        val relativePath = buildString {
+            append(defaultPublicDirectoryFor(outputProfile))
+            append("/")
+            append(DEFAULT_OUTPUT_DIRECTORY)
+            if (!relativeSubdirectory.isNullOrBlank()) {
+                append("/")
+                append(relativeSubdirectory)
+            }
+        }
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
             put(MediaStore.MediaColumns.MIME_TYPE, outputProfile.mimeType)
-            put(
-                MediaStore.MediaColumns.RELATIVE_PATH,
-                "${defaultPublicDirectoryFor(outputProfile)}/$DEFAULT_OUTPUT_DIRECTORY"
-            )
+            put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
             put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
         return contentResolver.insert(defaultCollectionFor(outputProfile), values)
@@ -2764,12 +3277,17 @@ class ConversionService : Service() {
     @Suppress("DEPRECATION")
     private fun createLegacyDefaultOutput(
         outputProfile: OutputProfile,
-        displayName: String
+        displayName: String,
+        relativeSubdirectory: String? = null
     ): Uri {
         val publicDirectory = Environment.getExternalStoragePublicDirectory(
             defaultPublicDirectoryFor(outputProfile)
         )
-        val outputDirectory = File(publicDirectory, DEFAULT_OUTPUT_DIRECTORY)
+        val outputDirectory = if (relativeSubdirectory.isNullOrBlank()) {
+            File(publicDirectory, DEFAULT_OUTPUT_DIRECTORY)
+        } else {
+            File(File(publicDirectory, DEFAULT_OUTPUT_DIRECTORY), relativeSubdirectory)
+        }
         if (!outputDirectory.exists() && !outputDirectory.mkdirs()) {
             error("Could not create output directory")
         }
@@ -2810,6 +3328,23 @@ class ConversionService : Service() {
             mimeType,
             displayName
         ) ?: error("Could not create output file")
+    }
+
+    private fun createOutputDirectoryDocument(
+        outputDirectoryUri: Uri,
+        displayName: String
+    ): Uri {
+        val treeDocumentId = DocumentsContract.getTreeDocumentId(outputDirectoryUri)
+        val parentUri = DocumentsContract.buildDocumentUriUsingTree(
+            outputDirectoryUri,
+            treeDocumentId
+        )
+        return DocumentsContract.createDocument(
+            contentResolver,
+            parentUri,
+            DocumentsContract.Document.MIME_TYPE_DIR,
+            displayName
+        ) ?: error("Could not create output directory")
     }
 
     private fun copyFileToOutput(source: File, outputUri: Uri) {
@@ -2887,6 +3422,16 @@ class ConversionService : Service() {
         }
         runCatching { DocumentsContract.deleteDocument(contentResolver, uri) }
         runCatching { contentResolver.delete(uri, null, null) }
+    }
+
+    private fun deleteOutputFolderQuietly(folder: OutputFolder?) {
+        if (folder == null) return
+        folder.fileDirectory?.let { directory ->
+            runCatching { directory.deleteRecursively() }
+        }
+        folder.documentDirectoryUri?.let { uri ->
+            runCatching { DocumentsContract.deleteDocument(contentResolver, uri) }
+        }
     }
 
     private fun outputProfileFor(input: ConversionTaskInput): OutputProfile? {
@@ -2970,6 +3515,29 @@ class ConversionService : Service() {
         val kind: OutputMediaKind
     )
 
+    private sealed interface ImageExportResult {
+        data class SingleFile(val file: File) : ImageExportResult
+
+        data class FolderFiles(
+            val files: List<File>,
+            val outputProfile: OutputProfile,
+            val folderName: String
+        ) : ImageExportResult
+    }
+
+    private fun ImageExportResult.deleteTempFiles() {
+        when (this) {
+            is ImageExportResult.SingleFile -> file.delete()
+            is ImageExportResult.FolderFiles -> files.forEach { it.delete() }
+        }
+    }
+
+    private data class OutputFolder(
+        val defaultRelativeSubdirectory: String? = null,
+        val fileDirectory: File? = null,
+        val documentDirectoryUri: Uri? = null
+    )
+
     private enum class OutputMediaKind {
         Audio,
         Document,
@@ -3001,6 +3569,19 @@ class ConversionService : Service() {
     ) {
         fun close() {
             descriptor?.close()
+        }
+    }
+
+    private data class GifFrameExtraction(
+        val directory: File,
+        val rawFrameFile: File,
+        val width: Int,
+        val height: Int,
+        val frameCount: Int,
+        val frameByteCount: Int
+    ) {
+        fun delete() {
+            directory.deleteRecursively()
         }
     }
 
@@ -3094,6 +3675,25 @@ class ConversionService : Service() {
         val width = pageCount.toString().length.coerceAtLeast(3)
         val pageNumber = (pageIndex + 1).toString().padStart(width, '0')
         return "${baseName}_page_${pageNumber}_${timestamp}_$shortId.$extension"
+    }
+
+    private fun outputFolderNameForFrames(input: ConversionTaskInput): String {
+        val baseName = sanitizedBaseNameFor(input)
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val shortId = input.fileId.take(8)
+        return "${baseName}_frames_${timestamp}_$shortId"
+    }
+
+    private fun outputNameForFrame(
+        input: ConversionTaskInput,
+        extension: String,
+        frameIndex: Int,
+        frameCount: Int
+    ): String {
+        val baseName = sanitizedBaseNameFor(input)
+        val width = frameCount.toString().length.coerceAtLeast(3)
+        val frameNumber = (frameIndex + 1).toString().padStart(width, '0')
+        return "${baseName}_frame_${frameNumber}.$extension"
     }
 
     private fun sanitizedBaseNameFor(input: ConversionTaskInput): String {
@@ -3193,6 +3793,7 @@ class ConversionService : Service() {
         private const val MIME_TYPE_JPEG = "image/jpeg"
         private const val MIME_TYPE_PNG = "image/png"
         private const val MIME_TYPE_WEBP = "image/webp"
+        private const val MIME_TYPE_GIF = "image/gif"
         private const val MIME_TYPE_ICO = "image/vnd.microsoft.icon"
         private const val MIME_TYPE_PDF = "application/pdf"
         private const val MIME_TYPE_TEXT = "text/plain"
@@ -3214,6 +3815,14 @@ class ConversionService : Service() {
         private const val ICO_MAX_PAYLOAD_BYTES = 64 * 1024 * 1024
         private const val ICO_SKIP_BUFFER_BYTES = 8 * 1024
         private const val ICO_BITS_PER_PIXEL = 32
+        private const val GIF_FRAME_TEMP_DIRECTORY = "gif-frames"
+        private const val GIF_RAW_FRAME_FILE_NAME = "frames.rgba"
+        private const val GIF_HEADER_BYTES = 10
+        private const val GIF_SIGNATURE_BYTES = 6
+        private const val GIF_WIDTH_OFFSET = 6
+        private const val GIF_HEIGHT_OFFSET = 8
+        private const val GIF_FRAME_MAX_PIXELS = 16_000_000L
+        private const val RGBA_BYTES_PER_PIXEL = 4
         private const val ACTION_START = "org.zenconverter.app.conversion.START"
         private const val ACTION_CANCEL = "org.zenconverter.app.conversion.CANCEL"
         private val ICO_IMAGE_SIZES = listOf(16, 32, 48, 64, 128, 256)
