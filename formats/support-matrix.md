@@ -19,6 +19,7 @@ as supported until it has a tested path, sample files, and failure behavior.
 | MP4 / other video audio tracks | MP3 / WAV / FLAC / WMA | Experimental | FFmpeg compatible | Extracts the first audio track and encodes the selected audio target. The app probes for `libmp3lame` before MP3 export; MP3 still needs physical-device sample verification. Subtitle, attachment, and extra audio tracks are not copied. |
 | MP4 | MP4 | Experimental | Media3 Transformer | Native MP4 output path; physical-device verification still required across samples. |
 | MP4 | MKV | Experimental | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in Matroska. Video bitrate, codec, short-side resolution cap, and max frame-rate options are applied. Subtitles, attachments, and extra tracks are not copied. |
+| MP4 / MKV / MOV / WEBM / AVI / 3GP / 3GPP / TS / MTS | MOV | Experimental | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in QuickTime MOV. Video bitrate, codec, short-side resolution cap, and max frame-rate options are applied. Subtitles, attachments, and extra tracks are not copied. |
 | MKV / MOV / WEBM / AVI / 3GP / 3GPP / TS / MTS | MP4 | Experimental | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in MP4. Video bitrate, codec, short-side resolution cap, and max frame-rate options are applied. Subtitles, attachments, and extra tracks are not copied. |
 | MP3 / M4A / FLAC / WAV / WMA | MP3 / WAV / FLAC / WMA | Experimental | FFmpeg compatible | Common audio conversion path. The app probes for `libmp3lame` before MP3 export; MP3 still needs physical-device sample verification. WMA uses bitrate when selected; WAV/FLAC ignore bitrate and accept sample-rate/channel controls. |
 | MP3 / M4A / FLAC / WAV / OGG | M4A | Experimental | Media3 Transformer | Output is AAC in M4A. Bitrate, sample-rate, and channel controls are best-effort native settings. |
@@ -37,7 +38,7 @@ as supported until it has a tested path, sample files, and failure behavior.
 
 ## Current Native Media Limits
 
-- Video targets are intentionally limited to MP4 and MKV.
+- Video targets are intentionally limited to MP4, MKV, and MOV.
 - Audio targets are connected for MP3, M4A, WAV, FLAC, and WMA. The app probes
   for `libmp3lame` before MP3 output. These paths remain experimental until
   physical-device sample tests cover the new combinations.
@@ -67,7 +68,7 @@ as supported until it has a tested path, sample files, and failure behavior.
 - Video compatibility output is true re-encoding, not stream-copy remux:
   `-map 0:v:0 -map 0:a:0? -sn -dn -c:v libx264|libx265 -c:a aac`.
   MP4 output writes `-f mp4` plus `+faststart`; MKV output writes
-  `-f matroska`.
+  `-f matroska`; MOV output writes `-f mov` plus `+faststart`.
 - Video compatibility options are wired as follows: codec selects
   `libx264`/`libx265`; selected bitrate becomes `-b:v`; Auto bitrate uses CRF
   23 for H.264 or CRF 28 for H.265; resolution caps the short side and keeps

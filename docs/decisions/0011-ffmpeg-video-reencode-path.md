@@ -25,6 +25,7 @@ FFmpeg compatibility video outputs now re-encode instead of using `-c copy`.
 
 - MP4 output uses the FFmpeg compatibility path for non-MP4 video inputs.
 - MKV output uses the FFmpeg compatibility path for video inputs.
+- MOV output uses the FFmpeg compatibility path for video inputs.
 - The first video track is encoded with `libx264` or `libx265` according to the
   selected video codec option.
 - The optional first audio track is encoded to AAC.
@@ -38,7 +39,7 @@ FFmpeg compatibility video outputs now re-encode instead of using `-c copy`.
 
 ## Consequences
 
-- More source containers and codecs can produce playable MP4/MKV outputs.
+- More source containers and codecs can produce playable MP4/MKV/MOV outputs.
 - Conversions are slower and use more CPU/battery than remux.
 - Output is generationally recompressed, not byte-identical.
 - H.264/H.265/AAC encoder availability is checked through FFmpeg before export

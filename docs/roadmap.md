@@ -32,6 +32,8 @@
   smoke testing across samples.
 - MP4 to MKV re-encode. FFmpeg Matroska output is connected and needs
   physical-device smoke testing.
+- Video to MOV re-encode. FFmpeg QuickTime MOV output is connected and needs
+  physical-device smoke testing.
 - MP4 video-file audio extraction to M4A. Implemented through Media3, needs
   physical-device smoke testing across samples.
 - Non-MP4 video-file audio extraction to M4A. Implemented as FFmpeg audio-track

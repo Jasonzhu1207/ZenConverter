@@ -62,7 +62,7 @@ Completed items are listed first, experimental paths next, and planned work last
 | MP4 to MP3 | Done | FFmpeg-compatible audio extraction and MP3 encode are connected and have passed current physical-device testing. |
 | Audio format conversion | Done | MP3 / M4A / WAV / FLAC / WMA targets are connected and have passed current testing. Edge cases still depend on device codecs and the bundled FFmpeg build. |
 | JPG / PNG / WEBP image conversion | Implemented | Native Android bitmap path. Static images only; metadata is not copied. |
-| MKV / MOV / WEBM / AVI and similar containers to MP4 | Experimental | FFmpeg-compatible re-encode to MP4 using the selected video options. |
+| MKV / MOV / WEBM / AVI and similar containers to MP4 / MOV | Experimental | FFmpeg-compatible re-encode using the selected video options. |
 | Image and PDF conversion | Experimental | Image to PDF uses Android `PdfDocument`; PDF to image uses Android `PdfRenderer`. It works one image/page at a time with bounded bitmap sizes. PDF output is page rasterization, not OCR or text extraction. |
 | DOCX / PPTX / XLSX to PDF | Experimental | Local Office-to-PDF path for modern Office files. Chinese text can render with bundled CJK fonts, but layout fidelity is limited: formatting may be messy, and text or shapes may be shifted or overlap. |
 | More video formats | Planned | Added only after the current paths are easier to trust. |

@@ -21,6 +21,11 @@ groups:
         engine: ffmpeg-compatible
         status: experimental
         note: "FFmpeg re-encode path. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio; subtitles, attachments, and extra tracks are not copied."
+      - from: video
+        to: mov
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "FFmpeg re-encode path for video inputs. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio in a QuickTime MOV container."
       - from: mkv
         to: mp4
         engine: ffmpeg-compatible

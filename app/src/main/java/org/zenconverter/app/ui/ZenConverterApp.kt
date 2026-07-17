@@ -154,7 +154,8 @@ enum class FileCategory(
         mimeTypes = listOf("video/*"),
         formats = listOf(
             TargetFormat("MP4", "mp4", "Auto engine"),
-            TargetFormat("MKV", "mkv", "Re-encode")
+            TargetFormat("MKV", "mkv", "Re-encode"),
+            TargetFormat("MOV", "mov", "Re-encode")
         )
     ),
     Audio(
@@ -3399,6 +3400,11 @@ private data class UiText(
                 englishText -> "Compatibility engine could not transcode this file to MKV"
                 simplifiedChineseText -> "兼容引擎无法把这个文件转码为 MKV"
                 else -> "相容引擎無法把這個檔案轉碼為 MKV"
+            }
+            "Compatibility engine could not transcode this file to MOV" -> when (this) {
+                englishText -> "Compatibility engine could not transcode this file to MOV"
+                simplifiedChineseText -> "兼容引擎无法把这个文件转码为 MOV"
+                else -> "相容引擎無法把這個檔案轉碼為 MOV"
             }
             "Compatibility engine could not extract AAC M4A audio" -> when (this) {
                 englishText -> "Compatibility engine could not extract AAC M4A audio"

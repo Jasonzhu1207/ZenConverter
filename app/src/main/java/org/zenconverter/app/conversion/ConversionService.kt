@@ -2363,9 +2363,9 @@ class ConversionService : Service() {
                     add("-fpsmax")
                     add(maxFrameRate.toString())
                 }
-            if (videoProfile.mp4VideoTag != null) {
+            if (videoProfile.videoTag != null) {
                 add("-tag:v")
-                add(videoProfile.mp4VideoTag)
+                add(videoProfile.videoTag)
             }
             add("-c:a")
             add(FFMPEG_AAC_ENCODER)
@@ -2390,7 +2390,14 @@ class ConversionService : Service() {
                 videoCodec = videoCodec,
                 format = "mp4",
                 useFastStart = true,
-                mp4VideoTag = if (videoCodec == FFMPEG_VIDEO_ENCODER_H265) "hvc1" else null,
+                videoTag = if (videoCodec == FFMPEG_VIDEO_ENCODER_H265) "hvc1" else null,
+                crf = defaultVideoCrfFor(videoCodec)
+            )
+            "mov" -> FfmpegVideoProfile(
+                videoCodec = videoCodec,
+                format = "mov",
+                useFastStart = true,
+                videoTag = if (videoCodec == FFMPEG_VIDEO_ENCODER_H265) "hvc1" else null,
                 crf = defaultVideoCrfFor(videoCodec)
             )
             "mkv" -> FfmpegVideoProfile(
@@ -2808,10 +2815,10 @@ class ConversionService : Service() {
             return "Compatibility engine could not write this video container"
         }
         return when (input.category) {
-            ConversionMediaCategory.Video -> if (videoTargetExtensionFor(input.targetFormat) == "mkv") {
-                "Compatibility engine could not transcode this file to MKV"
-            } else {
-                "Compatibility engine could not transcode this file to MP4"
+            ConversionMediaCategory.Video -> when (videoTargetExtensionFor(input.targetFormat)) {
+                "mkv" -> "Compatibility engine could not transcode this file to MKV"
+                "mov" -> "Compatibility engine could not transcode this file to MOV"
+                else -> "Compatibility engine could not transcode this file to MP4"
             }
             ConversionMediaCategory.Audio ->
                 "Compatibility engine could not convert this audio"
@@ -2884,7 +2891,7 @@ class ConversionService : Service() {
             ConversionMediaCategory.Video ->
                 isLikelyVideoInput(input) &&
                     (
-                        videoTargetExtensionFor(input.targetFormat) == "mkv" ||
+                        videoTargetExtensionFor(input.targetFormat) in COMPATIBILITY_VIDEO_TARGETS ||
                             !isLikelyMp4VideoInput(input)
                         )
             ConversionMediaCategory.Audio ->
@@ -3593,6 +3600,7 @@ class ConversionService : Service() {
                 when (videoTargetExtensionFor(input.targetFormat)) {
                     "mp4" -> OutputProfile(extension = "mp4", mimeType = MIME_TYPE_MP4, kind = OutputMediaKind.Video)
                     "mkv" -> OutputProfile(extension = "mkv", mimeType = MIME_TYPE_MKV, kind = OutputMediaKind.Video)
+                    "mov" -> OutputProfile(extension = "mov", mimeType = MIME_TYPE_MOV, kind = OutputMediaKind.Video)
                     else -> null
                 }
             }
@@ -3667,6 +3675,7 @@ class ConversionService : Service() {
         return when {
             normalized.contains("mp4") -> "mp4"
             normalized.contains("mkv") -> "mkv"
+            normalized.contains("mov") -> "mov"
             else -> null
         }
     }
@@ -3714,7 +3723,7 @@ class ConversionService : Service() {
         val pixelFormat: String = "yuv420p",
         val preset: String = "veryfast",
         val crf: String,
-        val mp4VideoTag: String? = null
+        val videoTag: String? = null
     )
 
     private data class FfmpegAudioProfile(
@@ -3963,6 +3972,7 @@ class ConversionService : Service() {
         private const val FFMPEG_DEFAULT_CRF_H265 = "28"
         private const val MIME_TYPE_MP4 = "video/mp4"
         private const val MIME_TYPE_MKV = "video/x-matroska"
+        private const val MIME_TYPE_MOV = "video/quicktime"
         private const val MIME_TYPE_MP3 = "audio/mpeg"
         private const val MIME_TYPE_M4A = "audio/mp4"
         private const val MIME_TYPE_WAV = "audio/wav"
@@ -4034,6 +4044,7 @@ class ConversionService : Service() {
             "ogv"
         )
         private val WMA_AUDIO_INPUT_EXTENSIONS = setOf("wma", "asf")
+        private val COMPATIBILITY_VIDEO_TARGETS = setOf("mkv", "mov")
         private val OFFICE_INPUT_EXTENSIONS = setOf("docx", "pptx", "xlsx")
         private val OFFICE_MIME_TYPES = mapOf(
             MIME_TYPE_DOCX to "docx",

@@ -50,7 +50,7 @@ ZenConverter 想做的是一个本地优先的 Android 转换器：
 | MP4 转 MP3 | 已完成 | FFmpeg 兼容路径已接入，可提取第一条音轨并编码 MP3，已通过当前真机测试。 |
 | 音频格式互转 | 已完成 | MP3 / M4A / WAV / FLAC / WMA 目标已接入并通过当前测试；边缘文件仍受设备编解码能力和内置 FFmpeg 构建影响。 |
 | JPG / PNG / WEBP 图片互转 | 已完成 | 使用 Android 原生 bitmap 路径。仅处理静态图片，不复制元数据。 |
-| MKV / MOV / WEBM / AVI 等容器转 MP4 | 实验性 | FFmpeg 兼容路径，按所选视频选项重新编码为 MP4。 |
+| MKV / MOV / WEBM / AVI 等容器转 MP4 / MOV | 实验性 | FFmpeg 兼容路径，按所选视频选项重新编码。 |
 | 图片与 PDF 互转 | 实验性 | 图片转 PDF 使用 Android `PdfDocument`，PDF 转图片使用 Android `PdfRenderer`。按图片/页面逐个处理，并限制 bitmap 尺寸。PDF 转图片是页面栅格化，不是 OCR、文本提取或嵌入图片提取。 |
 | DOCX / PPTX / XLSX 转 PDF | 实验性 | 本地 Office 转 PDF 路径，面向现代 Office 文件。中文文本可以通过内置 CJK 字体渲染，但版式保真有限：格式可能混乱，文字或形状可能错位、重叠。 |
 | 更多视频格式支持 | 计划中 | 等当前路径更可信后再继续扩展。 |
