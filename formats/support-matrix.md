@@ -16,10 +16,11 @@ as supported until it has a tested path, sample files, and failure behavior.
 | Input | Output | Status | Engine | Notes |
 | --- | --- | --- | --- | --- |
 | Any | Any | Planned | None | Do not imply universal support. |
-| MP4 / other video audio tracks | MP3 / WAV / FLAC / WMA | Experimental | FFmpeg compatible | Extracts the first audio track and encodes the selected audio target. The current self-built FFmpegKitNext AAR includes `libmp3lame`; MP3 still needs physical-device sample verification. Subtitle, attachment, and extra audio tracks are not copied. |
+| MP4 / other video audio tracks | MP3 / WAV / FLAC / WMA | Experimental | FFmpeg compatible | Extracts the first audio track and encodes the selected audio target. The app probes for `libmp3lame` before MP3 export; MP3 still needs physical-device sample verification. Subtitle, attachment, and extra audio tracks are not copied. |
 | MP4 | MP4 | Experimental | Media3 Transformer | Native MP4 output path; physical-device verification still required across samples. |
-| MKV / WEBM / AVI / 3GP / 3GPP / TS / MTS | MP4 | Experimental | FFmpeg compatible | Stream-copy remux to MP4. Success requires MP4-compatible video/audio streams; incompatible codecs fail clearly instead of re-encoding. |
-| MP3 / M4A / FLAC / WAV / WMA | MP3 / WAV / FLAC / WMA | Experimental | FFmpeg compatible | Common audio conversion path. The current self-built FFmpegKitNext AAR includes `libmp3lame`; MP3 still needs physical-device sample verification. WMA uses bitrate when selected; WAV/FLAC ignore bitrate and accept sample-rate/channel controls. |
+| MP4 | MKV | Experimental | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in Matroska. Video bitrate, codec, short-side resolution cap, and max frame-rate options are applied. Subtitles, attachments, and extra tracks are not copied. |
+| MKV / MOV / WEBM / AVI / 3GP / 3GPP / TS / MTS | MP4 | Experimental | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in MP4. Video bitrate, codec, short-side resolution cap, and max frame-rate options are applied. Subtitles, attachments, and extra tracks are not copied. |
+| MP3 / M4A / FLAC / WAV / WMA | MP3 / WAV / FLAC / WMA | Experimental | FFmpeg compatible | Common audio conversion path. The app probes for `libmp3lame` before MP3 export; MP3 still needs physical-device sample verification. WMA uses bitrate when selected; WAV/FLAC ignore bitrate and accept sample-rate/channel controls. |
 | MP3 / M4A / FLAC / WAV / OGG | M4A | Experimental | Media3 Transformer | Output is AAC in M4A. Bitrate, sample-rate, and channel controls are best-effort native settings. |
 | WMA | M4A | Experimental | FFmpeg compatible | Attempts AAC/M4A through FFmpeg compatibility mode; fails clearly if the bundled FFmpeg package lacks AAC encoding. |
 | MP4 video audio tracks | M4A | Experimental | Media3 Transformer | Audio extraction to AAC/M4A through the native path. Bitrate, sample-rate, and channel controls are best-effort native settings. |
@@ -36,19 +37,19 @@ as supported until it has a tested path, sample files, and failure behavior.
 
 ## Current Native Media Limits
 
-- Video targets are intentionally limited to MP4.
-- Audio targets are connected for MP3, M4A, WAV, FLAC, and WMA. The current
-  self-built FFmpegKitNext package includes `libmp3lame` for MP3 output. These
-  paths remain experimental until physical-device sample tests cover the new
-  combinations.
+- Video targets are intentionally limited to MP4 and MKV.
+- Audio targets are connected for MP3, M4A, WAV, FLAC, and WMA. The app probes
+  for `libmp3lame` before MP3 output. These paths remain experimental until
+  physical-device sample tests cover the new combinations.
 - MP3, M4A, WAV, FLAC, and OGG inputs targeting M4A are not universal promises. They
   stay on the AndroidX Media3 path and may fail on files whose codec, DRM,
   timestamp layout, or device codec support falls outside Media3 and platform
   capabilities.
-- Non-MP4 video containers are now split to the first FFmpeg compatibility path
-  for MP4 remux or M4A audio-track copy. M4A extraction succeeds only when the
-  source audio stream is already M4A-compatible, usually AAC. WebM Vorbis/Opus
-  and AVI MP3/PCM are intentionally left unsupported in this milestone.
+- Non-MP4 video containers selected for MP4 output use the FFmpeg compatibility
+  path with true video/audio re-encoding. M4A extraction still uses audio-track
+  copy and succeeds only when the source audio stream is already
+  M4A-compatible, usually AAC. WebM Vorbis/Opus and AVI MP3/PCM are
+  intentionally left unsupported for M4A extraction in this milestone.
 - Native Media3 export uses a 60 second muxer-sample watchdog. If no output
   sample is written within that window, the task fails clearly and should be
   retested later through the planned compatibility engine.
@@ -56,13 +57,22 @@ as supported until it has a tested path, sample files, and failure behavior.
 ## Current FFmpeg Compatibility Limits
 
 - The FFmpeg path uses the local self-built
-  `app/libs/ffmpeg-kit-next-7.1.0-lame-arm64-v8a.aar`, built from
+  `app/libs/ffmpeg-kit-next-7.1.0.aar`, built from
   `arthenica/ffmpeg-kit-next` tag `v7.1.0`, commit
   `1e64a8cdda1b045b014c0a54e9d395929c7b6ccc`, with SHA-256
-  `14fb12d5868b23b7e16a7f17b268364973f5acca059505a42ccdcb6cba1ac9b0`.
-  The AAR contains only `arm64-v8a` native libraries.
-- Video compatibility output is currently a stream-copy remux to MP4:
-  `-map 0:v:0 -map 0:a:0? -c copy`. It does not re-encode H.264/H.265.
+  `d1f2512e806ac3ff99b2f4c3d2e36fcca8c5c0eec548d84da81cf94d054cf406`.
+  The AAR contains only `arm64-v8a` native libraries. The exact rebuild command
+  for this replacement binary still needs to be recorded before a tagged
+  release.
+- Video compatibility output is true re-encoding, not stream-copy remux:
+  `-map 0:v:0 -map 0:a:0? -sn -dn -c:v libx264|libx265 -c:a aac`.
+  MP4 output writes `-f mp4` plus `+faststart`; MKV output writes
+  `-f matroska`.
+- Video compatibility options are wired as follows: codec selects
+  `libx264`/`libx265`; selected bitrate becomes `-b:v`; Auto bitrate uses CRF
+  23 for H.264 or CRF 28 for H.265; resolution caps the short side and keeps
+  even dimensions; frame-rate uses `-fpsmax` as an upper bound rather than
+  forcing low-FPS sources upward.
 - Subtitles, attachments, extra audio tracks, and unknown streams are not copied
   in this first path.
 - MP3, WAV, FLAC, and WMA audio targets use FFmpeg compatibility arguments:
@@ -70,10 +80,9 @@ as supported until it has a tested path, sample files, and failure behavior.
   selected bitrate, sample-rate, and channel options. WAV/FLAC pass sample-rate
   and channel options, but intentionally do not pass bitrate.
 - Physical-device logs on July 11, 2026 confirmed that the earlier local Free
-  AAR returned `Unknown encoder 'libmp3lame'`. The current self-built AAR has
-  `CONFIG_LIBMP3LAME` and `CONFIG_LIBMP3LAME_ENCODER` enabled. The app still
-  probes for `libmp3lame` before MP3 export and fails with a specific message
-  if the wrong FFmpeg package is bundled.
+  AAR returned `Unknown encoder 'libmp3lame'`. The app probes for
+  `libmp3lame` before MP3 export and fails with a specific message if the wrong
+  FFmpeg package is bundled.
 - MP4 video-file audio extraction to M4A remains on Media3. Non-MP4 video-file
   audio extraction to M4A uses FFmpeg stream copy only, so non-AAC audio still
   needs a future route that transcodes to AAC instead of only copying streams.

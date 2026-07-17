@@ -6,7 +6,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-val ffmpegKitLocalAar = file("libs/ffmpeg-kit-next-7.1.0-lame-arm64-v8a.aar")
+val ffmpegKitLocalAar = file("libs/ffmpeg-kit-next-7.1.0.aar")
 check(ffmpegKitLocalAar.isFile) {
     "Missing self-built FFmpegKitNext AAR at ${ffmpegKitLocalAar.path}. " +
         "Build the recorded arthenica/ffmpeg-kit-next package before Gradle sync."

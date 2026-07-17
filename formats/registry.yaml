@@ -10,72 +10,82 @@ groups:
         to: mp3
         engine: ffmpeg-compatible
         status: experimental
-        note: "Extracts the first audio track and encodes MP3 through libmp3lame in the current self-built FFmpegKitNext AAR. Physical-device sample verification is still pending."
+        note: "Extracts the first audio track and encodes MP3 through libmp3lame after runtime encoder probing. Physical-device sample verification is still pending."
       - from: mp4
         to: mp4
         engine: media3-transformer
         status: experimental
         note: "Native MP4 output path. Default settings preserve where possible; explicit options may transcode."
+      - from: mp4
+        to: mkv
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "FFmpeg re-encode path. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio; subtitles, attachments, and extra tracks are not copied."
       - from: mkv
         to: mp4
         engine: ffmpeg-compatible
         status: experimental
-        note: "FFmpeg Free tier remux path. Copies one video track and optional first audio track; codecs must already be MP4-compatible."
+        note: "FFmpeg re-encode path. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio."
+      - from: mov
+        to: mp4
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "FFmpeg re-encode path. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio."
       - from: webm
         to: mp4
         engine: ffmpeg-compatible
         status: experimental
-        note: "FFmpeg Free tier remux path. Fails clearly when streams cannot be copied into MP4."
+        note: "FFmpeg re-encode path. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio."
       - from: avi
         to: mp4
         engine: ffmpeg-compatible
         status: experimental
-        note: "FFmpeg Free tier remux path. Copies compatible streams without video re-encoding."
+        note: "FFmpeg re-encode path. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio."
       - from: 3gp
         to: mp4
         engine: ffmpeg-compatible
         status: experimental
-        note: "FFmpeg Free tier remux path. Copies compatible streams without video re-encoding."
+        note: "FFmpeg re-encode path. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio."
       - from: 3gpp
         to: mp4
         engine: ffmpeg-compatible
         status: experimental
-        note: "Alias of 3GP for routing. Copies compatible streams without video re-encoding."
+        note: "Alias of 3GP for routing. Uses the same FFmpeg re-encode path."
       - from: ts
         to: mp4
         engine: ffmpeg-compatible
         status: experimental
-        note: "FFmpeg Free tier remux path. Copies compatible streams without video re-encoding."
+        note: "FFmpeg re-encode path. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio."
       - from: mts
         to: mp4
         engine: ffmpeg-compatible
         status: experimental
-        note: "TS-family alias for routing. Copies compatible streams without video re-encoding."
+        note: "TS-family alias for routing. Uses the same FFmpeg re-encode path."
       - from: mp3
         to: mp3
         engine: ffmpeg-compatible
         status: experimental
-        note: "Re-encodes MP3 through libmp3lame in the current self-built FFmpegKitNext AAR. Bitrate, sample rate, and channel controls are passed when selected."
+        note: "Re-encodes MP3 through libmp3lame after runtime encoder probing. Bitrate, sample rate, and channel controls are passed when selected."
       - from: m4a
         to: mp3
         engine: ffmpeg-compatible
         status: experimental
-        note: "Encodes MP3 through libmp3lame in the current self-built FFmpegKitNext AAR. Physical-device sample verification is still pending."
+        note: "Encodes MP3 through libmp3lame after runtime encoder probing. Physical-device sample verification is still pending."
       - from: flac
         to: mp3
         engine: ffmpeg-compatible
         status: experimental
-        note: "Encodes MP3 through libmp3lame in the current self-built FFmpegKitNext AAR. Physical-device sample verification is still pending."
+        note: "Encodes MP3 through libmp3lame after runtime encoder probing. Physical-device sample verification is still pending."
       - from: wav
         to: mp3
         engine: ffmpeg-compatible
         status: experimental
-        note: "Encodes MP3 through libmp3lame in the current self-built FFmpegKitNext AAR. Physical-device sample verification is still pending."
+        note: "Encodes MP3 through libmp3lame after runtime encoder probing. Physical-device sample verification is still pending."
       - from: wma
         to: mp3
         engine: ffmpeg-compatible
         status: experimental
-        note: "Decodes WMA through FFmpeg and encodes MP3 through libmp3lame in the current self-built FFmpegKitNext AAR."
+        note: "Decodes WMA through FFmpeg and encodes MP3 through libmp3lame after runtime encoder probing."
       - from: mp3
         to: m4a
         engine: media3-transformer
@@ -190,7 +200,7 @@ groups:
         to: mp3
         engine: ffmpeg-compatible
         status: experimental
-        note: "Extracts the first audio track and encodes MP3 through libmp3lame in the current self-built FFmpegKitNext AAR. Physical-device sample verification is still pending."
+        note: "Extracts the first audio track and encodes MP3 through libmp3lame after runtime encoder probing. Physical-device sample verification is still pending."
       - from: video
         to: wav
         engine: ffmpeg-compatible

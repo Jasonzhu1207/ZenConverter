@@ -25,10 +25,13 @@
 ## Milestone 3: FFmpeg Compatibility
 
 - Select maintained FFmpeg strategy. Done for first path:
-  self-built `arthenica/ffmpeg-kit-next` `v7.1.0` AAR with `--enable-lame`,
-  `arm64-v8a` only, recorded in ADR 0007.
-- MKV/WebM/3GP/TS to MP4 stream copy. Implemented, needs physical-device smoke
-  testing across samples.
+  self-built `arthenica/ffmpeg-kit-next` `v7.1.0` AAR, `arm64-v8a` only,
+  recorded in ADR 0007. The current replacement AAR is connected; exact
+  rebuild flags still need to be recorded before a tagged release.
+- MKV/MOV/WebM/3GP/TS to MP4 re-encode. Implemented, needs physical-device
+  smoke testing across samples.
+- MP4 to MKV re-encode. FFmpeg Matroska output is connected and needs
+  physical-device smoke testing.
 - MP4 video-file audio extraction to M4A. Implemented through Media3, needs
   physical-device smoke testing across samples.
 - Non-MP4 video-file audio extraction to M4A. Implemented as FFmpeg audio-track

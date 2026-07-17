@@ -7,6 +7,9 @@ Superseded by [0007 Self-Built FFmpegKitNext Android Core](0007-self-built-ffmpe
 This record remains as the historical first integration decision. The active
 FFmpeg binary dependency is now the self-built FFmpegKitNext AAR recorded in
 ADR 0007, not the `ffmpegkit-maintained/ffmpeg` prebuilt Free AAR.
+Decision 0011 later replaces the current FFmpeg video output behavior with true
+video/audio re-encoding; the remux notes below describe only this first
+compatibility milestone.
 
 ## Context
 

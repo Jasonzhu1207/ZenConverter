@@ -2272,27 +2272,7 @@ class ConversionService : Service() {
         outputFile: File
     ): List<String> {
         return when (input.category) {
-            ConversionMediaCategory.Video -> listOf(
-                "-hide_banner",
-                "-nostdin",
-                "-y",
-                "-i",
-                inputPath,
-                "-ignore_unknown",
-                "-map",
-                "0:v:0",
-                "-map",
-                "0:a:0?",
-                "-sn",
-                "-dn",
-                "-c",
-                "copy",
-                "-movflags",
-                "+faststart",
-                "-f",
-                "mp4",
-                outputFile.absolutePath
-            )
+            ConversionMediaCategory.Video -> ffmpegVideoArgumentsFor(input, inputPath, outputFile)
             ConversionMediaCategory.Audio -> buildList {
                 val audioProfile = ffmpegAudioProfileFor(input)
                     ?: error("Unsupported audio target ${input.targetFormat}")
@@ -2338,6 +2318,142 @@ class ConversionService : Service() {
             ConversionMediaCategory.Pdf -> error("Compatibility engine is not connected for PDFs")
             ConversionMediaCategory.Document -> error("Compatibility engine is not connected for documents")
         }
+    }
+
+    private fun ffmpegVideoArgumentsFor(
+        input: ConversionTaskInput,
+        inputPath: String,
+        outputFile: File
+    ): List<String> {
+        val videoProfile = ffmpegVideoProfileFor(input)
+            ?: error("Unsupported video target ${input.targetFormat}")
+        return buildList {
+            add("-hide_banner")
+            add("-nostdin")
+            add("-y")
+            add("-i")
+            add(inputPath)
+            add("-ignore_unknown")
+            add("-map")
+            add("0:v:0")
+            add("-map")
+            add("0:a:0?")
+            add("-sn")
+            add("-dn")
+            add("-c:v")
+            add(videoProfile.videoCodec)
+            add("-pix_fmt")
+            add(videoProfile.pixelFormat)
+            add("-preset")
+            add(videoProfile.preset)
+            input.videoOptions.videoBitrate?.let { bitrate ->
+                add("-b:v")
+                add(bitrate.toString())
+            } ?: run {
+                add("-crf")
+                add(videoProfile.crf)
+            }
+            ffmpegVideoFilterFor(input)?.let { filter ->
+                add("-vf")
+                add(filter)
+            }
+            input.videoOptions.maxFrameRate
+                ?.takeIf { it > 0 }
+                ?.let { maxFrameRate ->
+                    add("-fpsmax")
+                    add(maxFrameRate.toString())
+                }
+            if (videoProfile.mp4VideoTag != null) {
+                add("-tag:v")
+                add(videoProfile.mp4VideoTag)
+            }
+            add("-c:a")
+            add(FFMPEG_AAC_ENCODER)
+            if (videoProfile.useFastStart) {
+                add("-movflags")
+                add("+faststart")
+            }
+            add("-f")
+            add(videoProfile.format)
+            add(outputFile.absolutePath)
+        }
+    }
+
+    private fun ffmpegVideoProfileFor(input: ConversionTaskInput): FfmpegVideoProfile? {
+        val targetExtension = videoTargetExtensionFor(input.targetFormat) ?: return null
+        val videoCodec = when (input.videoOptions.videoMimeType) {
+            VideoExportOptions.VIDEO_MIME_TYPE_H265 -> FFMPEG_VIDEO_ENCODER_H265
+            else -> FFMPEG_VIDEO_ENCODER_H264
+        }
+        return when (targetExtension) {
+            "mp4" -> FfmpegVideoProfile(
+                videoCodec = videoCodec,
+                format = "mp4",
+                useFastStart = true,
+                mp4VideoTag = if (videoCodec == FFMPEG_VIDEO_ENCODER_H265) "hvc1" else null,
+                crf = defaultVideoCrfFor(videoCodec)
+            )
+            "mkv" -> FfmpegVideoProfile(
+                videoCodec = videoCodec,
+                format = "matroska",
+                crf = defaultVideoCrfFor(videoCodec)
+            )
+            else -> null
+        }
+    }
+
+    private fun defaultVideoCrfFor(videoCodec: String): String {
+        return if (videoCodec == FFMPEG_VIDEO_ENCODER_H265) {
+            FFMPEG_DEFAULT_CRF_H265
+        } else {
+            FFMPEG_DEFAULT_CRF_H264
+        }
+    }
+
+    private fun ffmpegVideoFilterFor(input: ConversionTaskInput): String? {
+        val targetShortSide = input.videoOptions.maxShortSidePixels
+            ?.takeIf { it > 0 }
+            ?: return null
+        val sourceSize = readVideoSize(input.inputUri)
+        if (sourceSize != null) {
+            if (sourceSize.shortSide <= targetShortSide) return null
+            val scaledSize = scaledVideoSizeFor(sourceSize, targetShortSide)
+            return "scale=${scaledSize.width}:${scaledSize.height}"
+        }
+        Log.w(
+            TAG,
+            "Video size metadata unavailable; using FFmpeg dynamic scale filter " +
+                "targetShortSide=$targetShortSide displayName=${input.displayName}"
+        )
+        return "scale=w='if(gte(iw\\,ih)\\,-2\\,min(iw\\,$targetShortSide))':" +
+            "h='if(gte(iw\\,ih)\\,min(ih\\,$targetShortSide)\\,-2)'"
+    }
+
+    private fun scaledVideoSizeFor(sourceSize: VideoSize, targetShortSide: Int): VideoSize {
+        return if (sourceSize.width >= sourceSize.height) {
+            VideoSize(
+                width = evenVideoDimension(
+                    sourceSize.width.toDouble() *
+                        targetShortSide.toDouble() /
+                        sourceSize.height.toDouble()
+                ),
+                height = evenVideoDimension(targetShortSide.toDouble())
+            )
+        } else {
+            VideoSize(
+                width = evenVideoDimension(targetShortSide.toDouble()),
+                height = evenVideoDimension(
+                    sourceSize.height.toDouble() *
+                        targetShortSide.toDouble() /
+                        sourceSize.width.toDouble()
+                )
+            )
+        }
+    }
+
+    private fun evenVideoDimension(value: Double): Int {
+        val rounded = value.roundToInt().coerceAtLeast(2)
+        return if (rounded % 2 == 0) rounded else (rounded - 1).coerceAtLeast(2)
     }
 
     private fun ffmpegAudioProfileFor(input: ConversionTaskInput): FfmpegAudioProfile? {
@@ -2554,17 +2670,29 @@ class ConversionService : Service() {
     }
 
     private fun ffmpegMissingEncoderMessageFor(input: ConversionTaskInput): String? {
-        if (input.category != ConversionMediaCategory.Audio) return null
-        val profile = ffmpegAudioProfileFor(input) ?: return null
-        val requiredEncoder = profile.requiredEncoder ?: return null
-        if (ffmpegEncoderAvailable(requiredEncoder) != false) return null
+        val requiredEncoders = when (input.category) {
+            ConversionMediaCategory.Video -> {
+                val profile = ffmpegVideoProfileFor(input) ?: return null
+                listOf(profile.videoCodec, FFMPEG_AAC_ENCODER)
+            }
+            ConversionMediaCategory.Audio -> {
+                val profile = ffmpegAudioProfileFor(input) ?: return null
+                listOfNotNull(profile.requiredEncoder)
+            }
+            ConversionMediaCategory.Image,
+            ConversionMediaCategory.Pdf,
+            ConversionMediaCategory.Document -> return null
+        }
+        val missingEncoder = requiredEncoders.firstOrNull { encoder ->
+            ffmpegEncoderAvailable(encoder) == false
+        } ?: return null
 
         Log.e(
             TAG,
-            "FFmpeg compatibility package is missing encoder=$requiredEncoder " +
+            "FFmpeg compatibility package is missing encoder=$missingEncoder " +
                 "target=${input.targetFormat} displayName=${input.displayName}"
         )
-        return compatibilityMissingEncoderMessageFor(input, requiredEncoder)
+        return compatibilityMissingEncoderMessageFor(input, missingEncoder)
     }
 
     private fun ffmpegEncoderAvailable(encoder: String): Boolean? {
@@ -2600,13 +2728,20 @@ class ConversionService : Service() {
         input: ConversionTaskInput,
         encoder: String
     ): String {
-        return if (
+        return when {
             encoder == "libmp3lame" &&
-            audioTargetExtensionFor(input.targetFormat) == "mp3"
-        ) {
-            "Compatibility engine needs an MP3-capable FFmpeg package"
-        } else {
-            "Compatibility engine cannot encode this audio format yet"
+                audioTargetExtensionFor(input.targetFormat) == "mp3" ->
+                "Compatibility engine needs an MP3-capable FFmpeg package"
+            encoder == FFMPEG_VIDEO_ENCODER_H264 ->
+                "Compatibility engine needs an H.264-capable FFmpeg package"
+            encoder == FFMPEG_VIDEO_ENCODER_H265 ->
+                "Compatibility engine needs an H.265-capable FFmpeg package"
+            encoder == FFMPEG_AAC_ENCODER ->
+                "Compatibility engine needs an AAC-capable FFmpeg package"
+            input.category == ConversionMediaCategory.Video ->
+                "Compatibility engine cannot encode this video format yet"
+            else ->
+                "Compatibility engine cannot encode this audio format yet"
         }
     }
 
@@ -2655,15 +2790,29 @@ class ConversionService : Service() {
         if (
             input.category == ConversionMediaCategory.Video &&
             (
-                normalizedTail.contains("codec not currently supported in container") ||
-                    normalizedTail.contains("could not find tag for codec")
+                normalizedTail.contains("unknown encoder") ||
+                    normalizedTail.contains("encoder not found") ||
+                    normalizedTail.contains("invalid encoder")
             )
         ) {
-            return "Compatibility engine cannot copy this codec into MP4 yet"
+            return "Compatibility engine cannot encode this video format yet"
+        }
+        if (
+            input.category == ConversionMediaCategory.Video &&
+            (
+                normalizedTail.contains("codec not currently supported in container") ||
+                    normalizedTail.contains("could not find tag for codec") ||
+                    normalizedTail.contains("invalid argument")
+            )
+        ) {
+            return "Compatibility engine could not write this video container"
         }
         return when (input.category) {
-            ConversionMediaCategory.Video ->
-                "Compatibility engine could not remux this file to MP4"
+            ConversionMediaCategory.Video -> if (videoTargetExtensionFor(input.targetFormat) == "mkv") {
+                "Compatibility engine could not transcode this file to MKV"
+            } else {
+                "Compatibility engine could not transcode this file to MP4"
+            }
             ConversionMediaCategory.Audio ->
                 "Compatibility engine could not convert this audio"
             ConversionMediaCategory.Image ->
@@ -2733,7 +2882,11 @@ class ConversionService : Service() {
     private fun shouldUseCompatibilityEngine(input: ConversionTaskInput): Boolean {
         return when (input.category) {
             ConversionMediaCategory.Video ->
-                isLikelyVideoInput(input) && !isLikelyMp4VideoInput(input)
+                isLikelyVideoInput(input) &&
+                    (
+                        videoTargetExtensionFor(input.targetFormat) == "mkv" ||
+                            !isLikelyMp4VideoInput(input)
+                        )
             ConversionMediaCategory.Audio ->
                 audioTargetExtensionFor(input.targetFormat) != "m4a" ||
                     isLikelyWmaAudioInput(input) ||
@@ -3437,10 +3590,10 @@ class ConversionService : Service() {
     private fun outputProfileFor(input: ConversionTaskInput): OutputProfile? {
         return when (input.category) {
             ConversionMediaCategory.Video -> {
-                if (input.targetFormat.equals("MP4", ignoreCase = true)) {
-                    OutputProfile(extension = "mp4", mimeType = MIME_TYPE_MP4, kind = OutputMediaKind.Video)
-                } else {
-                    null
+                when (videoTargetExtensionFor(input.targetFormat)) {
+                    "mp4" -> OutputProfile(extension = "mp4", mimeType = MIME_TYPE_MP4, kind = OutputMediaKind.Video)
+                    "mkv" -> OutputProfile(extension = "mkv", mimeType = MIME_TYPE_MKV, kind = OutputMediaKind.Video)
+                    else -> null
                 }
             }
             ConversionMediaCategory.Audio -> {
@@ -3509,6 +3662,15 @@ class ConversionService : Service() {
         }
     }
 
+    private fun videoTargetExtensionFor(targetFormat: String): String? {
+        val normalized = targetFormat.lowercase(Locale.US)
+        return when {
+            normalized.contains("mp4") -> "mp4"
+            normalized.contains("mkv") -> "mkv"
+            else -> null
+        }
+    }
+
     private data class OutputProfile(
         val extension: String,
         val mimeType: String,
@@ -3544,6 +3706,16 @@ class ConversionService : Service() {
         Image,
         Video
     }
+
+    private data class FfmpegVideoProfile(
+        val videoCodec: String,
+        val format: String,
+        val useFastStart: Boolean = false,
+        val pixelFormat: String = "yuv420p",
+        val preset: String = "veryfast",
+        val crf: String,
+        val mp4VideoTag: String? = null
+    )
 
     private data class FfmpegAudioProfile(
         val codec: String,
@@ -3784,7 +3956,13 @@ class ConversionService : Service() {
         private const val FFMPEG_ENCODER_PROBE_TIMEOUT_MS = 2_000
         private const val FFMPEG_LOG_TAIL_LINES = 16
         private const val FFMPEG_LOG_LINE_LIMIT = 600
+        private const val FFMPEG_VIDEO_ENCODER_H264 = "libx264"
+        private const val FFMPEG_VIDEO_ENCODER_H265 = "libx265"
+        private const val FFMPEG_AAC_ENCODER = "aac"
+        private const val FFMPEG_DEFAULT_CRF_H264 = "23"
+        private const val FFMPEG_DEFAULT_CRF_H265 = "28"
         private const val MIME_TYPE_MP4 = "video/mp4"
+        private const val MIME_TYPE_MKV = "video/x-matroska"
         private const val MIME_TYPE_MP3 = "audio/mpeg"
         private const val MIME_TYPE_M4A = "audio/mp4"
         private const val MIME_TYPE_WAV = "audio/wav"

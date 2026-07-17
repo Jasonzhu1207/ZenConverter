@@ -153,7 +153,8 @@ enum class FileCategory(
     Video(
         mimeTypes = listOf("video/*"),
         formats = listOf(
-            TargetFormat("MP4", "mp4", "Auto engine")
+            TargetFormat("MP4", "mp4", "Auto engine"),
+            TargetFormat("MKV", "mkv", "Re-encode")
         )
     ),
     Audio(
@@ -3389,10 +3390,15 @@ private data class UiText(
                 simplifiedChineseText -> "兼容引擎无法打开 SAF 输入文件"
                 else -> "相容引擎無法開啟 SAF 輸入檔案"
             }
-            "Compatibility engine could not remux this file to MP4" -> when (this) {
-                englishText -> "Compatibility engine could not remux this file to MP4"
-                simplifiedChineseText -> "兼容引擎无法把这个文件重封装为 MP4"
-                else -> "相容引擎無法把這個檔案重封裝為 MP4"
+            "Compatibility engine could not transcode this file to MP4" -> when (this) {
+                englishText -> "Compatibility engine could not transcode this file to MP4"
+                simplifiedChineseText -> "兼容引擎无法把这个文件转码为 MP4"
+                else -> "相容引擎無法把這個檔案轉碼為 MP4"
+            }
+            "Compatibility engine could not transcode this file to MKV" -> when (this) {
+                englishText -> "Compatibility engine could not transcode this file to MKV"
+                simplifiedChineseText -> "兼容引擎无法把这个文件转码为 MKV"
+                else -> "相容引擎無法把這個檔案轉碼為 MKV"
             }
             "Compatibility engine could not extract AAC M4A audio" -> when (this) {
                 englishText -> "Compatibility engine could not extract AAC M4A audio"
@@ -3409,25 +3415,45 @@ private data class UiText(
                 simplifiedChineseText -> "当前兼容包暂时不能编码这个音频格式"
                 else -> "目前相容包暫時不能編碼這個音訊格式"
             }
+            "Compatibility engine cannot encode this video format yet" -> when (this) {
+                englishText -> "Compatibility engine cannot encode this video format yet"
+                simplifiedChineseText -> "当前兼容包暂时不能编码这个视频格式"
+                else -> "目前相容包暫時不能編碼這個影片格式"
+            }
             "Compatibility engine needs an MP3-capable FFmpeg package" -> when (this) {
                 englishText -> "Compatibility engine needs an MP3-capable FFmpeg package"
                 simplifiedChineseText -> "当前兼容包不包含 MP3 编码器"
                 else -> "目前相容包不包含 MP3 編碼器"
+            }
+            "Compatibility engine needs an H.264-capable FFmpeg package" -> when (this) {
+                englishText -> "Compatibility engine needs an H.264-capable FFmpeg package"
+                simplifiedChineseText -> "当前兼容包不包含 H.264 编码器"
+                else -> "目前相容包不包含 H.264 編碼器"
+            }
+            "Compatibility engine needs an H.265-capable FFmpeg package" -> when (this) {
+                englishText -> "Compatibility engine needs an H.265-capable FFmpeg package"
+                simplifiedChineseText -> "当前兼容包不包含 H.265 编码器"
+                else -> "目前相容包不包含 H.265 編碼器"
+            }
+            "Compatibility engine needs an AAC-capable FFmpeg package" -> when (this) {
+                englishText -> "Compatibility engine needs an AAC-capable FFmpeg package"
+                simplifiedChineseText -> "当前兼容包不包含 AAC 编码器"
+                else -> "目前相容包不包含 AAC 編碼器"
             }
             "Compatibility engine could not write this audio container" -> when (this) {
                 englishText -> "Compatibility engine could not write this audio container"
                 simplifiedChineseText -> "兼容引擎无法写出这个音频容器"
                 else -> "相容引擎無法寫出這個音訊容器"
             }
+            "Compatibility engine could not write this video container" -> when (this) {
+                englishText -> "Compatibility engine could not write this video container"
+                simplifiedChineseText -> "兼容引擎无法写出这个视频容器"
+                else -> "相容引擎無法寫出這個影片容器"
+            }
             "Compatibility engine needs an AAC audio stream for M4A copy" -> when (this) {
                 englishText -> "Compatibility engine needs an AAC audio stream for M4A copy"
                 simplifiedChineseText -> "这个兼容包暂时只能拷贝已有 AAC 音轨到 M4A"
                 else -> "這個相容包暫時只能拷貝既有 AAC 音軌到 M4A"
-            }
-            "Compatibility engine cannot copy this codec into MP4 yet" -> when (this) {
-                englishText -> "Compatibility engine cannot copy this codec into MP4 yet"
-                simplifiedChineseText -> "这个编码暂时不能直接封装进 MP4"
-                else -> "這個編碼暫時不能直接封裝進 MP4"
             }
             "Compatibility engine is not connected for images" -> failed
             "Image conversion failed" -> when (this) {

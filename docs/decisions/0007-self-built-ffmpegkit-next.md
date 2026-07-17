@@ -29,23 +29,20 @@ Recorded source and build:
 - Source repo: `https://github.com/arthenica/ffmpeg-kit-next`.
 - Tag: `v7.1.0`.
 - Commit: `1e64a8cdda1b045b014c0a54e9d395929c7b6ccc`.
-- Build host used on July 12, 2026: Ubuntu 24.04.4 LTS x86_64, 4 vCPU,
-  7.6 GiB RAM, 12 GiB swap.
-- Build wrapper: `./nix-android.sh`.
-- Nix profile: `android-r27d`.
-- Command:
-  `./nix-android.sh -p android-r27d --jobs=2 --enable-lame
-  --disable-arm-v7a --disable-arm-v7a-neon --disable-x86 --disable-x86-64`.
+- Replacement inspected on July 17, 2026. The exact replacement build host,
+  command, package flags, and source revision must be recorded before a tagged
+  release.
 - Output AAR:
-  `app/libs/ffmpeg-kit-next-7.1.0-lame-arm64-v8a.aar`.
+  `app/libs/ffmpeg-kit-next-7.1.0.aar`.
 - SHA-256:
-  `14fb12d5868b23b7e16a7f17b268364973f5acca059505a42ccdcb6cba1ac9b0`.
+  `d1f2512e806ac3ff99b2f4c3d2e36fcca8c5c0eec548d84da81cf94d054cf406`.
 - Build targets: `arm64-v8a`.
 - Android ABIs: `arm64-v8a`.
 - FFmpegKit package namespace remains `com.arthenica.ffmpegkit`.
-- MP3 evidence: `CONFIG_LIBMP3LAME=1` and
-  `CONFIG_LIBMP3LAME_ENCODER=1` are present in the generated FFmpeg config for
-  all three build targets.
+- Replacement note: the July 17, 2026 AAR was inspected locally and contains
+  `classes.jar`, only `jni/arm64-v8a` native libraries, and packaged notices
+  for LAME, libiconv, libvpx, Opus, x264, x265, and cpu-features. Its exact
+  rebuild command still needs to be recorded before a tagged release.
 
 Gradle must fail if the recorded AAR is missing. The release workflow must not
 download `ffmpegkit-maintained/ffmpeg` assets as a fallback.
@@ -58,9 +55,9 @@ download `ffmpegkit-maintained/ffmpeg` assets as a fallback.
   before Gradle builds.
 - The current AAR includes `arm64-v8a` only; 32-bit ARM and emulator/x86
   support remain out of scope.
-- The AAR packages LGPLv3, LAME LGPLv2-style, libiconv GPLv3, and Apache-2.0
-  cpu-features license texts. This is compatible with the project's
-  `AGPL-3.0-or-later` license, but must be revisited before any non-GPL-family
-  distribution.
+- The AAR packages LGPLv3 plus GPL-family and codec license texts including
+  LAME, libiconv, libvpx, Opus, x264, x265, and Apache-2.0 cpu-features. This
+  is compatible with the project's `AGPL-3.0-or-later` license, but must be
+  revisited before any non-GPL-family distribution.
 - Broader codec support should be added by another recorded self-build, not by
   silently swapping in a prebuilt fork artifact.

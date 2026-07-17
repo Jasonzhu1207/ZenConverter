@@ -87,7 +87,7 @@ The CI job verifies that the recorded self-built FFmpegKitNext AAR is already
 present under `app/libs` and that its SHA-256 is:
 
 ```text
-14fb12d5868b23b7e16a7f17b268364973f5acca059505a42ccdcb6cba1ac9b0
+d1f2512e806ac3ff99b2f4c3d2e36fcca8c5c0eec548d84da81cf94d054cf406
 ```
 
 It does not download FFmpegKit binaries from third-party forks. The recorded AAR
@@ -106,5 +106,5 @@ APK SHA-256: ...
 The in-app update checker reads the Android version line and verifies downloaded
 APKs when the checksum is present.
 
-The documented AAR includes `libmp3lame`, but MP3 output remains experimental
-until physical-device sample conversion passes.
+The app probes for `libmp3lame` before MP3 export, but MP3 output remains
+experimental until physical-device sample conversion passes.

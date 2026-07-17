@@ -23,8 +23,8 @@ jobs:
     env:
       APP_NAME: ZenConverter
       PRE_RELEASE_TAG: pre-release
-      FFMPEG_AAR: app/libs/ffmpeg-kit-next-7.1.0-lame-arm64-v8a.aar
-      FFMPEG_AAR_SHA256: 14fb12d5868b23b7e16a7f17b268364973f5acca059505a42ccdcb6cba1ac9b0
+      FFMPEG_AAR: app/libs/ffmpeg-kit-next-7.1.0.aar
+      FFMPEG_AAR_SHA256: d1f2512e806ac3ff99b2f4c3d2e36fcca8c5c0eec548d84da81cf94d054cf406
 
     steps:
       - name: Check out repository

@@ -76,7 +76,7 @@ Transitive dependencies required by the PDFBox-Android POM are also local JARs:
 ## Current FFmpeg Dependency
 
 - Dependency: Gradle requires the local self-built AAR
-  `app/libs/ffmpeg-kit-next-7.1.0-lame-arm64-v8a.aar`.
+  `app/libs/ffmpeg-kit-next-7.1.0.aar`.
 - No Maven fallback is configured for FFmpegKit. In particular, release builds
   must not download binaries from `ffmpegkit-maintained/ffmpeg`.
 - Package type: Android AAR.
@@ -87,10 +87,14 @@ Transitive dependencies required by the PDFBox-Android POM are also local JARs:
   - FFmpegKitNext main license: GNU Lesser General Public License v3.0.
   - LAME license file: GNU Library General Public License v2.
   - libiconv license file packaged by the build: GNU General Public License v3.0.
+  - libvpx license file.
+  - Opus license file.
+  - x264 license file.
+  - x265 license file.
   - cpu-features license file: Apache License 2.0.
 - Project compatibility: the app's license is `AGPL-3.0-or-later`, so the
-  packaged libiconv GPLv3 text is compatible with the current project
-  direction. Revisit this before any non-GPL-family distribution.
+  packaged GPL-family texts are compatible with the current project direction.
+  Revisit this before any non-GPL-family distribution.
 - Reason platform APIs are not enough: physical-device logs on July 5, 2026
   showed Media3 timing out on MKV before writing any muxer sample, while the
   same service pipeline completed MP4/M4A work. Physical-device logs on
@@ -102,31 +106,24 @@ Transitive dependencies required by the PDFBox-Android POM are also local JARs:
 
 Build record for the selected binary:
 
-- Build date: July 12, 2026.
-- Build host: Ubuntu 24.04.4 LTS x86_64, 4 vCPU, 7.6 GiB RAM, 12 GiB swap.
-- Build wrapper: `./nix-android.sh`.
-- Nix profile: `android-r27d`.
-- NDK from the flake: `27.3.13750724`.
-- Android API level used by the build: 24.
-- Build command:
-  `./nix-android.sh -p android-r27d --jobs=2 --enable-lame
-  --disable-arm-v7a --disable-arm-v7a-neon --disable-x86 --disable-x86-64`.
-- Enabled external libraries reported by the build: `lame`, `libiconv`.
+- Replacement inspected: July 17, 2026.
+- Build command: not recorded in this repository yet. Record the exact command,
+  package flags, and source revision before a tagged release.
+- Packaged external license files observed in the AAR: `lame`, `libiconv`,
+  `libvpx`, `opus`, `x264`, `x265`, and `cpu_features`.
 - Build targets included: `arm64-v8a`.
 - Android ABIs included in the AAR: `arm64-v8a`.
 - Android ABIs packaged in the app: `arm64-v8a` only, via Gradle `abiFilters`.
-- AAR file name: `ffmpeg-kit-next-7.1.0-lame-arm64-v8a.aar`.
-- AAR size: `9,073,515` bytes.
+- AAR file name: `ffmpeg-kit-next-7.1.0.aar`.
+- AAR size: `12,323,954` bytes.
 - AAR SHA-256:
-  `14fb12d5868b23b7e16a7f17b268364973f5acca059505a42ccdcb6cba1ac9b0`.
+  `d1f2512e806ac3ff99b2f4c3d2e36fcca8c5c0eec548d84da81cf94d054cf406`.
 - Verification evidence:
-  - AAR `classes.jar` contains `com/arthenica/ffmpegkit/FFmpegKit.class` and
-    `FFmpegKitConfig.class`.
+  - AAR contains `classes.jar`.
   - AAR contains `jni/arm64-v8a` native libraries.
-  - FFmpeg `config.h` contains `#define CONFIG_LIBMP3LAME 1` for
-    `android-arm64-24`.
-  - FFmpeg `config_components.h` contains
-    `#define CONFIG_LIBMP3LAME_ENCODER 1` for the arm64 build target.
+  - AAR contains only `arm64-v8a` native libraries.
+  - AAR packages `source.txt` with the upstream source-code request notice.
+  - MP3 encoder availability is still runtime-probed by the app before export.
 
 Transitive dependencies required when consuming the local AAR through
 `implementation(files(...))`:

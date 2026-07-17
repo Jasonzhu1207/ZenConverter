@@ -52,21 +52,22 @@ Goal: add flexible media conversion without making FFmpeg the only foundation.
   - self-built FFmpeg AAR,
   - or another actively maintained wrapper.
 - Record license flags before shipping binaries.
-- Start with MP4 to MP3 and MKV to MP4 stream copy.
+- Start with MP4 to MP3, non-MP4 video to MP4 re-encode, and MP4 to MKV
+  re-encode.
 - Use file descriptors or SAF-aware APIs when available.
 
 Success: FFmpeg jobs run from Kotlin, report progress, and do not require
 duplicating normal local files into cache.
 
 Current first step: a self-built `arthenica/ffmpeg-kit-next` `v7.1.0` AAR is
-wired for non-MP4 video container remux to MP4, non-MP4 video-file audio
-extraction to M4A by FFmpeg audio-track copy, and experimental audio targets for
-MP3/WAV/FLAC/WMA through FFmpeg arguments. The current AAR is `arm64-v8a` only
-and was built with `--enable-lame`, so the package now contains the `libmp3lame` encoder
-that the earlier Free AAR lacked. This is still not universal video or audio
-transcoding: MP3 output needs physical-device sample verification, and WebM
-Vorbis/Opus to M4A plus AVI MP3/PCM to M4A need a later route that actually
-transcodes non-AAC audio instead of only copying streams.
+wired for non-MP4 video container re-encode to MP4, MP4 re-encode to MKV,
+non-MP4 video-file audio extraction to M4A by FFmpeg audio-track copy, and
+experimental audio targets for MP3/WAV/FLAC/WMA through FFmpeg arguments. The
+current AAR is `arm64-v8a` only, and the app probes for `libmp3lame` before MP3
+export so the wrong package fails clearly. This is still not universal video or
+audio transcoding: MP3 output needs physical-device sample verification, and
+WebM Vorbis/Opus to M4A plus AVI MP3/PCM to M4A need a later route that
+actually transcodes non-AAC audio instead of only copying streams.
 
 ## Phase 4: Image, PDF, Archive
 

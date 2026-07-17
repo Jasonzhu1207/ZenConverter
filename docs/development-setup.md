@@ -36,15 +36,15 @@ FFmpegKit local core: `app/build.gradle.kts` requires the self-built local AAR
 below. There is no Maven fallback for FFmpegKit, and release CI verifies the
 recorded SHA-256 instead of downloading a prebuilt third-party fork artifact.
 
-- `app/libs/ffmpeg-kit-next-7.1.0-lame-arm64-v8a.aar`
+- `app/libs/ffmpeg-kit-next-7.1.0.aar`
   - source: `https://github.com/arthenica/ffmpeg-kit-next`
   - tag: `v7.1.0`
   - commit: `1e64a8cdda1b045b014c0a54e9d395929c7b6ccc`
-  - build command: `./nix-android.sh -p android-r27d --jobs=2 --enable-lame --disable-arm-v7a --disable-arm-v7a-neon --disable-x86 --disable-x86-64`
-  - SHA-256: `14fb12d5868b23b7e16a7f17b268364973f5acca059505a42ccdcb6cba1ac9b0`
+  - build command: replacement build command must be recorded before a tagged release
+  - SHA-256: `d1f2512e806ac3ff99b2f4c3d2e36fcca8c5c0eec548d84da81cf94d054cf406`
   - ABI: `arm64-v8a`
-  - MP3 evidence: generated config contains `CONFIG_LIBMP3LAME` and
-    `CONFIG_LIBMP3LAME_ENCODER`
+  - packaged license files include LAME, libiconv, libvpx, Opus, x264, x265,
+    and cpu-features notices
 
 The published APK is arm64-only to keep size down and match the Office2PDF
 native library.
@@ -61,8 +61,8 @@ checkouts can build without downloading a third-party fork artifact. Other
 by git. If the FFmpegKitNext AAR is absent, Gradle fails during configuration
 with a clear message.
 
-MP3 output needs `libmp3lame`. The recorded self-built AAR includes the encoder,
-but the MP3 rows remain experimental until physical-device samples pass.
+MP3 output needs `libmp3lame`. The app probes FFmpeg's encoder list before MP3
+export and keeps the MP3 rows experimental until physical-device samples pass.
 
 ## Office2PDF Native Rebuild
 
