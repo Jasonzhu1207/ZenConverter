@@ -268,14 +268,40 @@ jobs:
           ASSET_PATH: ${{ steps.package.outputs.asset_path }}
         run: |
           set -euo pipefail
-          cat > release-notes.md <<EOF
-          Signed APK for ${RELEASE_TAG}.
 
-          Android version: ${{ steps.app_version.outputs.version_name }} (${{ steps.app_version.outputs.version_code }})
-          APK SHA-256: ${{ steps.package.outputs.asset_sha256 }}
+          previous_release_tag="$(
+            git describe \
+              --tags \
+              --match 'v[0-9]*.[0-9]*.[0-9]*' \
+              --exclude "$RELEASE_TAG" \
+              --abbrev=0 \
+              "$RELEASE_TAG" 2>/dev/null || true
+          )"
 
-          Commit: ${GITHUB_SHA}
-          EOF
+          if [ -n "$previous_release_tag" ]; then
+            changelog_range="${previous_release_tag}..${RELEASE_TAG}"
+            changelog_heading="Changes since ${previous_release_tag}:"
+          else
+            changelog_range="${RELEASE_TAG}"
+            changelog_heading="Changes in ${RELEASE_TAG}:"
+          fi
+
+          changelog="$(git log --reverse --format='- %h %s' "$changelog_range")"
+          if [ -z "$changelog" ]; then
+            changelog="- No commits found in ${changelog_range}"
+          fi
+
+          {
+            echo "Signed APK for ${RELEASE_TAG}."
+            echo
+            echo "Android version: ${{ steps.app_version.outputs.version_name }} (${{ steps.app_version.outputs.version_code }})"
+            echo "APK SHA-256: ${{ steps.package.outputs.asset_sha256 }}"
+            echo
+            echo "$changelog_heading"
+            printf '%s\n' "$changelog"
+            echo
+            echo "Commit: ${GITHUB_SHA}"
+          } > release-notes.md
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release edit "$RELEASE_TAG" \
