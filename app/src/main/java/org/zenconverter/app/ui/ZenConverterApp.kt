@@ -173,7 +173,10 @@ enum class FileCategory(
             "image/webp",
             "image/gif",
             "image/heic",
-            "image/heif"
+            "image/heif",
+            "image/vnd.microsoft.icon",
+            "image/x-icon",
+            "image/ico"
         ),
         formats = listOf(
             TargetFormat("JPG", "jpg", "Batch"),
@@ -3239,6 +3242,16 @@ private data class UiText(
                 englishText -> "Image engine could not decode this input"
                 simplifiedChineseText -> "无法解码这张图片"
                 else -> "無法解碼這張圖片"
+            }
+            "Image engine could not decode this ICO input" -> when (this) {
+                englishText -> "Image engine could not decode this ICO input"
+                simplifiedChineseText -> "无法解码这个 ICO 文件"
+                else -> "無法解碼這個 ICO 檔案"
+            }
+            "Image engine only supports PNG-in-ICO input" -> when (this) {
+                englishText -> "Image engine only supports PNG-in-ICO input"
+                simplifiedChineseText -> "当前只支持 PNG-in-ICO 输入"
+                else -> "目前只支援 PNG-in-ICO 輸入"
             }
             "Image engine could not write this output" -> when (this) {
                 englishText -> "Image engine could not write this output"

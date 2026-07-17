@@ -253,6 +253,11 @@ groups:
         engine: native-bitmap
         status: experimental
         note: "Static WEBP only. Android 11+ can write WEBP lossless when selected; otherwise WEBP output is lossy. ICO output is a modern multi-size PNG-in-ICO file."
+      - from: ico
+        to: jpg/jfif/png/webp/ico
+        engine: native-bitmap
+        status: experimental
+        note: "Reads the largest ICO layer when that layer is PNG-in-ICO, then reuses the static image output path. Old BMP/DIB icon payloads are not decoded in this milestone."
       - from: gif
         to: jpg/jfif/png/webp/ico
         engine: native-bitmap
@@ -280,6 +285,11 @@ groups:
         engine: native-pdfdocument
         status: experimental
         note: "Static WEBP only; animated WEBP is not preserved as animation."
+      - from: ico
+        to: pdf
+        engine: native-pdfdocument
+        status: experimental
+        note: "Places the largest decoded ICO layer on one PDF page when that layer is PNG-in-ICO. Old BMP/DIB icon payloads are not decoded in this milestone."
       - from: gif
         to: pdf
         engine: native-pdfdocument

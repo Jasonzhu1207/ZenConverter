@@ -81,8 +81,9 @@ import org.zenconverter.app.office.Office2PdfNative
 import org.zenconverter.app.office.Office2PdfUnavailableException
 import org.zenconverter.app.office.Office2PdfUnsupportedAbiException
 import java.io.ByteArrayOutputStream
-import java.io.IOException
 import java.io.File
+import java.io.IOException
+import java.io.InputStream
 import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -1234,6 +1235,9 @@ class ConversionService : Service() {
         maxLongSidePixels: Int?,
         maxPixels: Long = MAX_IMAGE_DECODE_PIXELS
     ): Bitmap? {
+        decodeIcoBitmap(uri, maxLongSidePixels, maxPixels)?.let { bitmap ->
+            return bitmap
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             decodeImageBitmapWithImageDecoder(uri, maxLongSidePixels, maxPixels)?.let { bitmap ->
                 return scaleBitmapIfNeeded(bitmap, maxLongSidePixels)
@@ -1243,6 +1247,157 @@ class ConversionService : Service() {
             return bitmap
         }
         return decodeImageBitmapWithBitmapFactory(uri, maxLongSidePixels, maxPixels)
+    }
+
+    private fun decodeIcoBitmap(
+        uri: Uri,
+        maxLongSidePixels: Int?,
+        maxPixels: Long
+    ): Bitmap? {
+        val entries = readIcoDirectory(uri) ?: return null
+        val selectedEntry = entries
+            .filter { it.imageSize in 1..ICO_MAX_PAYLOAD_BYTES }
+            .maxWithOrNull(
+                compareBy<IcoDirectoryEntry> { it.pixelArea }
+                    .thenBy { it.bitCount }
+                    .thenBy { it.imageSize }
+            ) ?: error("Image engine could not decode this ICO input")
+
+        val payload = readIcoPayload(uri, selectedEntry)
+            ?: error("Image engine could not decode this ICO input")
+        if (!payload.hasPngSignature()) {
+            Log.w(TAG, "ICO input uses an unsupported non-PNG icon payload")
+            error("Image engine only supports PNG-in-ICO input")
+        }
+
+        val bounds = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        BitmapFactory.decodeByteArray(payload, 0, payload.size, bounds)
+
+        val width = bounds.outWidth
+        val height = bounds.outHeight
+        if (width <= 0 || height <= 0) {
+            Log.w(TAG, "ICO PNG payload bounds failed width=$width height=$height")
+            error("Image engine could not decode this ICO input")
+        }
+
+        val options = BitmapFactory.Options().apply {
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+            inSampleSize = imageSampleSize(width, height, maxLongSidePixels, maxPixels)
+        }
+        val decoded = BitmapFactory.decodeByteArray(payload, 0, payload.size, options) ?: run {
+            Log.w(TAG, "ICO PNG payload decode returned null")
+            error("Image engine could not decode this ICO input")
+        }
+        return scaleBitmapIfNeeded(decoded, maxLongSidePixels)
+    }
+
+    private fun readIcoDirectory(uri: Uri): List<IcoDirectoryEntry>? {
+        return runCatching {
+            contentResolver.openInputStream(uri)?.use { input ->
+                val header = input.readExactByteArrayOrNull(ICO_HEADER_BYTES) ?: return@use null
+                val reserved = header.readLittleEndianUnsignedShort(0)
+                val type = header.readLittleEndianUnsignedShort(2)
+                val count = header.readLittleEndianUnsignedShort(4)
+                if (reserved != 0 || type != ICO_TYPE_ICON) return@use null
+                if (count <= 0 || count > ICO_MAX_IMAGE_COUNT) {
+                    Log.w(TAG, "ICO directory has unsupported image count=$count")
+                    return@use null
+                }
+
+                val directoryEndOffset = ICO_HEADER_BYTES + ICO_DIRECTORY_ENTRY_BYTES * count
+                val entries = mutableListOf<IcoDirectoryEntry>()
+                for (entryIndex in 0 until count) {
+                    val entry = input.readExactByteArrayOrNull(ICO_DIRECTORY_ENTRY_BYTES)
+                        ?: return@use null
+                    val imageSize = entry.readLittleEndianUnsignedInt(8)
+                    val imageOffset = entry.readLittleEndianUnsignedInt(12)
+                    if (
+                        imageSize > Int.MAX_VALUE.toLong() ||
+                        imageOffset > Int.MAX_VALUE.toLong() ||
+                        imageOffset < directoryEndOffset.toLong()
+                    ) {
+                        Log.w(TAG, "Skipping invalid ICO directory entry index=$entryIndex")
+                        continue
+                    }
+                    entries += IcoDirectoryEntry(
+                        width = entry.icoDirectorySize(0),
+                        height = entry.icoDirectorySize(1),
+                        planes = entry.readLittleEndianUnsignedShort(4),
+                        bitCount = entry.readLittleEndianUnsignedShort(6),
+                        imageSize = imageSize.toInt(),
+                        imageOffset = imageOffset.toInt()
+                    )
+                }
+
+                entries.takeIf { it.isNotEmpty() }
+            }
+        }.onFailure { exception ->
+            Log.w(TAG, "ICO directory read failed", exception)
+        }.getOrNull()
+    }
+
+    private fun readIcoPayload(uri: Uri, entry: IcoDirectoryEntry): ByteArray? {
+        return runCatching {
+            contentResolver.openInputStream(uri)?.use { input ->
+                if (!input.skipFully(entry.imageOffset.toLong())) return@use null
+                input.readExactByteArrayOrNull(entry.imageSize)
+            }
+        }.onFailure { exception ->
+            Log.w(TAG, "ICO payload read failed", exception)
+        }.getOrNull()
+    }
+
+    private fun InputStream.readExactByteArrayOrNull(byteCount: Int): ByteArray? {
+        val bytes = ByteArray(byteCount)
+        var offset = 0
+        while (offset < byteCount) {
+            val read = read(bytes, offset, byteCount - offset)
+            if (read < 0) return null
+            offset += read
+        }
+        return bytes
+    }
+
+    private fun InputStream.skipFully(byteCount: Long): Boolean {
+        var remaining = byteCount
+        val buffer = ByteArray(ICO_SKIP_BUFFER_BYTES)
+        while (remaining > 0L) {
+            val skipped = skip(remaining)
+            if (skipped > 0L) {
+                remaining -= skipped
+                continue
+            }
+
+            val readSize = minOf(buffer.size.toLong(), remaining).toInt()
+            val read = read(buffer, 0, readSize)
+            if (read < 0) return false
+            remaining -= read.toLong()
+        }
+        return true
+    }
+
+    private fun ByteArray.icoDirectorySize(offset: Int): Int {
+        val value = this[offset].toInt() and 0xff
+        return if (value == 0) ICO_MAX_DIRECTORY_SIZE else value
+    }
+
+    private fun ByteArray.readLittleEndianUnsignedShort(offset: Int): Int {
+        return (this[offset].toInt() and 0xff) or
+            ((this[offset + 1].toInt() and 0xff) shl 8)
+    }
+
+    private fun ByteArray.readLittleEndianUnsignedInt(offset: Int): Long {
+        return (this[offset].toLong() and 0xffL) or
+            ((this[offset + 1].toLong() and 0xffL) shl 8) or
+            ((this[offset + 2].toLong() and 0xffL) shl 16) or
+            ((this[offset + 3].toLong() and 0xffL) shl 24)
+    }
+
+    private fun ByteArray.hasPngSignature(): Boolean {
+        if (size < PNG_SIGNATURE.size) return false
+        return PNG_SIGNATURE.indices.all { index -> this[index] == PNG_SIGNATURE[index] }
     }
 
     @RequiresApi(Build.VERSION_CODES.P)
@@ -2876,6 +3031,17 @@ class ConversionService : Service() {
         val pngBytes: ByteArray
     )
 
+    private data class IcoDirectoryEntry(
+        val width: Int,
+        val height: Int,
+        val planes: Int,
+        val bitCount: Int,
+        val imageSize: Int,
+        val imageOffset: Int
+    ) {
+        val pixelArea: Int = width * height
+    }
+
     private data class PdfRenderProfile(
         val dpi: Float,
         val maxLongSidePixels: Int,
@@ -3040,13 +3206,27 @@ class ConversionService : Service() {
         private const val URI_SCHEME_FILE = "file"
         private const val MIN_MIXABLE_CHANNEL_COUNT = 1
         private const val MAX_MIXABLE_CHANNEL_COUNT = 6
+        private const val ICO_TYPE_ICON = 1
         private const val ICO_HEADER_BYTES = 6
         private const val ICO_DIRECTORY_ENTRY_BYTES = 16
         private const val ICO_MAX_DIRECTORY_SIZE = 256
+        private const val ICO_MAX_IMAGE_COUNT = 64
+        private const val ICO_MAX_PAYLOAD_BYTES = 64 * 1024 * 1024
+        private const val ICO_SKIP_BUFFER_BYTES = 8 * 1024
         private const val ICO_BITS_PER_PIXEL = 32
         private const val ACTION_START = "org.zenconverter.app.conversion.START"
         private const val ACTION_CANCEL = "org.zenconverter.app.conversion.CANCEL"
         private val ICO_IMAGE_SIZES = listOf(16, 32, 48, 64, 128, 256)
+        private val PNG_SIGNATURE = byteArrayOf(
+            0x89.toByte(),
+            0x50.toByte(),
+            0x4e.toByte(),
+            0x47.toByte(),
+            0x0d.toByte(),
+            0x0a.toByte(),
+            0x1a.toByte(),
+            0x0a.toByte()
+        )
         private val VIDEO_INPUT_EXTENSIONS = setOf(
             "mp4",
             "m4v",
