@@ -3712,6 +3712,11 @@ private data class UiText(
                 simplifiedChineseText -> "多格式兼容"
                 else -> "多格式相容"
             }
+            "Re-encode" -> when (this) {
+                englishText -> "Re-encode"
+                simplifiedChineseText -> "重新编码"
+                else -> "重新編碼"
+            }
             "Auto engine" -> when (this) {
                 englishText -> "Native or compatibility"
                 simplifiedChineseText -> "原生或兼容引擎"
