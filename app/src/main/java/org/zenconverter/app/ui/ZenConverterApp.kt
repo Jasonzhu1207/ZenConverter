@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.provider.DocumentsContract
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
@@ -69,12 +70,14 @@ import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PictureAsPdf
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -117,6 +120,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import org.zenconverter.app.conversion.AudioExportOptions
+import org.zenconverter.app.conversion.FileBasicInfo
 import org.zenconverter.app.conversion.GifFrameExportMode
 import org.zenconverter.app.conversion.ImageExportOptions
 import org.zenconverter.app.conversion.PdfExportOptions
@@ -221,6 +225,7 @@ data class QueuedFile(
     val mimeType: String?,
     val category: FileCategory,
     val targetFormat: String,
+    val inputInfo: FileBasicInfo? = null,
     val gifFrameMode: GifFrameExportMode = GifFrameExportMode.FirstFrame,
     val pdfPasswords: List<String?> = emptyList()
 )
@@ -256,7 +261,12 @@ data class TaskProgress(
     val fileId: String,
     val status: TaskProgressStatus,
     val progress: Float,
-    val message: String
+    val message: String,
+    val outputUri: Uri? = null,
+    val outputUris: List<Uri> = emptyList(),
+    val outputDirectoryUri: Uri? = null,
+    val outputMimeType: String? = null,
+    val outputInfo: FileBasicInfo? = null
 )
 
 enum class TaskProgressStatus {
@@ -2579,6 +2589,10 @@ private fun FileRow(
     canRemove: Boolean,
     onRemove: () -> Unit
 ) {
+    val context = LocalContext.current
+    val completedProgress = progress?.takeIf {
+        it.status == TaskProgressStatus.Completed && it.outputUriList().isNotEmpty()
+    }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -2592,7 +2606,11 @@ private fun FileRow(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 10.dp)
+            ) {
                 Text(
                     text = file.displayName,
                     style = MaterialTheme.typography.bodyMedium,
@@ -2601,28 +2619,40 @@ private fun FileRow(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = listOfNotNull(
-                        file.mimeType ?: texts.unknownType,
-                        formatBytes(file.sizeBytes, texts)
-                    ).joinToString(" / "),
+                    text = formatFileInfoLine(
+                        info = file.inputInfo,
+                        texts = texts,
+                        fallbackType = file.mimeType ?: texts.unknownType,
+                        fallbackSizeBytes = file.sizeBytes
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            TextButton(
-                onClick = onRemove,
-                enabled = canRemove
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                AppIcon(
+                if (completedProgress != null) {
+                    CompactTaskActionButton(
+                        icon = Icons.Rounded.Share,
+                        contentDescription = texts.shareOutput,
+                        onClick = { shareOutput(context, completedProgress, texts) }
+                    )
+                    CompactTaskActionButton(
+                        icon = Icons.Rounded.FolderOpen,
+                        contentDescription = texts.openOutputLocation,
+                        onClick = { openOutputLocation(context, completedProgress, texts) }
+                    )
+                }
+                CompactTaskActionButton(
                     icon = Icons.Rounded.DeleteOutline,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(16.dp)
+                    contentDescription = texts.remove,
+                    enabled = canRemove,
+                    onClick = onRemove
                 )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(texts.remove)
             }
         }
 
@@ -2630,6 +2660,11 @@ private fun FileRow(
             SmallTag(texts.categoryLabel(file.category))
             SmallTag(texts.toFormat(file.targetFormat))
             SmallTag(texts.progressLabel(progress))
+        }
+        if (progress?.status == TaskProgressStatus.Completed && progress.outputInfo != null) {
+            ResultInfoLine(
+                text = formatResultInfoLine(file, progress.outputInfo, texts)
+            )
         }
         if (progress?.status == TaskProgressStatus.Failed) {
             Text(
@@ -2875,6 +2910,22 @@ private fun SmallTag(text: String) {
 }
 
 @Composable
+private fun ResultInfoLine(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.primary,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.06f), RoundedCornerShape(8.dp))
+            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.14f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp, vertical = 7.dp)
+    )
+}
+
+@Composable
 private fun StatusLine(
     text: String,
     isError: Boolean = false
@@ -3081,6 +3132,31 @@ private fun imageQualityOptionsFor(targetFormat: TargetFormat): List<String> {
     }
 }
 
+@Composable
+private fun CompactTaskActionButton(
+    icon: ImageVector,
+    contentDescription: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    IconButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.size(34.dp)
+    ) {
+        AppIcon(
+            icon = icon,
+            contentDescription = contentDescription,
+            tint = if (enabled) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+            },
+            modifier = Modifier.size(18.dp)
+        )
+    }
+}
+
 private fun supportsWebpLosslessQuality(targetFormat: TargetFormat): Boolean {
     return targetFormat.extension.equals("webp", ignoreCase = true) &&
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
@@ -3169,6 +3245,11 @@ private data class UiText(
     val unknownType: String,
     val unknownSize: String,
     val remove: String,
+    val shareOutput: String,
+    val openOutputLocation: String,
+    val outputUnavailable: String,
+    val shareOutputFailed: String,
+    val openOutputFailed: String,
     val waiting: String,
     val processing: String,
     val flowComplete: String,
@@ -3195,6 +3276,38 @@ private data class UiText(
     val toPrefix: String
 ) {
     fun selectedCount(count: Int): String = "$count $selectedSuffix"
+
+    fun fileCountLabel(count: Int): String {
+        return when (this) {
+            englishText -> if (count == 1) "1 file" else "$count files"
+            simplifiedChineseText -> "$count 个文件"
+            else -> "$count 個檔案"
+        }
+    }
+
+    fun pageCountLabel(count: Int): String {
+        return when (this) {
+            englishText -> if (count == 1) "1 page" else "$count pages"
+            simplifiedChineseText -> "$count 页"
+            else -> "$count 頁"
+        }
+    }
+
+    fun frameRateLabel(value: String): String {
+        return when (this) {
+            englishText -> "Frame rate $value"
+            simplifiedChineseText -> "帧率 $value"
+            else -> "幀率 $value"
+        }
+    }
+
+    fun bitrateLabel(value: String): String {
+        return when (this) {
+            englishText -> "Overall bitrate $value"
+            simplifiedChineseText -> "总码率 $value"
+            else -> "總碼率 $value"
+        }
+    }
 
     fun qrCodeFor(value: String): String {
         return when (this) {
@@ -4111,6 +4224,11 @@ private val englishText = UiText(
     unknownType = "Unknown type",
     unknownSize = "Unknown size",
     remove = "Remove",
+    shareOutput = "Share output",
+    openOutputLocation = "Open output location",
+    outputUnavailable = "Output file is unavailable",
+    shareOutputFailed = "No app can share this output",
+    openOutputFailed = "No app can open this output",
     waiting = "Waiting",
     processing = "Processing",
     flowComplete = "Flow complete",
@@ -4192,6 +4310,11 @@ private val simplifiedChineseText = UiText(
     unknownType = "未知类型",
     unknownSize = "未知大小",
     remove = "移除",
+    shareOutput = "分享输出",
+    openOutputLocation = "打开输出位置",
+    outputUnavailable = "输出文件不可用",
+    shareOutputFailed = "没有可分享此输出的应用",
+    openOutputFailed = "没有可打开此输出的应用",
     waiting = "等待中",
     processing = "处理中",
     flowComplete = "流程完成",
@@ -4273,6 +4396,11 @@ private val traditionalChineseText = UiText(
     unknownType = "未知類型",
     unknownSize = "未知大小",
     remove = "移除",
+    shareOutput = "分享輸出",
+    openOutputLocation = "開啟輸出位置",
+    outputUnavailable = "輸出檔案不可用",
+    shareOutputFailed = "沒有可分享此輸出的應用",
+    openOutputFailed = "沒有可開啟此輸出的應用",
     waiting = "等待中",
     processing = "處理中",
     flowComplete = "流程完成",
@@ -4327,6 +4455,109 @@ private fun openExternalLink(
     }
 }
 
+private fun shareOutput(
+    context: Context,
+    progress: TaskProgress,
+    texts: UiText
+) {
+    val outputUris = progress.outputUriList()
+    if (outputUris.isEmpty()) {
+        Toast.makeText(context, texts.outputUnavailable, Toast.LENGTH_SHORT).show()
+        return
+    }
+    val intent = Intent(
+        if (outputUris.size == 1) Intent.ACTION_SEND else Intent.ACTION_SEND_MULTIPLE
+    ).apply {
+        type = progress.outputMimeType ?: MIME_TYPE_ANY
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        clipData = clipDataForUris(context, outputUris, texts.shareOutput)
+        if (outputUris.size == 1) {
+            putExtra(Intent.EXTRA_STREAM, outputUris.first())
+        } else {
+            putParcelableArrayListExtra(Intent.EXTRA_STREAM, arrayListOf<Uri>().apply { addAll(outputUris) })
+        }
+    }
+    val chooser = Intent.createChooser(intent, texts.shareOutput).apply {
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    try {
+        context.startActivity(chooser)
+    } catch (_: Throwable) {
+        Toast.makeText(context, texts.shareOutputFailed, Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun openOutputLocation(
+    context: Context,
+    progress: TaskProgress,
+    texts: UiText
+) {
+    val outputUri = progress.outputUri ?: progress.outputUriList().firstOrNull()
+    val locationUri = progress.outputDirectoryUri
+    if (
+        locationUri != null &&
+        tryOpenOutputUri(
+            context = context,
+            uri = locationUri,
+            mimeType = DocumentsContract.Document.MIME_TYPE_DIR,
+            title = texts.openOutputLocation
+        )
+    ) {
+        return
+    }
+    if (outputUri == null) {
+        Toast.makeText(context, texts.outputUnavailable, Toast.LENGTH_SHORT).show()
+        return
+    }
+    if (
+        !tryOpenOutputUri(
+            context = context,
+            uri = outputUri,
+            mimeType = progress.outputMimeType ?: MIME_TYPE_ANY,
+            title = texts.openOutputLocation
+        )
+    ) {
+        Toast.makeText(context, texts.openOutputFailed, Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun tryOpenOutputUri(
+    context: Context,
+    uri: Uri,
+    mimeType: String,
+    title: String
+): Boolean {
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, mimeType)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        clipData = ClipData.newUri(context.contentResolver, title, uri)
+    }
+    val chooser = Intent.createChooser(intent, title).apply {
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    return runCatching {
+        context.startActivity(chooser)
+        true
+    }.getOrDefault(false)
+}
+
+private fun clipDataForUris(
+    context: Context,
+    uris: List<Uri>,
+    label: String
+): ClipData {
+    val clipData = ClipData.newUri(context.contentResolver, label, uris.first())
+    uris.drop(1).forEach { uri ->
+        clipData.addItem(ClipData.Item(uri))
+    }
+    return clipData
+}
+
+private fun TaskProgress.outputUriList(): List<Uri> {
+    if (outputUris.isNotEmpty()) return outputUris
+    return outputUri?.let { listOf(it) }.orEmpty()
+}
+
 private fun copyToClipboard(
     context: Context,
     label: String,
@@ -4337,6 +4568,8 @@ private fun copyToClipboard(
     clipboard.setPrimaryClip(ClipData.newPlainText(label, value))
     Toast.makeText(context, copiedMessage, Toast.LENGTH_SHORT).show()
 }
+
+private const val MIME_TYPE_ANY = "*/*"
 
 private fun formatBytes(sizeBytes: Long?, texts: UiText): String {
     if (sizeBytes == null) return texts.unknownSize
@@ -4350,4 +4583,114 @@ private fun formatBytes(sizeBytes: Long?, texts: UiText): String {
         unitIndex++
     }
     return String.format(Locale.US, "%.1f %s", value, units[unitIndex])
+}
+
+private fun formatFileInfoLine(
+    info: FileBasicInfo?,
+    texts: UiText,
+    fallbackType: String,
+    fallbackSizeBytes: Long?
+): String {
+    val parts = fileInfoParts(info, texts)
+    if (parts.isNotEmpty()) return parts.joinToString(" · ")
+    return listOf(fallbackType, formatBytes(fallbackSizeBytes, texts)).joinToString(" · ")
+}
+
+private fun formatResultInfoLine(
+    file: QueuedFile,
+    outputInfo: FileBasicInfo,
+    texts: UiText
+): String {
+    val inputInfo = file.inputInfo
+    val formatChange = formatChangeLabel(inputInfo, outputInfo)
+    val sizeChange = formatSizeChangeLabel(inputInfo?.sizeBytes ?: file.sizeBytes, outputInfo.sizeBytes, texts)
+    return fileInfoParts(
+        info = outputInfo,
+        texts = texts,
+        formatOverride = formatChange,
+        sizeOverride = sizeChange
+    ).joinToString(" · ")
+}
+
+private fun fileInfoParts(
+    info: FileBasicInfo?,
+    texts: UiText,
+    formatOverride: String? = null,
+    sizeOverride: String? = null
+): List<String> {
+    if (info == null) return emptyList()
+    return buildList {
+        val formatPart = formatOverride ?: info.formatLabel?.takeIf { it.isNotBlank() }
+        formatPart?.let { add(it) }
+        info.itemCount?.let { add(texts.fileCountLabel(it)) }
+        info.durationMs?.let { add(formatDurationMs(it, texts)) }
+        if (info.width != null && info.height != null) {
+            add("${info.width}x${info.height}")
+        }
+        info.frameRate?.let { add(texts.frameRateLabel(formatFrameRate(it))) }
+        info.bitrateBitsPerSecond?.let { add(texts.bitrateLabel(formatBitrate(it))) }
+        info.pageCount?.let { add(texts.pageCountLabel(it)) }
+        val sizePart = sizeOverride ?: info.sizeBytes?.let { formatBytes(it, texts) }
+        sizePart?.let { add(it) }
+    }
+}
+
+private fun formatChangeLabel(
+    inputInfo: FileBasicInfo?,
+    outputInfo: FileBasicInfo
+): String? {
+    val inputFormat = inputInfo?.formatLabel?.takeIf { it.isNotBlank() }
+    val outputFormat = outputInfo.formatLabel?.takeIf { it.isNotBlank() }
+    return when {
+        inputFormat != null && outputFormat != null -> "$inputFormat -> $outputFormat"
+        outputFormat != null -> outputFormat
+        else -> null
+    }
+}
+
+private fun formatSizeChangeLabel(
+    inputSizeBytes: Long?,
+    outputSizeBytes: Long?,
+    texts: UiText
+): String? {
+    if (outputSizeBytes == null) return null
+    val outputSize = formatBytes(outputSizeBytes, texts)
+    val inputSize = inputSizeBytes?.takeIf { it > 0L } ?: return outputSize
+    val percent = ((outputSizeBytes - inputSize).toDouble() / inputSize.toDouble()) * 100.0
+    return "$outputSize (${String.format(Locale.US, "%+.0f%%", percent)})"
+}
+
+private fun formatDurationMs(durationMs: Long, texts: UiText): String {
+    if (durationMs < 60_000L) {
+        return if (texts === englishText) {
+            String.format(Locale.US, "%.1fs", durationMs.toDouble() / 1000.0)
+        } else {
+            String.format(Locale.US, "%.1f秒", durationMs.toDouble() / 1000.0)
+        }
+    }
+    val totalSeconds = (durationMs / 1000L).coerceAtLeast(0L)
+    val seconds = totalSeconds % 60L
+    val minutes = (totalSeconds / 60L) % 60L
+    val hours = totalSeconds / 3600L
+    return if (hours > 0L) {
+        String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
+    } else {
+        String.format(Locale.US, "%d:%02d", minutes, seconds)
+    }
+}
+
+private fun formatFrameRate(frameRate: Float): String {
+    return if (frameRate >= 10f) {
+        String.format(Locale.US, "%.0f fps", frameRate)
+    } else {
+        String.format(Locale.US, "%.1f fps", frameRate)
+    }
+}
+
+private fun formatBitrate(bitsPerSecond: Long): String {
+    return if (bitsPerSecond >= 1_000_000L) {
+        String.format(Locale.US, "%.1f Mbps", bitsPerSecond.toDouble() / 1_000_000.0)
+    } else {
+        String.format(Locale.US, "%.0f kbps", bitsPerSecond.toDouble() / 1_000.0)
+    }
 }

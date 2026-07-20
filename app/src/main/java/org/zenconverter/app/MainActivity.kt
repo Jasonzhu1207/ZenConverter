@@ -29,6 +29,8 @@ import org.zenconverter.app.conversion.ConversionTaskInput
 import org.zenconverter.app.conversion.ConversionTaskState
 import org.zenconverter.app.conversion.ConversionTaskStatus
 import org.zenconverter.app.conversion.ConversionTaskStore
+import org.zenconverter.app.conversion.FileBasicInfo
+import org.zenconverter.app.conversion.FileBasicInfoReader
 import org.zenconverter.app.conversion.GifFrameExportMode
 import org.zenconverter.app.conversion.ImageExportOptions
 import org.zenconverter.app.conversion.OutputDestination
@@ -102,11 +104,19 @@ class MainActivity : ComponentActivity() {
         val documents = uris.map { uri ->
             persistInputFilePermission(uri)
             val metadata = queryOpenableMetadata(uri)
+            val mimeType = contentResolver.getType(uri)
             SelectedDocument(
                 uri = uri,
                 displayName = metadata.displayName,
                 sizeBytes = metadata.sizeBytes,
-                mimeType = contentResolver.getType(uri)
+                mimeType = mimeType,
+                inputInfo = FileBasicInfoReader.read(
+                    context = this,
+                    uri = uri,
+                    displayName = metadata.displayName,
+                    mimeType = mimeType,
+                    fallbackSizeBytes = metadata.sizeBytes
+                )
             )
         }
 
@@ -384,6 +394,7 @@ class MainActivity : ComponentActivity() {
                     audioOptions = pendingAudioOptions,
                     imageOptions = pendingImageOptions,
                     pdfOptions = pendingPdfOptions,
+                    inputInfo = file.inputInfo,
                     gifFrameMode = file.gifFrameMode,
                     pdfPasswords = file.pdfPasswords
                 )
@@ -791,7 +802,8 @@ private data class SelectedDocument(
     val uri: Uri,
     val displayName: String,
     val sizeBytes: Long?,
-    val mimeType: String?
+    val mimeType: String?,
+    val inputInfo: FileBasicInfo?
 )
 
 private data class PendingImagePdfSelection(
@@ -851,6 +863,7 @@ private fun SelectedDocument.toQueuedFile(
         mimeType = mimeType,
         category = request.category,
         targetFormat = request.targetFormat.label,
+        inputInfo = inputInfo,
         gifFrameMode = gifFrameMode,
         pdfPasswords = listOf(pdfPassword)
     )
@@ -870,6 +883,11 @@ private fun PendingPdfBatch.toMergedPdfQueuedFile(): QueuedFile {
         mimeType = MIME_TYPE_PDF,
         category = request.category,
         targetFormat = request.targetFormat.label,
+        inputInfo = FileBasicInfoReader.aggregate(
+            documents = openedDocuments.map { it.inputInfo },
+            fallbackSizeBytes = totalSize,
+            formatLabel = "PDF"
+        ),
         pdfPasswords = pdfPasswords.toList()
     )
 }
@@ -887,6 +905,10 @@ private fun PendingImagePdfSelection.toSinglePdfQueuedFile(): QueuedFile {
         mimeType = "image/*",
         category = request.category,
         targetFormat = request.targetFormat.label,
+        inputInfo = FileBasicInfoReader.aggregate(
+            documents = documents.map { it.inputInfo },
+            fallbackSizeBytes = totalSize
+        ),
         gifFrameMode = gifFrameMode
     )
 }
@@ -964,7 +986,12 @@ private fun ConversionTaskState.toUiProgress(): TaskProgress {
             ConversionTaskStatus.Failed -> TaskProgressStatus.Failed
         },
         progress = progress,
-        message = message
+        message = message,
+        outputUri = outputUri,
+        outputUris = outputUris,
+        outputDirectoryUri = outputDirectoryUri,
+        outputMimeType = outputMimeType,
+        outputInfo = outputInfo
     )
 }
 

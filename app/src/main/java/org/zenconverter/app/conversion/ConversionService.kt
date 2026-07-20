@@ -3215,6 +3215,18 @@ class ConversionService : Service() {
         }
     }
 
+    private fun aggregateOutputInfo(
+        outputProfile: OutputProfile,
+        itemCount: Int,
+        outputSizeBytes: Long
+    ): FileBasicInfo {
+        return FileBasicInfo(
+            formatLabel = outputProfile.extension.uppercase(Locale.US),
+            sizeBytes = outputSizeBytes.takeIf { it > 0L },
+            itemCount = itemCount.takeIf { it > 1 }
+        )
+    }
+
     private fun saveCompletedExport(
         input: ConversionTaskInput,
         tempFile: File
@@ -3229,14 +3241,24 @@ class ConversionService : Service() {
             try {
                 val outputProfile = outputProfileFor(input)
                     ?: error("Unsupported output format")
+                val outputDisplayName = outputNameFor(input, outputProfile.extension)
+                val tempFileSizeBytes = tempFile.length().takeIf { it >= 0L }
                 val createdOutputUri = createOutput(
                     input,
-                    outputNameFor(input, outputProfile.extension),
+                    outputDisplayName,
                     outputProfile
                 )
                 outputUri = createdOutputUri
                 copyFileToOutput(tempFile, createdOutputUri)
                 finalizeOutput(input, createdOutputUri, outputProfile.mimeType)
+                val outputInfo = FileBasicInfoReader.read(
+                    context = this,
+                    uri = createdOutputUri,
+                    displayName = outputDisplayName,
+                    mimeType = outputProfile.mimeType,
+                    fallbackSizeBytes = tempFileSizeBytes,
+                    formatOverride = outputProfile.extension.uppercase(Locale.US)
+                )
                 tempFile.delete()
                 handler.post {
                     if (ConversionTaskStore.isCancelled()) {
@@ -3245,7 +3267,14 @@ class ConversionService : Service() {
                         return@post
                     }
                     activeTempFile = null
-                    ConversionTaskStore.markCompleted(taskIndex, createdOutputUri)
+                    ConversionTaskStore.markCompleted(
+                        index = taskIndex,
+                        outputUri = createdOutputUri,
+                        outputUris = listOf(createdOutputUri),
+                        outputDirectoryUri = outputDirectoryUriFor(input, outputProfile),
+                        outputMimeType = outputProfile.mimeType,
+                        outputInfo = outputInfo
+                    )
                     taskIndex += 1
                     processNextTask()
                 }
@@ -3277,11 +3306,13 @@ class ConversionService : Service() {
 
         copyThread = Thread {
             val outputUris = mutableListOf<Uri>()
+            var outputSizeBytes = 0L
             try {
                 tempFiles.forEachIndexed { index, tempFile ->
                     if (Thread.currentThread().isInterrupted || ConversionTaskStore.isCancelled()) {
                         throw InterruptedException()
                     }
+                    outputSizeBytes += tempFile.length().coerceAtLeast(0L)
                     val createdOutputUri = createOutput(
                         input,
                         outputNameForPage(
@@ -3304,7 +3335,14 @@ class ConversionService : Service() {
                         return@post
                     }
                     activeTempFile = null
-                    ConversionTaskStore.markCompleted(taskIndex, outputUris.firstOrNull())
+                    ConversionTaskStore.markCompleted(
+                        index = taskIndex,
+                        outputUri = outputUris.firstOrNull(),
+                        outputUris = outputUris.toList(),
+                        outputDirectoryUri = outputDirectoryUriFor(input, outputProfile),
+                        outputMimeType = outputProfile.mimeType,
+                        outputInfo = aggregateOutputInfo(outputProfile, outputUris.size, outputSizeBytes)
+                    )
                     taskIndex += 1
                     processNextTask()
                 }
@@ -3338,6 +3376,7 @@ class ConversionService : Service() {
         copyThread = Thread {
             val outputUris = mutableListOf<Uri>()
             var outputFolder: OutputFolder? = null
+            var outputSizeBytes = 0L
             try {
                 val folder = createOutputFolder(input, folderName, outputProfile)
                 outputFolder = folder
@@ -3345,6 +3384,7 @@ class ConversionService : Service() {
                     if (Thread.currentThread().isInterrupted || ConversionTaskStore.isCancelled()) {
                         throw InterruptedException()
                     }
+                    outputSizeBytes += tempFile.length().coerceAtLeast(0L)
                     val createdOutputUri = createOutputInFolder(
                         folder = folder,
                         displayName = outputNameForFrame(
@@ -3368,7 +3408,15 @@ class ConversionService : Service() {
                         return@post
                     }
                     activeTempFile = null
-                    ConversionTaskStore.markCompleted(taskIndex, outputUris.firstOrNull())
+                    ConversionTaskStore.markCompleted(
+                        index = taskIndex,
+                        outputUri = outputUris.firstOrNull(),
+                        outputUris = outputUris.toList(),
+                        outputDirectoryUri = outputFolderOpenUri(outputFolder)
+                            ?: outputDirectoryUriFor(input, outputProfile),
+                        outputMimeType = outputProfile.mimeType,
+                        outputInfo = aggregateOutputInfo(outputProfile, outputUris.size, outputSizeBytes)
+                    )
                     taskIndex += 1
                     processNextTask()
                 }
@@ -3535,6 +3583,39 @@ class ConversionService : Service() {
                 OutputFolder(documentDirectoryUri = folderUri)
             }
         }
+    }
+
+    private fun outputDirectoryUriFor(
+        input: ConversionTaskInput,
+        outputProfile: OutputProfile
+    ): Uri? {
+        return when (val destination = input.outputDestination) {
+            OutputDestination.DefaultPublicDirectory -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    null
+                } else {
+                    val publicDirectory = Environment.getExternalStoragePublicDirectory(
+                        defaultPublicDirectoryFor(outputProfile)
+                    )
+                    Uri.fromFile(File(publicDirectory, DEFAULT_OUTPUT_DIRECTORY))
+                }
+            }
+            is OutputDestination.CustomDirectory -> documentUriForTree(destination.uri)
+        }
+    }
+
+    private fun outputFolderOpenUri(folder: OutputFolder?): Uri? {
+        if (folder == null) return null
+        folder.documentDirectoryUri?.let { return it }
+        folder.fileDirectory?.let { return Uri.fromFile(it) }
+        return null
+    }
+
+    private fun documentUriForTree(treeUri: Uri): Uri? {
+        return runCatching {
+            val treeDocumentId = DocumentsContract.getTreeDocumentId(treeUri)
+            DocumentsContract.buildDocumentUriUsingTree(treeUri, treeDocumentId)
+        }.getOrNull()
     }
 
     private fun createOutputInFolder(

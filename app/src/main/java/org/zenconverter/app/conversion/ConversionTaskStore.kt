@@ -17,6 +17,7 @@ data class ConversionTaskInput(
     val audioOptions: AudioExportOptions,
     val imageOptions: ImageExportOptions,
     val pdfOptions: PdfExportOptions,
+    val inputInfo: FileBasicInfo? = null,
     val gifFrameMode: GifFrameExportMode = GifFrameExportMode.FirstFrame,
     val pdfPasswords: List<String?> = emptyList()
 )
@@ -87,7 +88,11 @@ data class ConversionTaskState(
     val status: ConversionTaskStatus,
     val progress: Float,
     val message: String,
-    val outputUri: Uri? = null
+    val outputUri: Uri? = null,
+    val outputUris: List<Uri> = emptyList(),
+    val outputDirectoryUri: Uri? = null,
+    val outputMimeType: String? = null,
+    val outputInfo: FileBasicInfo? = null
 )
 
 enum class ConversionTaskStatus {
@@ -171,13 +176,24 @@ object ConversionTaskStore {
         }
     }
 
-    fun markCompleted(index: Int, outputUri: Uri? = null) {
+    fun markCompleted(
+        index: Int,
+        outputUri: Uri? = null,
+        outputUris: List<Uri> = outputUri?.let { listOf(it) }.orEmpty(),
+        outputDirectoryUri: Uri? = null,
+        outputMimeType: String? = null,
+        outputInfo: FileBasicInfo? = null
+    ) {
         updateTask(index) { task ->
             task.copy(
                 status = ConversionTaskStatus.Completed,
                 progress = 1f,
                 message = "Conversion complete",
-                outputUri = outputUri
+                outputUri = outputUri,
+                outputUris = outputUris,
+                outputDirectoryUri = outputDirectoryUri,
+                outputMimeType = outputMimeType,
+                outputInfo = outputInfo
             )
         }
     }
