@@ -901,7 +901,8 @@ private fun QueuedFile.hasConnectedNativeTarget(): Boolean {
     return when (category) {
         FileCategory.Video -> targetFormat.equals("MP4", ignoreCase = true) ||
             targetFormat.equals("MKV", ignoreCase = true) ||
-            targetFormat.equals("MOV", ignoreCase = true)
+            targetFormat.equals("MOV", ignoreCase = true) ||
+            targetFormat.equals("GIF", ignoreCase = true)
         FileCategory.Audio -> audioTargetExtensionFor(targetFormat) in CONNECTED_AUDIO_TARGETS
         FileCategory.Image -> targetFormat.equals("JPG", ignoreCase = true) ||
             targetFormat.equals("JFIF", ignoreCase = true) ||

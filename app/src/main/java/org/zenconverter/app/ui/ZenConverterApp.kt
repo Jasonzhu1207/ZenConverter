@@ -155,7 +155,8 @@ enum class FileCategory(
         formats = listOf(
             TargetFormat("MP4", "mp4", "Auto engine"),
             TargetFormat("MKV", "mkv", "Re-encode"),
-            TargetFormat("MOV", "mov", "Re-encode")
+            TargetFormat("MOV", "mov", "Re-encode"),
+            TargetFormat("GIF", "gif", "30s GIF")
         )
     ),
     Audio(
@@ -351,6 +352,11 @@ private val VIDEO_RESOLUTION_OPTIONS = listOf(
     VIDEO_RESOLUTION_1080P,
     VIDEO_RESOLUTION_720P,
     VIDEO_RESOLUTION_480P
+)
+private val VIDEO_GIF_RESOLUTION_OPTIONS = listOf(
+    VIDEO_RESOLUTION_480P,
+    VIDEO_RESOLUTION_720P,
+    VIDEO_RESOLUTION_ORIGINAL
 )
 
 private const val VIDEO_BITRATE_AUTO = "Auto bitrate"
@@ -600,7 +606,12 @@ private fun ZenConverterContent(
 
     fun setTarget(category: FileCategory, targetFormat: TargetFormat) {
         when (category) {
-            FileCategory.Video -> videoTarget = targetFormat
+            FileCategory.Video -> {
+                videoTarget = targetFormat
+                if (targetFormat.extension.equals("gif", ignoreCase = true)) {
+                    videoResolution = VIDEO_RESOLUTION_480P
+                }
+            }
             FileCategory.Audio -> audioTarget = targetFormat
             FileCategory.Image -> {
                 imageTarget = targetFormat
@@ -617,6 +628,14 @@ private fun ZenConverterContent(
     }
 
     fun currentVideoOptions(): VideoExportOptions {
+        if (videoTarget.extension.equals("gif", ignoreCase = true)) {
+            return VideoExportOptions(
+                maxShortSidePixels = videoResolutionToShortSide(videoResolution),
+                videoBitrate = null,
+                videoMimeType = VideoExportOptions.VIDEO_MIME_TYPE_H264,
+                maxFrameRate = 30
+            )
+        }
         return VideoExportOptions(
             maxShortSidePixels = videoResolutionToShortSide(videoResolution),
             videoBitrate = videoBitrateToBits(videoBitrate),
@@ -746,6 +765,7 @@ private fun ZenConverterContent(
                         videoCodec = videoCodec,
                         videoCodecOptions = videoCodecOptionsFor(supportedVideoMimeTypes),
                         videoFrameRate = videoFrameRate,
+                        videoTarget = videoTarget,
                         audioBitrate = audioBitrate,
                         audioSampleRate = audioSampleRate,
                         audioChannels = audioChannels,
@@ -2037,6 +2057,7 @@ private fun EncodingPanel(
     videoCodec: String,
     videoCodecOptions: List<String>,
     videoFrameRate: String,
+    videoTarget: TargetFormat,
     audioBitrate: String,
     audioSampleRate: String,
     audioChannels: String,
@@ -2084,6 +2105,7 @@ private fun EncodingPanel(
                 codec = videoCodec,
                 codecOptions = videoCodecOptions,
                 frameRate = videoFrameRate,
+                targetFormat = videoTarget,
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
                 onResolutionChange = onVideoResolutionChange,
@@ -2139,6 +2161,7 @@ private fun VideoOptions(
     codec: String,
     codecOptions: List<String>,
     frameRate: String,
+    targetFormat: TargetFormat,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onResolutionChange: (String) -> Unit,
@@ -2146,47 +2169,50 @@ private fun VideoOptions(
     onCodecChange: (String) -> Unit,
     onFrameRateChange: (String) -> Unit
 ) {
+    val isGifTarget = targetFormat.extension.equals("gif", ignoreCase = true)
     OptionGrid {
         OptionDropdown(
             "video-size",
             texts.resolution,
             resolution,
-            VIDEO_RESOLUTION_OPTIONS,
+            if (isGifTarget) VIDEO_GIF_RESOLUTION_OPTIONS else VIDEO_RESOLUTION_OPTIONS,
             texts,
             openMenuId,
             onOpenMenuChange,
             onResolutionChange
         )
-        OptionDropdown(
-            "video-bitrate",
-            texts.bitrate,
-            bitrate,
-            VIDEO_BITRATE_OPTIONS,
-            texts,
-            openMenuId,
-            onOpenMenuChange,
-            onBitrateChange
-        )
-        OptionDropdown(
-            "video-codec",
-            texts.codec,
-            codec,
-            codecOptions,
-            texts,
-            openMenuId,
-            onOpenMenuChange,
-            onCodecChange
-        )
-        OptionDropdown(
-            "video-frame-rate",
-            texts.frameRate,
-            frameRate,
-            VIDEO_FRAME_RATE_OPTIONS,
-            texts,
-            openMenuId,
-            onOpenMenuChange,
-            onFrameRateChange
-        )
+        if (!isGifTarget) {
+            OptionDropdown(
+                "video-bitrate",
+                texts.bitrate,
+                bitrate,
+                VIDEO_BITRATE_OPTIONS,
+                texts,
+                openMenuId,
+                onOpenMenuChange,
+                onBitrateChange
+            )
+            OptionDropdown(
+                "video-codec",
+                texts.codec,
+                codec,
+                codecOptions,
+                texts,
+                openMenuId,
+                onOpenMenuChange,
+                onCodecChange
+            )
+            OptionDropdown(
+                "video-frame-rate",
+                texts.frameRate,
+                frameRate,
+                VIDEO_FRAME_RATE_OPTIONS,
+                texts,
+                openMenuId,
+                onOpenMenuChange,
+                onFrameRateChange
+            )
+        }
     }
 }
 
@@ -3446,6 +3472,16 @@ private data class UiText(
                 simplifiedChineseText -> "当前兼容包不包含 AAC 编码器"
                 else -> "目前相容包不包含 AAC 編碼器"
             }
+            "Compatibility engine needs a GIF-capable FFmpeg package" -> when (this) {
+                englishText -> "Compatibility engine needs a GIF-capable FFmpeg package"
+                simplifiedChineseText -> "当前兼容包不包含 GIF 编码器"
+                else -> "目前相容包不包含 GIF 編碼器"
+            }
+            "Compatibility engine could not create this GIF" -> when (this) {
+                englishText -> "Compatibility engine could not create this GIF"
+                simplifiedChineseText -> "兼容引擎无法生成这个 GIF"
+                else -> "相容引擎無法產生這個 GIF"
+            }
             "Compatibility engine could not write this audio container" -> when (this) {
                 englishText -> "Compatibility engine could not write this audio container"
                 simplifiedChineseText -> "兼容引擎无法写出这个音频容器"
@@ -3722,6 +3758,11 @@ private data class UiText(
                 englishText -> "Re-encode"
                 simplifiedChineseText -> "重新编码"
                 else -> "重新編碼"
+            }
+            "30s GIF" -> when (this) {
+                englishText -> "Up to 30s GIF"
+                simplifiedChineseText -> "上限 30 秒 GIF"
+                else -> "上限 30 秒 GIF"
             }
             "Auto engine" -> when (this) {
                 englishText -> "Native or compatibility"

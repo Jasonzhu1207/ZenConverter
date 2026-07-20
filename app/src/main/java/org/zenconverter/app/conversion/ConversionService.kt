@@ -2028,7 +2028,7 @@ class ConversionService : Service() {
             )
         }
 
-        val durationMs = readDurationMs(input.inputUri)
+        val durationMs = ffmpegProgressDurationMsFor(input)
         val logTail = mutableListOf<String>()
 
         val inputSource = openFfmpegInputSource(input.inputUri)
@@ -2039,6 +2039,15 @@ class ConversionService : Service() {
             )
 
         try {
+            if (isVideoGifOutput(input)) {
+                return@withContext runFfmpegVideoGifExport(
+                    input = input,
+                    inputSource = inputSource,
+                    tempFile = tempFile,
+                    durationMs = durationMs,
+                    logTail = logTail
+                )
+            }
             val arguments = ffmpegArgumentsFor(input, inputSource.path, tempFile)
             executeFfmpeg(input, arguments, durationMs, logTail, inputSource.label)
         } finally {
@@ -2066,6 +2075,26 @@ class ConversionService : Service() {
             label = "fd",
             path = "/proc/self/fd/${inputDescriptor.fd}",
             descriptor = inputDescriptor
+        )
+    }
+
+    private suspend fun runFfmpegVideoGifExport(
+        input: ConversionTaskInput,
+        inputSource: FfmpegInputSource,
+        tempFile: File,
+        durationMs: Long?,
+        logTail: MutableList<String>
+    ): FfmpegRunResult {
+        return executeFfmpeg(
+            input = input,
+            arguments = ffmpegVideoGifArgumentsFor(
+                input = input,
+                inputPath = inputSource.path,
+                outputFile = tempFile
+            ),
+            durationMs = durationMs,
+            logTail = logTail,
+            inputSourceLabel = inputSource.label
         )
     }
 
@@ -2379,6 +2408,66 @@ class ConversionService : Service() {
         }
     }
 
+    private fun ffmpegVideoGifArgumentsFor(
+        input: ConversionTaskInput,
+        inputPath: String,
+        outputFile: File
+    ): List<String> {
+        return buildList {
+            add("-hide_banner")
+            add("-nostdin")
+            add("-y")
+            add("-t")
+            add(FFMPEG_VIDEO_GIF_MAX_DURATION_SECONDS)
+            add("-i")
+            add(inputPath)
+            add("-an")
+            add("-sn")
+            add("-dn")
+            add("-filter_complex")
+            add(
+                "[0:v:0]${ffmpegVideoGifFilterChainFor(input)},split[gifsrc][palette_src];" +
+                    "[palette_src]palettegen=max_colors=256[palette];" +
+                    "[gifsrc][palette]paletteuse=dither=sierra2_4a[gif]"
+            )
+            add("-map")
+            add("[gif]")
+            add("-frames:v")
+            add(FFMPEG_VIDEO_GIF_MAX_FRAMES.toString())
+            add("-loop")
+            add("0")
+            add("-f")
+            add("gif")
+            add(outputFile.absolutePath)
+        }
+    }
+
+    private fun ffmpegVideoGifFilterChainFor(input: ConversionTaskInput): String {
+        return buildList {
+            add("fps=$FFMPEG_VIDEO_GIF_FRAME_RATE")
+            ffmpegVideoGifScaleFilterFor(input)?.let { add(it) }
+        }.joinToString(separator = ",")
+    }
+
+    private fun ffmpegVideoGifScaleFilterFor(input: ConversionTaskInput): String? {
+        val targetShortSide = input.videoOptions.maxShortSidePixels
+            ?.takeIf { it > 0 }
+            ?: return null
+        val sourceSize = readVideoSize(input.inputUri)
+        if (sourceSize != null) {
+            if (sourceSize.shortSide <= targetShortSide) return null
+            val scaledSize = scaledVideoSizeFor(sourceSize, targetShortSide)
+            return "scale=${scaledSize.width}:${scaledSize.height}:flags=lanczos"
+        }
+        Log.w(
+            TAG,
+            "Video size metadata unavailable; using FFmpeg dynamic GIF scale filter " +
+                "targetShortSide=$targetShortSide displayName=${input.displayName}"
+        )
+        return "scale=w='if(gte(iw\\,ih)\\,-2\\,min(iw\\,$targetShortSide))':" +
+            "h='if(gte(iw\\,ih)\\,min(ih\\,$targetShortSide)\\,-2)':flags=lanczos"
+    }
+
     private fun ffmpegVideoProfileFor(input: ConversionTaskInput): FfmpegVideoProfile? {
         val targetExtension = videoTargetExtensionFor(input.targetFormat) ?: return null
         val videoCodec = when (input.videoOptions.videoMimeType) {
@@ -2514,7 +2603,9 @@ class ConversionService : Service() {
         arguments: List<String>,
         durationMs: Long?,
         logTail: MutableList<String>,
-        inputSourceLabel: String
+        inputSourceLabel: String,
+        progressStart: Float = 0f,
+        progressEnd: Float = FFMPEG_MAX_PROGRESS_BEFORE_SAVE
     ): FfmpegRunResult = suspendCancellableCoroutine { continuation ->
         val resumed = AtomicBoolean(false)
         Log.i(
@@ -2577,7 +2668,9 @@ class ConversionService : Service() {
                 if (message != null) {
                     appendFfmpegLogTail(logTail, message)
                     ffmpegProgressFromMessage(message, durationMs)?.let { progress ->
-                        updateCompatibilityProgress(progress)
+                        updateCompatibilityProgress(
+                            scaledFfmpegProgress(progress, progressStart, progressEnd)
+                        )
                     }
                 }
             },
@@ -2585,7 +2678,9 @@ class ConversionService : Service() {
                 val duration = durationMs
                 if (duration != null && duration > 0L) {
                     val progress = statistics.time.toFloat() / duration.toFloat()
-                    updateCompatibilityProgress(progress)
+                    updateCompatibilityProgress(
+                        scaledFfmpegProgress(progress, progressStart, progressEnd)
+                    )
                 }
             }
         )
@@ -2597,6 +2692,15 @@ class ConversionService : Service() {
                 Log.w(TAG, "Could not cancel FFmpeg session", exception)
             }
         }
+    }
+
+    private fun scaledFfmpegProgress(
+        progress: Float,
+        progressStart: Float,
+        progressEnd: Float
+    ): Float {
+        val normalizedProgress = progress.coerceIn(0f, 1f)
+        return progressStart + (progressEnd - progressStart) * normalizedProgress
     }
 
     private fun updateCompatibilityProgress(progress: Float) {
@@ -2679,8 +2783,12 @@ class ConversionService : Service() {
     private fun ffmpegMissingEncoderMessageFor(input: ConversionTaskInput): String? {
         val requiredEncoders = when (input.category) {
             ConversionMediaCategory.Video -> {
-                val profile = ffmpegVideoProfileFor(input) ?: return null
-                listOf(profile.videoCodec, FFMPEG_AAC_ENCODER)
+                if (isVideoGifOutput(input)) {
+                    listOf(FFMPEG_GIF_ENCODER)
+                } else {
+                    val profile = ffmpegVideoProfileFor(input) ?: return null
+                    listOf(profile.videoCodec, FFMPEG_AAC_ENCODER)
+                }
             }
             ConversionMediaCategory.Audio -> {
                 val profile = ffmpegAudioProfileFor(input) ?: return null
@@ -2725,9 +2833,23 @@ class ConversionService : Service() {
     }
 
     private fun ffmpegEncoderOutputContains(output: String, encoder: String): Boolean {
-        return output.lineSequence().any { line ->
-            val tokens = line.trim().split(WHITESPACE_REGEX, limit = 3)
-            tokens.size >= 2 && tokens[1] == encoder
+        val lines = output.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toList()
+        return lines.indices.any { index ->
+            val line = lines[index]
+            val tokens = line.split(WHITESPACE_REGEX, limit = 3)
+            when {
+                tokens.size >= 2 &&
+                    FFMPEG_ENCODER_FLAGS_REGEX.matches(tokens[0]) &&
+                    tokens[1] == encoder -> true
+                tokens.size == 1 &&
+                    tokens[0] == encoder &&
+                    index > 0 &&
+                    FFMPEG_ENCODER_FLAGS_REGEX.matches(lines[index - 1]) -> true
+                else -> false
+            }
         }
     }
 
@@ -2745,6 +2867,9 @@ class ConversionService : Service() {
                 "Compatibility engine needs an H.265-capable FFmpeg package"
             encoder == FFMPEG_AAC_ENCODER ->
                 "Compatibility engine needs an AAC-capable FFmpeg package"
+            encoder == FFMPEG_GIF_ENCODER &&
+                isVideoGifOutput(input) ->
+                "Compatibility engine needs a GIF-capable FFmpeg package"
             input.category == ConversionMediaCategory.Video ->
                 "Compatibility engine cannot encode this video format yet"
             else ->
@@ -2795,6 +2920,19 @@ class ConversionService : Service() {
             return "Compatibility engine could not write this audio container"
         }
         if (
+            isVideoGifOutput(input) &&
+            (
+                normalizedTail.contains("unknown encoder") ||
+                    normalizedTail.contains("encoder not found") ||
+                    normalizedTail.contains("invalid encoder")
+            )
+        ) {
+            return "Compatibility engine needs a GIF-capable FFmpeg package"
+        }
+        if (isVideoGifOutput(input)) {
+            return "Compatibility engine could not create this GIF"
+        }
+        if (
             input.category == ConversionMediaCategory.Video &&
             (
                 normalizedTail.contains("unknown encoder") ||
@@ -2818,6 +2956,7 @@ class ConversionService : Service() {
             ConversionMediaCategory.Video -> when (videoTargetExtensionFor(input.targetFormat)) {
                 "mkv" -> "Compatibility engine could not transcode this file to MKV"
                 "mov" -> "Compatibility engine could not transcode this file to MOV"
+                "gif" -> "Compatibility engine could not create this GIF"
                 else -> "Compatibility engine could not transcode this file to MP4"
             }
             ConversionMediaCategory.Audio ->
@@ -2886,6 +3025,15 @@ class ConversionService : Service() {
         }
     }
 
+    private fun ffmpegProgressDurationMsFor(input: ConversionTaskInput): Long? {
+        val durationMs = readDurationMs(input.inputUri)
+        return if (isVideoGifOutput(input)) {
+            durationMs?.coerceAtMost(FFMPEG_VIDEO_GIF_MAX_DURATION_MS)
+        } else {
+            durationMs
+        }
+    }
+
     private fun shouldUseCompatibilityEngine(input: ConversionTaskInput): Boolean {
         return when (input.category) {
             ConversionMediaCategory.Video ->
@@ -2908,6 +3056,11 @@ class ConversionService : Service() {
         val mimeType = input.mimeType.orEmpty().lowercase(Locale.US)
         val extension = input.extension.lowercase(Locale.US)
         return mimeType.startsWith("video/") || extension in VIDEO_INPUT_EXTENSIONS
+    }
+
+    private fun isVideoGifOutput(input: ConversionTaskInput): Boolean {
+        return input.category == ConversionMediaCategory.Video &&
+            videoTargetExtensionFor(input.targetFormat) == "gif"
     }
 
     private fun isLikelyMp4VideoInput(input: ConversionTaskInput): Boolean {
@@ -3601,6 +3754,7 @@ class ConversionService : Service() {
                     "mp4" -> OutputProfile(extension = "mp4", mimeType = MIME_TYPE_MP4, kind = OutputMediaKind.Video)
                     "mkv" -> OutputProfile(extension = "mkv", mimeType = MIME_TYPE_MKV, kind = OutputMediaKind.Video)
                     "mov" -> OutputProfile(extension = "mov", mimeType = MIME_TYPE_MOV, kind = OutputMediaKind.Video)
+                    "gif" -> OutputProfile(extension = "gif", mimeType = MIME_TYPE_GIF, kind = OutputMediaKind.Image)
                     else -> null
                 }
             }
@@ -3676,6 +3830,7 @@ class ConversionService : Service() {
             normalized.contains("mp4") -> "mp4"
             normalized.contains("mkv") -> "mkv"
             normalized.contains("mov") -> "mov"
+            normalized.contains("gif") -> "gif"
             else -> null
         }
     }
@@ -3967,9 +4122,14 @@ class ConversionService : Service() {
         private const val FFMPEG_LOG_LINE_LIMIT = 600
         private const val FFMPEG_VIDEO_ENCODER_H264 = "libx264"
         private const val FFMPEG_VIDEO_ENCODER_H265 = "libx265"
+        private const val FFMPEG_GIF_ENCODER = "gif"
         private const val FFMPEG_AAC_ENCODER = "aac"
         private const val FFMPEG_DEFAULT_CRF_H264 = "23"
         private const val FFMPEG_DEFAULT_CRF_H265 = "28"
+        private const val FFMPEG_VIDEO_GIF_MAX_DURATION_MS = 30_000L
+        private const val FFMPEG_VIDEO_GIF_MAX_DURATION_SECONDS = "30"
+        private const val FFMPEG_VIDEO_GIF_FRAME_RATE = 30
+        private const val FFMPEG_VIDEO_GIF_MAX_FRAMES = 900
         private const val MIME_TYPE_MP4 = "video/mp4"
         private const val MIME_TYPE_MKV = "video/x-matroska"
         private const val MIME_TYPE_MOV = "video/quicktime"
@@ -4044,7 +4204,7 @@ class ConversionService : Service() {
             "ogv"
         )
         private val WMA_AUDIO_INPUT_EXTENSIONS = setOf("wma", "asf")
-        private val COMPATIBILITY_VIDEO_TARGETS = setOf("mkv", "mov")
+        private val COMPATIBILITY_VIDEO_TARGETS = setOf("mkv", "mov", "gif")
         private val OFFICE_INPUT_EXTENSIONS = setOf("docx", "pptx", "xlsx")
         private val OFFICE_MIME_TYPES = mapOf(
             MIME_TYPE_DOCX to "docx",
@@ -4059,6 +4219,7 @@ class ConversionService : Service() {
             Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG or Paint.DITHER_FLAG
         )
         private val WHITESPACE_REGEX = Regex("\\s+")
+        private val FFMPEG_ENCODER_FLAGS_REGEX = Regex("[VAS][A-Z.]{5}")
         private val FFMPEG_TIME_REGEX = Regex("""time=(\d+:\d{2}:\d{2}(?:\.\d+)?)""")
         private val FFMPEG_TIMESTAMP_REGEX = Regex("""(\d+):(\d{2}):(\d{2}(?:\.\d+)?)""")
 

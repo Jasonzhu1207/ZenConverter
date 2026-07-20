@@ -26,6 +26,11 @@ groups:
         engine: ffmpeg-compatible
         status: experimental
         note: "FFmpeg re-encode path for video inputs. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio in a QuickTime MOV container."
+      - from: video
+        to: gif
+        engine: ffmpeg-compatible
+        status: experimental
+        note: "FFmpeg animated GIF output for video inputs. Uses palettegen/paletteuse, drops audio/subtitles/data streams, loops by default, and automatically limits output to the first 30 seconds, 30 fps, and 900 frames. GIF resolution defaults to a 480 px short side with 720 px and Original options."
       - from: mkv
         to: mp4
         engine: ffmpeg-compatible

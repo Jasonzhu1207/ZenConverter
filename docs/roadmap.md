@@ -34,6 +34,9 @@
   physical-device smoke testing.
 - Video to MOV re-encode. FFmpeg QuickTime MOV output is connected and needs
   physical-device smoke testing.
+- Video to animated GIF. FFmpeg palettegen/paletteuse output is connected with
+  a 30 second, 30 fps, 900 frame cap and 480p default short-side limit; needs
+  physical-device smoke testing across MP4/MOV/MKV/WEBM/AVI samples.
 - MP4 video-file audio extraction to M4A. Implemented through Media3, needs
   physical-device smoke testing across samples.
 - Non-MP4 video-file audio extraction to M4A. Implemented as FFmpeg audio-track
