@@ -31,6 +31,8 @@ FFmpeg compatibility video outputs now re-encode instead of using `-c copy`.
 - The optional first audio track is encoded to AAC.
 - Video bitrate, codec, short-side resolution cap, and max frame-rate options
   are mapped into FFmpeg arguments.
+- Audio bitrate, sample-rate, and channel-count options are mapped into FFmpeg
+  AAC arguments when they are present on the task.
 - Auto bitrate uses CRF defaults: 23 for H.264 and 28 for H.265.
 - Frame-rate uses `-fpsmax` so it caps high-FPS sources without forcing low-FPS
   sources upward.

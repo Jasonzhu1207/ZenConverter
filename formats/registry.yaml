@@ -98,24 +98,24 @@ groups:
         note: "Decodes WMA through FFmpeg and encodes MP3 through libmp3lame after runtime encoder probing."
       - from: mp3
         to: m4a
-        engine: media3-transformer
+        engine: ffmpeg-compatible
         status: experimental
-        note: "AAC in M4A. Bitrate, sample rate, and channel controls are best-effort native settings."
+        note: "Encodes AAC in an M4A container through FFmpeg compatibility mode. Bitrate, sample-rate, and channel controls are passed when selected."
       - from: m4a
         to: m4a
-        engine: media3-transformer
+        engine: ffmpeg-compatible
         status: experimental
-        note: "Can preserve compatible AAC where possible; explicit audio options may transcode."
+        note: "Re-encodes AAC in an M4A container through FFmpeg compatibility mode. This is not audio stream copy."
       - from: flac
         to: m4a
-        engine: media3-transformer
+        engine: ffmpeg-compatible
         status: experimental
-        note: "AAC in M4A. Depends on device decode support."
+        note: "Decodes through FFmpeg and encodes AAC in an M4A container. Bitrate, sample-rate, and channel controls are passed when selected."
       - from: wav
         to: m4a
-        engine: media3-transformer
+        engine: ffmpeg-compatible
         status: experimental
-        note: "AAC in M4A. Depends on device decode support."
+        note: "Decodes through FFmpeg and encodes AAC in an M4A container. Bitrate, sample-rate, and channel controls are passed when selected."
       - from: wma
         to: m4a
         engine: ffmpeg-compatible
@@ -123,9 +123,9 @@ groups:
         note: "Attempts AAC in M4A through FFmpeg compatibility mode; may fail if the package lacks AAC encoding."
       - from: ogg
         to: m4a
-        engine: media3-transformer
+        engine: ffmpeg-compatible
         status: experimental
-        note: "AAC in M4A. Depends on device decode support."
+        note: "Decodes through FFmpeg and encodes AAC in an M4A container when the bundled decoders can read the source."
       - from: mp3
         to: wav
         engine: ffmpeg-compatible
@@ -203,9 +203,9 @@ groups:
         note: "Re-encodes WMA v2 in an ASF/WMA container."
       - from: video
         to: m4a
-        engine: media3-transformer-or-ffmpeg-compatible
+        engine: ffmpeg-compatible
         status: experimental
-        note: "MP4 video sources use Media3 AAC output. Non-MP4 video sources use FFmpeg audio-track copy and currently require an M4A-compatible AAC stream."
+        note: "Extracts the first audio track and re-encodes AAC in an M4A container through FFmpeg compatibility mode. This is not audio stream copy."
       - from: video
         to: mp3
         engine: ffmpeg-compatible

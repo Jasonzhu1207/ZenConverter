@@ -90,6 +90,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -105,6 +106,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -166,11 +168,11 @@ enum class FileCategory(
     Audio(
         mimeTypes = listOf("audio/*", "video/*"),
         formats = listOf(
-            TargetFormat("M4A (AAC)", "m4a", "Auto engine"),
-            TargetFormat("MP3", "mp3", "Compatibility"),
-            TargetFormat("WAV", "wav", "Compatibility"),
-            TargetFormat("FLAC", "flac", "Compatibility"),
-            TargetFormat("WMA", "wma", "Compatibility")
+            TargetFormat("M4A (AAC)", "m4a", "Re-encode"),
+            TargetFormat("MP3", "mp3", "Re-encode"),
+            TargetFormat("WAV", "wav", "Re-encode"),
+            TargetFormat("FLAC", "flac", "Re-encode"),
+            TargetFormat("WMA", "wma", "Re-encode")
         )
     ),
     Image(
@@ -494,6 +496,15 @@ fun ZenConverterApp(
     var accent by remember { mutableStateOf(AccentColorOption.Charcoal) }
     var languageOption by remember { mutableStateOf(LanguageOption.System) }
     val texts = uiTextFor(resolveLanguage(languageOption))
+    val rootView = LocalView.current
+
+    DisposableEffect(rootView, isConversionRunning) {
+        val previousKeepScreenOn = rootView.keepScreenOn
+        rootView.keepScreenOn = isConversionRunning || previousKeepScreenOn
+        onDispose {
+            rootView.keepScreenOn = previousKeepScreenOn
+        }
+    }
 
     MaterialTheme(colorScheme = zenConverterColorScheme(accent)) {
         Surface(
@@ -839,7 +850,7 @@ private fun ZenConverterContent(
 
                 (conversionSummary ?: queueMessage)?.let { message ->
                     item(key = "status-line") {
-                        StatusLine(text = texts.taskMessage(message))
+                        StatusLine(text = texts.summaryMessage(message))
                     }
                 }
 
@@ -2115,13 +2126,19 @@ private fun EncodingPanel(
                 codec = videoCodec,
                 codecOptions = videoCodecOptions,
                 frameRate = videoFrameRate,
+                audioBitrate = audioBitrate,
+                audioSampleRate = audioSampleRate,
+                audioChannels = audioChannels,
                 targetFormat = videoTarget,
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
                 onResolutionChange = onVideoResolutionChange,
                 onBitrateChange = onVideoBitrateChange,
                 onCodecChange = onVideoCodecChange,
-                onFrameRateChange = onVideoFrameRateChange
+                onFrameRateChange = onVideoFrameRateChange,
+                onAudioBitrateChange = onAudioBitrateChange,
+                onAudioSampleRateChange = onAudioSampleRateChange,
+                onAudioChannelsChange = onAudioChannelsChange
             )
             FileCategory.Audio -> AudioOptions(
                 texts = texts,
@@ -2171,13 +2188,19 @@ private fun VideoOptions(
     codec: String,
     codecOptions: List<String>,
     frameRate: String,
+    audioBitrate: String,
+    audioSampleRate: String,
+    audioChannels: String,
     targetFormat: TargetFormat,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onResolutionChange: (String) -> Unit,
     onBitrateChange: (String) -> Unit,
     onCodecChange: (String) -> Unit,
-    onFrameRateChange: (String) -> Unit
+    onFrameRateChange: (String) -> Unit,
+    onAudioBitrateChange: (String) -> Unit,
+    onAudioSampleRateChange: (String) -> Unit,
+    onAudioChannelsChange: (String) -> Unit
 ) {
     val isGifTarget = targetFormat.extension.equals("gif", ignoreCase = true)
     OptionGrid {
@@ -2221,6 +2244,36 @@ private fun VideoOptions(
                 openMenuId,
                 onOpenMenuChange,
                 onFrameRateChange
+            )
+            OptionDropdown(
+                "video-audio-bitrate",
+                texts.audioBitrateLabel(),
+                audioBitrate,
+                AUDIO_BITRATE_OPTIONS,
+                texts,
+                openMenuId,
+                onOpenMenuChange,
+                onAudioBitrateChange
+            )
+            OptionDropdown(
+                "video-audio-sample-rate",
+                texts.sampleRate,
+                audioSampleRate,
+                AUDIO_SAMPLE_RATE_OPTIONS,
+                texts,
+                openMenuId,
+                onOpenMenuChange,
+                onAudioSampleRateChange
+            )
+            OptionDropdown(
+                "video-audio-channels",
+                texts.channels,
+                audioChannels,
+                AUDIO_CHANNEL_OPTIONS,
+                texts,
+                openMenuId,
+                onOpenMenuChange,
+                onAudioChannelsChange
             )
         }
     }
@@ -3309,6 +3362,14 @@ private data class UiText(
         }
     }
 
+    fun audioBitrateLabel(): String {
+        return when (this) {
+            englishText -> "Audio bitrate"
+            simplifiedChineseText -> "音频码率"
+            else -> "音訊位元率"
+        }
+    }
+
     fun qrCodeFor(value: String): String {
         return when (this) {
             englishText -> "QR code for $value"
@@ -3356,6 +3417,28 @@ private data class UiText(
             englishText -> "$fileName is password-protected. Enter the password to add it."
             simplifiedChineseText -> "$fileName 受密码保护。输入密码后再加入队列。"
             else -> "$fileName 受密碼保護。輸入密碼後再加入佇列。"
+        }
+    }
+
+    fun summaryMessage(value: String): String {
+        return when (value) {
+            "Processing", "Compatibility processing" -> runningKeepAwakeMessage(processing)
+            "Saving" -> runningKeepAwakeMessage(
+                when (this) {
+                    englishText -> "Saving"
+                    simplifiedChineseText -> "保存中"
+                    else -> "儲存中"
+                }
+            )
+            else -> taskMessage(value)
+        }
+    }
+
+    private fun runningKeepAwakeMessage(action: String): String {
+        return when (this) {
+            englishText -> "$action · Keeping the screen on; keep ZenConverter in the foreground"
+            simplifiedChineseText -> "$action · 已保持屏幕常亮，请让 ZenConverter 留在前台"
+            else -> "$action · 已保持螢幕常亮，請讓 ZenConverter 留在前台"
         }
     }
 
@@ -3585,6 +3668,21 @@ private data class UiText(
                 simplifiedChineseText -> "当前兼容包不包含 AAC 编码器"
                 else -> "目前相容包不包含 AAC 編碼器"
             }
+            "Compatibility engine needs a PCM WAV-capable FFmpeg package" -> when (this) {
+                englishText -> "Compatibility engine needs a PCM WAV-capable FFmpeg package"
+                simplifiedChineseText -> "当前兼容包不包含 PCM WAV 编码器"
+                else -> "目前相容包不包含 PCM WAV 編碼器"
+            }
+            "Compatibility engine needs a FLAC-capable FFmpeg package" -> when (this) {
+                englishText -> "Compatibility engine needs a FLAC-capable FFmpeg package"
+                simplifiedChineseText -> "当前兼容包不包含 FLAC 编码器"
+                else -> "目前相容包不包含 FLAC 編碼器"
+            }
+            "Compatibility engine needs a WMA-capable FFmpeg package" -> when (this) {
+                englishText -> "Compatibility engine needs a WMA-capable FFmpeg package"
+                simplifiedChineseText -> "当前兼容包不包含 WMA 编码器"
+                else -> "目前相容包不包含 WMA 編碼器"
+            }
             "Compatibility engine needs a GIF-capable FFmpeg package" -> when (this) {
                 englishText -> "Compatibility engine needs a GIF-capable FFmpeg package"
                 simplifiedChineseText -> "当前兼容包不包含 GIF 编码器"
@@ -3604,11 +3702,6 @@ private data class UiText(
                 englishText -> "Compatibility engine could not write this video container"
                 simplifiedChineseText -> "兼容引擎无法写出这个视频容器"
                 else -> "相容引擎無法寫出這個影片容器"
-            }
-            "Compatibility engine needs an AAC audio stream for M4A copy" -> when (this) {
-                englishText -> "Compatibility engine needs an AAC audio stream for M4A copy"
-                simplifiedChineseText -> "这个兼容包暂时只能拷贝已有 AAC 音轨到 M4A"
-                else -> "這個相容包暫時只能拷貝既有 AAC 音軌到 M4A"
             }
             "Compatibility engine is not connected for images" -> failed
             "Image conversion failed" -> when (this) {
@@ -3944,9 +4037,9 @@ private data class UiText(
                 else -> "自動（推薦）"
             }
             "Auto audio bitrate" -> when (this) {
-                englishText -> "Auto (keep if possible)"
-                simplifiedChineseText -> "自动（尽量保留）"
-                else -> "自動（盡量保留）"
+                englishText -> "Auto (encoder default)"
+                simplifiedChineseText -> "自动（编码器默认）"
+                else -> "自動（編碼器預設）"
             }
             "Recommended audio bitrate" -> when (this) {
                 englishText -> "Recommended (192 kbps)"

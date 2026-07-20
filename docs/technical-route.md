@@ -61,13 +61,13 @@ duplicating normal local files into cache.
 
 Current first step: a self-built `arthenica/ffmpeg-kit-next` `v7.1.0` AAR is
 wired for non-MP4 video container re-encode to MP4, MP4 re-encode to MKV, MOV
-output, non-MP4 video-file audio extraction to M4A by FFmpeg audio-track copy,
-and experimental audio targets for MP3/WAV/FLAC/WMA through FFmpeg arguments.
-The current AAR is `arm64-v8a` only, and the app probes for `libmp3lame` before
-MP3 export so the wrong package fails clearly. This is still not universal video
-or audio transcoding: MP3 output needs physical-device sample verification, and
-WebM Vorbis/Opus to M4A plus AVI MP3/PCM to M4A need a later route that actually
-transcodes non-AAC audio instead of only copying streams.
+output, video-file audio extraction to M4A by FFmpeg AAC re-encode, and
+experimental audio targets for MP3/M4A/WAV/FLAC/WMA through FFmpeg arguments.
+The current AAR is `arm64-v8a` only, and the app probes for needed encoders
+before export where possible so the wrong package fails clearly. This is still
+not universal video or audio transcoding: physical-device sample verification is
+needed across MP3, AAC/M4A, WAV, FLAC, WMA, Vorbis, Opus, PCM, and mixed video
+containers before these paths should be treated as stable.
 
 ## Phase 4: Image, PDF, Archive
 

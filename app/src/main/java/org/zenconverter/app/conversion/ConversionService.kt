@@ -2317,24 +2317,7 @@ class ConversionService : Service() {
                 add("-dn")
                 add("-c:a")
                 add(audioProfile.codec)
-                if (audioProfile.supportsBitrate) {
-                    input.audioOptions.audioBitrate?.let { bitrate ->
-                        add("-b:a")
-                        add(bitrate.toString())
-                    }
-                }
-                if (audioProfile.supportsSampleRate) {
-                    input.audioOptions.sampleRateHz?.let { sampleRateHz ->
-                        add("-ar")
-                        add(sampleRateHz.toString())
-                    }
-                }
-                if (audioProfile.supportsChannelCount) {
-                    input.audioOptions.channelCount?.let { channelCount ->
-                        add("-ac")
-                        add(channelCount.toString())
-                    }
-                }
+                addFfmpegAudioOptions(input.audioOptions, audioProfile)
                 if (audioProfile.useFastStart) {
                     add("-movflags")
                     add("+faststart")
@@ -2398,6 +2381,7 @@ class ConversionService : Service() {
             }
             add("-c:a")
             add(FFMPEG_AAC_ENCODER)
+            addFfmpegAudioOptions(input.audioOptions, ffmpegAacAudioProfile())
             if (videoProfile.useFastStart) {
                 add("-movflags")
                 add("+faststart")
@@ -2406,6 +2390,39 @@ class ConversionService : Service() {
             add(videoProfile.format)
             add(outputFile.absolutePath)
         }
+    }
+
+    private fun MutableList<String>.addFfmpegAudioOptions(
+        audioOptions: AudioExportOptions,
+        audioProfile: FfmpegAudioProfile
+    ) {
+        if (audioProfile.supportsBitrate) {
+            audioOptions.audioBitrate?.let { bitrate ->
+                add("-b:a")
+                add(bitrate.toString())
+            }
+        }
+        if (audioProfile.supportsSampleRate) {
+            audioOptions.sampleRateHz?.let { sampleRateHz ->
+                add("-ar")
+                add(sampleRateHz.toString())
+            }
+        }
+        if (audioProfile.supportsChannelCount) {
+            audioOptions.channelCount?.let { channelCount ->
+                add("-ac")
+                add(channelCount.toString())
+            }
+        }
+    }
+
+    private fun ffmpegAacAudioProfile(): FfmpegAudioProfile {
+        return FfmpegAudioProfile(
+            codec = FFMPEG_AAC_ENCODER,
+            format = "ipod",
+            useFastStart = true,
+            requiredEncoder = FFMPEG_AAC_ENCODER
+        )
     }
 
     private fun ffmpegVideoGifArgumentsFor(
@@ -2554,48 +2571,32 @@ class ConversionService : Service() {
 
     private fun ffmpegAudioProfileFor(input: ConversionTaskInput): FfmpegAudioProfile? {
         val targetExtension = audioTargetExtensionFor(input.targetFormat) ?: return null
-        if (targetExtension == "m4a" && shouldCopyM4aAudioInCompatibilityEngine(input)) {
-            return FfmpegAudioProfile(
-                codec = "copy",
-                format = "ipod",
-                useFastStart = true,
-                supportsBitrate = false,
-                supportsSampleRate = false,
-                supportsChannelCount = false
-            )
-        }
-
         return when (targetExtension) {
             "mp3" -> FfmpegAudioProfile(
-                codec = "libmp3lame",
+                codec = FFMPEG_MP3_ENCODER,
                 format = "mp3",
-                requiredEncoder = "libmp3lame"
+                requiredEncoder = FFMPEG_MP3_ENCODER
             )
-            "m4a" -> FfmpegAudioProfile(
-                codec = "aac",
-                format = "ipod",
-                useFastStart = true
-            )
+            "m4a" -> ffmpegAacAudioProfile()
             "wav" -> FfmpegAudioProfile(
-                codec = "pcm_s16le",
+                codec = FFMPEG_WAV_ENCODER,
                 format = "wav",
-                supportsBitrate = false
+                supportsBitrate = false,
+                requiredEncoder = FFMPEG_WAV_ENCODER
             )
             "flac" -> FfmpegAudioProfile(
-                codec = "flac",
+                codec = FFMPEG_FLAC_ENCODER,
                 format = "flac",
-                supportsBitrate = false
+                supportsBitrate = false,
+                requiredEncoder = FFMPEG_FLAC_ENCODER
             )
             "wma" -> FfmpegAudioProfile(
-                codec = "wmav2",
-                format = "asf"
+                codec = FFMPEG_WMA_ENCODER,
+                format = "asf",
+                requiredEncoder = FFMPEG_WMA_ENCODER
             )
             else -> null
         }
-    }
-
-    private fun shouldCopyM4aAudioInCompatibilityEngine(input: ConversionTaskInput): Boolean {
-        return audioTargetExtensionFor(input.targetFormat) == "m4a" && isLikelyVideoInput(input)
     }
 
     private suspend fun executeFfmpeg(
@@ -2858,7 +2859,7 @@ class ConversionService : Service() {
         encoder: String
     ): String {
         return when {
-            encoder == "libmp3lame" &&
+            encoder == FFMPEG_MP3_ENCODER &&
                 audioTargetExtensionFor(input.targetFormat) == "mp3" ->
                 "Compatibility engine needs an MP3-capable FFmpeg package"
             encoder == FFMPEG_VIDEO_ENCODER_H264 ->
@@ -2867,6 +2868,12 @@ class ConversionService : Service() {
                 "Compatibility engine needs an H.265-capable FFmpeg package"
             encoder == FFMPEG_AAC_ENCODER ->
                 "Compatibility engine needs an AAC-capable FFmpeg package"
+            encoder == FFMPEG_WAV_ENCODER ->
+                "Compatibility engine needs a PCM WAV-capable FFmpeg package"
+            encoder == FFMPEG_FLAC_ENCODER ->
+                "Compatibility engine needs a FLAC-capable FFmpeg package"
+            encoder == FFMPEG_WMA_ENCODER ->
+                "Compatibility engine needs a WMA-capable FFmpeg package"
             encoder == FFMPEG_GIF_ENCODER &&
                 isVideoGifOutput(input) ->
                 "Compatibility engine needs a GIF-capable FFmpeg package"
@@ -2884,18 +2891,8 @@ class ConversionService : Service() {
         val normalizedTail = outputTail.lowercase(Locale.US)
         if (
             input.category == ConversionMediaCategory.Audio &&
-            shouldCopyM4aAudioInCompatibilityEngine(input) &&
-            (
-                normalizedTail.contains("codec not currently supported in container") ||
-                    normalizedTail.contains("could not find tag for codec")
-            )
-        ) {
-            return "Compatibility engine needs an AAC audio stream for M4A copy"
-        }
-        if (
-            input.category == ConversionMediaCategory.Audio &&
             audioTargetExtensionFor(input.targetFormat) == "mp3" &&
-            normalizedTail.contains("libmp3lame")
+            normalizedTail.contains(FFMPEG_MP3_ENCODER)
         ) {
             return "Compatibility engine needs an MP3-capable FFmpeg package"
         }
@@ -3043,9 +3040,7 @@ class ConversionService : Service() {
                             !isLikelyMp4VideoInput(input)
                         )
             ConversionMediaCategory.Audio ->
-                audioTargetExtensionFor(input.targetFormat) != "m4a" ||
-                    isLikelyWmaAudioInput(input) ||
-                    (isLikelyVideoInput(input) && !isLikelyMp4VideoInput(input))
+                true
             ConversionMediaCategory.Image -> false
             ConversionMediaCategory.Pdf -> false
             ConversionMediaCategory.Document -> false
@@ -3067,14 +3062,6 @@ class ConversionService : Service() {
         val mimeType = input.mimeType.orEmpty().lowercase(Locale.US)
         val extension = input.extension.lowercase(Locale.US)
         return extension == "mp4" || mimeType == MIME_TYPE_MP4
-    }
-
-    private fun isLikelyWmaAudioInput(input: ConversionTaskInput): Boolean {
-        val mimeType = input.mimeType.orEmpty().lowercase(Locale.US)
-        val extension = input.extension.lowercase(Locale.US)
-        return extension in WMA_AUDIO_INPUT_EXTENSIONS ||
-            mimeType.contains("x-ms-wma") ||
-            mimeType.contains("x-ms-asf")
     }
 
     private fun isLikelyGifInputUri(uri: Uri): Boolean {
@@ -4205,6 +4192,10 @@ class ConversionService : Service() {
         private const val FFMPEG_VIDEO_ENCODER_H265 = "libx265"
         private const val FFMPEG_GIF_ENCODER = "gif"
         private const val FFMPEG_AAC_ENCODER = "aac"
+        private const val FFMPEG_MP3_ENCODER = "libmp3lame"
+        private const val FFMPEG_WAV_ENCODER = "pcm_s16le"
+        private const val FFMPEG_FLAC_ENCODER = "flac"
+        private const val FFMPEG_WMA_ENCODER = "wmav2"
         private const val FFMPEG_DEFAULT_CRF_H264 = "23"
         private const val FFMPEG_DEFAULT_CRF_H265 = "28"
         private const val FFMPEG_VIDEO_GIF_MAX_DURATION_MS = 30_000L
@@ -4284,7 +4275,6 @@ class ConversionService : Service() {
             "flv",
             "ogv"
         )
-        private val WMA_AUDIO_INPUT_EXTENSIONS = setOf("wma", "asf")
         private val COMPATIBILITY_VIDEO_TARGETS = setOf("mkv", "mov", "gif")
         private val OFFICE_INPUT_EXTENSIONS = setOf("docx", "pptx", "xlsx")
         private val OFFICE_MIME_TYPES = mapOf(

@@ -37,15 +37,15 @@
 - Video to animated GIF. FFmpeg palettegen/paletteuse output is connected with
   a 30 second, 30 fps, 900 frame cap and 480p default short-side limit; needs
   physical-device smoke testing across MP4/MOV/MKV/WEBM/AVI samples.
-- MP4 video-file audio extraction to M4A. Implemented through Media3, needs
-  physical-device smoke testing across samples.
-- Non-MP4 video-file audio extraction to M4A. Implemented as FFmpeg audio-track
-  copy only; non-AAC tracks need a later AAC-capable compatibility build.
+- Video-file audio extraction to M4A. Implemented as FFmpeg AAC re-encode for
+  MP4 and non-MP4 video sources; needs physical-device smoke testing across
+  AAC, MP3, PCM, Vorbis, and Opus source samples.
 - MP4 to MP3. Routing and argument generation are connected, and the current
   self-built FFmpegKitNext AAR includes `libmp3lame`; physical-device sample
   verification is still required before this can be treated as working.
-- MP3/M4A/WAV/FLAC/WMA audio target conversion. Implemented as experimental
-  routing and argument generation; needs physical-device sample coverage.
+- MP3/M4A/WAV/FLAC/WMA audio target conversion. Implemented as FFmpeg true
+  re-encode with bitrate, sample-rate, and channel options mapped where the
+  target supports them; needs physical-device sample coverage.
 - ffprobe metadata read.
 
 ## Milestone 4: Non-media Formats
