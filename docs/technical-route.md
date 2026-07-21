@@ -60,14 +60,16 @@ Success: FFmpeg jobs run from Kotlin, report progress, and do not require
 duplicating normal local files into cache.
 
 Current first step: a self-built `arthenica/ffmpeg-kit-next` `v7.1.0` AAR is
-wired for non-MP4 video container re-encode to MP4, MP4 re-encode to MKV, MOV
-output, video-file audio extraction to M4A by FFmpeg AAC re-encode, and
-experimental audio targets for MP3/M4A/WAV/FLAC/WMA through FFmpeg arguments.
-The current AAR is `arm64-v8a` only, and the app probes for needed encoders
-before export where possible so the wrong package fails clearly. This is still
-not universal video or audio transcoding: physical-device sample verification is
-needed across MP3, AAC/M4A, WAV, FLAC, WMA, Vorbis, Opus, PCM, and mixed video
-containers before these paths should be treated as stable.
+wired for MP4/MKV/MOV video re-encode, video-to-GIF output, video-file audio
+extraction to M4A by FFmpeg AAC re-encode, and experimental audio targets for
+MP3/M4A/WAV/FLAC/WMA through FFmpeg arguments. The first advanced filter set is
+also connected for MP4/MKV/MOV video outputs and audio outputs: fade, mirror,
+rotate, frame fit/crop, volume/mute, and echo. The current AAR is `arm64-v8a`
+only, and the app probes for needed encoders and selected filters before export
+where possible so the wrong package fails clearly. This is still not universal
+video or audio transcoding: physical-device sample verification is needed
+across MP3, AAC/M4A, WAV, FLAC, WMA, Vorbis, Opus, PCM, mixed video containers,
+and advanced filter combinations before these paths should be treated as stable.
 
 ## Phase 4: Image, PDF, Archive
 

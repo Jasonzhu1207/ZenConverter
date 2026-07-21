@@ -39,7 +39,8 @@ data class VideoExportOptions(
     val maxShortSidePixels: Int? = null,
     val videoBitrate: Int? = null,
     val videoMimeType: String = VIDEO_MIME_TYPE_H264,
-    val maxFrameRate: Int? = null
+    val maxFrameRate: Int? = null,
+    val advanced: VideoAdvancedOptions = VideoAdvancedOptions()
 ) {
     companion object {
         const val VIDEO_MIME_TYPE_H264 = "video/avc"
@@ -50,8 +51,75 @@ data class VideoExportOptions(
 data class AudioExportOptions(
     val audioBitrate: Int? = null,
     val sampleRateHz: Int? = null,
-    val channelCount: Int? = null
+    val channelCount: Int? = null,
+    val advanced: AudioAdvancedOptions = AudioAdvancedOptions()
 )
+
+data class VideoAdvancedOptions(
+    val fadeInSeconds: Float? = null,
+    val fadeOutSeconds: Float? = null,
+    val mirror: VideoMirrorMode = VideoMirrorMode.Off,
+    val rotation: VideoRotationMode = VideoRotationMode.None,
+    val aspectRatio: VideoAspectRatioMode = VideoAspectRatioMode.Keep
+) {
+    val hasEnabledEffects: Boolean
+        get() = fadeInSeconds != null ||
+            fadeOutSeconds != null ||
+            mirror != VideoMirrorMode.Off ||
+            rotation != VideoRotationMode.None ||
+            aspectRatio != VideoAspectRatioMode.Keep
+}
+
+data class AudioAdvancedOptions(
+    val fadeInSeconds: Float? = null,
+    val fadeOutSeconds: Float? = null,
+    val volume: AudioVolumeMode = AudioVolumeMode.Original,
+    val echo: AudioEchoMode = AudioEchoMode.Off
+) {
+    val hasEnabledEffects: Boolean
+        get() = fadeInSeconds != null ||
+            fadeOutSeconds != null ||
+            volume != AudioVolumeMode.Original ||
+            echo != AudioEchoMode.Off
+}
+
+enum class VideoMirrorMode {
+    Off,
+    Horizontal,
+    Vertical,
+    Both
+}
+
+enum class VideoRotationMode {
+    None,
+    Clockwise90,
+    CounterClockwise90,
+    Rotate180
+}
+
+enum class VideoAspectRatioMode {
+    Keep,
+    Fit16By9,
+    Fit9By16,
+    Fit1By1,
+    Crop16By9,
+    Crop9By16,
+    Crop1By1
+}
+
+enum class AudioVolumeMode {
+    Original,
+    Mute,
+    Half,
+    OneAndHalf,
+    Double
+}
+
+enum class AudioEchoMode {
+    Off,
+    Light,
+    Room
+}
 
 data class ImageExportOptions(
     val quality: Int = 90,

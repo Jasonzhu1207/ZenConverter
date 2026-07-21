@@ -108,6 +108,7 @@ class ConversionService : Service() {
     private var ffmpegKitLoadFailure: Throwable? = null
     private var pdfBoxReady = false
     private val ffmpegEncoderAvailability = mutableMapOf<String, Boolean>()
+    private val ffmpegFilterAvailability = mutableMapOf<String, Boolean>()
 
     override fun onCreate() {
         super.onCreate()
@@ -2029,6 +2030,20 @@ class ConversionService : Service() {
         }
 
         val durationMs = ffmpegProgressDurationMsFor(input)
+        ffmpegMissingAdvancedMetadataMessageFor(input, durationMs)?.let { message ->
+            return@withContext FfmpegRunResult(
+                success = false,
+                cancelled = false,
+                message = message
+            )
+        }
+        ffmpegMissingFilterMessageFor(input)?.let { message ->
+            return@withContext FfmpegRunResult(
+                success = false,
+                cancelled = false,
+                message = message
+            )
+        }
         val logTail = mutableListOf<String>()
 
         val inputSource = openFfmpegInputSource(input.inputUri)
@@ -2048,7 +2063,7 @@ class ConversionService : Service() {
                     logTail = logTail
                 )
             }
-            val arguments = ffmpegArgumentsFor(input, inputSource.path, tempFile)
+            val arguments = ffmpegArgumentsFor(input, inputSource.path, tempFile, durationMs)
             executeFfmpeg(input, arguments, durationMs, logTail, inputSource.label)
         } finally {
             inputSource.close()
@@ -2298,10 +2313,11 @@ class ConversionService : Service() {
     private fun ffmpegArgumentsFor(
         input: ConversionTaskInput,
         inputPath: String,
-        outputFile: File
+        outputFile: File,
+        durationMs: Long?
     ): List<String> {
         return when (input.category) {
-            ConversionMediaCategory.Video -> ffmpegVideoArgumentsFor(input, inputPath, outputFile)
+            ConversionMediaCategory.Video -> ffmpegVideoArgumentsFor(input, inputPath, outputFile, durationMs)
             ConversionMediaCategory.Audio -> buildList {
                 val audioProfile = ffmpegAudioProfileFor(input)
                     ?: error("Unsupported audio target ${input.targetFormat}")
@@ -2317,7 +2333,7 @@ class ConversionService : Service() {
                 add("-dn")
                 add("-c:a")
                 add(audioProfile.codec)
-                addFfmpegAudioOptions(input.audioOptions, audioProfile)
+                addFfmpegAudioOptions(input.audioOptions, audioProfile, durationMs)
                 if (audioProfile.useFastStart) {
                     add("-movflags")
                     add("+faststart")
@@ -2335,10 +2351,12 @@ class ConversionService : Service() {
     private fun ffmpegVideoArgumentsFor(
         input: ConversionTaskInput,
         inputPath: String,
-        outputFile: File
+        outputFile: File,
+        durationMs: Long?
     ): List<String> {
         val videoProfile = ffmpegVideoProfileFor(input)
             ?: error("Unsupported video target ${input.targetFormat}")
+        val includeAudio = input.audioOptions.advanced.volume != AudioVolumeMode.Mute
         return buildList {
             add("-hide_banner")
             add("-nostdin")
@@ -2348,10 +2366,15 @@ class ConversionService : Service() {
             add("-ignore_unknown")
             add("-map")
             add("0:v:0")
-            add("-map")
-            add("0:a:0?")
+            if (includeAudio) {
+                add("-map")
+                add("0:a:0?")
+            }
             add("-sn")
             add("-dn")
+            if (!includeAudio) {
+                add("-an")
+            }
             add("-c:v")
             add(videoProfile.videoCodec)
             add("-pix_fmt")
@@ -2365,7 +2388,7 @@ class ConversionService : Service() {
                 add("-crf")
                 add(videoProfile.crf)
             }
-            ffmpegVideoFilterFor(input)?.let { filter ->
+            ffmpegVideoFilterFor(input, durationMs)?.let { filter ->
                 add("-vf")
                 add(filter)
             }
@@ -2379,9 +2402,11 @@ class ConversionService : Service() {
                 add("-tag:v")
                 add(videoProfile.videoTag)
             }
-            add("-c:a")
-            add(FFMPEG_AAC_ENCODER)
-            addFfmpegAudioOptions(input.audioOptions, ffmpegAacAudioProfile())
+            if (includeAudio) {
+                add("-c:a")
+                add(FFMPEG_AAC_ENCODER)
+                addFfmpegAudioOptions(input.audioOptions, ffmpegAacAudioProfile(), durationMs)
+            }
             if (videoProfile.useFastStart) {
                 add("-movflags")
                 add("+faststart")
@@ -2394,8 +2419,13 @@ class ConversionService : Service() {
 
     private fun MutableList<String>.addFfmpegAudioOptions(
         audioOptions: AudioExportOptions,
-        audioProfile: FfmpegAudioProfile
+        audioProfile: FfmpegAudioProfile,
+        durationMs: Long?
     ) {
+        ffmpegAudioFilterFor(audioOptions, durationMs)?.let { filter ->
+            add("-af")
+            add(filter)
+        }
         if (audioProfile.supportsBitrate) {
             audioOptions.audioBitrate?.let { bitrate ->
                 add("-b:a")
@@ -2523,23 +2553,123 @@ class ConversionService : Service() {
         }
     }
 
-    private fun ffmpegVideoFilterFor(input: ConversionTaskInput): String? {
-        val targetShortSide = input.videoOptions.maxShortSidePixels
-            ?.takeIf { it > 0 }
-            ?: return null
-        val sourceSize = readVideoSize(input.inputUri)
-        if (sourceSize != null) {
-            if (sourceSize.shortSide <= targetShortSide) return null
-            val scaledSize = scaledVideoSizeFor(sourceSize, targetShortSide)
-            return "scale=${scaledSize.width}:${scaledSize.height}"
+    private fun ffmpegVideoFilterFor(
+        input: ConversionTaskInput,
+        durationMs: Long?
+    ): String? {
+        val advanced = input.videoOptions.advanced
+        val filters = buildList {
+            addAll(ffmpegVideoRotationFiltersFor(advanced.rotation))
+            addAll(ffmpegVideoMirrorFiltersFor(advanced.mirror))
+            ffmpegVideoAspectFilterFor(advanced.aspectRatio)?.let { add(it) }
+            ffmpegVideoScaleFilterFor(input.videoOptions.maxShortSidePixels)?.let { add(it) }
+            advanced.fadeInSeconds?.let { seconds ->
+                add("fade=t=in:st=0:d=${ffmpegSeconds(seconds.toDouble())}")
+            }
+            advanced.fadeOutSeconds?.let { seconds ->
+                durationMs?.let {
+                    add(
+                        "fade=t=out:st=${ffmpegFadeOutStartSeconds(it, seconds)}:" +
+                            "d=${ffmpegSeconds(seconds.toDouble())}"
+                    )
+                }
+            }
         }
-        Log.w(
-            TAG,
-            "Video size metadata unavailable; using FFmpeg dynamic scale filter " +
-                "targetShortSide=$targetShortSide displayName=${input.displayName}"
-        )
-        return "scale=w='if(gte(iw\\,ih)\\,-2\\,min(iw\\,$targetShortSide))':" +
-            "h='if(gte(iw\\,ih)\\,min(ih\\,$targetShortSide)\\,-2)'"
+        return filters.takeIf { it.isNotEmpty() }?.joinToString(separator = ",")
+    }
+
+    private fun ffmpegVideoRotationFiltersFor(rotation: VideoRotationMode): List<String> {
+        return when (rotation) {
+            VideoRotationMode.Clockwise90 -> listOf("transpose=clock")
+            VideoRotationMode.CounterClockwise90 -> listOf("transpose=cclock")
+            VideoRotationMode.Rotate180 -> listOf("transpose=clock", "transpose=clock")
+            VideoRotationMode.None -> emptyList()
+        }
+    }
+
+    private fun ffmpegVideoMirrorFiltersFor(mirror: VideoMirrorMode): List<String> {
+        return when (mirror) {
+            VideoMirrorMode.Horizontal -> listOf("hflip")
+            VideoMirrorMode.Vertical -> listOf("vflip")
+            VideoMirrorMode.Both -> listOf("hflip", "vflip")
+            VideoMirrorMode.Off -> emptyList()
+        }
+    }
+
+    private fun ffmpegVideoAspectFilterFor(aspectRatio: VideoAspectRatioMode): String? {
+        val ratio = when (aspectRatio) {
+            VideoAspectRatioMode.Fit16By9,
+            VideoAspectRatioMode.Crop16By9 -> "16/9"
+            VideoAspectRatioMode.Fit9By16,
+            VideoAspectRatioMode.Crop9By16 -> "9/16"
+            VideoAspectRatioMode.Fit1By1,
+            VideoAspectRatioMode.Crop1By1 -> "1"
+            VideoAspectRatioMode.Keep -> return null
+        }
+        return when (aspectRatio) {
+            VideoAspectRatioMode.Fit16By9,
+            VideoAspectRatioMode.Fit9By16,
+            VideoAspectRatioMode.Fit1By1 ->
+                "pad=w='if(gt(iw/ih\\,$ratio)\\,iw\\,ceil(ih*$ratio/2)*2)':" +
+                    "h='if(gt(iw/ih\\,$ratio)\\,ceil(iw/$ratio/2)*2\\,ih)':" +
+                    "x=(ow-iw)/2:y=(oh-ih)/2:color=black"
+            VideoAspectRatioMode.Crop16By9,
+            VideoAspectRatioMode.Crop9By16,
+            VideoAspectRatioMode.Crop1By1 ->
+                "crop=w='if(gt(iw/ih\\,$ratio)\\,floor(ih*$ratio/2)*2\\,iw)':" +
+                    "h='if(gt(iw/ih\\,$ratio)\\,ih\\,floor(iw/$ratio/2)*2)':" +
+                    "x=(iw-ow)/2:y=(ih-oh)/2"
+            VideoAspectRatioMode.Keep -> null
+        }
+    }
+
+    private fun ffmpegVideoScaleFilterFor(targetShortSide: Int?): String? {
+        val shortSide = targetShortSide?.takeIf { it > 0 } ?: return null
+        return "scale=w='if(gte(iw\\,ih)\\,-2\\,min(iw\\,$shortSide))':" +
+            "h='if(gte(iw\\,ih)\\,min(ih\\,$shortSide)\\,-2)':flags=lanczos"
+    }
+
+    private fun ffmpegAudioFilterFor(
+        audioOptions: AudioExportOptions,
+        durationMs: Long?
+    ): String? {
+        val advanced = audioOptions.advanced
+        val filters = buildList {
+            when (advanced.volume) {
+                AudioVolumeMode.Mute -> add("volume=0")
+                AudioVolumeMode.Half -> add("volume=0.5")
+                AudioVolumeMode.OneAndHalf -> add("volume=1.5")
+                AudioVolumeMode.Double -> add("volume=2.0")
+                AudioVolumeMode.Original -> Unit
+            }
+            when (advanced.echo) {
+                AudioEchoMode.Light -> add("aecho=0.8:0.88:60:0.35")
+                AudioEchoMode.Room -> add("aecho=0.8:0.9:80|160:0.35|0.25")
+                AudioEchoMode.Off -> Unit
+            }
+            advanced.fadeInSeconds?.let { seconds ->
+                add("afade=t=in:st=0:d=${ffmpegSeconds(seconds.toDouble())}")
+            }
+            advanced.fadeOutSeconds?.let { seconds ->
+                durationMs?.let {
+                    add(
+                        "afade=t=out:st=${ffmpegFadeOutStartSeconds(it, seconds)}:" +
+                            "d=${ffmpegSeconds(seconds.toDouble())}"
+                    )
+                }
+            }
+        }
+        return filters.takeIf { it.isNotEmpty() }?.joinToString(separator = ",")
+    }
+
+    private fun ffmpegFadeOutStartSeconds(durationMs: Long, fadeSeconds: Float): String {
+        val startSeconds = (durationMs.toDouble() / 1000.0 - fadeSeconds.toDouble())
+            .coerceAtLeast(0.0)
+        return ffmpegSeconds(startSeconds)
+    }
+
+    private fun ffmpegSeconds(seconds: Double): String {
+        return String.format(Locale.US, "%.3f", seconds)
     }
 
     private fun scaledVideoSizeFor(sourceSize: VideoSize, targetShortSide: Int): VideoSize {
@@ -2781,6 +2911,111 @@ class ConversionService : Service() {
         return ((hours * 3600L + minutes * 60L) * 1000L + (seconds * 1000.0).toLong())
     }
 
+    private fun ffmpegMissingAdvancedMetadataMessageFor(
+        input: ConversionTaskInput,
+        durationMs: Long?
+    ): String? {
+        if (durationMs != null) return null
+        val audioFadeOutApplies =
+            input.audioOptions.advanced.volume != AudioVolumeMode.Mute &&
+                input.audioOptions.advanced.fadeOutSeconds != null
+        val needsDuration = when (input.category) {
+            ConversionMediaCategory.Video ->
+                !isVideoGifOutput(input) &&
+                    (input.videoOptions.advanced.fadeOutSeconds != null || audioFadeOutApplies)
+            ConversionMediaCategory.Audio ->
+                input.audioOptions.advanced.fadeOutSeconds != null
+            ConversionMediaCategory.Image,
+            ConversionMediaCategory.Pdf,
+            ConversionMediaCategory.Document -> false
+        }
+        return if (needsDuration) {
+            "Compatibility engine needs duration metadata for fade out"
+        } else {
+            null
+        }
+    }
+
+    private fun ffmpegMissingFilterMessageFor(input: ConversionTaskInput): String? {
+        val missingFilter = requiredFfmpegFiltersFor(input).firstOrNull { filter ->
+            ffmpegFilterAvailable(filter) == false
+        } ?: return null
+        Log.e(
+            TAG,
+            "FFmpeg compatibility package is missing filter=$missingFilter " +
+                "target=${input.targetFormat} displayName=${input.displayName}"
+        )
+        return "Compatibility engine is missing an advanced filter"
+    }
+
+    private fun requiredFfmpegFiltersFor(input: ConversionTaskInput): Set<String> {
+        return buildSet {
+            if (input.category == ConversionMediaCategory.Video && !isVideoGifOutput(input)) {
+                val videoAdvanced = input.videoOptions.advanced
+                if (
+                    videoAdvanced.rotation == VideoRotationMode.Clockwise90 ||
+                    videoAdvanced.rotation == VideoRotationMode.CounterClockwise90 ||
+                    videoAdvanced.rotation == VideoRotationMode.Rotate180
+                ) {
+                    add("transpose")
+                }
+                when (videoAdvanced.mirror) {
+                    VideoMirrorMode.Horizontal -> add("hflip")
+                    VideoMirrorMode.Vertical -> add("vflip")
+                    VideoMirrorMode.Both -> {
+                        add("hflip")
+                        add("vflip")
+                    }
+                    VideoMirrorMode.Off -> Unit
+                }
+                when (videoAdvanced.aspectRatio) {
+                    VideoAspectRatioMode.Fit16By9,
+                    VideoAspectRatioMode.Fit9By16,
+                    VideoAspectRatioMode.Fit1By1 -> add("pad")
+                    VideoAspectRatioMode.Crop16By9,
+                    VideoAspectRatioMode.Crop9By16,
+                    VideoAspectRatioMode.Crop1By1 -> add("crop")
+                    VideoAspectRatioMode.Keep -> Unit
+                }
+                if (
+                    videoAdvanced.fadeInSeconds != null ||
+                    videoAdvanced.fadeOutSeconds != null
+                ) {
+                    add("fade")
+                }
+            }
+
+            val audioAdvanced = input.audioOptions.advanced
+            val audioFiltersApply = when (input.category) {
+                ConversionMediaCategory.Audio -> true
+                ConversionMediaCategory.Video ->
+                    !isVideoGifOutput(input) &&
+                        audioAdvanced.volume != AudioVolumeMode.Mute
+                ConversionMediaCategory.Image,
+                ConversionMediaCategory.Pdf,
+                ConversionMediaCategory.Document -> false
+            }
+            if (audioFiltersApply) {
+                when (audioAdvanced.volume) {
+                    AudioVolumeMode.Half,
+                    AudioVolumeMode.OneAndHalf,
+                    AudioVolumeMode.Double -> add("volume")
+                    AudioVolumeMode.Mute -> {
+                        if (input.category == ConversionMediaCategory.Audio) add("volume")
+                    }
+                    AudioVolumeMode.Original -> Unit
+                }
+                if (audioAdvanced.echo != AudioEchoMode.Off) add("aecho")
+                if (
+                    audioAdvanced.fadeInSeconds != null ||
+                    audioAdvanced.fadeOutSeconds != null
+                ) {
+                    add("afade")
+                }
+            }
+        }
+    }
+
     private fun ffmpegMissingEncoderMessageFor(input: ConversionTaskInput): String? {
         val requiredEncoders = when (input.category) {
             ConversionMediaCategory.Video -> {
@@ -2788,7 +3023,12 @@ class ConversionService : Service() {
                     listOf(FFMPEG_GIF_ENCODER)
                 } else {
                     val profile = ffmpegVideoProfileFor(input) ?: return null
-                    listOf(profile.videoCodec, FFMPEG_AAC_ENCODER)
+                    buildList {
+                        add(profile.videoCodec)
+                        if (input.audioOptions.advanced.volume != AudioVolumeMode.Mute) {
+                            add(FFMPEG_AAC_ENCODER)
+                        }
+                    }
                 }
             }
             ConversionMediaCategory.Audio -> {
@@ -2831,6 +3071,38 @@ class ConversionService : Service() {
         val available = ffmpegEncoderOutputContains(output, encoder)
         ffmpegEncoderAvailability[encoder] = available
         return available
+    }
+
+    private fun ffmpegFilterAvailable(filter: String): Boolean? {
+        ffmpegFilterAvailability[filter]?.let { return it }
+
+        val output = runCatching {
+            val session = FFmpegKit.executeWithArguments(
+                arrayOf("-hide_banner", "-filters")
+            )
+            if (ReturnCode.isSuccess(session.getReturnCode())) {
+                session.getAllLogsAsString(FFMPEG_ENCODER_PROBE_TIMEOUT_MS).orEmpty()
+            } else {
+                ""
+            }
+        }.onFailure { exception ->
+            Log.w(TAG, "Could not probe FFmpeg filter list", exception)
+        }.getOrNull() ?: return null
+        if (output.isBlank()) return null
+
+        val available = ffmpegFilterOutputContains(output, filter)
+        ffmpegFilterAvailability[filter] = available
+        return available
+    }
+
+    private fun ffmpegFilterOutputContains(output: String, filter: String): Boolean {
+        return output.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .any { line ->
+                val tokens = line.split(WHITESPACE_REGEX, limit = 3)
+                tokens.size >= 2 && tokens[1] == filter
+            }
     }
 
     private fun ffmpegEncoderOutputContains(output: String, encoder: String): Boolean {
@@ -4275,7 +4547,7 @@ class ConversionService : Service() {
             "flv",
             "ogv"
         )
-        private val COMPATIBILITY_VIDEO_TARGETS = setOf("mkv", "mov", "gif")
+        private val COMPATIBILITY_VIDEO_TARGETS = setOf("mp4", "mkv", "mov", "gif")
         private val OFFICE_INPUT_EXTENSIONS = setOf("docx", "pptx", "xlsx")
         private val OFFICE_MIME_TYPES = mapOf(
             MIME_TYPE_DOCX to "docx",

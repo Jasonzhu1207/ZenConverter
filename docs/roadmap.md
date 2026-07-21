@@ -30,10 +30,17 @@
   rebuild flags still need to be recorded before a tagged release.
 - MKV/MOV/WebM/3GP/TS to MP4 re-encode. Implemented, needs physical-device
   smoke testing across samples.
+- MP4 to MP4 re-encode. Implemented through the FFmpeg compatibility path so
+  visible video/audio options and advanced filters apply consistently; needs
+  physical-device smoke testing.
 - MP4 to MKV re-encode. FFmpeg Matroska output is connected and needs
   physical-device smoke testing.
 - Video to MOV re-encode. FFmpeg QuickTime MOV output is connected and needs
   physical-device smoke testing.
+- First-batch advanced audio/video processing. Implemented through existing
+  FFmpeg filters for MP4/MKV/MOV video outputs and audio outputs: fade, mirror,
+  rotate, frame fit/crop, volume/mute, and echo. Reverse and denoise remain
+  future experimental items.
 - Video to animated GIF. FFmpeg palettegen/paletteuse output is connected with
   a 30 second, 30 fps, 900 frame cap and 480p default short-side limit; needs
   physical-device smoke testing across MP4/MOV/MKV/WEBM/AVI samples.

@@ -17,12 +17,12 @@ as supported until it has a tested path, sample files, and failure behavior.
 | --- | --- | --- | --- | --- |
 | Any | Any | Planned | None | Do not imply universal support. |
 | MP4 / MKV / MOV / WEBM / AVI / 3GP / 3GPP / TS / MTS video audio tracks | MP3 / M4A / WAV / FLAC / WMA | Experimental | FFmpeg compatible | Extracts the first audio stream and encodes the selected audio target. M4A is AAC re-encode, not stream copy. The app probes encoders before export where possible. Bitrate, sample-rate, and channel options are passed when the target supports them; video, subtitle, attachment, and extra audio tracks are not copied. |
-| MP4 | MP4 | Experimental | Media3 Transformer | Native MP4 output path; physical-device verification still required across samples. |
-| MP4 | MKV | Experimental | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in Matroska. Video bitrate, codec, short-side resolution cap, and max frame-rate options are applied. Subtitles, attachments, and extra tracks are not copied. |
-| MP4 / MKV / MOV / WEBM / AVI / 3GP / 3GPP / TS / MTS | MOV | Experimental | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in QuickTime MOV. Video bitrate, codec, short-side resolution cap, and max frame-rate options are applied. Subtitles, attachments, and extra tracks are not copied. |
+| MP4 | MP4 | Experimental | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in MP4. Video bitrate, codec, short-side resolution cap, max frame-rate, and first-batch advanced filters are applied. Subtitles, attachments, and extra tracks are not copied. |
+| MP4 | MKV | Experimental | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in Matroska. Video bitrate, codec, short-side resolution cap, max frame-rate, and first-batch advanced filters are applied. Subtitles, attachments, and extra tracks are not copied. |
+| MP4 / MKV / MOV / WEBM / AVI / 3GP / 3GPP / TS / MTS | MOV | Experimental | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in QuickTime MOV. Video bitrate, codec, short-side resolution cap, max frame-rate, and first-batch advanced filters are applied. Subtitles, attachments, and extra tracks are not copied. |
 | MP4 / MKV / MOV / WEBM / AVI / 3GP / 3GPP / TS / MTS | GIF | Experimental | FFmpeg compatible | Creates an animated GIF from the first video track with palettegen/paletteuse. Output is automatically limited to the first 30 seconds, 30 fps, and 900 frames. The default short-side cap is 480 px, with 720 px and Original options. Audio, subtitles, data streams, timing metadata, and container metadata are not copied. |
-| MKV / MOV / WEBM / AVI / 3GP / 3GPP / TS / MTS | MP4 | Experimental | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in MP4. Video bitrate, codec, short-side resolution cap, and max frame-rate options are applied. Subtitles, attachments, and extra tracks are not copied. |
-| MP3 / M4A / AAC / FLAC / WAV / WMA / OGG | MP3 / M4A / WAV / FLAC / WMA | Experimental | FFmpeg compatible | Common audio conversion path. MP3 uses `libmp3lame`; M4A uses AAC; WAV uses PCM; FLAC uses FLAC; WMA uses WMA v2 in ASF/WMA. Bitrate is applied for MP3/M4A/WMA when selected. Sample-rate and channel controls are applied when selected. WAV/FLAC ignore bitrate. |
+| MKV / MOV / WEBM / AVI / 3GP / 3GPP / TS / MTS | MP4 | Experimental | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in MP4. Video bitrate, codec, short-side resolution cap, max frame-rate, and first-batch advanced filters are applied. Subtitles, attachments, and extra tracks are not copied. |
+| MP3 / M4A / AAC / FLAC / WAV / WMA / OGG | MP3 / M4A / WAV / FLAC / WMA | Experimental | FFmpeg compatible | Common audio conversion path. MP3 uses `libmp3lame`; M4A uses AAC; WAV uses PCM; FLAC uses FLAC; WMA uses WMA v2 in ASF/WMA. Bitrate is applied for MP3/M4A/WMA when selected. Sample-rate, channel, fade, volume/mute, and echo controls are applied when selected. WAV/FLAC ignore bitrate. |
 | JPG / JPEG / JFIF / JPE / PNG / WEBP | JPG / JFIF / PNG / WEBP / ICO | Experimental | Native Bitmap | Static image conversion through Android platform bitmap APIs; physical-device smoke testing is still pending. JFIF output is JPEG-encoded pixels with a `.jfif` extension. JPG/JFIF/WEBP quality presets are Original 100, High 95, Balanced 85, Small 60; WEBP also offers Android 11+ lossless output. ICO output is a multi-size PNG-in-ICO file. PNG is written as lossless output. Transparency is preserved for PNG/WEBP/ICO and flattened to white for JPG/JFIF. Metadata is not copied, though JPEG EXIF orientation is applied best-effort; animated WEBP is not preserved as animation. |
 | ICO | JPG / JFIF / PNG / WEBP / ICO / PDF | Experimental | Native Bitmap / Android PdfDocument | Reads the largest ICO layer only when that layer is PNG-in-ICO. Old BMP/DIB icon payloads are not decoded in this milestone. |
 | GIF | JPG / JFIF / PNG / WEBP / ICO / PDF | Experimental | Native Bitmap / FFmpeg compatible / Android PdfDocument | User can choose first-frame conversion or split-frame output. GIF split uses the FFmpeg compatibility path to decode a raw RGBA frame stream, then reuses the native image/PDF writers. Split image outputs and one-PDF-per-frame outputs are saved inside a subfolder. Animation timing, loop count, frame delay, and metadata are not preserved. |
@@ -44,11 +44,11 @@ as supported until it has a tested path, sample files, and failure behavior.
 - Video files selected in the Audio lane map only the first audio stream and
   encode the selected audio target. Video, subtitles, data streams, attachments,
   extra audio tracks, and metadata are not copied.
-- Non-MP4 video containers selected for MP4 output use the FFmpeg compatibility
-  path with true video/audio re-encoding.
-- Native Media3 export uses a 60 second muxer-sample watchdog. If no output
-  sample is written within that window, the task fails clearly and should be
-  retested later through the planned compatibility engine.
+- MP4/MKV/MOV video outputs use the FFmpeg compatibility path with true
+  video/audio re-encoding, including MP4-to-MP4.
+- Native Media3 export remains in the codebase as the original hardware path,
+  but current connected video container outputs prefer FFmpeg so visible options
+  and advanced filters are consistently applied.
 
 ## Current FFmpeg Compatibility Limits
 
@@ -64,6 +64,11 @@ as supported until it has a tested path, sample files, and failure behavior.
   `-map 0:v:0 -map 0:a:0? -sn -dn -c:v libx264|libx265 -c:a aac`.
   MP4 output writes `-f mp4` plus `+faststart`; MKV output writes
   `-f matroska`; MOV output writes `-f mov` plus `+faststart`.
+- First-batch advanced filters are experimental and only apply to MP4/MKV/MOV
+  video outputs and audio outputs: video fade, mirror, rotate, fit/crop frame
+  shape; audio fade, volume/mute, and echo. Video mute omits the output audio
+  track. Fade-out needs readable duration metadata. GIF output does not use
+  these advanced controls.
 - Video-to-GIF uses the FFmpeg compatibility path with an inline
   palettegen/paletteuse filter graph. It writes `image/gif`, defaults to a
   480 px short-side cap, offers 720 px and Original size options, forces
@@ -76,14 +81,15 @@ as supported until it has a tested path, sample files, and failure behavior.
   forcing low-FPS sources upward.
 - Video compatibility AAC audio options are wired as follows: selected audio
   bitrate becomes `-b:a`; selected sample-rate becomes `-ar`; selected channel
-  count becomes `-ac`.
+  count becomes `-ac`; selected audio advanced filters become `-af` unless
+  video mute removes audio entirely.
 - Subtitles, attachments, extra audio tracks, and unknown streams are not copied
   in this first path.
 - MP3, M4A, WAV, FLAC, and WMA audio targets use FFmpeg compatibility arguments:
   `libmp3lame`, `aac`, `pcm_s16le`, `flac`, and `wmav2` respectively.
-  MP3/M4A/WMA pass selected bitrate, sample-rate, and channel options.
-  WAV/FLAC pass sample-rate and channel options, but intentionally do not pass
-  bitrate.
+  MP3/M4A/WMA pass selected bitrate, sample-rate, channel options, and advanced
+  audio filters. WAV/FLAC pass sample-rate, channel options, and advanced audio
+  filters, but intentionally do not pass bitrate.
 - Physical-device logs on July 11, 2026 confirmed that the earlier local Free
   AAR returned `Unknown encoder 'libmp3lame'`. The app probes for
   `libmp3lame` before MP3 export and fails with a specific message if the wrong

@@ -121,14 +121,21 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import org.zenconverter.app.conversion.AudioAdvancedOptions
+import org.zenconverter.app.conversion.AudioEchoMode
 import org.zenconverter.app.conversion.AudioExportOptions
+import org.zenconverter.app.conversion.AudioVolumeMode
 import org.zenconverter.app.conversion.FileBasicInfo
 import org.zenconverter.app.conversion.GifFrameExportMode
 import org.zenconverter.app.conversion.ImageExportOptions
 import org.zenconverter.app.conversion.PdfExportOptions
 import org.zenconverter.app.conversion.PdfImagePageMode
 import org.zenconverter.app.conversion.PdfRenderQuality
+import org.zenconverter.app.conversion.VideoAdvancedOptions
+import org.zenconverter.app.conversion.VideoAspectRatioMode
 import org.zenconverter.app.conversion.VideoExportOptions
+import org.zenconverter.app.conversion.VideoMirrorMode
+import org.zenconverter.app.conversion.VideoRotationMode
 import org.zenconverter.app.updates.ApkInstaller
 import org.zenconverter.app.updates.ApkOpenResult
 import org.zenconverter.app.updates.ApkUpdateDownloader
@@ -159,7 +166,7 @@ enum class FileCategory(
     Video(
         mimeTypes = listOf("video/*"),
         formats = listOf(
-            TargetFormat("MP4", "mp4", "Auto engine"),
+            TargetFormat("MP4", "mp4", "Re-encode"),
             TargetFormat("MKV", "mkv", "Re-encode"),
             TargetFormat("MOV", "mov", "Re-encode"),
             TargetFormat("GIF", "gif", "30s GIF")
@@ -308,6 +315,23 @@ private sealed interface UpdateDownloadUiState {
     data class Failed(val message: String?) : UpdateDownloadUiState
 }
 
+private data class VideoAdvancedUiState(
+    val expanded: Boolean,
+    val fadeIn: String,
+    val fadeOut: String,
+    val mirror: String,
+    val rotation: String,
+    val aspectRatio: String
+)
+
+private data class AudioAdvancedUiState(
+    val expanded: Boolean,
+    val fadeIn: String,
+    val fadeOut: String,
+    val volume: String,
+    val echo: String
+)
+
 private const val ZENCONVERTER_REPOSITORY_URL = "https://github.com/Jasonzhu1207/ZenConverter"
 private const val AFDIAN_URL = "https://afdian.com/a/Jason1207"
 private const val USDT_TRC20_ADDRESS = "TL88m9Wfdy4dAGhkLQ5jn9g8kZBTkRKrwf"
@@ -431,6 +455,78 @@ private val AUDIO_CHANNEL_OPTIONS = listOf(
     AUDIO_CHANNELS_ORIGINAL,
     AUDIO_CHANNELS_STEREO,
     AUDIO_CHANNELS_MONO
+)
+
+private const val ADVANCED_FADE_OFF = "Off"
+private const val ADVANCED_FADE_HALF_SECOND = "0.5s"
+private const val ADVANCED_FADE_ONE_SECOND = "1s"
+private const val ADVANCED_FADE_TWO_SECONDS = "2s"
+private val ADVANCED_FADE_OPTIONS = listOf(
+    ADVANCED_FADE_OFF,
+    ADVANCED_FADE_HALF_SECOND,
+    ADVANCED_FADE_ONE_SECOND,
+    ADVANCED_FADE_TWO_SECONDS
+)
+
+private const val VIDEO_MIRROR_OFF = "Mirror off"
+private const val VIDEO_MIRROR_HORIZONTAL = "Horizontal"
+private const val VIDEO_MIRROR_VERTICAL = "Vertical"
+private const val VIDEO_MIRROR_BOTH = "Both"
+private val VIDEO_MIRROR_OPTIONS = listOf(
+    VIDEO_MIRROR_OFF,
+    VIDEO_MIRROR_HORIZONTAL,
+    VIDEO_MIRROR_VERTICAL,
+    VIDEO_MIRROR_BOTH
+)
+
+private const val VIDEO_ROTATION_NONE = "No rotation"
+private const val VIDEO_ROTATION_90_CW = "90 CW"
+private const val VIDEO_ROTATION_90_CCW = "90 CCW"
+private const val VIDEO_ROTATION_180 = "180"
+private val VIDEO_ROTATION_OPTIONS = listOf(
+    VIDEO_ROTATION_NONE,
+    VIDEO_ROTATION_90_CW,
+    VIDEO_ROTATION_90_CCW,
+    VIDEO_ROTATION_180
+)
+
+private const val VIDEO_ASPECT_KEEP = "Keep aspect"
+private const val VIDEO_ASPECT_FIT_16_9 = "Fit 16:9"
+private const val VIDEO_ASPECT_FIT_9_16 = "Fit 9:16"
+private const val VIDEO_ASPECT_FIT_1_1 = "Fit 1:1"
+private const val VIDEO_ASPECT_CROP_16_9 = "Crop 16:9"
+private const val VIDEO_ASPECT_CROP_9_16 = "Crop 9:16"
+private const val VIDEO_ASPECT_CROP_1_1 = "Crop 1:1"
+private val VIDEO_ASPECT_OPTIONS = listOf(
+    VIDEO_ASPECT_KEEP,
+    VIDEO_ASPECT_FIT_16_9,
+    VIDEO_ASPECT_FIT_9_16,
+    VIDEO_ASPECT_FIT_1_1,
+    VIDEO_ASPECT_CROP_16_9,
+    VIDEO_ASPECT_CROP_9_16,
+    VIDEO_ASPECT_CROP_1_1
+)
+
+private const val AUDIO_VOLUME_MUTE = "Mute"
+private const val AUDIO_VOLUME_50 = "50%"
+private const val AUDIO_VOLUME_100 = "100%"
+private const val AUDIO_VOLUME_150 = "150%"
+private const val AUDIO_VOLUME_200 = "200%"
+private val AUDIO_VOLUME_OPTIONS = listOf(
+    AUDIO_VOLUME_100,
+    AUDIO_VOLUME_50,
+    AUDIO_VOLUME_150,
+    AUDIO_VOLUME_200,
+    AUDIO_VOLUME_MUTE
+)
+
+private const val AUDIO_ECHO_OFF = "Echo off"
+private const val AUDIO_ECHO_LIGHT = "Light echo"
+private const val AUDIO_ECHO_ROOM = "Room echo"
+private val AUDIO_ECHO_OPTIONS = listOf(
+    AUDIO_ECHO_OFF,
+    AUDIO_ECHO_LIGHT,
+    AUDIO_ECHO_ROOM
 )
 
 private const val IMAGE_QUALITY_ORIGINAL = "Original"
@@ -613,6 +709,17 @@ private fun ZenConverterContent(
     var audioBitrate by remember { mutableStateOf(AUDIO_BITRATE_AUTO) }
     var audioSampleRate by remember { mutableStateOf(AUDIO_SAMPLE_RATE_ORIGINAL) }
     var audioChannels by remember { mutableStateOf(AUDIO_CHANNELS_ORIGINAL) }
+    var videoAdvancedExpanded by remember { mutableStateOf(false) }
+    var videoFadeIn by remember { mutableStateOf(ADVANCED_FADE_OFF) }
+    var videoFadeOut by remember { mutableStateOf(ADVANCED_FADE_OFF) }
+    var videoMirror by remember { mutableStateOf(VIDEO_MIRROR_OFF) }
+    var videoRotation by remember { mutableStateOf(VIDEO_ROTATION_NONE) }
+    var videoAspectRatio by remember { mutableStateOf(VIDEO_ASPECT_KEEP) }
+    var audioAdvancedExpanded by remember { mutableStateOf(false) }
+    var audioFadeIn by remember { mutableStateOf(ADVANCED_FADE_OFF) }
+    var audioFadeOut by remember { mutableStateOf(ADVANCED_FADE_OFF) }
+    var audioVolume by remember { mutableStateOf(AUDIO_VOLUME_100) }
+    var audioEcho by remember { mutableStateOf(AUDIO_ECHO_OFF) }
     var imageQuality by remember { mutableStateOf(IMAGE_QUALITY_BALANCED) }
     var pdfPageMode by remember { mutableStateOf(PDF_PAGE_MODE_A4_FIT) }
     var pdfRenderQuality by remember { mutableStateOf(PDF_RENDER_QUALITY_BALANCED) }
@@ -661,7 +768,14 @@ private fun ZenConverterContent(
             maxShortSidePixels = videoResolutionToShortSide(videoResolution),
             videoBitrate = videoBitrateToBits(videoBitrate),
             videoMimeType = videoCodecToMimeType(videoCodec),
-            maxFrameRate = videoFrameRateToCap(videoFrameRate)
+            maxFrameRate = videoFrameRateToCap(videoFrameRate),
+            advanced = VideoAdvancedOptions(
+                fadeInSeconds = fadeDurationSeconds(videoFadeIn),
+                fadeOutSeconds = fadeDurationSeconds(videoFadeOut),
+                mirror = videoMirrorModeFor(videoMirror),
+                rotation = videoRotationModeFor(videoRotation),
+                aspectRatio = videoAspectRatioModeFor(videoAspectRatio)
+            )
         )
     }
 
@@ -669,7 +783,13 @@ private fun ZenConverterContent(
         return AudioExportOptions(
             audioBitrate = audioBitrateToBits(audioBitrate),
             sampleRateHz = audioSampleRateToHz(audioSampleRate),
-            channelCount = audioChannelsToCount(audioChannels)
+            channelCount = audioChannelsToCount(audioChannels),
+            advanced = AudioAdvancedOptions(
+                fadeInSeconds = fadeDurationSeconds(audioFadeIn),
+                fadeOutSeconds = fadeDurationSeconds(audioFadeOut),
+                volume = audioVolumeModeFor(audioVolume),
+                echo = audioEchoModeFor(audioEcho)
+            )
         )
     }
 
@@ -790,6 +910,21 @@ private fun ZenConverterContent(
                         audioBitrate = audioBitrate,
                         audioSampleRate = audioSampleRate,
                         audioChannels = audioChannels,
+                        videoAdvanced = VideoAdvancedUiState(
+                            expanded = videoAdvancedExpanded,
+                            fadeIn = videoFadeIn,
+                            fadeOut = videoFadeOut,
+                            mirror = videoMirror,
+                            rotation = videoRotation,
+                            aspectRatio = videoAspectRatio
+                        ),
+                        audioAdvanced = AudioAdvancedUiState(
+                            expanded = audioAdvancedExpanded,
+                            fadeIn = audioFadeIn,
+                            fadeOut = audioFadeOut,
+                            volume = audioVolume,
+                            echo = audioEcho
+                        ),
                         audioTarget = audioTarget,
                         imageTarget = imageTarget,
                         pdfTarget = pdfTarget,
@@ -805,6 +940,17 @@ private fun ZenConverterContent(
                         onAudioBitrateChange = { audioBitrate = it },
                         onAudioSampleRateChange = { audioSampleRate = it },
                         onAudioChannelsChange = { audioChannels = it },
+                        onVideoAdvancedExpandedChange = { videoAdvancedExpanded = it },
+                        onVideoFadeInChange = { videoFadeIn = it },
+                        onVideoFadeOutChange = { videoFadeOut = it },
+                        onVideoMirrorChange = { videoMirror = it },
+                        onVideoRotationChange = { videoRotation = it },
+                        onVideoAspectRatioChange = { videoAspectRatio = it },
+                        onAudioAdvancedExpandedChange = { audioAdvancedExpanded = it },
+                        onAudioFadeInChange = { audioFadeIn = it },
+                        onAudioFadeOutChange = { audioFadeOut = it },
+                        onAudioVolumeChange = { audioVolume = it },
+                        onAudioEchoChange = { audioEcho = it },
                         onImageQualityChange = { imageQuality = it },
                         onPdfPageModeChange = { pdfPageMode = it },
                         onPdfRenderQualityChange = { pdfRenderQuality = it }
@@ -2082,6 +2228,8 @@ private fun EncodingPanel(
     audioBitrate: String,
     audioSampleRate: String,
     audioChannels: String,
+    videoAdvanced: VideoAdvancedUiState,
+    audioAdvanced: AudioAdvancedUiState,
     audioTarget: TargetFormat,
     imageTarget: TargetFormat,
     pdfTarget: TargetFormat,
@@ -2097,6 +2245,17 @@ private fun EncodingPanel(
     onAudioBitrateChange: (String) -> Unit,
     onAudioSampleRateChange: (String) -> Unit,
     onAudioChannelsChange: (String) -> Unit,
+    onVideoAdvancedExpandedChange: (Boolean) -> Unit,
+    onVideoFadeInChange: (String) -> Unit,
+    onVideoFadeOutChange: (String) -> Unit,
+    onVideoMirrorChange: (String) -> Unit,
+    onVideoRotationChange: (String) -> Unit,
+    onVideoAspectRatioChange: (String) -> Unit,
+    onAudioAdvancedExpandedChange: (Boolean) -> Unit,
+    onAudioFadeInChange: (String) -> Unit,
+    onAudioFadeOutChange: (String) -> Unit,
+    onAudioVolumeChange: (String) -> Unit,
+    onAudioEchoChange: (String) -> Unit,
     onImageQualityChange: (String) -> Unit,
     onPdfPageModeChange: (String) -> Unit,
     onPdfRenderQualityChange: (String) -> Unit
@@ -2129,6 +2288,8 @@ private fun EncodingPanel(
                 audioBitrate = audioBitrate,
                 audioSampleRate = audioSampleRate,
                 audioChannels = audioChannels,
+                videoAdvanced = videoAdvanced,
+                audioAdvanced = audioAdvanced,
                 targetFormat = videoTarget,
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
@@ -2138,19 +2299,36 @@ private fun EncodingPanel(
                 onFrameRateChange = onVideoFrameRateChange,
                 onAudioBitrateChange = onAudioBitrateChange,
                 onAudioSampleRateChange = onAudioSampleRateChange,
-                onAudioChannelsChange = onAudioChannelsChange
+                onAudioChannelsChange = onAudioChannelsChange,
+                onVideoAdvancedExpandedChange = onVideoAdvancedExpandedChange,
+                onVideoFadeInChange = onVideoFadeInChange,
+                onVideoFadeOutChange = onVideoFadeOutChange,
+                onVideoMirrorChange = onVideoMirrorChange,
+                onVideoRotationChange = onVideoRotationChange,
+                onVideoAspectRatioChange = onVideoAspectRatioChange,
+                onAudioAdvancedExpandedChange = onAudioAdvancedExpandedChange,
+                onAudioFadeInChange = onAudioFadeInChange,
+                onAudioFadeOutChange = onAudioFadeOutChange,
+                onAudioVolumeChange = onAudioVolumeChange,
+                onAudioEchoChange = onAudioEchoChange
             )
             FileCategory.Audio -> AudioOptions(
                 texts = texts,
                 bitrate = audioBitrate,
                 sampleRate = audioSampleRate,
                 channels = audioChannels,
+                advanced = audioAdvanced,
                 targetFormat = audioTarget,
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
                 onBitrateChange = onAudioBitrateChange,
                 onSampleRateChange = onAudioSampleRateChange,
-                onChannelsChange = onAudioChannelsChange
+                onChannelsChange = onAudioChannelsChange,
+                onAdvancedExpandedChange = onAudioAdvancedExpandedChange,
+                onFadeInChange = onAudioFadeInChange,
+                onFadeOutChange = onAudioFadeOutChange,
+                onVolumeChange = onAudioVolumeChange,
+                onEchoChange = onAudioEchoChange
             )
             FileCategory.Image -> ImageOptions(
                 texts = texts,
@@ -2191,6 +2369,8 @@ private fun VideoOptions(
     audioBitrate: String,
     audioSampleRate: String,
     audioChannels: String,
+    videoAdvanced: VideoAdvancedUiState,
+    audioAdvanced: AudioAdvancedUiState,
     targetFormat: TargetFormat,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
@@ -2200,7 +2380,18 @@ private fun VideoOptions(
     onFrameRateChange: (String) -> Unit,
     onAudioBitrateChange: (String) -> Unit,
     onAudioSampleRateChange: (String) -> Unit,
-    onAudioChannelsChange: (String) -> Unit
+    onAudioChannelsChange: (String) -> Unit,
+    onVideoAdvancedExpandedChange: (Boolean) -> Unit,
+    onVideoFadeInChange: (String) -> Unit,
+    onVideoFadeOutChange: (String) -> Unit,
+    onVideoMirrorChange: (String) -> Unit,
+    onVideoRotationChange: (String) -> Unit,
+    onVideoAspectRatioChange: (String) -> Unit,
+    onAudioAdvancedExpandedChange: (Boolean) -> Unit,
+    onAudioFadeInChange: (String) -> Unit,
+    onAudioFadeOutChange: (String) -> Unit,
+    onAudioVolumeChange: (String) -> Unit,
+    onAudioEchoChange: (String) -> Unit
 ) {
     val isGifTarget = targetFormat.extension.equals("gif", ignoreCase = true)
     OptionGrid {
@@ -2275,6 +2466,29 @@ private fun VideoOptions(
                 onOpenMenuChange,
                 onAudioChannelsChange
             )
+            VideoAdvancedOptionsPanel(
+                texts = texts,
+                state = videoAdvanced,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                onExpandedChange = onVideoAdvancedExpandedChange,
+                onFadeInChange = onVideoFadeInChange,
+                onFadeOutChange = onVideoFadeOutChange,
+                onMirrorChange = onVideoMirrorChange,
+                onRotationChange = onVideoRotationChange,
+                onAspectRatioChange = onVideoAspectRatioChange
+            )
+            AudioAdvancedOptionsPanel(
+                texts = texts,
+                state = audioAdvanced,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                onExpandedChange = onAudioAdvancedExpandedChange,
+                onFadeInChange = onAudioFadeInChange,
+                onFadeOutChange = onAudioFadeOutChange,
+                onVolumeChange = onAudioVolumeChange,
+                onEchoChange = onAudioEchoChange
+            )
         }
     }
 }
@@ -2285,12 +2499,18 @@ private fun AudioOptions(
     bitrate: String,
     sampleRate: String,
     channels: String,
+    advanced: AudioAdvancedUiState,
     targetFormat: TargetFormat,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onBitrateChange: (String) -> Unit,
     onSampleRateChange: (String) -> Unit,
-    onChannelsChange: (String) -> Unit
+    onChannelsChange: (String) -> Unit,
+    onAdvancedExpandedChange: (Boolean) -> Unit,
+    onFadeInChange: (String) -> Unit,
+    onFadeOutChange: (String) -> Unit,
+    onVolumeChange: (String) -> Unit,
+    onEchoChange: (String) -> Unit
 ) {
     OptionGrid {
         if (audioSupportsBitrateOption(targetFormat)) {
@@ -2331,6 +2551,213 @@ private fun AudioOptions(
             onOpenMenuChange,
             onChannelsChange
         )
+        AudioAdvancedOptionsPanel(
+            texts = texts,
+            state = advanced,
+            openMenuId = openMenuId,
+            onOpenMenuChange = onOpenMenuChange,
+            onExpandedChange = onAdvancedExpandedChange,
+            onFadeInChange = onFadeInChange,
+            onFadeOutChange = onFadeOutChange,
+            onVolumeChange = onVolumeChange,
+            onEchoChange = onEchoChange
+        )
+    }
+}
+
+@Composable
+private fun VideoAdvancedOptionsPanel(
+    texts: UiText,
+    state: VideoAdvancedUiState,
+    openMenuId: String?,
+    onOpenMenuChange: (String?) -> Unit,
+    onExpandedChange: (Boolean) -> Unit,
+    onFadeInChange: (String) -> Unit,
+    onFadeOutChange: (String) -> Unit,
+    onMirrorChange: (String) -> Unit,
+    onRotationChange: (String) -> Unit,
+    onAspectRatioChange: (String) -> Unit
+) {
+    AdvancedOptionsPanel(
+        title = texts.videoAdvancedTitle(),
+        note = texts.videoAdvancedNote(),
+        expanded = state.expanded,
+        onExpandedChange = onExpandedChange
+    ) {
+        OptionDropdown(
+            "video-advanced-fade-in",
+            texts.fadeInLabel(),
+            state.fadeIn,
+            ADVANCED_FADE_OPTIONS,
+            texts,
+            openMenuId,
+            onOpenMenuChange,
+            onFadeInChange
+        )
+        OptionDropdown(
+            "video-advanced-fade-out",
+            texts.fadeOutLabel(),
+            state.fadeOut,
+            ADVANCED_FADE_OPTIONS,
+            texts,
+            openMenuId,
+            onOpenMenuChange,
+            onFadeOutChange
+        )
+        OptionDropdown(
+            "video-advanced-mirror",
+            texts.mirrorLabel(),
+            state.mirror,
+            VIDEO_MIRROR_OPTIONS,
+            texts,
+            openMenuId,
+            onOpenMenuChange,
+            onMirrorChange
+        )
+        OptionDropdown(
+            "video-advanced-rotation",
+            texts.rotationLabel(),
+            state.rotation,
+            VIDEO_ROTATION_OPTIONS,
+            texts,
+            openMenuId,
+            onOpenMenuChange,
+            onRotationChange
+        )
+        OptionDropdown(
+            "video-advanced-aspect",
+            texts.aspectRatioLabel(),
+            state.aspectRatio,
+            VIDEO_ASPECT_OPTIONS,
+            texts,
+            openMenuId,
+            onOpenMenuChange,
+            onAspectRatioChange
+        )
+    }
+}
+
+@Composable
+private fun AudioAdvancedOptionsPanel(
+    texts: UiText,
+    state: AudioAdvancedUiState,
+    openMenuId: String?,
+    onOpenMenuChange: (String?) -> Unit,
+    onExpandedChange: (Boolean) -> Unit,
+    onFadeInChange: (String) -> Unit,
+    onFadeOutChange: (String) -> Unit,
+    onVolumeChange: (String) -> Unit,
+    onEchoChange: (String) -> Unit
+) {
+    AdvancedOptionsPanel(
+        title = texts.audioAdvancedTitle(),
+        note = texts.audioAdvancedNote(),
+        expanded = state.expanded,
+        onExpandedChange = onExpandedChange
+    ) {
+        OptionDropdown(
+            "audio-advanced-fade-in",
+            texts.fadeInLabel(),
+            state.fadeIn,
+            ADVANCED_FADE_OPTIONS,
+            texts,
+            openMenuId,
+            onOpenMenuChange,
+            onFadeInChange
+        )
+        OptionDropdown(
+            "audio-advanced-fade-out",
+            texts.fadeOutLabel(),
+            state.fadeOut,
+            ADVANCED_FADE_OPTIONS,
+            texts,
+            openMenuId,
+            onOpenMenuChange,
+            onFadeOutChange
+        )
+        OptionDropdown(
+            "audio-advanced-volume",
+            texts.volumeLabel(),
+            state.volume,
+            AUDIO_VOLUME_OPTIONS,
+            texts,
+            openMenuId,
+            onOpenMenuChange,
+            onVolumeChange
+        )
+        OptionDropdown(
+            "audio-advanced-echo",
+            texts.echoLabel(),
+            state.echo,
+            AUDIO_ECHO_OPTIONS,
+            texts,
+            openMenuId,
+            onOpenMenuChange,
+            onEchoChange
+        )
+    }
+}
+
+@Composable
+private fun AdvancedOptionsPanel(
+    title: String,
+    note: String,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.045f), RoundedCornerShape(8.dp))
+            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+            .animateContentSize()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onExpandedChange(!expanded) }
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = note,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            AppIcon(
+                icon = Icons.Rounded.ExpandMore,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .size(20.dp)
+                    .rotate(if (expanded) 180f else 0f)
+            )
+        }
+        AnimatedVisibility(
+            visible = expanded,
+            enter = fadeIn() + expandVertically(animationSpec = spring(stiffness = 520f)),
+            exit = fadeOut() + shrinkVertically(animationSpec = spring(stiffness = 620f))
+        ) {
+            Column(
+                modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                content = content
+            )
+        }
     }
 }
 
@@ -3167,6 +3594,63 @@ private fun audioChannelsToCount(value: String): Int? {
     }
 }
 
+private fun fadeDurationSeconds(value: String): Float? {
+    return when (value) {
+        ADVANCED_FADE_HALF_SECOND -> 0.5f
+        ADVANCED_FADE_ONE_SECOND -> 1f
+        ADVANCED_FADE_TWO_SECONDS -> 2f
+        else -> null
+    }
+}
+
+private fun videoMirrorModeFor(value: String): VideoMirrorMode {
+    return when (value) {
+        VIDEO_MIRROR_HORIZONTAL -> VideoMirrorMode.Horizontal
+        VIDEO_MIRROR_VERTICAL -> VideoMirrorMode.Vertical
+        VIDEO_MIRROR_BOTH -> VideoMirrorMode.Both
+        else -> VideoMirrorMode.Off
+    }
+}
+
+private fun videoRotationModeFor(value: String): VideoRotationMode {
+    return when (value) {
+        VIDEO_ROTATION_90_CW -> VideoRotationMode.Clockwise90
+        VIDEO_ROTATION_90_CCW -> VideoRotationMode.CounterClockwise90
+        VIDEO_ROTATION_180 -> VideoRotationMode.Rotate180
+        else -> VideoRotationMode.None
+    }
+}
+
+private fun videoAspectRatioModeFor(value: String): VideoAspectRatioMode {
+    return when (value) {
+        VIDEO_ASPECT_FIT_16_9 -> VideoAspectRatioMode.Fit16By9
+        VIDEO_ASPECT_FIT_9_16 -> VideoAspectRatioMode.Fit9By16
+        VIDEO_ASPECT_FIT_1_1 -> VideoAspectRatioMode.Fit1By1
+        VIDEO_ASPECT_CROP_16_9 -> VideoAspectRatioMode.Crop16By9
+        VIDEO_ASPECT_CROP_9_16 -> VideoAspectRatioMode.Crop9By16
+        VIDEO_ASPECT_CROP_1_1 -> VideoAspectRatioMode.Crop1By1
+        else -> VideoAspectRatioMode.Keep
+    }
+}
+
+private fun audioVolumeModeFor(value: String): AudioVolumeMode {
+    return when (value) {
+        AUDIO_VOLUME_MUTE -> AudioVolumeMode.Mute
+        AUDIO_VOLUME_50 -> AudioVolumeMode.Half
+        AUDIO_VOLUME_150 -> AudioVolumeMode.OneAndHalf
+        AUDIO_VOLUME_200 -> AudioVolumeMode.Double
+        else -> AudioVolumeMode.Original
+    }
+}
+
+private fun audioEchoModeFor(value: String): AudioEchoMode {
+    return when (value) {
+        AUDIO_ECHO_LIGHT -> AudioEchoMode.Light
+        AUDIO_ECHO_ROOM -> AudioEchoMode.Room
+        else -> AudioEchoMode.Off
+    }
+}
+
 private fun audioSupportsBitrateOption(targetFormat: TargetFormat): Boolean {
     return targetFormat.extension.lowercase(Locale.US) !in AUDIO_LOSSLESS_OUTPUT_EXTENSIONS
 }
@@ -3367,6 +3851,94 @@ private data class UiText(
             englishText -> "Audio bitrate"
             simplifiedChineseText -> "音频码率"
             else -> "音訊位元率"
+        }
+    }
+
+    fun videoAdvancedTitle(): String {
+        return when (this) {
+            englishText -> "Advanced video"
+            simplifiedChineseText -> "视频高级处理"
+            else -> "影片進階處理"
+        }
+    }
+
+    fun videoAdvancedNote(): String {
+        return when (this) {
+            englishText -> "Fade, mirror, rotate, and frame shape"
+            simplifiedChineseText -> "淡入淡出、镜像、旋转、画幅"
+            else -> "淡入淡出、鏡像、旋轉、畫幅"
+        }
+    }
+
+    fun audioAdvancedTitle(): String {
+        return when (this) {
+            englishText -> "Advanced audio"
+            simplifiedChineseText -> "音频高级处理"
+            else -> "音訊進階處理"
+        }
+    }
+
+    fun audioAdvancedNote(): String {
+        return when (this) {
+            englishText -> "Fade, volume, mute, and echo"
+            simplifiedChineseText -> "淡入淡出、音量、静音、回音"
+            else -> "淡入淡出、音量、靜音、回音"
+        }
+    }
+
+    fun fadeInLabel(): String {
+        return when (this) {
+            englishText -> "Fade in"
+            simplifiedChineseText -> "淡入"
+            else -> "淡入"
+        }
+    }
+
+    fun fadeOutLabel(): String {
+        return when (this) {
+            englishText -> "Fade out"
+            simplifiedChineseText -> "淡出"
+            else -> "淡出"
+        }
+    }
+
+    fun mirrorLabel(): String {
+        return when (this) {
+            englishText -> "Mirror"
+            simplifiedChineseText -> "镜像"
+            else -> "鏡像"
+        }
+    }
+
+    fun rotationLabel(): String {
+        return when (this) {
+            englishText -> "Rotate"
+            simplifiedChineseText -> "旋转"
+            else -> "旋轉"
+        }
+    }
+
+    fun aspectRatioLabel(): String {
+        return when (this) {
+            englishText -> "Frame"
+            simplifiedChineseText -> "画幅"
+            else -> "畫幅"
+        }
+    }
+
+    fun volumeLabel(): String {
+        return when (this) {
+            englishText -> "Volume"
+            simplifiedChineseText -> "音量"
+            else -> "音量"
+        }
+    }
+
+    fun echoLabel(): String {
+        return when (this) {
+            englishText -> "Echo"
+            simplifiedChineseText -> "回音"
+            else -> "回音"
         }
     }
 
@@ -3687,6 +4259,16 @@ private data class UiText(
                 englishText -> "Compatibility engine needs a GIF-capable FFmpeg package"
                 simplifiedChineseText -> "当前兼容包不包含 GIF 编码器"
                 else -> "目前相容包不包含 GIF 編碼器"
+            }
+            "Compatibility engine needs duration metadata for fade out" -> when (this) {
+                englishText -> "Compatibility engine needs duration metadata for fade out"
+                simplifiedChineseText -> "淡出需要读取文件时长"
+                else -> "淡出需要讀取檔案時長"
+            }
+            "Compatibility engine is missing an advanced filter" -> when (this) {
+                englishText -> "Compatibility engine is missing an advanced filter"
+                simplifiedChineseText -> "当前兼容包缺少所选高级处理滤镜"
+                else -> "目前相容包缺少所選進階處理濾鏡"
             }
             "Compatibility engine could not create this GIF" -> when (this) {
                 englishText -> "Compatibility engine could not create this GIF"
@@ -4030,6 +4612,113 @@ private data class UiText(
                 englishText -> "Original"
                 simplifiedChineseText -> "原始"
                 else -> "原始"
+            }
+            ADVANCED_FADE_OFF -> when (this) {
+                englishText -> "Off"
+                simplifiedChineseText -> "关闭"
+                else -> "關閉"
+            }
+            ADVANCED_FADE_HALF_SECOND,
+            ADVANCED_FADE_ONE_SECOND,
+            ADVANCED_FADE_TWO_SECONDS,
+            AUDIO_VOLUME_50,
+            AUDIO_VOLUME_100,
+            AUDIO_VOLUME_150,
+            AUDIO_VOLUME_200 -> value
+            VIDEO_MIRROR_OFF -> when (this) {
+                englishText -> "Off"
+                simplifiedChineseText -> "关闭"
+                else -> "關閉"
+            }
+            VIDEO_MIRROR_HORIZONTAL -> when (this) {
+                englishText -> "Horizontal"
+                simplifiedChineseText -> "左右镜像"
+                else -> "左右鏡像"
+            }
+            VIDEO_MIRROR_VERTICAL -> when (this) {
+                englishText -> "Vertical"
+                simplifiedChineseText -> "上下镜像"
+                else -> "上下鏡像"
+            }
+            VIDEO_MIRROR_BOTH -> when (this) {
+                englishText -> "Both"
+                simplifiedChineseText -> "上下左右"
+                else -> "上下左右"
+            }
+            VIDEO_ROTATION_NONE -> when (this) {
+                englishText -> "None"
+                simplifiedChineseText -> "不旋转"
+                else -> "不旋轉"
+            }
+            VIDEO_ROTATION_90_CW -> when (this) {
+                englishText -> "90° clockwise"
+                simplifiedChineseText -> "顺时针 90°"
+                else -> "順時針 90°"
+            }
+            VIDEO_ROTATION_90_CCW -> when (this) {
+                englishText -> "90° counterclockwise"
+                simplifiedChineseText -> "逆时针 90°"
+                else -> "逆時針 90°"
+            }
+            VIDEO_ROTATION_180 -> when (this) {
+                englishText -> "180°"
+                simplifiedChineseText -> "180°"
+                else -> "180°"
+            }
+            VIDEO_ASPECT_KEEP -> when (this) {
+                englishText -> "Keep"
+                simplifiedChineseText -> "保持"
+                else -> "保持"
+            }
+            VIDEO_ASPECT_FIT_16_9 -> when (this) {
+                englishText -> "Fit 16:9"
+                simplifiedChineseText -> "适配 16:9"
+                else -> "適配 16:9"
+            }
+            VIDEO_ASPECT_FIT_9_16 -> when (this) {
+                englishText -> "Fit 9:16"
+                simplifiedChineseText -> "适配 9:16"
+                else -> "適配 9:16"
+            }
+            VIDEO_ASPECT_FIT_1_1 -> when (this) {
+                englishText -> "Fit 1:1"
+                simplifiedChineseText -> "适配 1:1"
+                else -> "適配 1:1"
+            }
+            VIDEO_ASPECT_CROP_16_9 -> when (this) {
+                englishText -> "Crop 16:9"
+                simplifiedChineseText -> "裁剪 16:9"
+                else -> "裁剪 16:9"
+            }
+            VIDEO_ASPECT_CROP_9_16 -> when (this) {
+                englishText -> "Crop 9:16"
+                simplifiedChineseText -> "裁剪 9:16"
+                else -> "裁剪 9:16"
+            }
+            VIDEO_ASPECT_CROP_1_1 -> when (this) {
+                englishText -> "Crop 1:1"
+                simplifiedChineseText -> "裁剪 1:1"
+                else -> "裁剪 1:1"
+            }
+            AUDIO_VOLUME_MUTE -> when (this) {
+                englishText -> "Mute"
+                simplifiedChineseText -> "静音"
+                else -> "靜音"
+            }
+            AUDIO_ECHO_OFF -> when (this) {
+                englishText -> "Off"
+                simplifiedChineseText -> "关闭"
+                else -> "關閉"
+            }
+            AUDIO_ECHO_LIGHT -> when (this) {
+                englishText -> "Light"
+                simplifiedChineseText -> "轻微"
+                else -> "輕微"
+            }
+            AUDIO_ECHO_ROOM -> when (this) {
+                englishText -> "Room"
+                simplifiedChineseText -> "房间"
+                else -> "房間"
             }
             "Auto bitrate" -> when (this) {
                 englishText -> "Auto (recommended)"
