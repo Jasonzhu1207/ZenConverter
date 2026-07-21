@@ -17,6 +17,7 @@ data class ConversionTaskInput(
     val audioOptions: AudioExportOptions,
     val imageOptions: ImageExportOptions,
     val pdfOptions: PdfExportOptions,
+    val pdfSecurityOptions: PdfSecurityOptions = PdfSecurityOptions(),
     val inputInfo: FileBasicInfo? = null,
     val gifFrameMode: GifFrameExportMode = GifFrameExportMode.FirstFrame,
     val pdfPasswords: List<String?> = emptyList()
@@ -142,6 +143,17 @@ data class PdfExportOptions(
     val imagePageMode: PdfImagePageMode = PdfImagePageMode.A4Fit,
     val renderQuality: PdfRenderQuality = PdfRenderQuality.Balanced
 )
+
+data class PdfSecurityOptions(
+    val mode: PdfSecurityMode = PdfSecurityMode.None,
+    val outputPassword: String? = null
+)
+
+enum class PdfSecurityMode {
+    None,
+    Encrypt,
+    Decrypt
+}
 
 enum class PdfImagePageMode {
     A4Fit,
@@ -349,8 +361,14 @@ object ConversionTaskStore {
     private fun clearSensitiveInputs() {
         for (index in inputs.indices) {
             val input = inputs[index]
-            if (input.pdfPasswords.any { it != null }) {
-                inputs[index] = input.copy(pdfPasswords = emptyList())
+            if (
+                input.pdfPasswords.any { it != null } ||
+                input.pdfSecurityOptions.outputPassword != null
+            ) {
+                inputs[index] = input.copy(
+                    pdfPasswords = emptyList(),
+                    pdfSecurityOptions = input.pdfSecurityOptions.copy(outputPassword = null)
+                )
             }
         }
     }

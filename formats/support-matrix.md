@@ -30,8 +30,9 @@ as supported until it has a tested path, sample files, and failure behavior.
 | JPG / JPEG / JFIF / JPE / PNG / WEBP | PDF | Experimental | Android PdfDocument | Creates one PDF page per image. A4-fit and original-ratio page modes preserve image ratio and use a white page background. Multiple selected images can become one multi-page PDF or one PDF per image. |
 | PDF | JPG / PNG / WEBP | Experimental | Android PdfRenderer | Renders each PDF page to one image file. This is page rasterization, not OCR, text extraction, or embedded-image extraction. Multi-page outputs use one task and same-sized page images. |
 | Multiple PDFs | PDF | Experimental | PDFBox-Android | Merges selected PDFs as page objects instead of rasterizing them. Normal text layers and vector content are preserved best-effort; complex forms, bookmarks, attachments, and metadata are not guaranteed. |
-| PDF | TXT | Experimental | PDFBox-Android | Extracts selectable text with page separators. This is not OCR; scanned PDFs without a text layer fail clearly. |
-| DOCX / PPTX / XLSX | PDF | Experimental | office2pdf native | Converts OOXML Office files to PDF through the bundled `arm64-v8a` `libzen_office2pdf.so`. The current rebuilt library receives bundled Noto Sans and Noto Serif CJK directories through the explicit font-path JNI entry, and Simplified Chinese text rendering has been verified on an arm64 physical device. This path reads each whole input into memory, caps source files at 64 MiB, and does not promise Microsoft Office layout fidelity; overlapping text, shifted shapes, and degraded slide/spreadsheet layout remain expected on complex files. |
+| PDF | TXT / MD | Experimental | PDFBox-Android | Extracts selectable text with page separators. Markdown output is lightweight: a document title plus per-page headings and extracted text. This is not OCR; scanned PDFs without a text layer fail clearly. |
+| PDF | Encrypt PDF / Decrypt PDF | Experimental | PDFBox-Android | Encrypt applies one open password to the output PDF. Decrypt removes security only after the source PDF opens normally or with the user-provided password. This is not password cracking; passwords are kept in memory only and are not logged or persisted. |
+| DOCX / PPTX / XLSX | PDF / TXT / MD | Experimental | office2pdf native / PDFBox-Android | Converts OOXML Office files to PDF through the bundled `arm64-v8a` `libzen_office2pdf.so`. TXT/MD outputs reuse that intermediate PDF and extract its selectable text with PDFBox-Android. The current rebuilt library receives bundled Noto Sans and Noto Serif CJK directories through the explicit font-path JNI entry, and Simplified Chinese text rendering has been verified on an arm64 physical device. This path reads each whole input into memory, caps source files at 64 MiB, and does not promise Microsoft Office layout fidelity; overlapping text, shifted shapes, and degraded slide/spreadsheet layout remain expected on complex files. |
 
 ## Current Native Media Limits
 
@@ -147,9 +148,9 @@ as supported until it has a tested path, sample files, and failure behavior.
 ## Current Native PDF Limits
 
 - Image to PDF uses Android `PdfDocument`; PDF to image uses Android
-  `PdfRenderer`. PDF merge and PDF to TXT use PDFBox-Android because Android
-  platform APIs do not provide broad true PDF merge or cross-version text
-  extraction.
+  `PdfRenderer`. PDF merge, PDF to TXT/MD, and PDF encrypt/decrypt use
+  PDFBox-Android because Android platform APIs do not provide broad true PDF
+  merge, cross-version text extraction, or PDF security editing.
 - Image to PDF decodes one image at a time, caps source decode to a 4096 px long
   side and 16 MP, applies JPEG orientation best-effort, and flattens the page
   onto white.
@@ -168,22 +169,33 @@ as supported until it has a tested path, sample files, and failure behavior.
 - PDF merge copies each source PDF to task cache first, then merges with
   PDFBox-Android. The output is not re-encrypted. Advanced structures such as
   complex forms, bookmarks, attachments, and metadata are best-effort only.
-- PDF to TXT extracts selectable text with PDFBox-Android and inserts stable
-  page separators. It does not do OCR, so scanned PDFs without a text layer fail
-  with a clear no-selectable-text message.
-- PDFBox-backed PDF merge and PDF to TXT can load password-protected source PDFs
-  with transient in-memory passwords. Passwords are not logged or persisted.
+- PDF to TXT/MD extracts selectable text with PDFBox-Android. TXT inserts
+  stable page separators; MD writes a document title and per-page headings. It
+  does not do OCR, table reconstruction, or heading inference, so scanned PDFs
+  without a text layer fail with a clear no-selectable-text message.
+- PDF encryption applies a single open password using standard PDFBox
+  protection. It does not expose separate owner/user passwords or a
+  print/copy/modify permissions matrix.
+- PDF decryption removes security only after the document can be opened
+  normally or with the correct source password. It does not brute-force or
+  recover unknown passwords; unencrypted PDFs can still be saved as normal PDF
+  copies.
+- PDFBox-backed PDF merge, PDF to TXT/MD, and PDF encrypt/decrypt can load
+  password-protected source PDFs with transient in-memory passwords. Source and
+  output passwords are not logged or persisted.
 
 Manual PDF sample coverage should include ordinary multi-PDF merge, mixed
 text/scanned/image PDFs, mixed page sizes, large PDFs, cancellation during cache
-or write, password-protected sources, text-layer PDF to TXT, mixed-content PDF to
-TXT, and scanned PDF to TXT with the no-selectable-text failure.
+or write, password-protected sources, text-layer PDF to TXT/MD, mixed-content PDF
+to TXT/MD, scanned PDF to TXT/MD with the no-selectable-text failure, encrypted
+PDF creation, correct-password decryption, wrong-password failure, and
+unencrypted PDF decryption-as-copy.
 
 ## Current Office Document Limits
 
-- Office document targets are intentionally limited to DOCX, PPTX, and XLSX to
-  PDF. Legacy DOC, PPT, XLS, ODT, RTF, and encrypted/password-protected Office
-  files are not connected.
+- Office document inputs are intentionally limited to DOCX, PPTX, and XLSX, with
+  PDF, TXT, and MD outputs. Legacy DOC, PPT, XLS, ODT, RTF, and
+  encrypted/password-protected Office files are not connected.
 - The native library is currently bundled only at
   `app/src/main/jniLibs/arm64-v8a/libzen_office2pdf.so`. Published APKs are
   arm64-only, so 32-bit ARM devices are not supported by the release package.
@@ -193,7 +205,8 @@ TXT, and scanned PDF to TXT with the no-selectable-text failure.
   retained only so older local test binaries can still start.
 - The JNI surface accepts and returns byte arrays. The service therefore reads
   the whole OOXML source into memory, rejects files larger than 64 MiB, and then
-  writes the returned PDF bytes to the normal output flow.
+  writes the returned PDF bytes to the normal output flow or extracts text from
+  that intermediate PDF for TXT/MD.
 - Before conversion, the Kotlin wrapper copies bundled Noto Sans CJK and Noto
   Serif CJK into app-private storage and passes that directory to the JNI v2
   `ConvertOptions.font_paths` API when the native library exports it. This
@@ -205,7 +218,10 @@ TXT, and scanned PDF to TXT with the no-selectable-text failure.
   show overlapping text, shifted Office shapes, and degraded slide layout. Treat
   this as a local first-pass renderer, not a replacement for Microsoft Office
   export.
+- Office TXT/MD output inherits the Office-to-PDF rendering limits and then
+  extracts only selectable text from the intermediate PDF. It does not do OCR or
+  reconstruct rich document structure.
 - Manual sample coverage should include small and large DOCX, PPTX, and XLSX
   files, Simplified Chinese text, missing fonts, embedded images, charts,
-  cancellation, unsupported legacy formats, oversized files, and an arm32-device
-  startup failure check.
+  TXT/MD text output, cancellation, unsupported legacy formats, oversized files,
+  and an arm32-device startup failure check.

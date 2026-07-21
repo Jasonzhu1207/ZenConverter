@@ -35,11 +35,14 @@ import org.zenconverter.app.conversion.GifFrameExportMode
 import org.zenconverter.app.conversion.ImageExportOptions
 import org.zenconverter.app.conversion.OutputDestination
 import org.zenconverter.app.conversion.PdfExportOptions
+import org.zenconverter.app.conversion.PdfSecurityMode
+import org.zenconverter.app.conversion.PdfSecurityOptions
 import org.zenconverter.app.conversion.VideoExportOptions
 import org.zenconverter.app.ui.FileCategory
 import org.zenconverter.app.ui.GifFrameModePrompt
 import org.zenconverter.app.ui.GifPdfFramePrompt
 import org.zenconverter.app.ui.ImagePdfMergePrompt
+import org.zenconverter.app.ui.PdfOutputPasswordPrompt
 import org.zenconverter.app.ui.PdfPasswordPrompt
 import org.zenconverter.app.ui.ZenConverterApp
 import org.zenconverter.app.ui.OutputDirectory
@@ -61,10 +64,12 @@ class MainActivity : ComponentActivity() {
     private val gifFrameModePrompt = mutableStateOf<GifFrameModePrompt?>(null)
     private val gifPdfFramePrompt = mutableStateOf<GifPdfFramePrompt?>(null)
     private val pdfPasswordPrompt = mutableStateOf<PdfPasswordPrompt?>(null)
+    private val pdfOutputPasswordPrompt = mutableStateOf<PdfOutputPasswordPrompt?>(null)
     private val pendingPdfSelections = ArrayDeque<PendingPdfSelection>()
     private var pendingImagePdfSelection: PendingImagePdfSelection? = null
     private var pendingGifFrameSelection: PendingGifFrameSelection? = null
     private var pendingGifPdfFrameSelection: PendingGifPdfFrameSelection? = null
+    private var pendingPdfOutputPasswordSelection: PendingPdfOutputPasswordSelection? = null
     private var activePdfPasswordSelection: PendingPdfSelection? = null
     private var pendingSelection: PendingSelection? = null
     private var pendingVideoOptions: VideoExportOptions = VideoExportOptions()
@@ -174,11 +179,13 @@ class MainActivity : ComponentActivity() {
                     activePdfPasswordSelection = null
                     pendingGifFrameSelection = null
                     pendingGifPdfFrameSelection = null
+                    pendingPdfOutputPasswordSelection = null
                     pdfSelectionGeneration += 1
                     imagePdfMergePrompt.value = null
                     gifFrameModePrompt.value = null
                     gifPdfFramePrompt.value = null
                     pdfPasswordPrompt.value = null
+                    pdfOutputPasswordPrompt.value = null
                     ConversionTaskStore.clear()
                 },
                 conversionTasks = ConversionTaskStore.tasks.map { it.toUiProgress() },
@@ -188,6 +195,7 @@ class MainActivity : ComponentActivity() {
                 gifFrameModePrompt = gifFrameModePrompt.value,
                 gifPdfFramePrompt = gifPdfFramePrompt.value,
                 pdfPasswordPrompt = pdfPasswordPrompt.value,
+                pdfOutputPasswordPrompt = pdfOutputPasswordPrompt.value,
                 onChooseSinglePdf = {
                     pendingImagePdfSelection?.let { selection ->
                         queuedFiles.add(selection.toSinglePdfQueuedFile())
@@ -288,6 +296,31 @@ class MainActivity : ComponentActivity() {
                         processNextPendingPdfSelection()
                     }
                 },
+                onSubmitPdfOutputPassword = { password ->
+                    val selection = pendingPdfOutputPasswordSelection
+                    pendingPdfOutputPasswordSelection = null
+                    pdfOutputPasswordPrompt.value = null
+                    if (selection != null) {
+                        if (password.isBlank()) {
+                            ConversionTaskStore.showMessage("PDF password was empty")
+                        } else {
+                            enqueuePdfDocumentsWithProbe(
+                                request = selection.request.copy(
+                                    pdfSecurityOptions = PdfSecurityOptions(
+                                        mode = PdfSecurityMode.Encrypt,
+                                        outputPassword = password
+                                    )
+                                ),
+                                documents = selection.documents
+                            )
+                        }
+                    }
+                },
+                onCancelPdfOutputPassword = {
+                    pendingPdfOutputPasswordSelection = null
+                    pdfOutputPasswordPrompt.value = null
+                    ConversionTaskStore.showMessage("PDF encryption was skipped")
+                },
                 onStartConversion = { videoOptions, audioOptions, imageOptions, pdfOptions ->
                     pendingVideoOptions = videoOptions
                     pendingAudioOptions = audioOptions
@@ -371,6 +404,7 @@ class MainActivity : ComponentActivity() {
                     audioOptions = pendingAudioOptions,
                     imageOptions = pendingImageOptions,
                     pdfOptions = pendingPdfOptions,
+                    pdfSecurityOptions = file.pdfSecurityOptions,
                     inputInfo = file.inputInfo,
                     gifFrameMode = file.gifFrameMode,
                     pdfPasswords = file.pdfPasswords
@@ -469,7 +503,18 @@ class MainActivity : ComponentActivity() {
                 )
             }
             request.category == FileCategory.Pdf -> {
-                enqueuePdfDocumentsWithProbe(request, documents)
+                if (request.isPdfEncryptTarget()) {
+                    pendingPdfOutputPasswordSelection = PendingPdfOutputPasswordSelection(
+                        request = request,
+                        documents = documents
+                    )
+                    pdfOutputPasswordPrompt.value = PdfOutputPasswordPrompt(fileCount = documents.size)
+                } else {
+                    enqueuePdfDocumentsWithProbe(
+                        request = request.withPdfTargetSecurityOptions(),
+                        documents = documents
+                    )
+                }
             }
             else -> {
                 enqueueDocumentsOnePerImage(request, documents, gifFrameMode)
@@ -675,7 +720,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun probePdf(selection: PendingPdfSelection, password: String?): PdfProbeResult {
-        if (password != null && selection.request.usesPdfBoxTarget()) {
+        if (selection.request.usesPdfBoxTarget()) {
             return probePdfWithPdfBox(selection.document.uri, password)
         }
         return probePdfWithRenderer(selection.document.uri, password)
@@ -698,12 +743,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun probePdfWithPdfBox(uri: Uri, password: String): PdfProbeResult {
+    private fun probePdfWithPdfBox(uri: Uri, password: String?): PdfProbeResult {
         return try {
             ensurePdfBoxReady()
             val memoryUsage = MemoryUsageSetting.setupTempFileOnly()
             contentResolver.openInputStream(uri)?.use { input ->
-                PDDocument.load(input, password, memoryUsage).use { document ->
+                val document = if (password == null) {
+                    PDDocument.load(input, memoryUsage)
+                } else {
+                    PDDocument.load(input, password, memoryUsage)
+                }
+                document.use {
                     if (document.numberOfPages <= 0) {
                         PdfProbeResult.Failed("PDF has no pages")
                     } else {
@@ -757,8 +807,14 @@ class MainActivity : ComponentActivity() {
     private fun clearQueuedPdfPasswords() {
         for (index in queuedFiles.indices) {
             val file = queuedFiles[index]
-            if (file.pdfPasswords.any { it != null }) {
-                queuedFiles[index] = file.copy(pdfPasswords = emptyList())
+            if (
+                file.pdfPasswords.any { it != null } ||
+                file.pdfSecurityOptions.outputPassword != null
+            ) {
+                queuedFiles[index] = file.copy(
+                    pdfPasswords = emptyList(),
+                    pdfSecurityOptions = file.pdfSecurityOptions.copy(outputPassword = null)
+                )
             }
         }
     }
@@ -771,7 +827,8 @@ class MainActivity : ComponentActivity() {
 
 private data class PendingSelection(
     val category: FileCategory,
-    val targetFormat: TargetFormat
+    val targetFormat: TargetFormat,
+    val pdfSecurityOptions: PdfSecurityOptions = PdfSecurityOptions()
 )
 
 private data class SelectedDocument(
@@ -794,6 +851,11 @@ private data class PendingGifFrameSelection(
 )
 
 private data class PendingGifPdfFrameSelection(
+    val request: PendingSelection,
+    val documents: List<SelectedDocument>
+)
+
+private data class PendingPdfOutputPasswordSelection(
     val request: PendingSelection,
     val documents: List<SelectedDocument>
 )
@@ -841,6 +903,7 @@ private fun SelectedDocument.toQueuedFile(
         targetFormat = request.targetFormat.label,
         inputInfo = inputInfo,
         gifFrameMode = gifFrameMode,
+        pdfSecurityOptions = request.pdfSecurityOptions,
         pdfPasswords = listOf(pdfPassword)
     )
 }
@@ -864,6 +927,7 @@ private fun PendingPdfBatch.toMergedPdfQueuedFile(): QueuedFile {
             fallbackSizeBytes = totalSize,
             formatLabel = "PDF"
         ),
+        pdfSecurityOptions = request.pdfSecurityOptions,
         pdfPasswords = pdfPasswords.toList()
     )
 }
@@ -912,20 +976,49 @@ private fun QueuedFile.hasConnectedNativeTarget(): Boolean {
             targetFormat.equals("PNG", ignoreCase = true) ||
             targetFormat.equals("WEBP", ignoreCase = true) ||
             targetFormat.equals("PDF", ignoreCase = true) ||
-            targetFormat.equals("TXT", ignoreCase = true)
-        FileCategory.Document -> targetFormat.equals("PDF", ignoreCase = true)
+            targetFormat.equals("TXT", ignoreCase = true) ||
+            targetFormat.equals("MD", ignoreCase = true) ||
+            targetFormat.equals("Encrypt PDF", ignoreCase = true) ||
+            targetFormat.equals("Decrypt PDF", ignoreCase = true)
+        FileCategory.Document -> targetFormat.equals("PDF", ignoreCase = true) ||
+            targetFormat.equals("TXT", ignoreCase = true) ||
+            targetFormat.equals("MD", ignoreCase = true)
     }
 }
 
 private fun PendingSelection.isPdfMergeTarget(): Boolean {
-    return category == FileCategory.Pdf && targetFormat.extension.equals("pdf", ignoreCase = true)
+    return category == FileCategory.Pdf &&
+        targetFormat.label.equals("PDF", ignoreCase = true)
+}
+
+private fun PendingSelection.isPdfEncryptTarget(): Boolean {
+    return category == FileCategory.Pdf &&
+        targetFormat.label.equals("Encrypt PDF", ignoreCase = true)
+}
+
+private fun PendingSelection.isPdfDecryptTarget(): Boolean {
+    return category == FileCategory.Pdf &&
+        targetFormat.label.equals("Decrypt PDF", ignoreCase = true)
+}
+
+private fun PendingSelection.withPdfTargetSecurityOptions(): PendingSelection {
+    if (pdfSecurityOptions.mode != PdfSecurityMode.None) return this
+    return if (isPdfDecryptTarget()) {
+        copy(pdfSecurityOptions = PdfSecurityOptions(mode = PdfSecurityMode.Decrypt))
+    } else {
+        this
+    }
 }
 
 private fun PendingSelection.usesPdfBoxTarget(): Boolean {
     return category == FileCategory.Pdf &&
         (
-            targetFormat.extension.equals("pdf", ignoreCase = true) ||
-                targetFormat.extension.equals("txt", ignoreCase = true)
+            isPdfMergeTarget() ||
+                isPdfEncryptTarget() ||
+                isPdfDecryptTarget() ||
+                pdfSecurityOptions.mode != PdfSecurityMode.None ||
+                targetFormat.extension.equals("txt", ignoreCase = true) ||
+                targetFormat.extension.equals("md", ignoreCase = true)
             )
 }
 

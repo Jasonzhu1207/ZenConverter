@@ -51,13 +51,16 @@ import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.io.MemoryUsageSetting
 import com.tom_roush.pdfbox.multipdf.PDFMergerUtility
 import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.pdmodel.encryption.AccessPermission
 import com.tom_roush.pdfbox.pdmodel.encryption.InvalidPasswordException
+import com.tom_roush.pdfbox.pdmodel.encryption.StandardProtectionPolicy
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import org.zenconverter.app.MainActivity
 import org.zenconverter.app.R
 import org.zenconverter.app.office.Office2PdfNative
 import org.zenconverter.app.office.Office2PdfUnavailableException
 import org.zenconverter.app.office.Office2PdfUnsupportedAbiException
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
@@ -173,7 +176,8 @@ class ConversionService : Service() {
         if (input.category == ConversionMediaCategory.Pdf) {
             if (
                 outputProfile.extension.equals("pdf", ignoreCase = true) ||
-                outputProfile.extension.equals("txt", ignoreCase = true)
+                outputProfile.extension.equals("txt", ignoreCase = true) ||
+                outputProfile.extension.equals("md", ignoreCase = true)
             ) {
                 startPdfDocumentExport(input, tempFile, outputProfile)
             } else {
@@ -183,7 +187,7 @@ class ConversionService : Service() {
         }
 
         if (input.category == ConversionMediaCategory.Document) {
-            startOfficeDocumentExport(input, tempFile)
+            startOfficeDocumentExport(input, tempFile, outputProfile)
             return
         }
 
@@ -303,19 +307,20 @@ class ConversionService : Service() {
                     return@onFailure
                 }
                 Log.w(TAG, "Could not run PDF document export", exception)
-                failCurrentTask(pdfDocumentFailureMessageFor(exception, outputProfile))
+                failCurrentTask(pdfDocumentFailureMessageFor(exception, input, outputProfile))
             }
         }
     }
 
     private fun startOfficeDocumentExport(
         input: ConversionTaskInput,
-        tempFile: File
+        tempFile: File,
+        outputProfile: OutputProfile
     ) {
         serviceScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
-                    writeOfficeDocumentExport(input, tempFile)
+                    writeOfficeDocumentExport(input, tempFile, outputProfile)
                 }
             }.onSuccess {
                 if (ConversionTaskStore.isCancelled()) {
@@ -338,8 +343,36 @@ class ConversionService : Service() {
 
     private fun writeOfficeDocumentExport(
         input: ConversionTaskInput,
-        outputFile: File
+        outputFile: File,
+        outputProfile: OutputProfile
     ) {
+        val pdfBytes = convertOfficeInputToPdfBytes(input)
+        when (outputProfile.extension.lowercase(Locale.US)) {
+            "pdf" -> {
+                outputFile.outputStream().use { output ->
+                    output.write(pdfBytes)
+                    output.flush()
+                }
+                throwIfConversionCancelled()
+                updateImageProgress(0.95f)
+            }
+            "txt" -> writePdfTextFileFromBytes(
+                pdfBytes = pdfBytes,
+                outputFile = outputFile,
+                title = markdownTitleFor(input),
+                format = TextDocumentFormat.PlainText
+            )
+            "md" -> writePdfTextFileFromBytes(
+                pdfBytes = pdfBytes,
+                outputFile = outputFile,
+                title = markdownTitleFor(input),
+                format = TextDocumentFormat.Markdown
+            )
+            else -> error("Office conversion failed")
+        }
+    }
+
+    private fun convertOfficeInputToPdfBytes(input: ConversionTaskInput): ByteArray {
         val extension = officeInputExtensionFor(input)
             ?: error("Unsupported Office document")
 
@@ -354,13 +387,9 @@ class ConversionService : Service() {
         if (!looksLikePdf(pdfBytes)) {
             error("Office engine did not return a PDF")
         }
-
-        outputFile.outputStream().use { output ->
-            output.write(pdfBytes)
-            output.flush()
-        }
         throwIfConversionCancelled()
-        updateImageProgress(0.95f)
+        updateImageProgress(0.55f)
+        return pdfBytes
     }
 
     private fun writePdfDocumentExport(
@@ -368,9 +397,22 @@ class ConversionService : Service() {
         outputFile: File,
         outputProfile: OutputProfile
     ) {
+        when (input.pdfSecurityOptions.mode) {
+            PdfSecurityMode.Encrypt -> {
+                writePdfSecurityFile(input, outputFile, encrypt = true)
+                return
+            }
+            PdfSecurityMode.Decrypt -> {
+                writePdfSecurityFile(input, outputFile, encrypt = false)
+                return
+            }
+            PdfSecurityMode.None -> Unit
+        }
+
         when (outputProfile.extension.lowercase(Locale.US)) {
             "pdf" -> writeMergedPdf(input, outputFile)
-            "txt" -> writePdfTextFile(input, outputFile)
+            "txt" -> writePdfTextFile(input, outputFile, TextDocumentFormat.PlainText)
+            "md" -> writePdfTextFile(input, outputFile, TextDocumentFormat.Markdown)
             else -> error("PDF conversion failed")
         }
     }
@@ -422,7 +464,8 @@ class ConversionService : Service() {
 
     private fun writePdfTextFile(
         input: ConversionTaskInput,
-        outputFile: File
+        outputFile: File,
+        format: TextDocumentFormat
     ) {
         val inputUris = input.inputUris.ifEmpty { listOf(input.inputUri) }
         if (inputUris.size != 1) error("PDF text extraction failed")
@@ -434,42 +477,150 @@ class ConversionService : Service() {
 
         try {
             document = loadPdfBoxDocument(cachedInputs.files.first(), input.pdfPasswordAt(0))
-            val pageCount = document.numberOfPages
-            if (pageCount <= 0) error("PDF has no pages")
+            writeExtractedPdfTextFile(
+                document = document,
+                outputFile = outputFile,
+                title = markdownTitleFor(input),
+                format = format,
+                progressStart = 0.08f,
+                progressEnd = 0.92f
+            )
+        } catch (throwable: Throwable) {
+            outputFile.delete()
+            throw throwable
+        } finally {
+            runCatching { document?.close() }
+            cachedInputs.delete()
+        }
+    }
 
-            val stripper = PDFTextStripper()
-            var hasSelectableText = false
+    private fun writePdfTextFileFromBytes(
+        pdfBytes: ByteArray,
+        outputFile: File,
+        title: String,
+        format: TextDocumentFormat
+    ) {
+        throwIfConversionCancelled()
+        ensurePdfBoxReady()
+        try {
+            ByteArrayInputStream(pdfBytes).use { input ->
+                PDDocument.load(input, MemoryUsageSetting.setupTempFileOnly()).use { document ->
+                    writeExtractedPdfTextFile(
+                        document = document,
+                        outputFile = outputFile,
+                        title = title,
+                        format = format,
+                        progressStart = 0.58f,
+                        progressEnd = 0.95f
+                    )
+                }
+            }
+        } catch (throwable: Throwable) {
+            outputFile.delete()
+            throw throwable
+        }
+    }
 
-            outputFile.outputStream().bufferedWriter(Charsets.UTF_8).use { writer ->
-                for (pageIndex in 0 until pageCount) {
-                    throwIfConversionCancelled()
-                    stripper.startPage = pageIndex + 1
-                    stripper.endPage = pageIndex + 1
-                    val pageText = stripper.getText(document).trimEnd()
-                    throwIfConversionCancelled()
+    private fun writeExtractedPdfTextFile(
+        document: PDDocument,
+        outputFile: File,
+        title: String,
+        format: TextDocumentFormat,
+        progressStart: Float,
+        progressEnd: Float
+    ) {
+        val pageCount = document.numberOfPages
+        if (pageCount <= 0) error("PDF has no pages")
 
-                    if (pageText.isNotBlank()) {
-                        hasSelectableText = true
-                    }
+        val stripper = PDFTextStripper()
+        var hasSelectableText = false
 
-                    writer.write("--- Page ${pageNumberForTextOutput(pageIndex)} ---")
-                    writer.newLine()
-                    if (pageText.isNotEmpty()) {
-                        writer.write(pageText)
+        outputFile.outputStream().bufferedWriter(Charsets.UTF_8).use { writer ->
+            if (format == TextDocumentFormat.Markdown) {
+                writer.write("# $title")
+                writer.newLine()
+                writer.newLine()
+            }
+
+            for (pageIndex in 0 until pageCount) {
+                throwIfConversionCancelled()
+                stripper.startPage = pageIndex + 1
+                stripper.endPage = pageIndex + 1
+                val pageText = stripper.getText(document).trimEnd()
+                throwIfConversionCancelled()
+
+                if (pageText.isNotBlank()) {
+                    hasSelectableText = true
+                }
+
+                when (format) {
+                    TextDocumentFormat.PlainText -> {
+                        writer.write("--- Page ${pageNumberForTextOutput(pageIndex)} ---")
                         writer.newLine()
                     }
-                    writer.newLine()
-                    writer.flush()
-                    throwIfConversionCancelled()
-
-                    updateImageProgress(progressForIndexedWork(pageIndex, pageCount, 0.08f, 0.92f))
+                    TextDocumentFormat.Markdown -> {
+                        writer.write("## Page ${pageIndex + 1}")
+                        writer.newLine()
+                        writer.newLine()
+                    }
                 }
+                if (pageText.isNotEmpty()) {
+                    writer.write(pageText)
+                    writer.newLine()
+                }
+                writer.newLine()
+                writer.flush()
+                throwIfConversionCancelled()
+
+                updateImageProgress(progressForIndexedWork(pageIndex, pageCount, progressStart, progressEnd))
+            }
+        }
+
+        throwIfConversionCancelled()
+        if (!hasSelectableText) {
+            error("PDF has no selectable text; OCR is not included")
+        }
+        updateImageProgress(0.95f)
+    }
+
+    private fun writePdfSecurityFile(
+        input: ConversionTaskInput,
+        outputFile: File,
+        encrypt: Boolean
+    ) {
+        val inputUris = input.inputUris.ifEmpty { listOf(input.inputUri) }
+        if (inputUris.size != 1) error(if (encrypt) "PDF encryption failed" else "PDF decryption failed")
+
+        throwIfConversionCancelled()
+        ensurePdfBoxReady()
+        val cachedInputs = cachePdfInputsForPdfBox(input, inputUris)
+        var document: PDDocument? = null
+
+        try {
+            document = loadPdfBoxDocument(cachedInputs.files.first(), input.pdfPasswordAt(0))
+            if (document.numberOfPages <= 0) error("PDF has no pages")
+            throwIfConversionCancelled()
+
+            if (encrypt) {
+                val password = input.pdfSecurityOptions.outputPassword
+                    ?.takeIf { it.isNotBlank() }
+                    ?: error("PDF password was empty")
+                val policy = StandardProtectionPolicy(
+                    password,
+                    password,
+                    AccessPermission()
+                ).apply {
+                    setEncryptionKeyLength(PDF_ENCRYPTION_KEY_LENGTH_BITS)
+                    setPreferAES(true)
+                }
+                document.protect(policy)
+            } else {
+                document.setAllSecurityToBeRemoved(true)
             }
 
             throwIfConversionCancelled()
-            if (!hasSelectableText) {
-                error("PDF has no selectable text; OCR is not included")
-            }
+            document.save(outputFile)
+            throwIfConversionCancelled()
             updateImageProgress(0.95f)
         } catch (throwable: Throwable) {
             outputFile.delete()
@@ -1709,13 +1860,20 @@ class ConversionService : Service() {
 
     private fun pdfDocumentFailureMessageFor(
         exception: Throwable,
+        input: ConversionTaskInput,
         outputProfile: OutputProfile
     ): String {
         val message = pdfFailureMessageFor(exception)
         if (message != "PDF conversion failed") return message
+        when (input.pdfSecurityOptions.mode) {
+            PdfSecurityMode.Encrypt -> return "PDF encryption failed"
+            PdfSecurityMode.Decrypt -> return "PDF decryption failed"
+            PdfSecurityMode.None -> Unit
+        }
         return when (outputProfile.extension.lowercase(Locale.US)) {
             "pdf" -> "PDF merge failed"
             "txt" -> "PDF text extraction failed"
+            "md" -> "PDF markdown export failed"
             else -> message
         }
     }
@@ -3987,14 +4145,23 @@ class ConversionService : Service() {
                         OutputProfile(extension = "pdf", mimeType = MIME_TYPE_PDF, kind = OutputMediaKind.Document)
                     input.targetFormat.equals("TXT", ignoreCase = true) ->
                         OutputProfile(extension = "txt", mimeType = MIME_TYPE_TEXT, kind = OutputMediaKind.Document)
+                    input.targetFormat.equals("MD", ignoreCase = true) ->
+                        OutputProfile(extension = "md", mimeType = MIME_TYPE_MARKDOWN, kind = OutputMediaKind.Document)
+                    input.targetFormat.equals("Encrypt PDF", ignoreCase = true) ||
+                        input.targetFormat.equals("Decrypt PDF", ignoreCase = true) ->
+                        OutputProfile(extension = "pdf", mimeType = MIME_TYPE_PDF, kind = OutputMediaKind.Document)
                     else -> null
                 }
             }
             ConversionMediaCategory.Document -> {
-                if (input.targetFormat.equals("PDF", ignoreCase = true)) {
-                    OutputProfile(extension = "pdf", mimeType = MIME_TYPE_PDF, kind = OutputMediaKind.Document)
-                } else {
-                    null
+                when {
+                    input.targetFormat.equals("PDF", ignoreCase = true) ->
+                        OutputProfile(extension = "pdf", mimeType = MIME_TYPE_PDF, kind = OutputMediaKind.Document)
+                    input.targetFormat.equals("TXT", ignoreCase = true) ->
+                        OutputProfile(extension = "txt", mimeType = MIME_TYPE_TEXT, kind = OutputMediaKind.Document)
+                    input.targetFormat.equals("MD", ignoreCase = true) ->
+                        OutputProfile(extension = "md", mimeType = MIME_TYPE_MARKDOWN, kind = OutputMediaKind.Document)
+                    else -> null
                 }
             }
         }
@@ -4057,6 +4224,11 @@ class ConversionService : Service() {
         Document,
         Image,
         Video
+    }
+
+    private enum class TextDocumentFormat {
+        PlainText,
+        Markdown
     }
 
     private data class FfmpegVideoProfile(
@@ -4178,6 +4350,12 @@ class ConversionService : Service() {
 
     private fun pageNumberForTextOutput(pageIndex: Int): String {
         return (pageIndex + 1).toString().padStart(3, '0')
+    }
+
+    private fun markdownTitleFor(input: ConversionTaskInput): String {
+        return sanitizedBaseNameFor(input)
+            .replace('_', ' ')
+            .ifBlank { "ZenConverter" }
     }
 
     private fun outputNameFor(input: ConversionTaskInput, extension: String): String {
@@ -4340,6 +4518,8 @@ class ConversionService : Service() {
         private const val MIME_TYPE_ICO = "image/vnd.microsoft.icon"
         private const val MIME_TYPE_PDF = "application/pdf"
         private const val MIME_TYPE_TEXT = "text/plain"
+        private const val MIME_TYPE_MARKDOWN = "text/markdown"
+        private const val PDF_ENCRYPTION_KEY_LENGTH_BITS = 128
         private const val MIME_TYPE_DOCX =
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         private const val MIME_TYPE_PPTX =

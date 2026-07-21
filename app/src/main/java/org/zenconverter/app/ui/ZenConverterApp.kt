@@ -133,6 +133,7 @@ import org.zenconverter.app.conversion.ImageExportOptions
 import org.zenconverter.app.conversion.PdfExportOptions
 import org.zenconverter.app.conversion.PdfImagePageMode
 import org.zenconverter.app.conversion.PdfRenderQuality
+import org.zenconverter.app.conversion.PdfSecurityOptions
 import org.zenconverter.app.conversion.VideoAdvancedOptions
 import org.zenconverter.app.conversion.VideoAspectRatioMode
 import org.zenconverter.app.conversion.VideoExportOptions
@@ -212,7 +213,10 @@ enum class FileCategory(
             TargetFormat("JPG", "jpg", "Page rasterization"),
             TargetFormat("WEBP", "webp", "Page rasterization"),
             TargetFormat("PDF", "pdf", "Merge PDFs"),
-            TargetFormat("TXT", "txt", "Text layer")
+            TargetFormat("TXT", "txt", "Text layer"),
+            TargetFormat("MD", "md", "Markdown"),
+            TargetFormat("Encrypt PDF", "pdf", "Password protect"),
+            TargetFormat("Decrypt PDF", "pdf", "Remove password")
         )
     ),
     Document(
@@ -222,7 +226,9 @@ enum class FileCategory(
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         ),
         formats = listOf(
-            TargetFormat("PDF", "pdf", "Office to PDF")
+            TargetFormat("PDF", "pdf", "Office to PDF"),
+            TargetFormat("TXT", "txt", "Text layer"),
+            TargetFormat("MD", "md", "Markdown")
         )
     )
 }
@@ -238,6 +244,7 @@ data class QueuedFile(
     val targetFormat: String,
     val inputInfo: FileBasicInfo? = null,
     val gifFrameMode: GifFrameExportMode = GifFrameExportMode.FirstFrame,
+    val pdfSecurityOptions: PdfSecurityOptions = PdfSecurityOptions(),
     val pdfPasswords: List<String?> = emptyList()
 )
 
@@ -255,6 +262,10 @@ data class GifPdfFramePrompt(
 
 data class PdfPasswordPrompt(
     val displayName: String
+)
+
+data class PdfOutputPasswordPrompt(
+    val fileCount: Int
 )
 
 data class OutputDirectory(
@@ -589,6 +600,7 @@ fun ZenConverterApp(
     gifFrameModePrompt: GifFrameModePrompt?,
     gifPdfFramePrompt: GifPdfFramePrompt?,
     pdfPasswordPrompt: PdfPasswordPrompt?,
+    pdfOutputPasswordPrompt: PdfOutputPasswordPrompt?,
     onChooseSinglePdf: () -> Unit,
     onChooseOnePdfPerImage: () -> Unit,
     onDismissImagePdfPrompt: () -> Unit,
@@ -600,6 +612,8 @@ fun ZenConverterApp(
     onDismissGifPdfFramePrompt: () -> Unit,
     onSubmitPdfPassword: (String) -> Unit,
     onCancelPdfPassword: () -> Unit,
+    onSubmitPdfOutputPassword: (String) -> Unit,
+    onCancelPdfOutputPassword: () -> Unit,
     onStartConversion: (VideoExportOptions, AudioExportOptions, ImageExportOptions, PdfExportOptions) -> Unit,
     onCancelConversion: () -> Unit
 ) {
@@ -675,6 +689,14 @@ fun ZenConverterApp(
                     prompt = prompt,
                     onSubmit = onSubmitPdfPassword,
                     onCancel = onCancelPdfPassword
+                )
+            }
+            pdfOutputPasswordPrompt?.let { prompt ->
+                PdfOutputPasswordDialog(
+                    texts = texts,
+                    prompt = prompt,
+                    onSubmit = onSubmitPdfOutputPassword,
+                    onCancel = onCancelPdfOutputPassword
                 )
             }
         }
@@ -951,6 +973,7 @@ private fun ZenConverterContent(
                         audioTarget = audioTarget,
                         imageTarget = imageTarget,
                         pdfTarget = pdfTarget,
+                        documentTarget = documentTarget,
                         imageQuality = imageQuality,
                         pdfPageMode = pdfPageMode,
                         pdfRenderQuality = pdfRenderQuality,
@@ -1145,6 +1168,41 @@ private fun PdfPasswordDialog(
         ZenPromptActions(
             confirmText = texts.choose,
             dismissText = texts.skip,
+            onConfirm = { onSubmit(password) },
+            onDismissAction = onCancel
+        )
+    }
+}
+
+@Composable
+private fun PdfOutputPasswordDialog(
+    texts: UiText,
+    prompt: PdfOutputPasswordPrompt,
+    onSubmit: (String) -> Unit,
+    onCancel: () -> Unit
+) {
+    var password by remember(prompt.fileCount) { mutableStateOf("") }
+    ZenPromptFrame(onDismissRequest = onCancel) {
+        SectionTitle(
+            icon = Icons.Rounded.PictureAsPdf,
+            title = texts.pdfOutputPasswordTitle
+        )
+        Text(
+            text = texts.pdfOutputPasswordMessage(prompt.fileCount),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            singleLine = true,
+            label = { Text(texts.password) },
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth()
+        )
+        ZenPromptActions(
+            confirmText = texts.choose,
+            dismissText = texts.cancel,
             onConfirm = { onSubmit(password) },
             onDismissAction = onCancel
         )
@@ -2259,6 +2317,7 @@ private fun EncodingPanel(
     audioTarget: TargetFormat,
     imageTarget: TargetFormat,
     pdfTarget: TargetFormat,
+    documentTarget: TargetFormat,
     imageQuality: String,
     pdfPageMode: String,
     pdfRenderQuality: String,
@@ -2383,7 +2442,7 @@ private fun EncodingPanel(
                 onRenderQualityChange = onPdfRenderQualityChange
             )
             FileCategory.Document -> Text(
-                text = texts.optionValue("Office to PDF"),
+                text = texts.optionValue(documentTarget.modeHint),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -2931,7 +2990,8 @@ private fun PdfOptions(
 ) {
     if (
         targetFormat.extension.equals("pdf", ignoreCase = true) ||
-        targetFormat.extension.equals("txt", ignoreCase = true)
+        targetFormat.extension.equals("txt", ignoreCase = true) ||
+        targetFormat.extension.equals("md", ignoreCase = true)
     ) {
         Text(
             text = texts.optionValue(targetFormat.modeHint),
@@ -3242,7 +3302,7 @@ private fun FileRow(
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SmallTag(texts.categoryLabel(file.category))
-            SmallTag(texts.toFormat(file.targetFormat))
+            SmallTag(texts.toFormat(texts.optionValue(file.targetFormat)))
             SmallTag(texts.progressLabel(progress))
         }
         if (progress?.status == TaskProgressStatus.Completed && progress.outputInfo != null) {
@@ -3273,7 +3333,7 @@ private fun FormatDropdown(
     Column(horizontalAlignment = Alignment.End) {
         PillMenuButton(
             onClick = { onExpandedChange(!expanded) },
-            text = "$label: ${selected.label}",
+            text = "$label: ${texts.optionValue(selected.label)}",
             expanded = expanded
         )
         InlineDropdownPanel(
@@ -3281,7 +3341,7 @@ private fun FormatDropdown(
         ) {
             options.forEach { option ->
                 DropdownOption(
-                    text = "${option.label} / ${texts.engineHint(option.modeHint)}",
+                    text = "${texts.optionValue(option.label)} / ${texts.engineHint(option.modeHint)}",
                     selected = option == selected,
                     onClick = {
                         onExpandedChange(false)
@@ -3920,6 +3980,7 @@ private data class UiText(
     val gifFramePromptTitle: String,
     val gifPdfFramePromptTitle: String,
     val pdfPasswordTitle: String,
+    val pdfOutputPasswordTitle: String,
     val uiPresetSuffix: String,
     val toPrefix: String
 ) {
@@ -4119,6 +4180,19 @@ private data class UiText(
         }
     }
 
+    fun pdfOutputPasswordMessage(fileCount: Int): String {
+        return when (this) {
+            englishText -> {
+                val label = if (fileCount == 1) "this PDF" else "$fileCount PDFs"
+                "Set the password required to open $label after export."
+            }
+            simplifiedChineseText ->
+                "设置导出后打开这 $fileCount 个 PDF 所需的密码。"
+            else ->
+                "設定匯出後開啟這 $fileCount 個 PDF 所需的密碼。"
+        }
+    }
+
     fun summaryMessage(value: String): String {
         return when (value) {
             "Processing", "Compatibility processing" -> runningKeepAwakeMessage(processing)
@@ -4165,6 +4239,11 @@ private data class UiText(
                 simplifiedChineseText -> "已跳过受密码保护的 PDF"
                 else -> "已略過受密碼保護的 PDF"
             }
+            "PDF encryption was skipped" -> when (this) {
+                englishText -> "PDF encryption was skipped"
+                simplifiedChineseText -> "已跳过 PDF 加密"
+                else -> "已略過 PDF 加密"
+            }
             "PDF password was empty" -> when (this) {
                 englishText -> "PDF password was empty"
                 simplifiedChineseText -> "PDF 密码不能为空"
@@ -4209,6 +4288,21 @@ private data class UiText(
                 englishText -> "PDF text extraction failed"
                 simplifiedChineseText -> "PDF 文本提取失败"
                 else -> "PDF 文字提取失敗"
+            }
+            "PDF markdown export failed" -> when (this) {
+                englishText -> "PDF markdown export failed"
+                simplifiedChineseText -> "PDF Markdown 导出失败"
+                else -> "PDF Markdown 匯出失敗"
+            }
+            "PDF encryption failed" -> when (this) {
+                englishText -> "PDF encryption failed"
+                simplifiedChineseText -> "PDF 加密失败"
+                else -> "PDF 加密失敗"
+            }
+            "PDF decryption failed" -> when (this) {
+                englishText -> "PDF decryption failed"
+                simplifiedChineseText -> "PDF 解密失败"
+                else -> "PDF 解密失敗"
             }
             "PDF conversion failed" -> when (this) {
                 englishText -> "PDF conversion failed"
@@ -4492,9 +4586,9 @@ private data class UiText(
                 else -> "轉換圖片格式"
             }
             FileCategory.Pdf -> when (this) {
-                englishText -> "Render PDF pages"
-                simplifiedChineseText -> "渲染 PDF 页面"
-                else -> "渲染 PDF 頁面"
+                englishText -> "Render, extract, merge, or secure"
+                simplifiedChineseText -> "渲染、提取、合并、加密"
+                else -> "渲染、提取、合併、加密"
             }
             FileCategory.Document -> when (this) {
                 englishText -> "Convert Office files"
@@ -4530,9 +4624,9 @@ private data class UiText(
                 else -> "可用時調整輸出品質"
             }
             FileCategory.Pdf -> when (this) {
-                englishText -> "Set page render size"
-                simplifiedChineseText -> "设置页面渲染尺寸"
-                else -> "設定頁面渲染尺寸"
+                englishText -> "PDF pages, text, merge, and password tools"
+                simplifiedChineseText -> "PDF 页面、文本、合并和密码工具"
+                else -> "PDF 頁面、文字、合併和密碼工具"
             }
             FileCategory.Document -> when (this) {
                 englishText -> "Experimental DOCX, PPTX, and XLSX path"
@@ -4684,6 +4778,8 @@ private data class UiText(
                 else -> "原生或相容引擎"
             }
             "PDF" -> "PDF"
+            "TXT" -> "TXT"
+            "MD" -> "MD"
             "Page rasterization" -> when (this) {
                 englishText -> "Page rasterization"
                 simplifiedChineseText -> "页面栅格化"
@@ -4698,6 +4794,31 @@ private data class UiText(
                 englishText -> "Text layer"
                 simplifiedChineseText -> "文本层提取"
                 else -> "文字層提取"
+            }
+            "Markdown" -> when (this) {
+                englishText -> "Markdown"
+                simplifiedChineseText -> "Markdown"
+                else -> "Markdown"
+            }
+            "Encrypt PDF" -> when (this) {
+                englishText -> "Encrypt PDF"
+                simplifiedChineseText -> "加密 PDF"
+                else -> "加密 PDF"
+            }
+            "Decrypt PDF" -> when (this) {
+                englishText -> "Decrypt PDF"
+                simplifiedChineseText -> "解密 PDF"
+                else -> "解密 PDF"
+            }
+            "Password protect" -> when (this) {
+                englishText -> "Password protect"
+                simplifiedChineseText -> "密码保护"
+                else -> "密碼保護"
+            }
+            "Remove password" -> when (this) {
+                englishText -> "Remove password"
+                simplifiedChineseText -> "移除密码"
+                else -> "移除密碼"
             }
             "Office to PDF" -> when (this) {
                 englishText -> "Office to PDF"
@@ -5173,6 +5294,7 @@ private val englishText = UiText(
     gifFramePromptTitle = "GIF frames",
     gifPdfFramePromptTitle = "GIF frames to PDF",
     pdfPasswordTitle = "PDF password",
+    pdfOutputPasswordTitle = "Set PDF password",
     uiPresetSuffix = "",
     toPrefix = "to"
 )
@@ -5258,6 +5380,7 @@ private val simplifiedChineseText = UiText(
     gifFramePromptTitle = "GIF 拆帧",
     gifPdfFramePromptTitle = "GIF 拆帧转 PDF",
     pdfPasswordTitle = "PDF 密码",
+    pdfOutputPasswordTitle = "设置 PDF 密码",
     uiPresetSuffix = "",
     toPrefix = "转为"
 )
@@ -5343,6 +5466,7 @@ private val traditionalChineseText = UiText(
     gifFramePromptTitle = "GIF 拆幀",
     gifPdfFramePromptTitle = "GIF 拆幀轉 PDF",
     pdfPasswordTitle = "PDF 密碼",
+    pdfOutputPasswordTitle = "設定 PDF 密碼",
     uiPresetSuffix = "",
     toPrefix = "轉為"
 )

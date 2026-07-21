@@ -345,6 +345,21 @@ groups:
         engine: pdfbox-android
         status: experimental
         note: "Extracts selectable text with page separators through PDFBox-Android. This is not OCR; scanned PDFs without a text layer fail clearly. Password-protected source PDFs can be loaded with transient passwords."
+      - from: pdf
+        to: md
+        engine: pdfbox-android
+        status: experimental
+        note: "Exports lightweight Markdown through PDFBox-Android text extraction. Output uses a document title and per-page headings only; it does not do OCR, table reconstruction, or heading inference. Password-protected source PDFs can be loaded with transient passwords."
+      - from: pdf
+        to: encrypted-pdf
+        engine: pdfbox-android
+        status: experimental
+        note: "Applies a single open password through PDFBox-Android standard protection. The output password is kept in memory only and is not logged or persisted. This does not expose owner/user password separation or a permissions matrix."
+      - from: pdf
+        to: decrypted-pdf
+        engine: pdfbox-android
+        status: experimental
+        note: "Removes PDF security only when the source PDF can be opened normally or with the user-provided source password. This is not password cracking; unsupported or incorrect passwords fail clearly. Unencrypted PDFs can still be saved as normal PDF copies."
   document:
     planned:
       - from: docx
@@ -352,13 +367,43 @@ groups:
         engine: office2pdf-native
         status: experimental
         note: "Converts OOXML Word documents to PDF through the bundled arm64-v8a libzen_office2pdf.so. The current JNI build passes bundled Noto Sans and Noto Serif CJK through explicit native font paths; Chinese text renders on an arm64 physical device, but layout fidelity remains experimental."
+      - from: docx
+        to: txt
+        engine: office2pdf-native/pdfbox-android
+        status: experimental
+        note: "Converts DOCX to an intermediate PDF through the bundled Office engine, then extracts selectable text with PDFBox-Android. Inherits the Office path's 64 MiB input cap and layout/text extraction limits; no OCR."
+      - from: docx
+        to: md
+        engine: office2pdf-native/pdfbox-android
+        status: experimental
+        note: "Converts DOCX to an intermediate PDF, then writes lightweight Markdown with a title and per-page headings. Inherits the Office path's 64 MiB input cap and PDF text-layer limits; no high-fidelity structure reconstruction."
       - from: pptx
         to: pdf
         engine: office2pdf-native
         status: experimental
         note: "Converts OOXML PowerPoint presentations to PDF through the bundled arm64-v8a libzen_office2pdf.so. The current JNI build passes bundled Noto Sans and Noto Serif CJK through explicit native font paths; Chinese text renders on an arm64 physical device, but slide layout fidelity remains experimental."
+      - from: pptx
+        to: txt
+        engine: office2pdf-native/pdfbox-android
+        status: experimental
+        note: "Converts PPTX to an intermediate PDF through the bundled Office engine, then extracts selectable text with PDFBox-Android. Inherits the Office path's 64 MiB input cap and slide layout/text extraction limits; no OCR."
+      - from: pptx
+        to: md
+        engine: office2pdf-native/pdfbox-android
+        status: experimental
+        note: "Converts PPTX to an intermediate PDF, then writes lightweight Markdown with a title and per-page headings. Inherits the Office path's 64 MiB input cap and PDF text-layer limits; no high-fidelity slide structure reconstruction."
       - from: xlsx
         to: pdf
         engine: office2pdf-native
         status: experimental
         note: "Converts OOXML Excel workbooks to PDF through the bundled arm64-v8a libzen_office2pdf.so. The current JNI build passes bundled Noto Sans and Noto Serif CJK through explicit native font paths; Chinese text renders on an arm64 physical device, but spreadsheet pagination and layout fidelity remain experimental."
+      - from: xlsx
+        to: txt
+        engine: office2pdf-native/pdfbox-android
+        status: experimental
+        note: "Converts XLSX to an intermediate PDF through the bundled Office engine, then extracts selectable text with PDFBox-Android. Inherits the Office path's 64 MiB input cap and spreadsheet pagination/text extraction limits; no OCR."
+      - from: xlsx
+        to: md
+        engine: office2pdf-native/pdfbox-android
+        status: experimental
+        note: "Converts XLSX to an intermediate PDF, then writes lightweight Markdown with a title and per-page headings. Inherits the Office path's 64 MiB input cap and PDF text-layer limits; no high-fidelity spreadsheet structure reconstruction."

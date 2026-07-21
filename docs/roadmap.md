@@ -65,7 +65,14 @@
   native bitmap path with GIF first-frame or FFmpeg-backed split-frame input,
   best-effort HEIC/HEIF input, PNG-in-ICO output, and largest-layer PNG-in-ICO
   input; needs physical-device smoke testing across samples.
-- PDF image export/import.
+- PDF image export/import, PDF merge, PDF TXT/MD text export, and PDF
+  encrypt/decrypt are connected through Android PdfRenderer/PdfDocument and
+  PDFBox-Android where appropriate. TXT/MD only extract selectable text; PDF
+  security tools do not crack unknown passwords.
+- Office DOCX/PPTX/XLSX to PDF/TXT/MD is connected through the bundled
+  arm64-v8a office2pdf JNI path, with TXT/MD extracted from the intermediate
+  PDF. This remains an experimental first-pass renderer with a 64 MiB source
+  input cap.
 - ZIP archive handling.
 
 ## Milestone 5: Public Alpha
