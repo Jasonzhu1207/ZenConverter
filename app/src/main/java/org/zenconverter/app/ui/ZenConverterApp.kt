@@ -3149,7 +3149,7 @@ private fun QueueActions(
                 modifier = Modifier.size(17.dp)
             )
             Spacer(modifier = Modifier.width(7.dp))
-            Text(texts.cancel)
+            Text(texts.cancelOrClearTasks)
         }
         Button(
             onClick = onStart,
@@ -3947,6 +3947,7 @@ private data class UiText(
     val folderSelectedForSession: String,
     val start: String,
     val cancel: String,
+    val cancelOrClearTasks: String,
     val queue: String,
     val selectedSuffix: String,
     val emptyQueue: String,
@@ -5261,6 +5262,7 @@ private val englishText = UiText(
     folderSelectedForSession = "Folder selected for this session",
     start = "Start",
     cancel = "Cancel",
+    cancelOrClearTasks = "Cancel / Clear tasks",
     queue = "Conversion tasks",
     selectedSuffix = "selected",
     emptyQueue = "No tasks yet",
@@ -5347,6 +5349,7 @@ private val simplifiedChineseText = UiText(
     folderSelectedForSession = "本次已选择文件夹",
     start = "开始",
     cancel = "取消",
+    cancelOrClearTasks = "取消/清空任务列表",
     queue = "转换任务",
     selectedSuffix = "个已选",
     emptyQueue = "暂无任务，先在上方选择文件",
@@ -5433,6 +5436,7 @@ private val traditionalChineseText = UiText(
     folderSelectedForSession = "本次已選擇資料夾",
     start = "開始",
     cancel = "取消",
+    cancelOrClearTasks = "取消／清空任務列表",
     queue = "轉換任務",
     selectedSuffix = "個已選",
     emptyQueue = "暫無任務，先在上方選擇檔案",

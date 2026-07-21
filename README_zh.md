@@ -44,15 +44,15 @@ ZenConverter 想做的是一个本地优先的 Android 转换器：
 | 模块 | 状态 | 说明 |
 | --- | --- | --- |
 | 原生 Android 外壳 | 已完成 | Kotlin、Compose、Material 3、前台服务任务管线。 |
-| 空转换任务流 | 已完成 | 文件选择、任务状态、进度、取消和失败状态。 |
-| MP4 转 MP4 | 已完成 | 已接入 FFmpeg 真重新编码路径，确保可见的视频/音频选项和高级滤镜一致生效；大文件仍建议谨慎测试。 |
-| MP4 转 MP3 | 已完成 | FFmpeg 兼容路径已接入，可提取第一条音轨并编码 MP3，已通过当前真机测试。 |
-| 音频格式互转 | 已完成 | MP3 / M4A / WAV / FLAC / WMA 目标已接入并通过当前测试；边缘文件仍受内置 FFmpeg 构建和源文件情况影响。 |
-| JPG / PNG / WEBP 图片互转 | 已完成 | 使用 Android 原生 bitmap 路径。仅处理静态图片，不复制元数据。 |
-| MKV / MOV / WEBM / AVI 等容器转 MP4 / MOV | 实验性 | FFmpeg 兼容路径，按所选视频选项重新编码。 |
-| 图片与 PDF 互转 | 实验性 | 图片转 PDF 使用 Android `PdfDocument`，PDF 转图片使用 Android `PdfRenderer`。按图片/页面逐个处理，并限制 bitmap 尺寸。PDF 转图片是页面栅格化，不是 OCR、文本提取或嵌入图片提取。 |
-| DOCX / PPTX / XLSX 转 PDF | 实验性 | 本地 Office 转 PDF 路径，面向现代 Office 文件。中文文本可以通过内置 CJK 字体渲染，但版式保真有限：格式可能混乱，文字或形状可能错位、重叠。 |
-| 更多视频格式支持 | 计划中 | 等当前路径更可信后再继续扩展。 |
+| 任务队列与结果 | 已完成 | 文件基础信息、逐任务进度和失败状态、转换前后摘要、取消、输出分享，以及尽力打开输出文件或所在位置。 |
+| 视频转换 | 已完成 | MP4 / MKV / MOV 输出均走 FFmpeg 视频与音频真重新编码，包含 MP4 转 MP4；编码、码率、分辨率、帧率和音频选项会实际作用于输出。 |
+| 视频转动图 GIF | 已完成 | 使用 FFmpeg 调色板路线，自动取前 30 秒，最多 30 fps、900 帧；默认短边 480 px，可选 720 px 或原始尺寸。 |
+| 音频提取与互转 | 已完成 | 视频音频提取和 MP3 / M4A / WAV / FLAC / WMA 目标均走 FFmpeg 真重新编码；已接入适用的码率、采样率、声道和编码器检查。 |
+| 音视频高级处理 | 实验性 | 视频支持短视频倒放、淡入淡出、镜像、旋转和画幅适配/裁剪；音频支持倒放、无模型 `afftdn` 降噪、淡入淡出、音量/静音和回音。倒放有保守的安全限制。 |
+| 图片转换 | 已完成 | 支持 JPG / JPEG / JFIF / JPE、PNG、WEBP、GIF、HEIC / HEIF、ICO 输入，以及 JPG / JFIF / PNG / WEBP / ICO / PDF 输出。GIF 可转首帧或拆帧到文件夹；不复制元数据和动画时序。 |
+| PDF 工具 | 实验性 | 图片/PDF 互转、PDF 合并、可选择文本导出 TXT / 轻量 MD，以及基于密码的 PDF 加密和解密。不包含 OCR 或密码破解。 |
+| Office 转换 | 实验性 | DOCX / PPTX / XLSX 可在本地输出 PDF、TXT 或轻量 MD。中文可用内置 CJK 字体渲染，但版式保真有限，源文件上限为 64 MiB。 |
+| ZIP 压缩包处理 | 计划中 | 等当前转换路径更可信后再继续扩展。 |
 
 ## 架构
 
@@ -70,9 +70,9 @@ flowchart LR
 
 UI 不直接做转换。每个任务会根据输入、输出和所选模式选择引擎：
 
-- `FastCopy`：尽量不重编码，只做封装转换或提取。
-- `Compatibility`：用 FFmpeg 处理已接入的音视频目标，以及 Android API 做不了的格式和操作。
+- `Compatibility`：已接入音视频目标、GIF 输出和高级处理均走 FFmpeg 真重新编码路线。
 - `Native`：用 Android 平台 API 处理图片、PDF 等不需要媒体引擎的任务。
+- `Office`：用本地初版 Office 渲染路线处理 DOCX、PPTX 和 XLSX。
 - `SafeCache`：后续用于处理无法提供可用文件描述符的文件来源。
 
 更多细节见 [docs/architecture.md](docs/architecture.md) 和

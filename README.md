@@ -56,15 +56,15 @@ Completed items are listed first, experimental paths next, and planned work last
 | Area | Status | Notes |
 | --- | --- | --- |
 | Native Android shell | Done | Kotlin, Compose, Material 3, foreground service pipeline. |
-| No-op conversion jobs | Done | File selection, task state, progress, cancel, and failure states. |
-| MP4 to MP4 | Done | FFmpeg true re-encode path is connected so visible video/audio options and advanced filters apply consistently. Large files should still be tested carefully. |
-| MP4 to MP3 | Done | FFmpeg-compatible audio extraction and MP3 encode are connected and have passed current physical-device testing. |
-| Audio format conversion | Done | MP3 / M4A / WAV / FLAC / WMA targets are connected and have passed current testing. Edge cases still depend on the bundled FFmpeg build and source files. |
-| JPG / PNG / WEBP image conversion | Implemented | Native Android bitmap path. Static images only; metadata is not copied. |
-| MKV / MOV / WEBM / AVI and similar containers to MP4 / MOV | Experimental | FFmpeg-compatible re-encode using the selected video options. |
-| Image and PDF conversion | Experimental | Image to PDF uses Android `PdfDocument`; PDF to image uses Android `PdfRenderer`. It works one image/page at a time with bounded bitmap sizes. PDF output is page rasterization, not OCR or text extraction. |
-| DOCX / PPTX / XLSX to PDF | Experimental | Local Office-to-PDF path for modern Office files. Chinese text can render with bundled CJK fonts, but layout fidelity is limited: formatting may be messy, and text or shapes may be shifted or overlap. |
-| More video formats | Planned | Added only after the current paths are easier to trust. |
+| Task queue and results | Done | File basics, per-task progress and failures, compact before/after conversion details, cancellation, output sharing, and best-effort opening of the result or its location. |
+| Video conversion | Done | MP4 / MKV / MOV outputs use FFmpeg true video and audio re-encoding, including MP4-to-MP4. Codec, bitrate, resolution, frame-rate, and audio options are applied to the output. |
+| Video to animated GIF | Done | FFmpeg palette-based GIF export automatically uses at most the first 30 seconds, 30 fps, and 900 frames. The default short-side cap is 480 px, with 720 px and Original options. |
+| Audio extraction and conversion | Done | Video audio extraction and MP3 / M4A / WAV / FLAC / WMA targets all use FFmpeg true audio re-encoding. Applicable bitrate, sample-rate, channel, and encoder checks are wired. |
+| Advanced audio/video processing | Experimental | Video supports short reverse playback, fade, mirror, rotation, and frame fit/crop. Audio supports reverse playback, non-model `afftdn` noise reduction, fade, volume/mute, and echo. Reverse playback has conservative safety limits. |
+| Image conversion | Done | JPG / JPEG / JFIF / JPE, PNG, WEBP, GIF, HEIC / HEIF, and ICO inputs; JPG / JFIF / PNG / WEBP / ICO / PDF outputs. GIF can use its first frame or split frames into a folder. Metadata and animation timing are not copied. |
+| PDF tools | Experimental | Image/PDF conversion, PDF merge, selectable-text export to TXT / lightweight MD, plus password-based PDF encryption and decryption. No OCR or password cracking is included. |
+| Office conversion | Experimental | DOCX / PPTX / XLSX can produce PDF, TXT, or lightweight MD locally. Chinese text can render with bundled CJK fonts, but layout fidelity is limited and source files are capped at 64 MiB. |
+| ZIP archive handling | Planned | Added after the current conversion paths are easier to trust. |
 
 ## Architecture
 
@@ -83,9 +83,9 @@ flowchart LR
 The UI does not do conversion work. Each task is routed to an engine based on
 the input, output, and selected mode:
 
-- `FastCopy`: remux or extract without re-encoding where possible.
-- `Compatibility`: FFmpeg path for connected video/audio targets and operations Android APIs cannot cover.
+- `Compatibility`: FFmpeg true re-encode path for connected video/audio targets, GIF output, and advanced processing.
 - `Native`: Android platform bitmap/PDF handling where no media engine is needed.
+- `Office`: Local first-pass Office rendering path for DOCX, PPTX, and XLSX.
 - `SafeCache`: future fallback for file providers that cannot provide usable descriptors.
 
 More detail lives in [docs/architecture.md](docs/architecture.md) and
