@@ -17,10 +17,11 @@
 
 ## Milestone 2: First Real Video Path
 
-- Media3 Transformer dependency.
-- MP4 compression preset.
+- First MP4 compression/transcoding preset.
 - Physical-device test with a large sample.
 - Foreground service progress.
+- Earlier hardware-engine experiment is now retired; active video outputs use
+  the FFmpeg path for consistent option handling.
 
 ## Milestone 3: FFmpeg Compatibility
 
@@ -37,10 +38,13 @@
   physical-device smoke testing.
 - Video to MOV re-encode. FFmpeg QuickTime MOV output is connected and needs
   physical-device smoke testing.
-- First-batch advanced audio/video processing. Implemented through existing
-  FFmpeg filters for MP4/MKV/MOV video outputs and audio outputs: fade, mirror,
-  rotate, frame fit/crop, volume/mute, and echo. Reverse and denoise remain
-  future experimental items.
+- Advanced audio/video processing. Implemented through existing FFmpeg filters
+  for MP4/MKV/MOV video outputs and audio outputs: video reverse playback,
+  fade, mirror, rotate, frame fit/crop; audio reverse playback, `afftdn` audio
+  noise reduction, fade, volume/mute, and echo. Video reverse is capped to
+  inputs with readable duration and size metadata, up to 60 seconds, and within
+  a conservative reverse-frame memory budget. Model-based audio denoise and
+  video denoise remain intentionally unconnected.
 - Video to animated GIF. FFmpeg palettegen/paletteuse output is connected with
   a 30 second, 30 fps, 900 frame cap and 480p default short-side limit; needs
   physical-device smoke testing across MP4/MOV/MKV/WEBM/AVI samples.

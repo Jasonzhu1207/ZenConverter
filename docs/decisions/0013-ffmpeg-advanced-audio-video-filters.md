@@ -29,9 +29,9 @@ audio/video processing batch.
 - The app probes selected FFmpeg filters where possible and fails clearly if the
   bundled compatibility package is missing one.
 
-Reverse and denoise are left out of this batch. Reverse can be expensive for
-long or high-resolution media, and denoise needs separate filter-capability and
-quality testing before being advertised.
+Reverse and denoise were left out of this first batch. ADR 0014 records the
+later limited follow-up for short video/audio reverse playback and non-model
+audio noise reduction.
 
 ## Consequences
 

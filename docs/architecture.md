@@ -10,8 +10,9 @@ flowchart TD
     Queue["Task Queue"]
     Service["Foreground Service"]
     Registry["Conversion Registry"]
-    Media3["Media3 Hardware Engine"]
     FFmpeg["FFmpeg Compatibility Engine"]
+    Native["Native Image/PDF Engine"]
+    Office["Office2PDF Engine"]
     Files["SAF File Access"]
     Cache["Cache Fallback"]
 
@@ -19,8 +20,9 @@ flowchart TD
     VM --> Queue
     Queue --> Service
     Service --> Registry
-    Registry --> Media3
     Registry --> FFmpeg
+    Registry --> Native
+    Registry --> Office
     Service --> Files
     Files --> Cache
 ```
@@ -29,7 +31,9 @@ flowchart TD
 
 - UI is not the conversion engine. It only describes jobs and shows state.
 - The registry chooses an engine based on input, output, and mode.
-- Media3 handles common hardware-accelerated video work.
-- FFmpeg handles compatibility tasks that Android APIs cannot cover.
+- FFmpeg handles connected video/audio conversion and advanced processing.
+- Native Android APIs handle bitmap image conversion, image/PDF paths, and
+  metadata work where they are reliable enough.
+- The experimental Office path is isolated behind its JNI renderer.
 - The app must stream or pass file descriptors whenever possible.
 - Copying large files to cache is a fallback, not the default path.

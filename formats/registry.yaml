@@ -15,17 +15,17 @@ groups:
         to: mp4
         engine: ffmpeg-compatible
         status: experimental
-        note: "FFmpeg re-encode path. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio. Video/audio options and first-batch advanced filters are applied where selected."
+        note: "FFmpeg re-encode path. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio. Video/audio options and advanced filters are applied where selected."
       - from: mp4
         to: mkv
         engine: ffmpeg-compatible
         status: experimental
-        note: "FFmpeg re-encode path. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio; selected first-batch advanced filters apply. Subtitles, attachments, and extra tracks are not copied."
+        note: "FFmpeg re-encode path. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio; selected advanced filters apply. Subtitles, attachments, and extra tracks are not copied."
       - from: video
         to: mov
         engine: ffmpeg-compatible
         status: experimental
-        note: "FFmpeg re-encode path for video inputs. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio in a QuickTime MOV container; selected first-batch advanced filters apply."
+        note: "FFmpeg re-encode path for video inputs. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio in a QuickTime MOV container; selected advanced filters apply."
       - from: video
         to: gif
         engine: ffmpeg-compatible
@@ -75,157 +75,157 @@ groups:
         to: mp3
         engine: ffmpeg-compatible
         status: experimental
-        note: "Re-encodes MP3 through libmp3lame after runtime encoder probing. Bitrate, sample rate, and channel controls are passed when selected."
+        note: "Re-encodes MP3 through libmp3lame after runtime encoder probing. Bitrate, sample rate, channel, and advanced audio filter controls are passed when selected."
       - from: m4a
         to: mp3
         engine: ffmpeg-compatible
         status: experimental
-        note: "Encodes MP3 through libmp3lame after runtime encoder probing. Physical-device sample verification is still pending."
+        note: "Encodes MP3 through libmp3lame after runtime encoder probing. Advanced audio filters apply where selected. Physical-device sample verification is still pending."
       - from: flac
         to: mp3
         engine: ffmpeg-compatible
         status: experimental
-        note: "Encodes MP3 through libmp3lame after runtime encoder probing. Physical-device sample verification is still pending."
+        note: "Encodes MP3 through libmp3lame after runtime encoder probing. Advanced audio filters apply where selected. Physical-device sample verification is still pending."
       - from: wav
         to: mp3
         engine: ffmpeg-compatible
         status: experimental
-        note: "Encodes MP3 through libmp3lame after runtime encoder probing. Physical-device sample verification is still pending."
+        note: "Encodes MP3 through libmp3lame after runtime encoder probing. Advanced audio filters apply where selected. Physical-device sample verification is still pending."
       - from: wma
         to: mp3
         engine: ffmpeg-compatible
         status: experimental
-        note: "Decodes WMA through FFmpeg and encodes MP3 through libmp3lame after runtime encoder probing."
+        note: "Decodes WMA through FFmpeg and encodes MP3 through libmp3lame after runtime encoder probing. Advanced audio filters apply where selected."
       - from: mp3
         to: m4a
         engine: ffmpeg-compatible
         status: experimental
-        note: "Encodes AAC in an M4A container through FFmpeg compatibility mode. Bitrate, sample-rate, and channel controls are passed when selected."
+        note: "Encodes AAC in an M4A container through FFmpeg compatibility mode. Bitrate, sample-rate, channel, and advanced audio filter controls are passed when selected."
       - from: m4a
         to: m4a
         engine: ffmpeg-compatible
         status: experimental
-        note: "Re-encodes AAC in an M4A container through FFmpeg compatibility mode. This is not audio stream copy."
+        note: "Re-encodes AAC in an M4A container through FFmpeg compatibility mode. This is not audio stream copy; advanced audio filters apply where selected."
       - from: flac
         to: m4a
         engine: ffmpeg-compatible
         status: experimental
-        note: "Decodes through FFmpeg and encodes AAC in an M4A container. Bitrate, sample-rate, and channel controls are passed when selected."
+        note: "Decodes through FFmpeg and encodes AAC in an M4A container. Bitrate, sample-rate, channel, and advanced audio filter controls are passed when selected."
       - from: wav
         to: m4a
         engine: ffmpeg-compatible
         status: experimental
-        note: "Decodes through FFmpeg and encodes AAC in an M4A container. Bitrate, sample-rate, and channel controls are passed when selected."
+        note: "Decodes through FFmpeg and encodes AAC in an M4A container. Bitrate, sample-rate, channel, and advanced audio filter controls are passed when selected."
       - from: wma
         to: m4a
         engine: ffmpeg-compatible
         status: experimental
-        note: "Attempts AAC in M4A through FFmpeg compatibility mode; may fail if the package lacks AAC encoding."
+        note: "Attempts AAC in M4A through FFmpeg compatibility mode; may fail if the package lacks AAC encoding. Advanced audio filters apply where selected."
       - from: ogg
         to: m4a
         engine: ffmpeg-compatible
         status: experimental
-        note: "Decodes through FFmpeg and encodes AAC in an M4A container when the bundled decoders can read the source."
+        note: "Decodes through FFmpeg and encodes AAC in an M4A container when the bundled decoders can read the source. Advanced audio filters apply where selected."
       - from: mp3
         to: wav
         engine: ffmpeg-compatible
         status: experimental
-        note: "Writes PCM WAV. Sample rate and channel controls are passed when selected; bitrate is not used."
+        note: "Writes PCM WAV. Sample rate, channel, and advanced audio filter controls are passed when selected; bitrate is not used."
       - from: m4a
         to: wav
         engine: ffmpeg-compatible
         status: experimental
-        note: "Writes PCM WAV through FFmpeg compatibility mode."
+        note: "Writes PCM WAV through FFmpeg compatibility mode. Advanced audio filters apply where selected."
       - from: flac
         to: wav
         engine: ffmpeg-compatible
         status: experimental
-        note: "Writes PCM WAV through FFmpeg compatibility mode."
+        note: "Writes PCM WAV through FFmpeg compatibility mode. Advanced audio filters apply where selected."
       - from: wav
         to: wav
         engine: ffmpeg-compatible
         status: experimental
-        note: "Rewrites PCM WAV; bitrate is not used."
+        note: "Rewrites PCM WAV; bitrate is not used. Advanced audio filters apply where selected."
       - from: wma
         to: wav
         engine: ffmpeg-compatible
         status: experimental
-        note: "Decodes WMA through FFmpeg and writes PCM WAV when the bundled codecs are available."
+        note: "Decodes WMA through FFmpeg and writes PCM WAV when the bundled codecs are available. Advanced audio filters apply where selected."
       - from: mp3
         to: flac
         engine: ffmpeg-compatible
         status: experimental
-        note: "Encodes FLAC. Sample rate and channel controls are passed when selected; bitrate is not used."
+        note: "Encodes FLAC. Sample rate, channel, and advanced audio filter controls are passed when selected; bitrate is not used."
       - from: m4a
         to: flac
         engine: ffmpeg-compatible
         status: experimental
-        note: "Encodes FLAC through FFmpeg compatibility mode."
+        note: "Encodes FLAC through FFmpeg compatibility mode. Advanced audio filters apply where selected."
       - from: flac
         to: flac
         engine: ffmpeg-compatible
         status: experimental
-        note: "Re-encodes FLAC; bitrate is not used."
+        note: "Re-encodes FLAC; bitrate is not used. Advanced audio filters apply where selected."
       - from: wav
         to: flac
         engine: ffmpeg-compatible
         status: experimental
-        note: "Encodes FLAC through FFmpeg compatibility mode."
+        note: "Encodes FLAC through FFmpeg compatibility mode. Advanced audio filters apply where selected."
       - from: wma
         to: flac
         engine: ffmpeg-compatible
         status: experimental
-        note: "Decodes WMA through FFmpeg and encodes FLAC when the bundled codecs are available."
+        note: "Decodes WMA through FFmpeg and encodes FLAC when the bundled codecs are available. Advanced audio filters apply where selected."
       - from: mp3
         to: wma
         engine: ffmpeg-compatible
         status: experimental
-        note: "Encodes WMA v2 in an ASF/WMA container through FFmpeg compatibility mode."
+        note: "Encodes WMA v2 in an ASF/WMA container through FFmpeg compatibility mode. Advanced audio filters apply where selected."
       - from: m4a
         to: wma
         engine: ffmpeg-compatible
         status: experimental
-        note: "Encodes WMA v2 in an ASF/WMA container through FFmpeg compatibility mode."
+        note: "Encodes WMA v2 in an ASF/WMA container through FFmpeg compatibility mode. Advanced audio filters apply where selected."
       - from: flac
         to: wma
         engine: ffmpeg-compatible
         status: experimental
-        note: "Encodes WMA v2 in an ASF/WMA container through FFmpeg compatibility mode."
+        note: "Encodes WMA v2 in an ASF/WMA container through FFmpeg compatibility mode. Advanced audio filters apply where selected."
       - from: wav
         to: wma
         engine: ffmpeg-compatible
         status: experimental
-        note: "Encodes WMA v2 in an ASF/WMA container through FFmpeg compatibility mode."
+        note: "Encodes WMA v2 in an ASF/WMA container through FFmpeg compatibility mode. Advanced audio filters apply where selected."
       - from: wma
         to: wma
         engine: ffmpeg-compatible
         status: experimental
-        note: "Re-encodes WMA v2 in an ASF/WMA container."
+        note: "Re-encodes WMA v2 in an ASF/WMA container. Advanced audio filters apply where selected."
       - from: video
         to: m4a
         engine: ffmpeg-compatible
         status: experimental
-        note: "Extracts the first audio track and re-encodes AAC in an M4A container through FFmpeg compatibility mode. This is not audio stream copy."
+        note: "Extracts the first audio track and re-encodes AAC in an M4A container through FFmpeg compatibility mode. This is not audio stream copy; advanced audio filters apply where selected."
       - from: video
         to: mp3
         engine: ffmpeg-compatible
         status: experimental
-        note: "Extracts the first audio track and encodes MP3 through libmp3lame after runtime encoder probing. Physical-device sample verification is still pending."
+        note: "Extracts the first audio track and encodes MP3 through libmp3lame after runtime encoder probing. Advanced audio filters apply where selected. Physical-device sample verification is still pending."
       - from: video
         to: wav
         engine: ffmpeg-compatible
         status: experimental
-        note: "Extracts the first audio track and writes PCM WAV through FFmpeg compatibility mode."
+        note: "Extracts the first audio track and writes PCM WAV through FFmpeg compatibility mode. Advanced audio filters apply where selected."
       - from: video
         to: flac
         engine: ffmpeg-compatible
         status: experimental
-        note: "Extracts the first audio track and encodes FLAC through FFmpeg compatibility mode."
+        note: "Extracts the first audio track and encodes FLAC through FFmpeg compatibility mode. Advanced audio filters apply where selected."
       - from: video
         to: wma
         engine: ffmpeg-compatible
         status: experimental
-        note: "Extracts the first audio track and encodes WMA v2 through FFmpeg compatibility mode."
+        note: "Extracts the first audio track and encodes WMA v2 through FFmpeg compatibility mode. Advanced audio filters apply where selected."
   image:
     planned:
       - from: jpg/jpeg/jfif/jpe

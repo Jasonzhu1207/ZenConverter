@@ -45,9 +45,9 @@ ZenConverter 想做的是一个本地优先的 Android 转换器：
 | --- | --- | --- |
 | 原生 Android 外壳 | 已完成 | Kotlin、Compose、Material 3、前台服务任务管线。 |
 | 空转换任务流 | 已完成 | 文件选择、任务状态、进度、取消和失败状态。 |
-| MP4 转 MP4 | 已完成 | Media3 Transformer 路径已接入，并通过当前真机测试；大文件仍建议谨慎测试。 |
+| MP4 转 MP4 | 已完成 | 已接入 FFmpeg 真重新编码路径，确保可见的视频/音频选项和高级滤镜一致生效；大文件仍建议谨慎测试。 |
 | MP4 转 MP3 | 已完成 | FFmpeg 兼容路径已接入，可提取第一条音轨并编码 MP3，已通过当前真机测试。 |
-| 音频格式互转 | 已完成 | MP3 / M4A / WAV / FLAC / WMA 目标已接入并通过当前测试；边缘文件仍受设备编解码能力和内置 FFmpeg 构建影响。 |
+| 音频格式互转 | 已完成 | MP3 / M4A / WAV / FLAC / WMA 目标已接入并通过当前测试；边缘文件仍受内置 FFmpeg 构建和源文件情况影响。 |
 | JPG / PNG / WEBP 图片互转 | 已完成 | 使用 Android 原生 bitmap 路径。仅处理静态图片，不复制元数据。 |
 | MKV / MOV / WEBM / AVI 等容器转 MP4 / MOV | 实验性 | FFmpeg 兼容路径，按所选视频选项重新编码。 |
 | 图片与 PDF 互转 | 实验性 | 图片转 PDF 使用 Android `PdfDocument`，PDF 转图片使用 Android `PdfRenderer`。按图片/页面逐个处理，并限制 bitmap 尺寸。PDF 转图片是页面栅格化，不是 OCR、文本提取或嵌入图片提取。 |
@@ -62,17 +62,17 @@ flowchart LR
     Preset["选择预设"]
     Queue["任务队列"]
     Service["前台服务"]
-    Engine["Media3 / FFmpeg / Native"]
+    Engine["FFmpeg / Native / Office"]
     Output["保存输出"]
 
     Pick --> Preset --> Queue --> Service --> Engine --> Output
 ```
 
-UI 不直接做转换。每个任务会根据输入、输出和设备能力选择模式：
+UI 不直接做转换。每个任务会根据输入、输出和所选模式选择引擎：
 
 - `FastCopy`：尽量不重编码，只做封装转换或提取。
-- `Hardware`：使用 AndroidX Media3 / MediaCodec 处理常见视频任务。
-- `Compatibility`：用 FFmpeg 补上 Android API 做不了的格式和操作。
+- `Compatibility`：用 FFmpeg 处理已接入的音视频目标，以及 Android API 做不了的格式和操作。
+- `Native`：用 Android 平台 API 处理图片、PDF 等不需要媒体引擎的任务。
 - `SafeCache`：后续用于处理无法提供可用文件描述符的文件来源。
 
 更多细节见 [docs/architecture.md](docs/architecture.md) 和

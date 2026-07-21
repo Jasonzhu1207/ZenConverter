@@ -132,7 +132,6 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-    implementation("androidx.media3:media3-transformer:1.10.1")
     implementation(files(pdfBoxAndroidLocalAar))
     implementation(
         files(

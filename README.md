@@ -57,9 +57,9 @@ Completed items are listed first, experimental paths next, and planned work last
 | --- | --- | --- |
 | Native Android shell | Done | Kotlin, Compose, Material 3, foreground service pipeline. |
 | No-op conversion jobs | Done | File selection, task state, progress, cancel, and failure states. |
-| MP4 to MP4 | Done | Media3 Transformer path is connected and has passed current physical-device testing. Large files should still be tested carefully. |
+| MP4 to MP4 | Done | FFmpeg true re-encode path is connected so visible video/audio options and advanced filters apply consistently. Large files should still be tested carefully. |
 | MP4 to MP3 | Done | FFmpeg-compatible audio extraction and MP3 encode are connected and have passed current physical-device testing. |
-| Audio format conversion | Done | MP3 / M4A / WAV / FLAC / WMA targets are connected and have passed current testing. Edge cases still depend on device codecs and the bundled FFmpeg build. |
+| Audio format conversion | Done | MP3 / M4A / WAV / FLAC / WMA targets are connected and have passed current testing. Edge cases still depend on the bundled FFmpeg build and source files. |
 | JPG / PNG / WEBP image conversion | Implemented | Native Android bitmap path. Static images only; metadata is not copied. |
 | MKV / MOV / WEBM / AVI and similar containers to MP4 / MOV | Experimental | FFmpeg-compatible re-encode using the selected video options. |
 | Image and PDF conversion | Experimental | Image to PDF uses Android `PdfDocument`; PDF to image uses Android `PdfRenderer`. It works one image/page at a time with bounded bitmap sizes. PDF output is page rasterization, not OCR or text extraction. |
@@ -74,18 +74,18 @@ flowchart LR
     Preset["Choose preset"]
     Queue["Task queue"]
     Service["Foreground service"]
-    Engine["Media3 / FFmpeg / Native"]
+    Engine["FFmpeg / Native / Office"]
     Output["Save output"]
 
     Pick --> Preset --> Queue --> Service --> Engine --> Output
 ```
 
 The UI does not do conversion work. Each task is routed to an engine based on
-the input, output, and device capability:
+the input, output, and selected mode:
 
 - `FastCopy`: remux or extract without re-encoding where possible.
-- `Hardware`: AndroidX Media3 / MediaCodec for common Android-supported video work.
-- `Compatibility`: FFmpeg path for containers and operations Android APIs cannot cover.
+- `Compatibility`: FFmpeg path for connected video/audio targets and operations Android APIs cannot cover.
+- `Native`: Android platform bitmap/PDF handling where no media engine is needed.
 - `SafeCache`: future fallback for file providers that cannot provide usable descriptors.
 
 More detail lives in [docs/architecture.md](docs/architecture.md) and

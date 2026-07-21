@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted.
+Superseded by [0015 Retire Media3 Transformer Path](0015-retire-media3-transformer-path.md)
+for active media export behavior.
 
 ## Context
 

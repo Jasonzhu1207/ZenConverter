@@ -25,8 +25,6 @@ Before a dependency becomes core:
 
 - AndroidX Compose and AndroidX Material Icons Extended are Apache-2.0
   dependencies used for the native Android UI.
-- AndroidX Media3 Transformer `1.10.1` is an Apache-2.0 dependency used for the
-  first real MP4 export path.
 
 ## Current PDF Dependency
 
@@ -96,8 +94,9 @@ Transitive dependencies required by the PDFBox-Android POM are also local JARs:
   packaged GPL-family texts are compatible with the current project direction.
   Revisit this before any non-GPL-family distribution.
 - Reason platform APIs are not enough: physical-device logs on July 5, 2026
-  showed Media3 timing out on MKV before writing any muxer sample, while the
-  same service pipeline completed MP4/M4A work. Physical-device logs on
+  showed the earlier Android hardware media path timing out on MKV before
+  writing any muxer sample, while the same service pipeline completed MP4/M4A
+  work. Physical-device logs on
   July 11, 2026 showed the earlier Free FFmpegKit AAR lacked `libmp3lame`.
 - Maintenance check: the original `arthenica/ffmpeg-kit` repo is archived, but
   `arthenica/ffmpeg-kit-next` is the upstream successor used as source for this

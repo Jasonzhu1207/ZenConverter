@@ -34,7 +34,6 @@ import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.util.Log
-import androidx.annotation.OptIn
 import androidx.annotation.RequiresApi
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.FFmpegKitConfig
@@ -48,27 +47,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import androidx.media3.common.Effect
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MimeTypes
-import androidx.media3.common.audio.AudioProcessor
-import androidx.media3.common.audio.ChannelMixingAudioProcessor
-import androidx.media3.common.audio.ChannelMixingMatrix
-import androidx.media3.common.audio.SonicAudioProcessor
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.effect.FrameDropEffect
-import androidx.media3.effect.Presentation
-import androidx.media3.transformer.AudioEncoderSettings
-import androidx.media3.transformer.Composition
-import androidx.media3.transformer.DefaultEncoderFactory
-import androidx.media3.transformer.EditedMediaItem
-import androidx.media3.transformer.Effects
-import androidx.media3.transformer.ExportException
-import androidx.media3.transformer.ExportResult
-import androidx.media3.transformer.ProgressHolder
-import androidx.media3.transformer.Transformer
-import androidx.media3.transformer.TransformationRequest
-import androidx.media3.transformer.VideoEncoderSettings
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.io.MemoryUsageSetting
 import com.tom_roush.pdfbox.multipdf.PDFMergerUtility
@@ -92,17 +70,13 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlin.math.roundToInt
 
-@OptIn(UnstableApi::class)
 class ConversionService : Service() {
     private val handler = Handler(Looper.getMainLooper())
-    private val progressHolder = ProgressHolder()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private var taskIndex = 0
-    private var activeTransformer: Transformer? = null
     private var activeFfmpegSession: FFmpegSession? = null
     private var activeTempFile: File? = null
-    private var progressRunnable: Runnable? = null
     private var copyThread: Thread? = null
     private var ffmpegKitReady = false
     private var ffmpegKitLoadFailure: Throwable? = null
@@ -139,7 +113,6 @@ class ConversionService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
-        activeTransformer?.cancel()
         cancelActiveFfmpegSession()
         copyThread?.interrupt()
         activeTempFile?.delete()
@@ -182,18 +155,10 @@ class ConversionService : Service() {
                         input.category == ConversionMediaCategory.Pdf -> "NativePdf"
                         input.category == ConversionMediaCategory.Document -> "Office2Pdf"
                         useCompatibilityEngine -> "Compatibility"
-                        else -> "Hardware"
+                        else -> "Unrouted"
                     }
                 }"
         )
-        if (
-            !useCompatibilityEngine &&
-            input.category == ConversionMediaCategory.Video &&
-            !VideoEncoderSupport.canEncode(input.videoOptions.videoMimeType)
-        ) {
-            failCurrentTask("Selected video encoder is not supported on this device")
-            return
-        }
 
         val tempFile = createTempFileFor(input, outputProfile.extension)
         activeTempFile = tempFile
@@ -227,152 +192,9 @@ class ConversionService : Service() {
             return
         }
 
-        startMedia3Export(input, tempFile)
-    }
-
-    private fun startMedia3Export(
-        input: ConversionTaskInput,
-        tempFile: File
-    ) {
-        val listener = object : Transformer.Listener {
-            override fun onCompleted(composition: Composition, exportResult: ExportResult) {
-                Log.i(
-                    TAG,
-                    "Media3 export completed category=${input.category} " +
-                        "target=${input.targetFormat} displayName=${input.displayName} " +
-                        "durationMs=${exportResult.approximateDurationMs} " +
-                        "fileSizeBytes=${exportResult.fileSizeBytes} " +
-                        "audioMime=${exportResult.audioMimeType} " +
-                        "videoMime=${exportResult.videoMimeType}"
-                )
-                handler.post {
-                    saveCompletedExport(input, tempFile)
-                }
-            }
-
-            override fun onError(
-                composition: Composition,
-                exportResult: ExportResult,
-                exportException: ExportException
-            ) {
-                val failureMessage = failureMessageFor(exportException)
-                Log.w(
-                    TAG,
-                    "Media3 export failed category=${input.category} " +
-                        "target=${input.targetFormat} displayName=${input.displayName} " +
-                        "errorCode=${exportException.getErrorCodeName()} " +
-                        "audioMime=${exportResult.audioMimeType} " +
-                        "videoMime=${exportResult.videoMimeType}",
-                    exportException
-                )
-                handler.post {
-                    stopProgressPolling()
-                    activeTransformer = null
-                    activeTempFile?.delete()
-                    activeTempFile = null
-                    failCurrentTask(failureMessage)
-                }
-            }
-
-            override fun onFallbackApplied(
-                composition: Composition,
-                originalTransformationRequest: TransformationRequest,
-                fallbackTransformationRequest: TransformationRequest
-            ) {
-                Log.i(
-                    TAG,
-                    "Media3 fallback applied category=${input.category} " +
-                        "target=${input.targetFormat} displayName=${input.displayName} " +
-                        "originalAudio=${originalTransformationRequest.audioMimeType} " +
-                        "fallbackAudio=${fallbackTransformationRequest.audioMimeType} " +
-                        "originalVideo=${originalTransformationRequest.videoMimeType} " +
-                        "fallbackVideo=${fallbackTransformationRequest.videoMimeType}"
-                )
-            }
-        }
-
-        runCatching {
-            tempFile.delete()
-            val encoderFactoryBuilder = DefaultEncoderFactory.Builder(this)
-            if (input.category == ConversionMediaCategory.Video) {
-                input.videoOptions.videoBitrate?.let { bitrate ->
-                    encoderFactoryBuilder.setRequestedVideoEncoderSettings(
-                        VideoEncoderSettings.Builder()
-                            .setBitrate(bitrate)
-                            .build()
-                    )
-                }
-            }
-            if (input.category == ConversionMediaCategory.Audio) {
-                input.audioOptions.audioBitrate?.let { bitrate ->
-                    encoderFactoryBuilder.setRequestedAudioEncoderSettings(
-                        AudioEncoderSettings.Builder()
-                            .setBitrate(bitrate)
-                            .build()
-                    )
-                }
-            }
-
-            val transformerBuilder = Transformer.Builder(this)
-                .setAudioMimeType(MimeTypes.AUDIO_AAC)
-                .setMaxDelayBetweenMuxerSamplesMs(MAX_DELAY_BETWEEN_MUXER_SAMPLES_MS)
-                .setEncoderFactory(encoderFactoryBuilder.build())
-                .addListener(listener)
-
-            if (input.category == ConversionMediaCategory.Video) {
-                transformerBuilder.setVideoMimeType(input.videoOptions.videoMimeType)
-            }
-
-            activeTransformer = transformerBuilder.build()
-            Log.i(
-                TAG,
-                "Starting Media3 export category=${input.category} " +
-                    "target=${input.targetFormat} displayName=${input.displayName} " +
-                    "temp=${tempFile.name} videoOptions=${input.videoOptions} " +
-                    "audioOptions=${input.audioOptions} " +
-                    "maxDelayBetweenMuxerSamplesMs=$MAX_DELAY_BETWEEN_MUXER_SAMPLES_MS"
-            )
-            activeTransformer?.start(buildEditedMediaItem(input), tempFile.absolutePath)
-            startProgressPolling()
-        }.onFailure { exception ->
-            Log.w(TAG, "Could not start Media3 export", exception)
-            stopProgressPolling()
-            activeTransformer = null
-            activeTempFile?.delete()
-            activeTempFile = null
-            failCurrentTask("Could not start native export")
-        }
-    }
-
-    private fun startProgressPolling() {
-        stopProgressPolling()
-        val runnable = object : Runnable {
-            override fun run() {
-                val transformer = activeTransformer ?: return
-                val progressState = runCatching {
-                    transformer.getProgress(progressHolder)
-                }.getOrDefault(Transformer.PROGRESS_STATE_UNAVAILABLE)
-
-                if (progressState == Transformer.PROGRESS_STATE_AVAILABLE) {
-                    ConversionTaskStore.updateProgress(
-                        taskIndex,
-                        progressHolder.progress / 100f
-                    )
-                }
-                updateNotification(
-                    "Processing",
-                    (ConversionTaskStore.aggregateProgress() * 100).toInt()
-                )
-                handler.postDelayed(this, PROGRESS_DELAY_MS)
-            }
-        }
-        progressRunnable = runnable
-        handler.post(runnable)
-    }
-
-    private fun stopProgressPolling() {
-        progressRunnable?.let { handler.removeCallbacks(it) }
-        progressRunnable = null
+        tempFile.delete()
+        activeTempFile = null
+        failCurrentTask("Only connected video, audio, image, PDF, and document targets can run")
     }
 
     private fun startImageExport(
@@ -2037,6 +1859,13 @@ class ConversionService : Service() {
                 message = message
             )
         }
+        ffmpegUnsupportedAdvancedSelectionMessageFor(input, durationMs)?.let { message ->
+            return@withContext FfmpegRunResult(
+                success = false,
+                cancelled = false,
+                message = message
+            )
+        }
         ffmpegMissingFilterMessageFor(input)?.let { message ->
             return@withContext FfmpegRunResult(
                 success = false,
@@ -2405,7 +2234,12 @@ class ConversionService : Service() {
             if (includeAudio) {
                 add("-c:a")
                 add(FFMPEG_AAC_ENCODER)
-                addFfmpegAudioOptions(input.audioOptions, ffmpegAacAudioProfile(), durationMs)
+                addFfmpegAudioOptions(
+                    audioOptions = input.audioOptions,
+                    audioProfile = ffmpegAacAudioProfile(),
+                    durationMs = durationMs,
+                    forceReverse = input.videoOptions.advanced.reverse
+                )
             }
             if (videoProfile.useFastStart) {
                 add("-movflags")
@@ -2420,9 +2254,10 @@ class ConversionService : Service() {
     private fun MutableList<String>.addFfmpegAudioOptions(
         audioOptions: AudioExportOptions,
         audioProfile: FfmpegAudioProfile,
-        durationMs: Long?
+        durationMs: Long?,
+        forceReverse: Boolean = false
     ) {
-        ffmpegAudioFilterFor(audioOptions, durationMs)?.let { filter ->
+        ffmpegAudioFilterFor(audioOptions, durationMs, forceReverse)?.let { filter ->
             add("-af")
             add(filter)
         }
@@ -2563,6 +2398,7 @@ class ConversionService : Service() {
             addAll(ffmpegVideoMirrorFiltersFor(advanced.mirror))
             ffmpegVideoAspectFilterFor(advanced.aspectRatio)?.let { add(it) }
             ffmpegVideoScaleFilterFor(input.videoOptions.maxShortSidePixels)?.let { add(it) }
+            if (advanced.reverse) add("reverse")
             advanced.fadeInSeconds?.let { seconds ->
                 add("fade=t=in:st=0:d=${ffmpegSeconds(seconds.toDouble())}")
             }
@@ -2599,9 +2435,9 @@ class ConversionService : Service() {
     private fun ffmpegVideoAspectFilterFor(aspectRatio: VideoAspectRatioMode): String? {
         val ratio = when (aspectRatio) {
             VideoAspectRatioMode.Fit16By9,
-            VideoAspectRatioMode.Crop16By9 -> "16/9"
+            VideoAspectRatioMode.Crop16By9 -> "(16/9)"
             VideoAspectRatioMode.Fit9By16,
-            VideoAspectRatioMode.Crop9By16 -> "9/16"
+            VideoAspectRatioMode.Crop9By16 -> "(9/16)"
             VideoAspectRatioMode.Fit1By1,
             VideoAspectRatioMode.Crop1By1 -> "1"
             VideoAspectRatioMode.Keep -> return null
@@ -2611,13 +2447,13 @@ class ConversionService : Service() {
             VideoAspectRatioMode.Fit9By16,
             VideoAspectRatioMode.Fit1By1 ->
                 "pad=w='if(gt(iw/ih\\,$ratio)\\,iw\\,ceil(ih*$ratio/2)*2)':" +
-                    "h='if(gt(iw/ih\\,$ratio)\\,ceil(iw/$ratio/2)*2\\,ih)':" +
+                    "h='if(gt(iw/ih\\,$ratio)\\,ceil(iw/($ratio)/2)*2\\,ih)':" +
                     "x=(ow-iw)/2:y=(oh-ih)/2:color=black"
             VideoAspectRatioMode.Crop16By9,
             VideoAspectRatioMode.Crop9By16,
             VideoAspectRatioMode.Crop1By1 ->
                 "crop=w='if(gt(iw/ih\\,$ratio)\\,floor(ih*$ratio/2)*2\\,iw)':" +
-                    "h='if(gt(iw/ih\\,$ratio)\\,ih\\,floor(iw/$ratio/2)*2)':" +
+                    "h='if(gt(iw/ih\\,$ratio)\\,ih\\,floor(iw/($ratio)/2)*2)':" +
                     "x=(iw-ow)/2:y=(ih-oh)/2"
             VideoAspectRatioMode.Keep -> null
         }
@@ -2631,10 +2467,13 @@ class ConversionService : Service() {
 
     private fun ffmpegAudioFilterFor(
         audioOptions: AudioExportOptions,
-        durationMs: Long?
+        durationMs: Long?,
+        forceReverse: Boolean = false
     ): String? {
         val advanced = audioOptions.advanced
         val filters = buildList {
+            if (forceReverse || advanced.reverse) add("areverse")
+            ffmpegAudioDenoiseFilterFor(advanced.noiseReduction)?.let { add(it) }
             when (advanced.volume) {
                 AudioVolumeMode.Mute -> add("volume=0")
                 AudioVolumeMode.Half -> add("volume=0.5")
@@ -2660,6 +2499,14 @@ class ConversionService : Service() {
             }
         }
         return filters.takeIf { it.isNotEmpty() }?.joinToString(separator = ",")
+    }
+
+    private fun ffmpegAudioDenoiseFilterFor(mode: AudioNoiseReductionMode): String? {
+        return when (mode) {
+            AudioNoiseReductionMode.Light -> "afftdn=nr=6"
+            AudioNoiseReductionMode.Standard -> "afftdn=nr=12"
+            AudioNoiseReductionMode.Off -> null
+        }
     }
 
     private fun ffmpegFadeOutStartSeconds(durationMs: Long, fadeSeconds: Float): String {
@@ -2916,6 +2763,10 @@ class ConversionService : Service() {
         durationMs: Long?
     ): String? {
         if (durationMs != null) return null
+        val videoReverseApplies =
+            input.category == ConversionMediaCategory.Video &&
+                !isVideoGifOutput(input) &&
+                input.videoOptions.advanced.reverse
         val audioFadeOutApplies =
             input.audioOptions.advanced.volume != AudioVolumeMode.Mute &&
                 input.audioOptions.advanced.fadeOutSeconds != null
@@ -2929,10 +2780,92 @@ class ConversionService : Service() {
             ConversionMediaCategory.Pdf,
             ConversionMediaCategory.Document -> false
         }
-        return if (needsDuration) {
-            "Compatibility engine needs duration metadata for fade out"
+        return when {
+            videoReverseApplies ->
+                "Compatibility engine needs duration metadata for reverse playback"
+            needsDuration ->
+                "Compatibility engine needs duration metadata for fade out"
+            else -> null
+        }
+    }
+
+    private fun ffmpegUnsupportedAdvancedSelectionMessageFor(
+        input: ConversionTaskInput,
+        durationMs: Long?
+    ): String? {
+        if (
+            input.category == ConversionMediaCategory.Video &&
+            !isVideoGifOutput(input) &&
+            input.videoOptions.advanced.reverse
+        ) {
+            val reverseBudgetMessage = ffmpegUnsafeVideoReverseMessageFor(input, durationMs)
+            if (reverseBudgetMessage != null) return reverseBudgetMessage
+        }
+        return null
+    }
+
+    private fun ffmpegUnsafeVideoReverseMessageFor(
+        input: ConversionTaskInput,
+        durationMs: Long?
+    ): String? {
+        if (durationMs == null) {
+            return "Compatibility engine needs duration metadata for reverse playback"
+        }
+        if (
+            durationMs > FFMPEG_VIDEO_REVERSE_MAX_DURATION_MS
+        ) {
+            return "Compatibility engine supports reverse video up to 60 seconds"
+        }
+        val reverseBufferSize = reverseBufferVideoSizeFor(input)
+            ?: return "Compatibility engine needs video size metadata for reverse playback"
+        val frameRate = input.inputInfo
+            ?.frameRate
+            ?.takeIf { it > 0f }
+            ?.toDouble()
+            ?.coerceIn(1.0, FFMPEG_VIDEO_REVERSE_MAX_FPS_ESTIMATE)
+            ?: FFMPEG_VIDEO_REVERSE_DEFAULT_FPS_ESTIMATE
+        val frameCount = (durationMs.toDouble() / 1000.0 * frameRate)
+            .toLong()
+            .coerceAtLeast(1L)
+        val estimatedBufferBytes =
+            reverseBufferSize.width.toLong() *
+                reverseBufferSize.height.toLong() *
+                FFMPEG_VIDEO_REVERSE_BYTES_PER_PIXEL *
+                frameCount
+        return if (estimatedBufferBytes > FFMPEG_VIDEO_REVERSE_MAX_BUFFER_BYTES) {
+            Log.w(
+                TAG,
+                "Video reverse rejected by memory budget displayName=${input.displayName} " +
+                    "width=${reverseBufferSize.width} height=${reverseBufferSize.height} " +
+                    "durationMs=$durationMs frameRate=$frameRate " +
+                    "estimatedBufferBytes=$estimatedBufferBytes"
+            )
+            "Reverse video is only safe for very short low-resolution clips"
         } else {
             null
+        }
+    }
+
+    private fun reverseBufferVideoSizeFor(input: ConversionTaskInput): VideoSize? {
+        val infoWidth = input.inputInfo?.width
+        val infoHeight = input.inputInfo?.height
+        val sourceSize = if (
+            infoWidth != null &&
+            infoHeight != null &&
+            infoWidth > 0 &&
+            infoHeight > 0
+        ) {
+            VideoSize(infoWidth, infoHeight)
+        } else {
+            readVideoSize(input.inputUri)
+        } ?: return null
+        val targetShortSide = input.videoOptions.maxShortSidePixels
+            ?.takeIf { it > 0 }
+            ?: return sourceSize
+        return if (sourceSize.shortSide > targetShortSide) {
+            scaledVideoSizeFor(sourceSize, targetShortSide)
+        } else {
+            sourceSize
         }
     }
 
@@ -2945,13 +2878,23 @@ class ConversionService : Service() {
             "FFmpeg compatibility package is missing filter=$missingFilter " +
                 "target=${input.targetFormat} displayName=${input.displayName}"
         )
-        return "Compatibility engine is missing an advanced filter"
+        return compatibilityMissingFilterMessageFor(missingFilter)
+    }
+
+    private fun compatibilityMissingFilterMessageFor(filter: String): String {
+        return when (filter) {
+            "reverse",
+            "areverse" -> "Compatibility engine needs reverse filters"
+            "afftdn" -> "Compatibility engine needs the audio denoise filter"
+            else -> "Compatibility engine is missing an advanced filter"
+        }
     }
 
     private fun requiredFfmpegFiltersFor(input: ConversionTaskInput): Set<String> {
         return buildSet {
             if (input.category == ConversionMediaCategory.Video && !isVideoGifOutput(input)) {
                 val videoAdvanced = input.videoOptions.advanced
+                if (videoAdvanced.reverse) add("reverse")
                 if (
                     videoAdvanced.rotation == VideoRotationMode.Clockwise90 ||
                     videoAdvanced.rotation == VideoRotationMode.CounterClockwise90 ||
@@ -2996,6 +2939,16 @@ class ConversionService : Service() {
                 ConversionMediaCategory.Document -> false
             }
             if (audioFiltersApply) {
+                if (
+                    audioAdvanced.reverse ||
+                    (
+                        input.category == ConversionMediaCategory.Video &&
+                            input.videoOptions.advanced.reverse
+                        )
+                ) {
+                    add("areverse")
+                }
+                if (audioAdvanced.noiseReduction != AudioNoiseReductionMode.Off) add("afftdn")
                 when (audioAdvanced.volume) {
                     AudioVolumeMode.Half,
                     AudioVolumeMode.OneAndHalf,
@@ -3204,6 +3157,16 @@ class ConversionService : Service() {
         if (
             input.category == ConversionMediaCategory.Video &&
             (
+                normalizedTail.contains("image size is too small") ||
+                    normalizedTail.contains("width not divisible by") ||
+                    normalizedTail.contains("height not divisible by")
+            )
+        ) {
+            return "Advanced video settings produced an unsupported frame size"
+        }
+        if (
+            input.category == ConversionMediaCategory.Video &&
+            (
                 normalizedTail.contains("unknown encoder") ||
                     normalizedTail.contains("encoder not found") ||
                     normalizedTail.contains("invalid encoder")
@@ -3305,35 +3268,17 @@ class ConversionService : Service() {
 
     private fun shouldUseCompatibilityEngine(input: ConversionTaskInput): Boolean {
         return when (input.category) {
-            ConversionMediaCategory.Video ->
-                isLikelyVideoInput(input) &&
-                    (
-                        videoTargetExtensionFor(input.targetFormat) in COMPATIBILITY_VIDEO_TARGETS ||
-                            !isLikelyMp4VideoInput(input)
-                        )
-            ConversionMediaCategory.Audio ->
-                true
+            ConversionMediaCategory.Video -> true
+            ConversionMediaCategory.Audio -> true
             ConversionMediaCategory.Image -> false
             ConversionMediaCategory.Pdf -> false
             ConversionMediaCategory.Document -> false
         }
     }
 
-    private fun isLikelyVideoInput(input: ConversionTaskInput): Boolean {
-        val mimeType = input.mimeType.orEmpty().lowercase(Locale.US)
-        val extension = input.extension.lowercase(Locale.US)
-        return mimeType.startsWith("video/") || extension in VIDEO_INPUT_EXTENSIONS
-    }
-
     private fun isVideoGifOutput(input: ConversionTaskInput): Boolean {
         return input.category == ConversionMediaCategory.Video &&
             videoTargetExtensionFor(input.targetFormat) == "gif"
-    }
-
-    private fun isLikelyMp4VideoInput(input: ConversionTaskInput): Boolean {
-        val mimeType = input.mimeType.orEmpty().lowercase(Locale.US)
-        val extension = input.extension.lowercase(Locale.US)
-        return extension == "mp4" || mimeType == MIME_TYPE_MP4
     }
 
     private fun isLikelyGifInputUri(uri: Uri): Boolean {
@@ -3394,68 +3339,6 @@ class ConversionService : Service() {
         }
     }
 
-    private fun buildEditedMediaItem(input: ConversionTaskInput): EditedMediaItem {
-        val videoEffects = if (input.category == ConversionMediaCategory.Video) {
-            videoEffectsFor(input)
-        } else {
-            emptyList()
-        }
-        return EditedMediaItem.Builder(MediaItem.fromUri(input.inputUri))
-            .setRemoveVideo(input.category == ConversionMediaCategory.Audio)
-            .setEffects(Effects(audioProcessorsFor(input), videoEffects))
-            .build()
-    }
-
-    private fun audioProcessorsFor(input: ConversionTaskInput): List<AudioProcessor> {
-        if (input.category != ConversionMediaCategory.Audio) return emptyList()
-        return buildList {
-            input.audioOptions.sampleRateHz?.let { sampleRateHz ->
-                add(
-                    SonicAudioProcessor().apply {
-                        setOutputSampleRateHz(sampleRateHz)
-                    }
-                )
-            }
-            input.audioOptions.channelCount?.let { channelCount ->
-                add(channelMixingProcessorFor(channelCount))
-            }
-        }
-    }
-
-    private fun channelMixingProcessorFor(outputChannelCount: Int): ChannelMixingAudioProcessor {
-        return ChannelMixingAudioProcessor().apply {
-            for (inputChannelCount in MIN_MIXABLE_CHANNEL_COUNT..MAX_MIXABLE_CHANNEL_COUNT) {
-                putChannelMixingMatrix(
-                    ChannelMixingMatrix.createForConstantPower(
-                        inputChannelCount,
-                        outputChannelCount
-                    )
-                )
-            }
-        }
-    }
-
-    private fun videoEffectsFor(input: ConversionTaskInput): List<Effect> {
-        return buildList {
-            val targetShortSide = input.videoOptions.maxShortSidePixels
-            if (targetShortSide != null) {
-                val sourceSize = readVideoSize(input.inputUri)
-                if (sourceSize == null || sourceSize.shortSide > targetShortSide) {
-                    add(
-                        Presentation.createForShortSide(targetShortSide)
-                            .copyWithUnsetSideRoundedTo(2)
-                    )
-                }
-            }
-
-            input.videoOptions.maxFrameRate
-                ?.takeIf { it > 0 }
-                ?.let { maxFrameRate ->
-                    add(FrameDropEffect.createDefaultFrameDropEffect(maxFrameRate.toFloat()))
-                }
-        }
-    }
-
     private fun readVideoSize(uri: Uri): VideoSize? {
         val retriever = MediaMetadataRetriever()
         return runCatching {
@@ -3490,8 +3373,6 @@ class ConversionService : Service() {
         input: ConversionTaskInput,
         tempFile: File
     ) {
-        stopProgressPolling()
-        activeTransformer = null
         ConversionTaskStore.markSaving(taskIndex)
         updateNotification("Saving", (ConversionTaskStore.aggregateProgress() * 100).toInt())
 
@@ -3558,8 +3439,6 @@ class ConversionService : Service() {
         tempFiles: List<File>,
         outputProfile: OutputProfile
     ) {
-        stopProgressPolling()
-        activeTransformer = null
         ConversionTaskStore.markSaving(taskIndex)
         updateNotification("Saving", (ConversionTaskStore.aggregateProgress() * 100).toInt())
 
@@ -3627,8 +3506,6 @@ class ConversionService : Service() {
         outputProfile: OutputProfile,
         folderName: String
     ) {
-        stopProgressPolling()
-        activeTransformer = null
         ConversionTaskStore.markSaving(taskIndex)
         updateNotification("Saving", (ConversionTaskStore.aggregateProgress() * 100).toInt())
 
@@ -3697,28 +3574,6 @@ class ConversionService : Service() {
         }.also { it.start() }
     }
 
-    private fun failureMessageFor(exportException: ExportException): String {
-        return when (exportException.errorCode) {
-            ExportException.ERROR_CODE_MUXING_TIMEOUT ->
-                "Native engine timed out before writing output"
-            ExportException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED ->
-                "Native engine cannot decode this input on this device"
-            ExportException.ERROR_CODE_DECODING_FAILED ->
-                "Native engine failed while decoding this input"
-            ExportException.ERROR_CODE_ENCODER_INIT_FAILED,
-            ExportException.ERROR_CODE_ENCODING_FORMAT_UNSUPPORTED,
-            ExportException.ERROR_CODE_ENCODING_FAILED ->
-                "Native engine cannot encode the selected output"
-            ExportException.ERROR_CODE_MUXING_FAILED ->
-                "Native engine could not write this MP4/M4A output"
-            ExportException.ERROR_CODE_IO_FILE_NOT_FOUND ->
-                "Input file could not be opened"
-            ExportException.ERROR_CODE_IO_NO_PERMISSION ->
-                "Input file permission was lost"
-            else -> "Conversion failed"
-        }
-    }
-
     private fun failCurrentTask(message: String) {
         val input = ConversionTaskStore.inputAt(taskIndex)
         Log.e(
@@ -3727,8 +3582,6 @@ class ConversionService : Service() {
                 "category=${input?.category} target=${input?.targetFormat} " +
                 "displayName=${input?.displayName} mimeType=${input?.mimeType}"
         )
-        stopProgressPolling()
-        activeTransformer = null
         activeFfmpegSession = null
         activeTempFile?.delete()
         activeTempFile = null
@@ -3739,8 +3592,6 @@ class ConversionService : Service() {
     }
 
     private fun finishRun() {
-        stopProgressPolling()
-        activeTransformer = null
         activeFfmpegSession = null
         activeTempFile = null
         ConversionTaskStore.markRunFinished()
@@ -3754,9 +3605,6 @@ class ConversionService : Service() {
 
     private fun cancelRun() {
         handler.removeCallbacksAndMessages(null)
-        stopProgressPolling()
-        activeTransformer?.cancel()
-        activeTransformer = null
         cancelActiveFfmpegSession()
         copyThread?.interrupt()
         activeTempFile?.delete()
@@ -4441,8 +4289,6 @@ class ConversionService : Service() {
         private const val TAG = "ConversionService"
         private const val CHANNEL_ID = "conversion_progress"
         private const val NOTIFICATION_ID = 1001
-        private const val PROGRESS_DELAY_MS = 500L
-        private const val MAX_DELAY_BETWEEN_MUXER_SAMPLES_MS = 60_000L
         private const val COPY_BUFFER_SIZE = 1024 * 1024
         private const val PROGRESS_BEFORE_SAVE = 0.98f
         private const val MAX_IMAGE_DECODE_PIXELS = 64_000_000L
@@ -4470,6 +4316,11 @@ class ConversionService : Service() {
         private const val FFMPEG_WMA_ENCODER = "wmav2"
         private const val FFMPEG_DEFAULT_CRF_H264 = "23"
         private const val FFMPEG_DEFAULT_CRF_H265 = "28"
+        private const val FFMPEG_VIDEO_REVERSE_MAX_DURATION_MS = 60_000L
+        private const val FFMPEG_VIDEO_REVERSE_MAX_BUFFER_BYTES = 256L * 1024L * 1024L
+        private const val FFMPEG_VIDEO_REVERSE_BYTES_PER_PIXEL = 4L
+        private const val FFMPEG_VIDEO_REVERSE_DEFAULT_FPS_ESTIMATE = 60.0
+        private const val FFMPEG_VIDEO_REVERSE_MAX_FPS_ESTIMATE = 120.0
         private const val FFMPEG_VIDEO_GIF_MAX_DURATION_MS = 30_000L
         private const val FFMPEG_VIDEO_GIF_MAX_DURATION_SECONDS = "30"
         private const val FFMPEG_VIDEO_GIF_FRAME_RATE = 30
@@ -4497,8 +4348,6 @@ class ConversionService : Service() {
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         private const val DEFAULT_OUTPUT_DIRECTORY = "ZenConverter"
         private const val URI_SCHEME_FILE = "file"
-        private const val MIN_MIXABLE_CHANNEL_COUNT = 1
-        private const val MAX_MIXABLE_CHANNEL_COUNT = 6
         private const val ICO_TYPE_ICON = 1
         private const val ICO_HEADER_BYTES = 6
         private const val ICO_DIRECTORY_ENTRY_BYTES = 16
@@ -4528,26 +4377,6 @@ class ConversionService : Service() {
             0x1a.toByte(),
             0x0a.toByte()
         )
-        private val VIDEO_INPUT_EXTENSIONS = setOf(
-            "mp4",
-            "m4v",
-            "mov",
-            "mkv",
-            "webm",
-            "avi",
-            "3gp",
-            "3gpp",
-            "3g2",
-            "ts",
-            "mts",
-            "m2ts",
-            "mpg",
-            "mpeg",
-            "vob",
-            "flv",
-            "ogv"
-        )
-        private val COMPATIBILITY_VIDEO_TARGETS = setOf("mp4", "mkv", "mov", "gif")
         private val OFFICE_INPUT_EXTENSIONS = setOf("docx", "pptx", "xlsx")
         private val OFFICE_MIME_TYPES = mapOf(
             MIME_TYPE_DOCX to "docx",

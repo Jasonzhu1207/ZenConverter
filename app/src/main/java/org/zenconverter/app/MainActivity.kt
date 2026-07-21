@@ -36,7 +36,6 @@ import org.zenconverter.app.conversion.ImageExportOptions
 import org.zenconverter.app.conversion.OutputDestination
 import org.zenconverter.app.conversion.PdfExportOptions
 import org.zenconverter.app.conversion.VideoExportOptions
-import org.zenconverter.app.conversion.VideoEncoderSupport
 import org.zenconverter.app.ui.FileCategory
 import org.zenconverter.app.ui.GifFrameModePrompt
 import org.zenconverter.app.ui.GifPdfFramePrompt
@@ -75,8 +74,9 @@ class MainActivity : ComponentActivity() {
     private var pdfProbeRunning = false
     private var pdfBoxReady = false
     private var pdfSelectionGeneration = 0
-    private val supportedVideoMimeTypes = mutableStateOf(
-        setOf(VideoExportOptions.VIDEO_MIME_TYPE_H264)
+    private val supportedVideoMimeTypes = setOf(
+        VideoExportOptions.VIDEO_MIME_TYPE_H264,
+        VideoExportOptions.VIDEO_MIME_TYPE_H265
     )
 
     private val requestNotificationPermission = registerForActivityResult(
@@ -151,7 +151,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             ZenConverterApp(
                 queuedFiles = queuedFiles,
-                supportedVideoMimeTypes = supportedVideoMimeTypes.value,
+                supportedVideoMimeTypes = supportedVideoMimeTypes,
                 outputLocationMode = outputLocationMode.value,
                 outputDirectory = outputDirectory.value,
                 onOutputLocationModeChange = { mode ->
@@ -299,29 +299,6 @@ class MainActivity : ComponentActivity() {
                     ConversionService.cancel(this)
                 }
             )
-        }
-        probeVideoEncoderSupportAsync()
-    }
-
-    private fun probeVideoEncoderSupportAsync() {
-        // Vendor codec enumeration can stall first composition, so keep it off the launch path.
-        Thread {
-            val mimeTypes = runCatching {
-                Thread.sleep(VIDEO_ENCODER_PROBE_DELAY_MILLIS)
-                VideoEncoderSupport.supportedMimeTypes()
-            }.getOrElse { exception ->
-                Log.w(TAG, "Video encoder support probe failed", exception)
-                return@Thread
-            }
-            runOnUiThread {
-                if (!isDestroyed && supportedVideoMimeTypes.value != mimeTypes) {
-                    supportedVideoMimeTypes.value = mimeTypes
-                }
-            }
-        }.apply {
-            name = "ZenVideoEncoderProbe"
-            isDaemon = true
-            start()
         }
     }
 
@@ -789,7 +766,6 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val TAG = "MainActivity"
         private const val PDF_PASSWORD_EXTENSION = 13
-        private const val VIDEO_ENCODER_PROBE_DELAY_MILLIS = 2_000L
     }
 }
 

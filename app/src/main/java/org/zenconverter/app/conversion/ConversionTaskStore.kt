@@ -56,6 +56,7 @@ data class AudioExportOptions(
 )
 
 data class VideoAdvancedOptions(
+    val reverse: Boolean = false,
     val fadeInSeconds: Float? = null,
     val fadeOutSeconds: Float? = null,
     val mirror: VideoMirrorMode = VideoMirrorMode.Off,
@@ -63,7 +64,8 @@ data class VideoAdvancedOptions(
     val aspectRatio: VideoAspectRatioMode = VideoAspectRatioMode.Keep
 ) {
     val hasEnabledEffects: Boolean
-        get() = fadeInSeconds != null ||
+        get() = reverse ||
+            fadeInSeconds != null ||
             fadeOutSeconds != null ||
             mirror != VideoMirrorMode.Off ||
             rotation != VideoRotationMode.None ||
@@ -71,16 +73,20 @@ data class VideoAdvancedOptions(
 }
 
 data class AudioAdvancedOptions(
+    val reverse: Boolean = false,
     val fadeInSeconds: Float? = null,
     val fadeOutSeconds: Float? = null,
     val volume: AudioVolumeMode = AudioVolumeMode.Original,
-    val echo: AudioEchoMode = AudioEchoMode.Off
+    val echo: AudioEchoMode = AudioEchoMode.Off,
+    val noiseReduction: AudioNoiseReductionMode = AudioNoiseReductionMode.Off
 ) {
     val hasEnabledEffects: Boolean
-        get() = fadeInSeconds != null ||
+        get() = reverse ||
+            fadeInSeconds != null ||
             fadeOutSeconds != null ||
             volume != AudioVolumeMode.Original ||
-            echo != AudioEchoMode.Off
+            echo != AudioEchoMode.Off ||
+            noiseReduction != AudioNoiseReductionMode.Off
 }
 
 enum class VideoMirrorMode {
@@ -119,6 +125,12 @@ enum class AudioEchoMode {
     Off,
     Light,
     Room
+}
+
+enum class AudioNoiseReductionMode {
+    Off,
+    Light,
+    Standard
 }
 
 data class ImageExportOptions(

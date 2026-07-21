@@ -13,7 +13,6 @@ data class ConversionRequest(
 enum class ConversionMode {
     Noop,
     FastCopy,
-    Hardware,
     Compatibility,
     SafeCache
 }

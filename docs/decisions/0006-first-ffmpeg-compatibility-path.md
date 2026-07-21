@@ -10,6 +10,8 @@ ADR 0007, not the `ffmpegkit-maintained/ffmpeg` prebuilt Free AAR.
 Decision 0011 later replaces the current FFmpeg video output behavior with true
 video/audio re-encoding; the remux notes below describe only this first
 compatibility milestone.
+Decision 0015 later retires the Media3 Transformer path entirely, so any notes
+below about Media3 fallback or M4A routing are historical only.
 
 ## Context
 

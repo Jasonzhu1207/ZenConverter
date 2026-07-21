@@ -85,6 +85,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.lightColorScheme
@@ -124,6 +125,7 @@ import androidx.compose.ui.window.DialogProperties
 import org.zenconverter.app.conversion.AudioAdvancedOptions
 import org.zenconverter.app.conversion.AudioEchoMode
 import org.zenconverter.app.conversion.AudioExportOptions
+import org.zenconverter.app.conversion.AudioNoiseReductionMode
 import org.zenconverter.app.conversion.AudioVolumeMode
 import org.zenconverter.app.conversion.FileBasicInfo
 import org.zenconverter.app.conversion.GifFrameExportMode
@@ -317,6 +319,7 @@ private sealed interface UpdateDownloadUiState {
 
 private data class VideoAdvancedUiState(
     val expanded: Boolean,
+    val reverse: Boolean,
     val fadeIn: String,
     val fadeOut: String,
     val mirror: String,
@@ -326,10 +329,12 @@ private data class VideoAdvancedUiState(
 
 private data class AudioAdvancedUiState(
     val expanded: Boolean,
+    val reverse: Boolean,
     val fadeIn: String,
     val fadeOut: String,
     val volume: String,
-    val echo: String
+    val echo: String,
+    val noiseReduction: String
 )
 
 private const val ZENCONVERTER_REPOSITORY_URL = "https://github.com/Jasonzhu1207/ZenConverter"
@@ -529,6 +534,15 @@ private val AUDIO_ECHO_OPTIONS = listOf(
     AUDIO_ECHO_ROOM
 )
 
+private const val AUDIO_DENOISE_OFF = "Noise reduction off"
+private const val AUDIO_DENOISE_LIGHT = "Light denoise"
+private const val AUDIO_DENOISE_STANDARD = "Standard denoise"
+private val AUDIO_DENOISE_OPTIONS = listOf(
+    AUDIO_DENOISE_OFF,
+    AUDIO_DENOISE_LIGHT,
+    AUDIO_DENOISE_STANDARD
+)
+
 private const val IMAGE_QUALITY_ORIGINAL = "Original"
 private const val IMAGE_QUALITY_LOSSLESS = "Lossless"
 private const val IMAGE_QUALITY_HIGH = "High"
@@ -710,16 +724,19 @@ private fun ZenConverterContent(
     var audioSampleRate by remember { mutableStateOf(AUDIO_SAMPLE_RATE_ORIGINAL) }
     var audioChannels by remember { mutableStateOf(AUDIO_CHANNELS_ORIGINAL) }
     var videoAdvancedExpanded by remember { mutableStateOf(false) }
+    var videoReverse by remember { mutableStateOf(false) }
     var videoFadeIn by remember { mutableStateOf(ADVANCED_FADE_OFF) }
     var videoFadeOut by remember { mutableStateOf(ADVANCED_FADE_OFF) }
     var videoMirror by remember { mutableStateOf(VIDEO_MIRROR_OFF) }
     var videoRotation by remember { mutableStateOf(VIDEO_ROTATION_NONE) }
     var videoAspectRatio by remember { mutableStateOf(VIDEO_ASPECT_KEEP) }
     var audioAdvancedExpanded by remember { mutableStateOf(false) }
+    var audioReverse by remember { mutableStateOf(false) }
     var audioFadeIn by remember { mutableStateOf(ADVANCED_FADE_OFF) }
     var audioFadeOut by remember { mutableStateOf(ADVANCED_FADE_OFF) }
     var audioVolume by remember { mutableStateOf(AUDIO_VOLUME_100) }
     var audioEcho by remember { mutableStateOf(AUDIO_ECHO_OFF) }
+    var audioNoiseReduction by remember { mutableStateOf(AUDIO_DENOISE_OFF) }
     var imageQuality by remember { mutableStateOf(IMAGE_QUALITY_BALANCED) }
     var pdfPageMode by remember { mutableStateOf(PDF_PAGE_MODE_A4_FIT) }
     var pdfRenderQuality by remember { mutableStateOf(PDF_RENDER_QUALITY_BALANCED) }
@@ -770,6 +787,7 @@ private fun ZenConverterContent(
             videoMimeType = videoCodecToMimeType(videoCodec),
             maxFrameRate = videoFrameRateToCap(videoFrameRate),
             advanced = VideoAdvancedOptions(
+                reverse = videoReverse,
                 fadeInSeconds = fadeDurationSeconds(videoFadeIn),
                 fadeOutSeconds = fadeDurationSeconds(videoFadeOut),
                 mirror = videoMirrorModeFor(videoMirror),
@@ -785,10 +803,12 @@ private fun ZenConverterContent(
             sampleRateHz = audioSampleRateToHz(audioSampleRate),
             channelCount = audioChannelsToCount(audioChannels),
             advanced = AudioAdvancedOptions(
+                reverse = audioReverse,
                 fadeInSeconds = fadeDurationSeconds(audioFadeIn),
                 fadeOutSeconds = fadeDurationSeconds(audioFadeOut),
                 volume = audioVolumeModeFor(audioVolume),
-                echo = audioEchoModeFor(audioEcho)
+                echo = audioEchoModeFor(audioEcho),
+                noiseReduction = audioNoiseReductionModeFor(audioNoiseReduction)
             )
         )
     }
@@ -912,6 +932,7 @@ private fun ZenConverterContent(
                         audioChannels = audioChannels,
                         videoAdvanced = VideoAdvancedUiState(
                             expanded = videoAdvancedExpanded,
+                            reverse = videoReverse,
                             fadeIn = videoFadeIn,
                             fadeOut = videoFadeOut,
                             mirror = videoMirror,
@@ -920,10 +941,12 @@ private fun ZenConverterContent(
                         ),
                         audioAdvanced = AudioAdvancedUiState(
                             expanded = audioAdvancedExpanded,
+                            reverse = audioReverse,
                             fadeIn = audioFadeIn,
                             fadeOut = audioFadeOut,
                             volume = audioVolume,
-                            echo = audioEcho
+                            echo = audioEcho,
+                            noiseReduction = audioNoiseReduction
                         ),
                         audioTarget = audioTarget,
                         imageTarget = imageTarget,
@@ -941,16 +964,19 @@ private fun ZenConverterContent(
                         onAudioSampleRateChange = { audioSampleRate = it },
                         onAudioChannelsChange = { audioChannels = it },
                         onVideoAdvancedExpandedChange = { videoAdvancedExpanded = it },
+                        onVideoReverseChange = { videoReverse = it },
                         onVideoFadeInChange = { videoFadeIn = it },
                         onVideoFadeOutChange = { videoFadeOut = it },
                         onVideoMirrorChange = { videoMirror = it },
                         onVideoRotationChange = { videoRotation = it },
                         onVideoAspectRatioChange = { videoAspectRatio = it },
                         onAudioAdvancedExpandedChange = { audioAdvancedExpanded = it },
+                        onAudioReverseChange = { audioReverse = it },
                         onAudioFadeInChange = { audioFadeIn = it },
                         onAudioFadeOutChange = { audioFadeOut = it },
                         onAudioVolumeChange = { audioVolume = it },
                         onAudioEchoChange = { audioEcho = it },
+                        onAudioNoiseReductionChange = { audioNoiseReduction = it },
                         onImageQualityChange = { imageQuality = it },
                         onPdfPageModeChange = { pdfPageMode = it },
                         onPdfRenderQualityChange = { pdfRenderQuality = it }
@@ -2246,16 +2272,19 @@ private fun EncodingPanel(
     onAudioSampleRateChange: (String) -> Unit,
     onAudioChannelsChange: (String) -> Unit,
     onVideoAdvancedExpandedChange: (Boolean) -> Unit,
+    onVideoReverseChange: (Boolean) -> Unit,
     onVideoFadeInChange: (String) -> Unit,
     onVideoFadeOutChange: (String) -> Unit,
     onVideoMirrorChange: (String) -> Unit,
     onVideoRotationChange: (String) -> Unit,
     onVideoAspectRatioChange: (String) -> Unit,
     onAudioAdvancedExpandedChange: (Boolean) -> Unit,
+    onAudioReverseChange: (Boolean) -> Unit,
     onAudioFadeInChange: (String) -> Unit,
     onAudioFadeOutChange: (String) -> Unit,
     onAudioVolumeChange: (String) -> Unit,
     onAudioEchoChange: (String) -> Unit,
+    onAudioNoiseReductionChange: (String) -> Unit,
     onImageQualityChange: (String) -> Unit,
     onPdfPageModeChange: (String) -> Unit,
     onPdfRenderQualityChange: (String) -> Unit
@@ -2301,16 +2330,19 @@ private fun EncodingPanel(
                 onAudioSampleRateChange = onAudioSampleRateChange,
                 onAudioChannelsChange = onAudioChannelsChange,
                 onVideoAdvancedExpandedChange = onVideoAdvancedExpandedChange,
+                onVideoReverseChange = onVideoReverseChange,
                 onVideoFadeInChange = onVideoFadeInChange,
                 onVideoFadeOutChange = onVideoFadeOutChange,
                 onVideoMirrorChange = onVideoMirrorChange,
                 onVideoRotationChange = onVideoRotationChange,
                 onVideoAspectRatioChange = onVideoAspectRatioChange,
                 onAudioAdvancedExpandedChange = onAudioAdvancedExpandedChange,
+                onAudioReverseChange = onAudioReverseChange,
                 onAudioFadeInChange = onAudioFadeInChange,
                 onAudioFadeOutChange = onAudioFadeOutChange,
                 onAudioVolumeChange = onAudioVolumeChange,
-                onAudioEchoChange = onAudioEchoChange
+                onAudioEchoChange = onAudioEchoChange,
+                onAudioNoiseReductionChange = onAudioNoiseReductionChange
             )
             FileCategory.Audio -> AudioOptions(
                 texts = texts,
@@ -2325,10 +2357,12 @@ private fun EncodingPanel(
                 onSampleRateChange = onAudioSampleRateChange,
                 onChannelsChange = onAudioChannelsChange,
                 onAdvancedExpandedChange = onAudioAdvancedExpandedChange,
+                onReverseChange = onAudioReverseChange,
                 onFadeInChange = onAudioFadeInChange,
                 onFadeOutChange = onAudioFadeOutChange,
                 onVolumeChange = onAudioVolumeChange,
-                onEchoChange = onAudioEchoChange
+                onEchoChange = onAudioEchoChange,
+                onNoiseReductionChange = onAudioNoiseReductionChange
             )
             FileCategory.Image -> ImageOptions(
                 texts = texts,
@@ -2382,16 +2416,19 @@ private fun VideoOptions(
     onAudioSampleRateChange: (String) -> Unit,
     onAudioChannelsChange: (String) -> Unit,
     onVideoAdvancedExpandedChange: (Boolean) -> Unit,
+    onVideoReverseChange: (Boolean) -> Unit,
     onVideoFadeInChange: (String) -> Unit,
     onVideoFadeOutChange: (String) -> Unit,
     onVideoMirrorChange: (String) -> Unit,
     onVideoRotationChange: (String) -> Unit,
     onVideoAspectRatioChange: (String) -> Unit,
     onAudioAdvancedExpandedChange: (Boolean) -> Unit,
+    onAudioReverseChange: (Boolean) -> Unit,
     onAudioFadeInChange: (String) -> Unit,
     onAudioFadeOutChange: (String) -> Unit,
     onAudioVolumeChange: (String) -> Unit,
-    onAudioEchoChange: (String) -> Unit
+    onAudioEchoChange: (String) -> Unit,
+    onAudioNoiseReductionChange: (String) -> Unit
 ) {
     val isGifTarget = targetFormat.extension.equals("gif", ignoreCase = true)
     OptionGrid {
@@ -2472,6 +2509,7 @@ private fun VideoOptions(
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
                 onExpandedChange = onVideoAdvancedExpandedChange,
+                onReverseChange = onVideoReverseChange,
                 onFadeInChange = onVideoFadeInChange,
                 onFadeOutChange = onVideoFadeOutChange,
                 onMirrorChange = onVideoMirrorChange,
@@ -2484,10 +2522,12 @@ private fun VideoOptions(
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
                 onExpandedChange = onAudioAdvancedExpandedChange,
+                onReverseChange = onAudioReverseChange,
                 onFadeInChange = onAudioFadeInChange,
                 onFadeOutChange = onAudioFadeOutChange,
                 onVolumeChange = onAudioVolumeChange,
-                onEchoChange = onAudioEchoChange
+                onEchoChange = onAudioEchoChange,
+                onNoiseReductionChange = onAudioNoiseReductionChange
             )
         }
     }
@@ -2507,10 +2547,12 @@ private fun AudioOptions(
     onSampleRateChange: (String) -> Unit,
     onChannelsChange: (String) -> Unit,
     onAdvancedExpandedChange: (Boolean) -> Unit,
+    onReverseChange: (Boolean) -> Unit,
     onFadeInChange: (String) -> Unit,
     onFadeOutChange: (String) -> Unit,
     onVolumeChange: (String) -> Unit,
-    onEchoChange: (String) -> Unit
+    onEchoChange: (String) -> Unit,
+    onNoiseReductionChange: (String) -> Unit
 ) {
     OptionGrid {
         if (audioSupportsBitrateOption(targetFormat)) {
@@ -2557,10 +2599,12 @@ private fun AudioOptions(
             openMenuId = openMenuId,
             onOpenMenuChange = onOpenMenuChange,
             onExpandedChange = onAdvancedExpandedChange,
+            onReverseChange = onReverseChange,
             onFadeInChange = onFadeInChange,
             onFadeOutChange = onFadeOutChange,
             onVolumeChange = onVolumeChange,
-            onEchoChange = onEchoChange
+            onEchoChange = onEchoChange,
+            onNoiseReductionChange = onNoiseReductionChange
         )
     }
 }
@@ -2572,6 +2616,7 @@ private fun VideoAdvancedOptionsPanel(
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onExpandedChange: (Boolean) -> Unit,
+    onReverseChange: (Boolean) -> Unit,
     onFadeInChange: (String) -> Unit,
     onFadeOutChange: (String) -> Unit,
     onMirrorChange: (String) -> Unit,
@@ -2584,6 +2629,11 @@ private fun VideoAdvancedOptionsPanel(
         expanded = state.expanded,
         onExpandedChange = onExpandedChange
     ) {
+        AdvancedSwitchRow(
+            label = texts.reverseLabel(),
+            checked = state.reverse,
+            onCheckedChange = onReverseChange
+        )
         OptionDropdown(
             "video-advanced-fade-in",
             texts.fadeInLabel(),
@@ -2644,10 +2694,12 @@ private fun AudioAdvancedOptionsPanel(
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onExpandedChange: (Boolean) -> Unit,
+    onReverseChange: (Boolean) -> Unit,
     onFadeInChange: (String) -> Unit,
     onFadeOutChange: (String) -> Unit,
     onVolumeChange: (String) -> Unit,
-    onEchoChange: (String) -> Unit
+    onEchoChange: (String) -> Unit,
+    onNoiseReductionChange: (String) -> Unit
 ) {
     AdvancedOptionsPanel(
         title = texts.audioAdvancedTitle(),
@@ -2655,6 +2707,11 @@ private fun AudioAdvancedOptionsPanel(
         expanded = state.expanded,
         onExpandedChange = onExpandedChange
     ) {
+        AdvancedSwitchRow(
+            label = texts.reverseLabel(),
+            checked = state.reverse,
+            onCheckedChange = onReverseChange
+        )
         OptionDropdown(
             "audio-advanced-fade-in",
             texts.fadeInLabel(),
@@ -2694,6 +2751,53 @@ private fun AudioAdvancedOptionsPanel(
             openMenuId,
             onOpenMenuChange,
             onEchoChange
+        )
+        OptionDropdown(
+            "audio-advanced-denoise",
+            texts.noiseReductionLabel(),
+            state.noiseReduction,
+            AUDIO_DENOISE_OPTIONS,
+            texts,
+            openMenuId,
+            onOpenMenuChange,
+            onNoiseReductionChange
+        )
+    }
+}
+
+@Composable
+private fun AdvancedSwitchRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White.copy(alpha = 0.72f))
+            .border(
+                1.dp,
+                MaterialTheme.colorScheme.primary.copy(alpha = if (checked) 0.22f else 0.08f),
+                RoundedCornerShape(8.dp)
+            )
+            .clickable(role = Role.Switch) { onCheckedChange(!checked) }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Switch(
+            checked = checked,
+            onCheckedChange = null
         )
     }
 }
@@ -3651,6 +3755,14 @@ private fun audioEchoModeFor(value: String): AudioEchoMode {
     }
 }
 
+private fun audioNoiseReductionModeFor(value: String): AudioNoiseReductionMode {
+    return when (value) {
+        AUDIO_DENOISE_LIGHT -> AudioNoiseReductionMode.Light
+        AUDIO_DENOISE_STANDARD -> AudioNoiseReductionMode.Standard
+        else -> AudioNoiseReductionMode.Off
+    }
+}
+
 private fun audioSupportsBitrateOption(targetFormat: TargetFormat): Boolean {
     return targetFormat.extension.lowercase(Locale.US) !in AUDIO_LOSSLESS_OUTPUT_EXTENSIONS
 }
@@ -3771,7 +3883,6 @@ private data class UiText(
     val defaultOutputNote: String,
     val customOutputLocation: String,
     val storagePermissionRequired: String,
-    val videoEncoderUnsupported: String,
     val folderPermissionSaved: String,
     val folderSelectedForSession: String,
     val start: String,
@@ -3864,9 +3975,9 @@ private data class UiText(
 
     fun videoAdvancedNote(): String {
         return when (this) {
-            englishText -> "Fade, mirror, rotate, and frame shape"
-            simplifiedChineseText -> "淡入淡出、镜像、旋转、画幅"
-            else -> "淡入淡出、鏡像、旋轉、畫幅"
+            englishText -> "Short reverse, fade, mirror, rotate, and frame shape"
+            simplifiedChineseText -> "短视频倒放、淡入淡出、镜像、旋转、画幅"
+            else -> "短影片倒放、淡入淡出、鏡像、旋轉、畫幅"
         }
     }
 
@@ -3880,9 +3991,17 @@ private data class UiText(
 
     fun audioAdvancedNote(): String {
         return when (this) {
-            englishText -> "Fade, volume, mute, and echo"
-            simplifiedChineseText -> "淡入淡出、音量、静音、回音"
-            else -> "淡入淡出、音量、靜音、回音"
+            englishText -> "Reverse, denoise, fade, volume, mute, and echo"
+            simplifiedChineseText -> "倒放、降噪、淡入淡出、音量、静音、回音"
+            else -> "倒放、降噪、淡入淡出、音量、靜音、回音"
+        }
+    }
+
+    fun reverseLabel(): String {
+        return when (this) {
+            englishText -> "Reverse playback"
+            simplifiedChineseText -> "倒放"
+            else -> "倒放"
         }
     }
 
@@ -3939,6 +4058,14 @@ private data class UiText(
             englishText -> "Echo"
             simplifiedChineseText -> "回音"
             else -> "回音"
+        }
+    }
+
+    fun noiseReductionLabel(): String {
+        return when (this) {
+            englishText -> "Noise reduction"
+            simplifiedChineseText -> "声音降噪"
+            else -> "聲音降噪"
         }
     }
 
@@ -4129,32 +4256,6 @@ private data class UiText(
                 else -> "無法讀取這個 PDF"
             }
             "Default output needs storage permission on this Android version" -> storagePermissionRequired
-            "Selected video encoder is not supported on this device" -> videoEncoderUnsupported
-            "Native engine timed out before writing output" -> when (this) {
-                englishText -> "Native engine timed out before writing output; this file may need compatibility mode"
-                simplifiedChineseText -> "原生引擎写出前超时，这个文件可能需要兼容模式"
-                else -> "原生引擎寫出前逾時，這個檔案可能需要相容模式"
-            }
-            "Native engine cannot decode this input on this device" -> when (this) {
-                englishText -> "Native engine cannot decode this input on this device"
-                simplifiedChineseText -> "当前设备的原生引擎无法解码这个输入"
-                else -> "目前裝置的原生引擎無法解碼這個輸入"
-            }
-            "Native engine failed while decoding this input" -> when (this) {
-                englishText -> "Native engine failed while decoding this input"
-                simplifiedChineseText -> "原生引擎解码这个输入时失败"
-                else -> "原生引擎解碼這個輸入時失敗"
-            }
-            "Native engine cannot encode the selected output" -> when (this) {
-                englishText -> "Native engine cannot encode the selected output"
-                simplifiedChineseText -> "原生引擎无法编码所选输出"
-                else -> "原生引擎無法編碼所選輸出"
-            }
-            "Native engine could not write this MP4/M4A output" -> when (this) {
-                englishText -> "Native engine could not write this MP4/M4A output"
-                simplifiedChineseText -> "原生引擎无法写出这个 MP4/M4A 输出"
-                else -> "原生引擎無法寫出這個 MP4/M4A 輸出"
-            }
             "Input file could not be opened" -> when (this) {
                 englishText -> "Input file could not be opened"
                 simplifiedChineseText -> "无法打开输入文件"
@@ -4164,11 +4265,6 @@ private data class UiText(
                 englishText -> "Input file permission was lost"
                 simplifiedChineseText -> "输入文件权限已失效"
                 else -> "輸入檔案權限已失效"
-            }
-            "Could not start native export" -> when (this) {
-                englishText -> "Could not start native export"
-                simplifiedChineseText -> "无法启动原生导出"
-                else -> "無法啟動原生匯出"
             }
             "Could not save output file" -> when (this) {
                 englishText -> "Could not save output file"
@@ -4264,6 +4360,41 @@ private data class UiText(
                 englishText -> "Compatibility engine needs duration metadata for fade out"
                 simplifiedChineseText -> "淡出需要读取文件时长"
                 else -> "淡出需要讀取檔案時長"
+            }
+            "Compatibility engine needs duration metadata for reverse playback" -> when (this) {
+                englishText -> "Compatibility engine needs duration metadata for reverse playback"
+                simplifiedChineseText -> "倒放需要读取文件时长"
+                else -> "倒放需要讀取檔案時長"
+            }
+            "Compatibility engine supports reverse video up to 60 seconds" -> when (this) {
+                englishText -> "Reverse video supports files up to 60 seconds"
+                simplifiedChineseText -> "视频倒放暂时只支持 60 秒以内"
+                else -> "影片倒放暫時只支援 60 秒以內"
+            }
+            "Compatibility engine needs video size metadata for reverse playback" -> when (this) {
+                englishText -> "Reverse video needs readable video size metadata"
+                simplifiedChineseText -> "视频倒放需要读取画面尺寸"
+                else -> "影片倒放需要讀取畫面尺寸"
+            }
+            "Reverse video is only safe for very short low-resolution clips" -> when (this) {
+                englishText -> "Reverse video only supports very short low-resolution clips"
+                simplifiedChineseText -> "视频倒放只适合很短的低分辨率片段"
+                else -> "影片倒放只適合很短的低解析度片段"
+            }
+            "Compatibility engine needs reverse filters" -> when (this) {
+                englishText -> "Compatibility engine needs reverse filters"
+                simplifiedChineseText -> "当前兼容包缺少倒放滤镜"
+                else -> "目前相容包缺少倒放濾鏡"
+            }
+            "Compatibility engine needs the audio denoise filter" -> when (this) {
+                englishText -> "Compatibility engine needs the audio denoise filter"
+                simplifiedChineseText -> "当前兼容包缺少声音降噪滤镜"
+                else -> "目前相容包缺少聲音降噪濾鏡"
+            }
+            "Advanced video settings produced an unsupported frame size" -> when (this) {
+                englishText -> "Advanced video settings produced an unsupported frame size"
+                simplifiedChineseText -> "高级画面设置生成了不支持的尺寸"
+                else -> "進階畫面設定產生了不支援的尺寸"
             }
             "Compatibility engine is missing an advanced filter" -> when (this) {
                 englishText -> "Compatibility engine is missing an advanced filter"
@@ -4532,11 +4663,6 @@ private data class UiText(
                 simplifiedChineseText -> "文档"
                 else -> "文件"
             }
-            "Hardware" -> when (this) {
-                englishText -> "Hardware accelerated"
-                simplifiedChineseText -> "硬件加速"
-                else -> "硬體加速"
-            }
             "Compatibility" -> when (this) {
                 englishText -> "Multi-format"
                 simplifiedChineseText -> "多格式兼容"
@@ -4719,6 +4845,21 @@ private data class UiText(
                 englishText -> "Room"
                 simplifiedChineseText -> "房间"
                 else -> "房間"
+            }
+            AUDIO_DENOISE_OFF -> when (this) {
+                englishText -> "Off"
+                simplifiedChineseText -> "关闭"
+                else -> "關閉"
+            }
+            AUDIO_DENOISE_LIGHT -> when (this) {
+                englishText -> "Light"
+                simplifiedChineseText -> "轻度"
+                else -> "輕度"
+            }
+            AUDIO_DENOISE_STANDARD -> when (this) {
+                englishText -> "Standard"
+                simplifiedChineseText -> "标准"
+                else -> "標準"
             }
             "Auto bitrate" -> when (this) {
                 englishText -> "Auto (recommended)"
@@ -4995,7 +5136,6 @@ private val englishText = UiText(
     defaultOutputNote = "System folders / ZenConverter",
     customOutputLocation = "Custom folder",
     storagePermissionRequired = "Allow storage permission or choose a folder",
-    videoEncoderUnsupported = "This device does not support the selected video encoder",
     folderPermissionSaved = "Folder permission saved",
     folderSelectedForSession = "Folder selected for this session",
     start = "Start",
@@ -5081,7 +5221,6 @@ private val simplifiedChineseText = UiText(
     defaultOutputNote = "系统文件夹 / ZenConverter",
     customOutputLocation = "自定义文件夹",
     storagePermissionRequired = "请允许存储权限，或改选自定义文件夹",
-    videoEncoderUnsupported = "当前设备不支持所选视频编码",
     folderPermissionSaved = "文件夹权限已保存",
     folderSelectedForSession = "本次已选择文件夹",
     start = "开始",
@@ -5167,7 +5306,6 @@ private val traditionalChineseText = UiText(
     defaultOutputNote = "系統資料夾 / ZenConverter",
     customOutputLocation = "自訂資料夾",
     storagePermissionRequired = "請允許儲存權限，或改選自訂資料夾",
-    videoEncoderUnsupported = "目前裝置不支援所選影片編碼",
     folderPermissionSaved = "資料夾權限已儲存",
     folderSelectedForSession = "本次已選擇資料夾",
     start = "開始",

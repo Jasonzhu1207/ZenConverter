@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted.
+Superseded by [0015 Retire Media3 Transformer Path](0015-retire-media3-transformer-path.md)
+for active media export behavior.
 
 Follow-up: Decision 0006 adds the first FFmpeg compatibility path after MKV
 testing hit the native Media3 muxing boundary.
