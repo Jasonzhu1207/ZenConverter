@@ -407,3 +407,20 @@ groups:
         engine: office2pdf-native/pdfbox-android
         status: experimental
         note: "Converts XLSX to an intermediate PDF, then writes lightweight Markdown with a title and per-page headings. Inherits the Office path's 64 MiB input cap and PDF text-layer limits; no high-fidelity spreadsheet structure reconstruction."
+  metadata:
+    planned:
+      - from: jpg/jpeg/jfif/jpe
+        to: inspect/clean/restore-metadata
+        engine: native-jpeg-segment
+        status: experimental
+        note: "Separate privacy tool. Inspects common EXIF values and removable JPEG metadata segments, then can remove EXIF/XMP, IPTC/Photoshop, and comment segments in place without re-encoding image pixels. JFIF, ICC, and Adobe display-related segments are preserved. Removed metadata is stored in app-private backup data and can be restored only when the selected image's metadata-stripped core SHA-256 and dimensions match."
+      - from: png/webp/heic/heif/gif/ico
+        to: inspect-metadata
+        engine: native-basic-info
+        status: experimental
+        note: "Basic image information may be displayed where Android platform APIs expose it. Lossless metadata cleanup is not connected for these formats in this milestone."
+      - from: video
+        to: inspect-metadata
+        engine: media-metadata-retriever
+        status: experimental
+        note: "Displays basic video metadata such as duration, size, resolution, frame rate, and container bitrate where Android exposes it. Video metadata cleanup is intentionally not connected."

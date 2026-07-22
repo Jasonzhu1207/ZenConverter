@@ -5,6 +5,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.media.ExifInterface
 import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
@@ -69,6 +70,7 @@ import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PictureAsPdf
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Videocam
@@ -140,6 +142,12 @@ import org.zenconverter.app.conversion.VideoAspectRatioMode
 import org.zenconverter.app.conversion.VideoExportOptions
 import org.zenconverter.app.conversion.VideoMirrorMode
 import org.zenconverter.app.conversion.VideoRotationMode
+import org.zenconverter.app.metadata.MetadataBackupInfo
+import org.zenconverter.app.metadata.MetadataInspection
+import org.zenconverter.app.metadata.MetadataMessageKey
+import org.zenconverter.app.metadata.MetadataStatusMessage
+import org.zenconverter.app.metadata.MetadataTargetKind
+import org.zenconverter.app.metadata.MetadataToolState
 import org.zenconverter.app.updates.ApkInstaller
 import org.zenconverter.app.updates.ApkOpenResult
 import org.zenconverter.app.updates.ApkUpdateDownloader
@@ -155,6 +163,8 @@ import org.zenconverter.app.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import java.text.DateFormat
+import java.util.Date
 import java.util.Locale
 
 data class TargetFormat(
@@ -592,11 +602,16 @@ fun ZenConverterApp(
     conversionTasks: List<TaskProgress>,
     conversionSummary: String?,
     isConversionRunning: Boolean,
+    metadataToolState: MetadataToolState,
     onOutputLocationModeChange: (OutputLocationMode) -> Unit,
     onPickFiles: (FileCategory, TargetFormat) -> Unit,
     onPickOutputDirectory: () -> Unit,
     onRemoveFile: (String) -> Unit,
     onClearQueue: () -> Unit,
+    onPickMetadataImage: () -> Unit,
+    onPickMetadataVideo: () -> Unit,
+    onCleanMetadata: () -> Unit,
+    onRestoreMetadata: (String) -> Unit,
     imagePdfMergePrompt: ImagePdfMergePrompt?,
     gifFrameModePrompt: GifFrameModePrompt?,
     gifPdfFramePrompt: GifPdfFramePrompt?,
@@ -647,6 +662,7 @@ fun ZenConverterApp(
                 conversionTasks = conversionTasks,
                 conversionSummary = conversionSummary,
                 isConversionRunning = isConversionRunning,
+                metadataToolState = metadataToolState,
                 onAccentSelected = { accent = it },
                 onLanguageSelected = { languageOption = it },
                 onOutputLocationModeChange = onOutputLocationModeChange,
@@ -654,6 +670,10 @@ fun ZenConverterApp(
                 onPickOutputDirectory = onPickOutputDirectory,
                 onRemoveFile = onRemoveFile,
                 onClearQueue = onClearQueue,
+                onPickMetadataImage = onPickMetadataImage,
+                onPickMetadataVideo = onPickMetadataVideo,
+                onCleanMetadata = onCleanMetadata,
+                onRestoreMetadata = onRestoreMetadata,
                 onStartConversion = onStartConversion,
                 onCancelConversion = onCancelConversion
             )
@@ -716,6 +736,7 @@ private fun ZenConverterContent(
     conversionTasks: List<TaskProgress>,
     conversionSummary: String?,
     isConversionRunning: Boolean,
+    metadataToolState: MetadataToolState,
     onAccentSelected: (AccentColorOption) -> Unit,
     onLanguageSelected: (LanguageOption) -> Unit,
     onOutputLocationModeChange: (OutputLocationMode) -> Unit,
@@ -723,11 +744,16 @@ private fun ZenConverterContent(
     onPickOutputDirectory: () -> Unit,
     onRemoveFile: (String) -> Unit,
     onClearQueue: () -> Unit,
+    onPickMetadataImage: () -> Unit,
+    onPickMetadataVideo: () -> Unit,
+    onCleanMetadata: () -> Unit,
+    onRestoreMetadata: (String) -> Unit,
     onStartConversion: (VideoExportOptions, AudioExportOptions, ImageExportOptions, PdfExportOptions) -> Unit,
     onCancelConversion: () -> Unit
 ) {
     var showSettings by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
+    var showMetadataSecurity by remember { mutableStateOf(false) }
     var showSupport by remember { mutableStateOf(false) }
     var activeCategory by remember { mutableStateOf(FileCategory.Video) }
     var videoTarget by remember { mutableStateOf(FileCategory.Video.formats.first()) }
@@ -868,16 +894,25 @@ private fun ZenConverterContent(
                     Column {
                         Header(
                             texts = texts,
+                            showMetadataSecurity = showMetadataSecurity,
                             showSettings = showSettings,
                             showAbout = showAbout,
+                            onToggleMetadataSecurity = {
+                                openMenuId = null
+                                showSettings = false
+                                showAbout = false
+                                showMetadataSecurity = !showMetadataSecurity
+                            },
                             onToggleSettings = {
                                 openMenuId = null
                                 showAbout = false
+                                showMetadataSecurity = false
                                 showSettings = !showSettings
                             },
                             onToggleAbout = {
                                 openMenuId = null
                                 showSettings = false
+                                showMetadataSecurity = false
                                 showAbout = !showAbout
                             }
                         )
@@ -922,142 +957,155 @@ private fun ZenConverterContent(
                     }
                 }
 
-                item(key = "conversion-lanes") {
-                    ConversionLanes(
-                        texts = texts,
-                        activeCategory = activeCategory,
-                        targetFor = ::targetFor,
-                        onTargetChange = ::setTarget,
-                        onActivate = { activeCategory = it },
-                        openMenuId = openMenuId,
-                        onOpenMenuChange = { openMenuId = it },
-                        onPickFiles = { category, target ->
-                            activeCategory = category
-                            openMenuId = null
-                            queueMessage = null
-                            onPickFiles(category, target)
-                        }
-                    )
-                }
-
-                item(key = "encoding-panel") {
-                    EncodingPanel(
-                        texts = texts,
-                        category = activeCategory,
-                        videoResolution = videoResolution,
-                        videoBitrate = videoBitrate,
-                        videoCodec = videoCodec,
-                        videoCodecOptions = videoCodecOptionsFor(supportedVideoMimeTypes),
-                        videoFrameRate = videoFrameRate,
-                        videoTarget = videoTarget,
-                        audioBitrate = audioBitrate,
-                        audioSampleRate = audioSampleRate,
-                        audioChannels = audioChannels,
-                        videoAdvanced = VideoAdvancedUiState(
-                            expanded = videoAdvancedExpanded,
-                            reverse = videoReverse,
-                            fadeIn = videoFadeIn,
-                            fadeOut = videoFadeOut,
-                            mirror = videoMirror,
-                            rotation = videoRotation,
-                            aspectRatio = videoAspectRatio
-                        ),
-                        audioAdvanced = AudioAdvancedUiState(
-                            expanded = audioAdvancedExpanded,
-                            reverse = audioReverse,
-                            fadeIn = audioFadeIn,
-                            fadeOut = audioFadeOut,
-                            volume = audioVolume,
-                            echo = audioEcho,
-                            noiseReduction = audioNoiseReduction
-                        ),
-                        audioTarget = audioTarget,
-                        imageTarget = imageTarget,
-                        pdfTarget = pdfTarget,
-                        documentTarget = documentTarget,
-                        imageQuality = imageQuality,
-                        pdfPageMode = pdfPageMode,
-                        pdfRenderQuality = pdfRenderQuality,
-                        openMenuId = openMenuId,
-                        onOpenMenuChange = { openMenuId = it },
-                        onVideoResolutionChange = { videoResolution = it },
-                        onVideoBitrateChange = { videoBitrate = it },
-                        onVideoCodecChange = { videoCodec = it },
-                        onVideoFrameRateChange = { videoFrameRate = it },
-                        onAudioBitrateChange = { audioBitrate = it },
-                        onAudioSampleRateChange = { audioSampleRate = it },
-                        onAudioChannelsChange = { audioChannels = it },
-                        onVideoAdvancedExpandedChange = { videoAdvancedExpanded = it },
-                        onVideoReverseChange = { videoReverse = it },
-                        onVideoFadeInChange = { videoFadeIn = it },
-                        onVideoFadeOutChange = { videoFadeOut = it },
-                        onVideoMirrorChange = { videoMirror = it },
-                        onVideoRotationChange = { videoRotation = it },
-                        onVideoAspectRatioChange = { videoAspectRatio = it },
-                        onAudioAdvancedExpandedChange = { audioAdvancedExpanded = it },
-                        onAudioReverseChange = { audioReverse = it },
-                        onAudioFadeInChange = { audioFadeIn = it },
-                        onAudioFadeOutChange = { audioFadeOut = it },
-                        onAudioVolumeChange = { audioVolume = it },
-                        onAudioEchoChange = { audioEcho = it },
-                        onAudioNoiseReductionChange = { audioNoiseReduction = it },
-                        onImageQualityChange = { imageQuality = it },
-                        onPdfPageModeChange = { pdfPageMode = it },
-                        onPdfRenderQualityChange = { pdfRenderQuality = it }
-                    )
-                }
-
-                item(key = "output-panel") {
-                    OutputPanel(
-                        texts = texts,
-                        outputLocationMode = outputLocationMode,
-                        outputDirectory = outputDirectory,
-                        onOutputLocationModeChange = onOutputLocationModeChange,
-                        onPickOutputDirectory = onPickOutputDirectory
-                    )
-                }
-
-                item(key = "queue-actions") {
-                    QueueActions(
-                        texts = texts,
-                        hasFiles = queuedFiles.isNotEmpty(),
-                        isRunning = isConversionRunning,
-                        onStart = {
-                            openMenuId = null
-                            queueMessage = null
-                            onStartConversion(
-                                currentVideoOptions(),
-                                currentAudioOptions(),
-                                currentImageOptions(),
-                                currentPdfOptions()
-                            )
-                        },
-                        onCancel = {
-                            openMenuId = null
-                            queueMessage = null
-                            if (isConversionRunning) {
-                                onCancelConversion()
-                            } else {
-                                onClearQueue()
-                            }
-                        }
-                    )
-                }
-
-                (conversionSummary ?: queueMessage)?.let { message ->
-                    item(key = "status-line") {
-                        StatusLine(text = texts.summaryMessage(message))
+                if (showMetadataSecurity) {
+                    item(key = "metadata-security") {
+                        MetadataSecurityPanel(
+                            texts = texts,
+                            state = metadataToolState,
+                            onPickImage = onPickMetadataImage,
+                            onPickVideo = onPickMetadataVideo,
+                            onClean = onCleanMetadata,
+                            onRestore = onRestoreMetadata
+                        )
                     }
-                }
+                } else {
+                    item(key = "conversion-lanes") {
+                        ConversionLanes(
+                            texts = texts,
+                            activeCategory = activeCategory,
+                            targetFor = ::targetFor,
+                            onTargetChange = ::setTarget,
+                            onActivate = { activeCategory = it },
+                            openMenuId = openMenuId,
+                            onOpenMenuChange = { openMenuId = it },
+                            onPickFiles = { category, target ->
+                                activeCategory = category
+                                openMenuId = null
+                                queueMessage = null
+                                onPickFiles(category, target)
+                            }
+                        )
+                    }
 
-                item(key = "file-queue") {
-                    FileQueue(
-                        texts = texts,
-                        files = queuedFiles,
-                        taskProgress = conversionTasks.associateBy { it.fileId },
-                        canRemove = !isConversionRunning,
-                        onRemoveFile = onRemoveFile
-                    )
+                    item(key = "encoding-panel") {
+                        EncodingPanel(
+                            texts = texts,
+                            category = activeCategory,
+                            videoResolution = videoResolution,
+                            videoBitrate = videoBitrate,
+                            videoCodec = videoCodec,
+                            videoCodecOptions = videoCodecOptionsFor(supportedVideoMimeTypes),
+                            videoFrameRate = videoFrameRate,
+                            videoTarget = videoTarget,
+                            audioBitrate = audioBitrate,
+                            audioSampleRate = audioSampleRate,
+                            audioChannels = audioChannels,
+                            videoAdvanced = VideoAdvancedUiState(
+                                expanded = videoAdvancedExpanded,
+                                reverse = videoReverse,
+                                fadeIn = videoFadeIn,
+                                fadeOut = videoFadeOut,
+                                mirror = videoMirror,
+                                rotation = videoRotation,
+                                aspectRatio = videoAspectRatio
+                            ),
+                            audioAdvanced = AudioAdvancedUiState(
+                                expanded = audioAdvancedExpanded,
+                                reverse = audioReverse,
+                                fadeIn = audioFadeIn,
+                                fadeOut = audioFadeOut,
+                                volume = audioVolume,
+                                echo = audioEcho,
+                                noiseReduction = audioNoiseReduction
+                            ),
+                            audioTarget = audioTarget,
+                            imageTarget = imageTarget,
+                            pdfTarget = pdfTarget,
+                            documentTarget = documentTarget,
+                            imageQuality = imageQuality,
+                            pdfPageMode = pdfPageMode,
+                            pdfRenderQuality = pdfRenderQuality,
+                            openMenuId = openMenuId,
+                            onOpenMenuChange = { openMenuId = it },
+                            onVideoResolutionChange = { videoResolution = it },
+                            onVideoBitrateChange = { videoBitrate = it },
+                            onVideoCodecChange = { videoCodec = it },
+                            onVideoFrameRateChange = { videoFrameRate = it },
+                            onAudioBitrateChange = { audioBitrate = it },
+                            onAudioSampleRateChange = { audioSampleRate = it },
+                            onAudioChannelsChange = { audioChannels = it },
+                            onVideoAdvancedExpandedChange = { videoAdvancedExpanded = it },
+                            onVideoReverseChange = { videoReverse = it },
+                            onVideoFadeInChange = { videoFadeIn = it },
+                            onVideoFadeOutChange = { videoFadeOut = it },
+                            onVideoMirrorChange = { videoMirror = it },
+                            onVideoRotationChange = { videoRotation = it },
+                            onVideoAspectRatioChange = { videoAspectRatio = it },
+                            onAudioAdvancedExpandedChange = { audioAdvancedExpanded = it },
+                            onAudioReverseChange = { audioReverse = it },
+                            onAudioFadeInChange = { audioFadeIn = it },
+                            onAudioFadeOutChange = { audioFadeOut = it },
+                            onAudioVolumeChange = { audioVolume = it },
+                            onAudioEchoChange = { audioEcho = it },
+                            onAudioNoiseReductionChange = { audioNoiseReduction = it },
+                            onImageQualityChange = { imageQuality = it },
+                            onPdfPageModeChange = { pdfPageMode = it },
+                            onPdfRenderQualityChange = { pdfRenderQuality = it }
+                        )
+                    }
+
+                    item(key = "output-panel") {
+                        OutputPanel(
+                            texts = texts,
+                            outputLocationMode = outputLocationMode,
+                            outputDirectory = outputDirectory,
+                            onOutputLocationModeChange = onOutputLocationModeChange,
+                            onPickOutputDirectory = onPickOutputDirectory
+                        )
+                    }
+
+                    item(key = "queue-actions") {
+                        QueueActions(
+                            texts = texts,
+                            hasFiles = queuedFiles.isNotEmpty(),
+                            isRunning = isConversionRunning,
+                            onStart = {
+                                openMenuId = null
+                                queueMessage = null
+                                onStartConversion(
+                                    currentVideoOptions(),
+                                    currentAudioOptions(),
+                                    currentImageOptions(),
+                                    currentPdfOptions()
+                                )
+                            },
+                            onCancel = {
+                                openMenuId = null
+                                queueMessage = null
+                                if (isConversionRunning) {
+                                    onCancelConversion()
+                                } else {
+                                    onClearQueue()
+                                }
+                            }
+                        )
+                    }
+
+                    (conversionSummary ?: queueMessage)?.let { message ->
+                        item(key = "status-line") {
+                            StatusLine(text = texts.summaryMessage(message))
+                        }
+                    }
+
+                    item(key = "file-queue") {
+                        FileQueue(
+                            texts = texts,
+                            files = queuedFiles,
+                            taskProgress = conversionTasks.associateBy { it.fileId },
+                            canRemove = !isConversionRunning,
+                            onRemoveFile = onRemoveFile
+                        )
+                    }
                 }
             }
         }
@@ -1313,8 +1361,10 @@ private fun ZenPromptActions(
 @Composable
 private fun Header(
     texts: UiText,
+    showMetadataSecurity: Boolean,
     showSettings: Boolean,
     showAbout: Boolean,
+    onToggleMetadataSecurity: () -> Unit,
     onToggleSettings: () -> Unit,
     onToggleAbout: () -> Unit
 ) {
@@ -1361,6 +1411,15 @@ private fun Header(
         }
         Spacer(modifier = Modifier.width(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            HeaderIconButton(
+                onClick = onToggleMetadataSecurity,
+                icon = if (showMetadataSecurity) Icons.Rounded.Close else Icons.Rounded.Security,
+                contentDescription = if (showMetadataSecurity) {
+                    texts.closeMetadataSecurity
+                } else {
+                    texts.openMetadataSecurity
+                }
+            )
             HeaderIconButton(
                 onClick = onToggleAbout,
                 icon = if (showAbout) Icons.Rounded.Close else Icons.Rounded.ErrorOutline,
@@ -1569,6 +1628,404 @@ private fun AboutPanel(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+        }
+    }
+}
+
+@Composable
+private fun MetadataSecurityPanel(
+    texts: UiText,
+    state: MetadataToolState,
+    onPickImage: () -> Unit,
+    onPickVideo: () -> Unit,
+    onClean: () -> Unit,
+    onRestore: (String) -> Unit
+) {
+    QuietPanel {
+        SectionTitle(
+            icon = Icons.Rounded.Security,
+            title = texts.metadataSecurityTitle
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = texts.metadataSecurityNote,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Button(
+                onClick = onPickImage,
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                AppIcon(
+                    icon = Icons.Rounded.Image,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(texts.pickMetadataImage, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            OutlinedButton(
+                onClick = onPickVideo,
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = Color.White,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                AppIcon(
+                    icon = Icons.Rounded.Videocam,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(texts.pickMetadataVideo, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+        StatusLine(text = texts.metadataBackupNote)
+
+        Spacer(modifier = Modifier.height(12.dp))
+        when (state) {
+            MetadataToolState.Empty -> {
+                Text(
+                    text = texts.metadataEmpty,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            MetadataToolState.Loading -> {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = texts.processing,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            is MetadataToolState.Error -> {
+                StatusLine(
+                    text = texts.metadataMessage(state.message),
+                    isError = true
+                )
+            }
+            is MetadataToolState.Ready -> {
+                MetadataInspectionCard(
+                    texts = texts,
+                    state = state,
+                    onClean = onClean,
+                    onRestore = onRestore
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MetadataInspectionCard(
+    texts: UiText,
+    state: MetadataToolState.Ready,
+    onClean: () -> Unit,
+    onRestore: (String) -> Unit
+) {
+    val inspection = state.inspection
+    var showDetails by remember(inspection.uri, state.message) { mutableStateOf(false) }
+    var showRestoreChoices by remember(inspection.uri, inspection.backups) { mutableStateOf(false) }
+    val metadataNotice = state.message ?: when {
+        inspection.kind == MetadataTargetKind.Image && !inspection.editable ->
+            MetadataStatusMessage(inspection.unsupportedMessage ?: MetadataMessageKey.UnsupportedImageFormat)
+        inspection.kind == MetadataTargetKind.Image && !inspection.canWrite ->
+            MetadataStatusMessage(MetadataMessageKey.WritePermissionNeeded)
+        inspection.kind == MetadataTargetKind.Image && !inspection.hasRemovableMetadata ->
+            MetadataStatusMessage(MetadataMessageKey.NoRemovableMetadata)
+        else -> null
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Color(0xFFEAEAEA), RoundedCornerShape(8.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 10.dp)
+            ) {
+                Text(
+                    text = inspection.displayName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = metadataPrimaryInfoLine(inspection, texts),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            SmallTag(texts.metadataKindLabel(inspection.kind))
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SmallTag(texts.metadataSupportLabel(inspection))
+            if (inspection.kind == MetadataTargetKind.Image && inspection.editable) {
+                SmallTag(texts.yesNoLabel(inspection.hasGps, texts.metadataGps))
+                SmallTag(texts.metadataBackupCountLabel(inspection.backups.size))
+            }
+        }
+
+        MetadataCompactRows(
+            rows = metadataCompactRows(inspection, texts)
+        )
+
+        metadataNotice?.let { message ->
+            StatusLine(
+                text = texts.metadataMessage(message),
+                isError = message.key !in setOf(
+                    MetadataMessageKey.Cleaned,
+                    MetadataMessageKey.Restored,
+                    MetadataMessageKey.NoRemovableMetadata
+                )
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = { showDetails = true },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Text(texts.metadataDetails, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (inspection.kind == MetadataTargetKind.Image) {
+                Button(
+                    onClick = onClean,
+                    enabled = inspection.editable &&
+                        inspection.hasRemovableMetadata &&
+                        inspection.canWrite &&
+                        !state.busy,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        text = if (state.busy) texts.processing else texts.metadataCleanAndBackup,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+
+        if (inspection.kind == MetadataTargetKind.Image) {
+            OutlinedButton(
+                onClick = {
+                    if (inspection.backups.size == 1) {
+                        onRestore(inspection.backups.first().id)
+                    } else {
+                        showRestoreChoices = true
+                    }
+                },
+                enabled = inspection.editable &&
+                    inspection.backups.isNotEmpty() &&
+                    inspection.canWrite &&
+                    !state.busy,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.045f),
+                    contentColor = MaterialTheme.colorScheme.primary
+                ),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Text(texts.metadataRestore, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+
+    if (showDetails) {
+        MetadataDetailsDialog(
+            texts = texts,
+            inspection = inspection,
+            onDismiss = { showDetails = false }
+        )
+    }
+    if (showRestoreChoices) {
+        MetadataRestoreDialog(
+            texts = texts,
+            backups = inspection.backups,
+            onRestore = { backupId ->
+                showRestoreChoices = false
+                onRestore(backupId)
+            },
+            onDismiss = { showRestoreChoices = false }
+        )
+    }
+}
+
+@Composable
+private fun MetadataCompactRows(rows: List<Pair<String, String>>) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        rows.forEach { (label, value) ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFFF7F7F7), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(0.38f)
+                )
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(0.62f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MetadataDetailsDialog(
+    texts: UiText,
+    inspection: MetadataInspection,
+    onDismiss: () -> Unit
+) {
+    ZenPromptFrame(onDismissRequest = onDismiss) {
+        SectionTitle(
+            icon = Icons.Rounded.Security,
+            title = texts.metadataDetails
+        )
+        Column(
+            modifier = Modifier
+                .heightIn(max = 360.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            MetadataCompactRows(rows = metadataDetailRows(inspection, texts))
+        }
+        Button(
+            onClick = onDismiss,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+        ) {
+            Text(texts.optionValue("Close"))
+        }
+    }
+}
+
+@Composable
+private fun MetadataRestoreDialog(
+    texts: UiText,
+    backups: List<MetadataBackupInfo>,
+    onRestore: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    ZenPromptFrame(onDismissRequest = onDismiss) {
+        SectionTitle(
+            icon = Icons.Rounded.Security,
+            title = texts.metadataRestoreTitle
+        )
+        Column(
+            modifier = Modifier
+                .heightIn(max = 360.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            backups.forEachIndexed { index, backup ->
+                OutlinedButton(
+                    onClick = { onRestore(backup.id) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(
+                        1.dp,
+                        if (index == 0) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.34f)
+                        } else {
+                            Color(0xFFE0E0E0)
+                        }
+                    ),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = if (index == 0) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.045f)
+                        } else {
+                            Color.White
+                        },
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        text = texts.metadataBackupLabel(backup, recommended = index == 0),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+        OutlinedButton(
+            onClick = onDismiss,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = Color.White,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
+        ) {
+            Text(texts.cancel)
         }
     }
 }
@@ -3910,6 +4367,8 @@ private val AUDIO_LOSSLESS_OUTPUT_EXTENSIONS = setOf("wav", "flac")
 
 private data class UiText(
     val tagline: String,
+    val openMetadataSecurity: String,
+    val closeMetadataSecurity: String,
     val openAbout: String,
     val closeAbout: String,
     val openSettings: String,
@@ -3939,6 +4398,17 @@ private data class UiText(
     val copy: String,
     val copied: String,
     val linkUnavailable: String,
+    val metadataSecurityTitle: String,
+    val metadataSecurityNote: String,
+    val metadataBackupNote: String,
+    val pickMetadataImage: String,
+    val pickMetadataVideo: String,
+    val metadataEmpty: String,
+    val metadataDetails: String,
+    val metadataCleanAndBackup: String,
+    val metadataRestore: String,
+    val metadataRestoreTitle: String,
+    val metadataGps: String,
     val accentColor: String,
     val language: String,
     val chooseConversion: String,
@@ -4138,6 +4608,284 @@ private data class UiText(
             simplifiedChineseText -> "声音降噪"
             else -> "聲音降噪"
         }
+    }
+
+    fun metadataKindLabel(kind: MetadataTargetKind): String {
+        return when (kind) {
+            MetadataTargetKind.Image -> when (this) {
+                englishText -> "Image"
+                simplifiedChineseText -> "图片"
+                else -> "圖片"
+            }
+            MetadataTargetKind.Video -> when (this) {
+                englishText -> "Video"
+                simplifiedChineseText -> "视频"
+                else -> "影片"
+            }
+        }
+    }
+
+    fun metadataSupportLabel(inspection: MetadataInspection): String {
+        return when {
+            inspection.kind == MetadataTargetKind.Video -> when (this) {
+                englishText -> "View only"
+                simplifiedChineseText -> "仅查看"
+                else -> "僅查看"
+            }
+            !inspection.editable -> when (this) {
+                englishText -> "Unsupported cleanup"
+                simplifiedChineseText -> "暂不支持清理"
+                else -> "暫不支援清理"
+            }
+            !inspection.canWrite -> when (this) {
+                englishText -> "Read only"
+                simplifiedChineseText -> "只读"
+                else -> "唯讀"
+            }
+            inspection.hasRemovableMetadata -> when (this) {
+                englishText -> "Metadata found"
+                simplifiedChineseText -> "发现元数据"
+                else -> "發現元資料"
+            }
+            else -> when (this) {
+                englishText -> "Clean"
+                simplifiedChineseText -> "已干净"
+                else -> "已乾淨"
+            }
+        }
+    }
+
+    fun metadataLabel(value: String): String {
+        return when (value) {
+            "Format" -> when (this) {
+                englishText -> "Format"
+                simplifiedChineseText -> "格式"
+                else -> "格式"
+            }
+            "Size" -> when (this) {
+                englishText -> "Size"
+                simplifiedChineseText -> "体积"
+                else -> "大小"
+            }
+            "Dimensions" -> when (this) {
+                englishText -> "Dimensions"
+                simplifiedChineseText -> "尺寸"
+                else -> "尺寸"
+            }
+            "Duration" -> when (this) {
+                englishText -> "Duration"
+                simplifiedChineseText -> "时长"
+                else -> "時長"
+            }
+            "Frame rate" -> frameRate
+            "Overall bitrate" -> when (this) {
+                englishText -> "Overall bitrate"
+                simplifiedChineseText -> "总码率"
+                else -> "總位元率"
+            }
+            "GPS" -> metadataGps
+            "Captured" -> when (this) {
+                englishText -> "Captured"
+                simplifiedChineseText -> "拍摄时间"
+                else -> "拍攝時間"
+            }
+            "Camera" -> when (this) {
+                englishText -> "Camera"
+                simplifiedChineseText -> "设备"
+                else -> "裝置"
+            }
+            "Software" -> when (this) {
+                englishText -> "Software"
+                simplifiedChineseText -> "软件"
+                else -> "軟體"
+            }
+            "Orientation" -> when (this) {
+                englishText -> "Orientation"
+                simplifiedChineseText -> "方向"
+                else -> "方向"
+            }
+            "Description" -> when (this) {
+                englishText -> "Description"
+                simplifiedChineseText -> "描述"
+                else -> "描述"
+            }
+            "Artist" -> when (this) {
+                englishText -> "Artist"
+                simplifiedChineseText -> "作者"
+                else -> "作者"
+            }
+            "Copyright" -> when (this) {
+                englishText -> "Copyright"
+                simplifiedChineseText -> "版权"
+                else -> "版權"
+            }
+            "EXIF" -> "EXIF"
+            "XMP" -> "XMP"
+            "IPTC" -> "IPTC"
+            "Comment" -> when (this) {
+                englishText -> "Comment"
+                simplifiedChineseText -> "注释"
+                else -> "註解"
+            }
+            "Removable" -> when (this) {
+                englishText -> "Removable"
+                simplifiedChineseText -> "可清理"
+                else -> "可清理"
+            }
+            "Backups" -> when (this) {
+                englishText -> "Backups"
+                simplifiedChineseText -> "备份"
+                else -> "備份"
+            }
+            "Core hash" -> when (this) {
+                englishText -> "Core hash"
+                simplifiedChineseText -> "图像指纹"
+                else -> "影像指紋"
+            }
+            "Support" -> when (this) {
+                englishText -> "Support"
+                simplifiedChineseText -> "支持"
+                else -> "支援"
+            }
+            else -> value
+        }
+    }
+
+    fun yesNo(value: Boolean): String {
+        return when (this) {
+            englishText -> if (value) "Yes" else "No"
+            simplifiedChineseText -> if (value) "有" else "无"
+            else -> if (value) "有" else "無"
+        }
+    }
+
+    fun yesNoLabel(value: Boolean, label: String): String {
+        return "$label: ${yesNo(value)}"
+    }
+
+    fun metadataBackupCountLabel(count: Int): String {
+        return when (this) {
+            englishText -> if (count == 1) "1 backup" else "$count backups"
+            simplifiedChineseText -> "$count 个备份"
+            else -> "$count 個備份"
+        }
+    }
+
+    fun metadataSegmentCountLabel(count: Int): String {
+        return when (this) {
+            englishText -> if (count == 1) "1 segment" else "$count segments"
+            simplifiedChineseText -> "$count 段"
+            else -> "$count 段"
+        }
+    }
+
+    fun metadataMessage(message: MetadataStatusMessage): String {
+        val base = when (message.key) {
+            MetadataMessageKey.Cleaned -> when (this) {
+                englishText -> "Metadata cleaned and backed up"
+                simplifiedChineseText -> "元数据已清理并备份"
+                else -> "元資料已清理並備份"
+            }
+            MetadataMessageKey.Restored -> when (this) {
+                englishText -> "Metadata restored"
+                simplifiedChineseText -> "元数据已恢复"
+                else -> "元資料已恢復"
+            }
+            MetadataMessageKey.NoRemovableMetadata -> when (this) {
+                englishText -> "No removable metadata was found"
+                simplifiedChineseText -> "未发现可清理元数据"
+                else -> "未發現可清理元資料"
+            }
+            MetadataMessageKey.UnsupportedImageFormat -> when (this) {
+                englishText -> "Lossless cleanup currently supports JPG/JPEG/JFIF only"
+                simplifiedChineseText -> "无损清理暂时只支持 JPG/JPEG/JFIF"
+                else -> "無損清理暫時只支援 JPG/JPEG/JFIF"
+            }
+            MetadataMessageKey.WritePermissionNeeded -> when (this) {
+                englishText -> "This file did not grant write access"
+                simplifiedChineseText -> "这个文件未授予写入权限"
+                else -> "這個檔案未授予寫入權限"
+            }
+            MetadataMessageKey.CouldNotRead -> when (this) {
+                englishText -> "Could not read metadata"
+                simplifiedChineseText -> "无法读取元数据"
+                else -> "無法讀取元資料"
+            }
+            MetadataMessageKey.CouldNotWrite -> when (this) {
+                englishText -> "Could not write metadata changes"
+                simplifiedChineseText -> "无法写入元数据变更"
+                else -> "無法寫入元資料變更"
+            }
+            MetadataMessageKey.BackupMissing -> when (this) {
+                englishText -> "Metadata backup was not found"
+                simplifiedChineseText -> "未找到元数据备份"
+                else -> "未找到元資料備份"
+            }
+            MetadataMessageKey.BackupDoesNotMatch -> when (this) {
+                englishText -> "This backup does not match the selected image"
+                simplifiedChineseText -> "这个备份与当前图片不匹配"
+                else -> "這個備份與目前圖片不匹配"
+            }
+            MetadataMessageKey.InvalidJpeg -> when (this) {
+                englishText -> "This JPEG file could not be parsed safely"
+                simplifiedChineseText -> "无法安全解析这个 JPEG 文件"
+                else -> "無法安全解析這個 JPEG 檔案"
+            }
+        }
+        return if (message.detail.isNullOrBlank()) base else "$base: ${message.detail}"
+    }
+
+    fun metadataOrientationLabel(value: Int?): String {
+        return when (value) {
+            ExifInterface.ORIENTATION_NORMAL -> when (this) {
+                englishText -> "Normal"
+                simplifiedChineseText -> "正常"
+                else -> "正常"
+            }
+            ExifInterface.ORIENTATION_ROTATE_90 -> when (this) {
+                englishText -> "Rotate 90°"
+                simplifiedChineseText -> "旋转 90°"
+                else -> "旋轉 90°"
+            }
+            ExifInterface.ORIENTATION_ROTATE_180 -> when (this) {
+                englishText -> "Rotate 180°"
+                simplifiedChineseText -> "旋转 180°"
+                else -> "旋轉 180°"
+            }
+            ExifInterface.ORIENTATION_ROTATE_270 -> when (this) {
+                englishText -> "Rotate 270°"
+                simplifiedChineseText -> "旋转 270°"
+                else -> "旋轉 270°"
+            }
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL,
+            ExifInterface.ORIENTATION_FLIP_VERTICAL,
+            ExifInterface.ORIENTATION_TRANSPOSE,
+            ExifInterface.ORIENTATION_TRANSVERSE -> when (this) {
+                englishText -> "Flipped"
+                simplifiedChineseText -> "翻转"
+                else -> "翻轉"
+            }
+            else -> unknownType
+        }
+    }
+
+    fun metadataBackupLabel(
+        backup: MetadataBackupInfo,
+        recommended: Boolean
+    ): String {
+        val time = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+            .format(Date(backup.createdAtMillis))
+        val size = formatBytes(backup.segmentBytes, this)
+        val suffix = if (recommended) {
+            when (this) {
+                englishText -> " · latest"
+                simplifiedChineseText -> " · 最新"
+                else -> " · 最新"
+            }
+        } else {
+            ""
+        }
+        return "$time · ${metadataSegmentCountLabel(backup.segmentCount)} · $size$suffix"
     }
 
     fun qrCodeFor(value: String): String {
@@ -4752,6 +5500,11 @@ private data class UiText(
                 simplifiedChineseText -> "视频"
                 else -> "影片"
             }
+            "Close" -> when (this) {
+                englishText -> "Close"
+                simplifiedChineseText -> "关闭"
+                else -> "關閉"
+            }
             "Audio" -> when (this) {
                 englishText -> "Audio"
                 simplifiedChineseText -> "音频"
@@ -5225,6 +5978,8 @@ private data class UiText(
 
 private val englishText = UiText(
     tagline = "Files stay on this device",
+    openMetadataSecurity = "Open privacy tools",
+    closeMetadataSecurity = "Close privacy tools",
     openAbout = "Open about",
     closeAbout = "Close about",
     openSettings = "Open settings",
@@ -5254,6 +6009,17 @@ private val englishText = UiText(
     copy = "Copy",
     copied = "Copied",
     linkUnavailable = "No app can open this link",
+    metadataSecurityTitle = "Metadata safety",
+    metadataSecurityNote = "Inspect metadata locally. JPG/JPEG/JFIF can be cleaned in place without re-encoding.",
+    metadataBackupNote = "Metadata backups stay in app data. Clearing app data or uninstalling may remove them.",
+    pickMetadataImage = "Image",
+    pickMetadataVideo = "Video",
+    metadataEmpty = "Choose an image or video to inspect metadata.",
+    metadataDetails = "Details",
+    metadataCleanAndBackup = "Clean",
+    metadataRestore = "Restore metadata",
+    metadataRestoreTitle = "Choose backup",
+    metadataGps = "GPS",
     accentColor = "Accent color",
     language = "Language",
     chooseConversion = "Choose conversion",
@@ -5312,6 +6078,8 @@ private val englishText = UiText(
 
 private val simplifiedChineseText = UiText(
     tagline = "本机转换，文件不上云",
+    openMetadataSecurity = "打开隐私工具",
+    closeMetadataSecurity = "关闭隐私工具",
     openAbout = "打开关于",
     closeAbout = "关闭关于",
     openSettings = "打开设置",
@@ -5341,6 +6109,17 @@ private val simplifiedChineseText = UiText(
     copy = "复制",
     copied = "已复制",
     linkUnavailable = "没有可打开此链接的应用",
+    metadataSecurityTitle = "元数据安全",
+    metadataSecurityNote = "本地查看元数据。JPG/JPEG/JFIF 可不重编码原地清理。",
+    metadataBackupNote = "元数据备份保存在应用数据目录，清理应用数据或卸载后可能丢失。",
+    pickMetadataImage = "图片",
+    pickMetadataVideo = "视频",
+    metadataEmpty = "选择图片或视频后查看元数据。",
+    metadataDetails = "查看详情",
+    metadataCleanAndBackup = "清理",
+    metadataRestore = "恢复元数据",
+    metadataRestoreTitle = "选择备份",
+    metadataGps = "GPS",
     accentColor = "重点色",
     language = "语言",
     chooseConversion = "选择转换",
@@ -5399,6 +6178,8 @@ private val simplifiedChineseText = UiText(
 
 private val traditionalChineseText = UiText(
     tagline = "本機轉換，檔案不上雲",
+    openMetadataSecurity = "開啟隱私工具",
+    closeMetadataSecurity = "關閉隱私工具",
     openAbout = "開啟關於",
     closeAbout = "關閉關於",
     openSettings = "開啟設定",
@@ -5428,6 +6209,17 @@ private val traditionalChineseText = UiText(
     copy = "複製",
     copied = "已複製",
     linkUnavailable = "沒有可開啟此連結的應用",
+    metadataSecurityTitle = "元資料安全",
+    metadataSecurityNote = "本地查看元資料。JPG/JPEG/JFIF 可不重新編碼原地清理。",
+    metadataBackupNote = "元資料備份保存在應用資料目錄，清理應用資料或卸載後可能遺失。",
+    pickMetadataImage = "圖片",
+    pickMetadataVideo = "影片",
+    metadataEmpty = "選擇圖片或影片後查看元資料。",
+    metadataDetails = "查看詳情",
+    metadataCleanAndBackup = "清理",
+    metadataRestore = "恢復元資料",
+    metadataRestoreTitle = "選擇備份",
+    metadataGps = "GPS",
     accentColor = "重點色",
     language = "語言",
     chooseConversion = "選擇轉換",
@@ -5627,6 +6419,102 @@ private fun copyToClipboard(
 }
 
 private const val MIME_TYPE_ANY = "*/*"
+
+private fun metadataPrimaryInfoLine(
+    inspection: MetadataInspection,
+    texts: UiText
+): String {
+    return buildList {
+        add(inspection.formatLabel)
+        if (inspection.width != null && inspection.height != null) {
+            add("${inspection.width}x${inspection.height}")
+        }
+        inspection.durationMs?.let { add(formatDurationMs(it, texts)) }
+        add(formatBytes(inspection.sizeBytes, texts))
+    }.joinToString(" · ")
+}
+
+private fun metadataCompactRows(
+    inspection: MetadataInspection,
+    texts: UiText
+): List<Pair<String, String>> {
+    return buildList {
+        if (inspection.kind == MetadataTargetKind.Video) {
+            inspection.durationMs?.let {
+                add(texts.metadataLabel("Duration") to formatDurationMs(it, texts))
+            }
+            if (inspection.width != null && inspection.height != null) {
+                add(texts.metadataLabel("Dimensions") to "${inspection.width}x${inspection.height}")
+            }
+            inspection.bitrateBitsPerSecond?.let {
+                add(texts.metadataLabel("Overall bitrate") to formatBitrate(it))
+            }
+            inspection.frameRate?.let {
+                add(texts.metadataLabel("Frame rate") to formatFrameRate(it))
+            }
+            return@buildList
+        }
+
+        add(texts.metadataLabel("GPS") to texts.yesNo(inspection.hasGps))
+        inspection.capturedAt?.let {
+            add(texts.metadataLabel("Captured") to it)
+        }
+        inspection.camera?.let {
+            add(texts.metadataLabel("Camera") to it)
+        }
+        add(
+            texts.metadataLabel("Removable") to
+                "${inspection.removableSegmentCount} · ${formatBytes(inspection.removableBytes, texts)}"
+        )
+    }
+}
+
+private fun metadataDetailRows(
+    inspection: MetadataInspection,
+    texts: UiText
+): List<Pair<String, String>> {
+    return buildList {
+        add(texts.metadataLabel("Format") to inspection.formatLabel)
+        add(texts.metadataLabel("Size") to formatBytes(inspection.sizeBytes, texts))
+        if (inspection.width != null && inspection.height != null) {
+            add(texts.metadataLabel("Dimensions") to "${inspection.width}x${inspection.height}")
+        }
+        inspection.durationMs?.let {
+            add(texts.metadataLabel("Duration") to formatDurationMs(it, texts))
+        }
+        inspection.frameRate?.let {
+            add(texts.metadataLabel("Frame rate") to formatFrameRate(it))
+        }
+        inspection.bitrateBitsPerSecond?.let {
+            add(texts.metadataLabel("Overall bitrate") to formatBitrate(it))
+        }
+        add(texts.metadataLabel("GPS") to texts.yesNo(inspection.hasGps))
+        inspection.capturedAt?.let { add(texts.metadataLabel("Captured") to it) }
+        inspection.camera?.let { add(texts.metadataLabel("Camera") to it) }
+        inspection.software?.let { add(texts.metadataLabel("Software") to it) }
+        add(texts.metadataLabel("Orientation") to texts.metadataOrientationLabel(inspection.orientation))
+        inspection.description?.let { add(texts.metadataLabel("Description") to it) }
+        inspection.artist?.let { add(texts.metadataLabel("Artist") to it) }
+        inspection.copyright?.let { add(texts.metadataLabel("Copyright") to it) }
+        if (inspection.kind == MetadataTargetKind.Image) {
+            add(texts.metadataLabel("EXIF") to texts.yesNo(inspection.hasExif))
+            add(texts.metadataLabel("XMP") to texts.yesNo(inspection.hasXmp))
+            add(texts.metadataLabel("IPTC") to texts.yesNo(inspection.hasIptc))
+            add(texts.metadataLabel("Comment") to texts.yesNo(inspection.hasComment))
+            add(
+                texts.metadataLabel("Removable") to
+                    "${inspection.removableSegmentCount} · ${formatBytes(inspection.removableBytes, texts)}"
+            )
+            add(texts.metadataLabel("Backups") to texts.metadataBackupCountLabel(inspection.backups.size))
+            inspection.coreHash?.take(16)?.let {
+                add(texts.metadataLabel("Core hash") to "$it...")
+            }
+            inspection.unsupportedMessage?.let {
+                add(texts.metadataLabel("Support") to texts.metadataMessage(MetadataStatusMessage(it)))
+            }
+        }
+    }
+}
 
 private fun formatBytes(sizeBytes: Long?, texts: UiText): String {
     if (sizeBytes == null) return texts.unknownSize

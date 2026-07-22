@@ -65,6 +65,12 @@
   native bitmap path with GIF first-frame or FFmpeg-backed split-frame input,
   best-effort HEIC/HEIF input, PNG-in-ICO output, and largest-layer PNG-in-ICO
   input; needs physical-device smoke testing across samples.
+- Metadata safety tool. Implemented as a separate privacy path: images/videos
+  can be inspected, and JPG/JPEG/JFIF metadata can be cleaned in place without
+  pixel re-encoding. Removed JPEG metadata segments are backed up in app-private
+  data and can be restored only for matching same-image imports. Metadata
+  editing, spoofing presets, and video metadata cleanup remain intentionally
+  unconnected.
 - PDF image export/import, PDF merge, PDF TXT/MD text export, and PDF
   encrypt/decrypt are connected through Android PdfRenderer/PdfDocument and
   PDFBox-Android where appropriate. TXT/MD only extract selectable text; PDF

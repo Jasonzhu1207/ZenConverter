@@ -24,6 +24,8 @@ as supported until it has a tested path, sample files, and failure behavior.
 | MKV / MOV / WEBM / AVI / 3GP / 3GPP / TS / MTS | MP4 | Experimental | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in MP4. Video bitrate, codec, short-side resolution cap, max frame-rate, and advanced filters are applied where selected. Subtitles, attachments, and extra tracks are not copied. |
 | MP3 / M4A / AAC / FLAC / WAV / WMA / OGG | MP3 / M4A / WAV / FLAC / WMA | Experimental | FFmpeg compatible | Common audio conversion path. MP3 uses `libmp3lame`; M4A uses AAC; WAV uses PCM; FLAC uses FLAC; WMA uses WMA v2 in ASF/WMA. Bitrate is applied for MP3/M4A/WMA when selected. Sample-rate, channel, reverse, fade, volume/mute, echo, and audio noise-reduction controls are applied when selected. WAV/FLAC ignore bitrate. |
 | JPG / JPEG / JFIF / JPE / PNG / WEBP | JPG / JFIF / PNG / WEBP / ICO | Experimental | Native Bitmap | Static image conversion through Android platform bitmap APIs; physical-device smoke testing is still pending. JFIF output is JPEG-encoded pixels with a `.jfif` extension. JPG/JFIF/WEBP quality presets are Original 100, High 95, Balanced 85, Small 60; WEBP also offers Android 11+ lossless output. ICO output is a multi-size PNG-in-ICO file. PNG is written as lossless output. Transparency is preserved for PNG/WEBP/ICO and flattened to white for JPG/JFIF. Metadata is not copied, though JPEG EXIF orientation is applied best-effort; animated WEBP is not preserved as animation. |
+| JPG / JPEG / JFIF / JPE | Inspect / clean / restore metadata | Experimental | Native JPEG segment tool | Separate privacy tool, not a conversion task. It inspects common EXIF values and removable JPEG metadata segments, then can remove EXIF/XMP, IPTC/Photoshop, and comment segments in place without re-encoding pixels. JFIF, ICC, and Adobe display-related segments are preserved. Removed metadata is backed up in app-private data and can be restored only when the selected image's metadata-stripped core SHA-256 and dimensions match. |
+| Video files | Inspect metadata | Experimental | MediaMetadataRetriever | Separate privacy tool can display basic duration, size, resolution, frame-rate, and container bitrate metadata where Android exposes it. Video metadata cleanup is intentionally not connected in this milestone. |
 | ICO | JPG / JFIF / PNG / WEBP / ICO / PDF | Experimental | Native Bitmap / Android PdfDocument | Reads the largest ICO layer only when that layer is PNG-in-ICO. Old BMP/DIB icon payloads are not decoded in this milestone. |
 | GIF | JPG / JFIF / PNG / WEBP / ICO / PDF | Experimental | Native Bitmap / FFmpeg compatible / Android PdfDocument | User can choose first-frame conversion or split-frame output. GIF split uses the FFmpeg compatibility path to decode a raw RGBA frame stream, then reuses the native image/PDF writers. Split image outputs and one-PDF-per-frame outputs are saved inside a subfolder. Animation timing, loop count, frame delay, and metadata are not preserved. |
 | HEIC / HEIF | JPG / JFIF / PNG / WEBP / ICO / PDF | Experimental | Native Bitmap / Android PdfDocument | Attempts platform decode through Android image APIs. Support depends on the device and Android image codec availability; failures should be clear. |
@@ -144,6 +146,21 @@ as supported until it has a tested path, sample files, and failure behavior.
   encoding to avoid foreground-service crashes.
 - Animated WEBP is not preserved as animation; this path should be treated as
   static-image conversion only.
+
+## Current Metadata Safety Limits
+
+- Metadata safety is a separate privacy tool and does not use the conversion
+  queue or conversion engines.
+- JPG/JPEG/JFIF/JPE images can be inspected and cleaned by removing removable
+  JPEG metadata segments without re-encoding image pixels. Cleaned metadata is
+  backed up under app-private data before writeback.
+- Restore only works when the selected image matches a backup by metadata-
+  stripped JPEG core SHA-256 and dimensions. Renaming a file can still match;
+  re-encoding, resizing, or editing pixels should not.
+- PNG, WEBP, HEIC/HEIF, GIF, ICO, and video cleanup are not connected in this
+  milestone. Unsupported images may still show basic format/size/dimensions.
+- Clearing app data or uninstalling the app removes metadata backups. Backups
+  are not uploaded and are not logged.
 
 ## Current Native PDF Limits
 

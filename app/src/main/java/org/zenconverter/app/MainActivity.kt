@@ -1,6 +1,7 @@
 package org.zenconverter.app
 
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.pdf.LoadParams
@@ -9,15 +10,18 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.ext.SdkExtensions
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.lifecycle.lifecycleScope
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.io.MemoryUsageSetting
 import com.tom_roush.pdfbox.pdmodel.PDDocument
@@ -38,6 +42,13 @@ import org.zenconverter.app.conversion.PdfExportOptions
 import org.zenconverter.app.conversion.PdfSecurityMode
 import org.zenconverter.app.conversion.PdfSecurityOptions
 import org.zenconverter.app.conversion.VideoExportOptions
+import org.zenconverter.app.metadata.MetadataInspection
+import org.zenconverter.app.metadata.MetadataMessageKey
+import org.zenconverter.app.metadata.MetadataOperationException
+import org.zenconverter.app.metadata.MetadataPrivacyManager
+import org.zenconverter.app.metadata.MetadataStatusMessage
+import org.zenconverter.app.metadata.MetadataTargetKind
+import org.zenconverter.app.metadata.MetadataToolState
 import org.zenconverter.app.ui.FileCategory
 import org.zenconverter.app.ui.GifFrameModePrompt
 import org.zenconverter.app.ui.GifPdfFramePrompt
@@ -51,6 +62,9 @@ import org.zenconverter.app.ui.QueuedFile
 import org.zenconverter.app.ui.TaskProgress
 import org.zenconverter.app.ui.TaskProgressStatus
 import org.zenconverter.app.ui.TargetFormat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.util.ArrayDeque
 import java.util.Locale
@@ -65,11 +79,15 @@ class MainActivity : ComponentActivity() {
     private val gifPdfFramePrompt = mutableStateOf<GifPdfFramePrompt?>(null)
     private val pdfPasswordPrompt = mutableStateOf<PdfPasswordPrompt?>(null)
     private val pdfOutputPasswordPrompt = mutableStateOf<PdfOutputPasswordPrompt?>(null)
+    private val metadataToolState = mutableStateOf<MetadataToolState>(MetadataToolState.Empty)
     private val pendingPdfSelections = ArrayDeque<PendingPdfSelection>()
     private var pendingImagePdfSelection: PendingImagePdfSelection? = null
     private var pendingGifFrameSelection: PendingGifFrameSelection? = null
     private var pendingGifPdfFrameSelection: PendingGifPdfFrameSelection? = null
     private var pendingPdfOutputPasswordSelection: PendingPdfOutputPasswordSelection? = null
+    private var pendingMetadataTargetKind: MetadataTargetKind? = null
+    private var pendingMetadataMediaWriteGrant: PendingMetadataMediaWriteGrant? = null
+    private var pendingMetadataReadPermissionRetry: PendingMetadataMediaWriteGrant? = null
     private var activePdfPasswordSelection: PendingPdfSelection? = null
     private var pendingSelection: PendingSelection? = null
     private var pendingVideoOptions: VideoExportOptions = VideoExportOptions()
@@ -141,6 +159,74 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    private val openMetadataDocument = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val kind = pendingMetadataTargetKind ?: return@registerForActivityResult
+        pendingMetadataTargetKind = null
+        if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
+        val uri = result.data?.data ?: return@registerForActivityResult
+
+        val canWrite = persistMetadataFilePermission(
+            uri = uri,
+            requestWrite = kind == MetadataTargetKind.Image
+        )
+        inspectMetadataSelection(uri, kind, canWrite)
+    }
+
+    private val requestMetadataMediaReadPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val pending = pendingMetadataReadPermissionRetry ?: return@registerForActivityResult
+        pendingMetadataReadPermissionRetry = null
+        val ready = metadataToolState.value as? MetadataToolState.Ready ?: return@registerForActivityResult
+        if (ready.inspection.uri != pending.uri) return@registerForActivityResult
+        if (granted) {
+            when (pending.operation) {
+                MetadataWriteOperation.Clean -> cleanSelectedMetadata(allowMediaWriteRequest = true)
+                MetadataWriteOperation.Restore -> {
+                    val backupId = pending.backupId ?: return@registerForActivityResult
+                    restoreSelectedMetadata(
+                        backupId = backupId,
+                        allowMediaWriteRequest = true
+                    )
+                }
+            }
+        } else {
+            metadataToolState.value = ready.copy(
+                busy = false,
+                message = MetadataStatusMessage(MetadataMessageKey.WritePermissionNeeded)
+            )
+        }
+    }
+
+    private val requestMetadataMediaWrite = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        val pending = pendingMetadataMediaWriteGrant ?: return@registerForActivityResult
+        pendingMetadataMediaWriteGrant = null
+        if (result.resultCode == Activity.RESULT_OK) {
+            val ready = metadataToolState.value as? MetadataToolState.Ready ?: return@registerForActivityResult
+            if (ready.inspection.uri != pending.uri) return@registerForActivityResult
+            when (pending.operation) {
+                MetadataWriteOperation.Clean -> cleanSelectedMetadata(allowMediaWriteRequest = false)
+                MetadataWriteOperation.Restore -> {
+                    val backupId = pending.backupId ?: return@registerForActivityResult
+                    restoreSelectedMetadata(
+                        backupId = backupId,
+                        allowMediaWriteRequest = false
+                    )
+                }
+            }
+        } else {
+            val ready = metadataToolState.value as? MetadataToolState.Ready ?: return@registerForActivityResult
+            metadataToolState.value = ready.copy(
+                busy = false,
+                message = MetadataStatusMessage(MetadataMessageKey.WritePermissionNeeded)
+            )
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.light(
@@ -191,11 +277,24 @@ class MainActivity : ComponentActivity() {
                 conversionTasks = ConversionTaskStore.tasks.map { it.toUiProgress() },
                 conversionSummary = ConversionTaskStore.summaryMessage.value,
                 isConversionRunning = ConversionTaskStore.isRunning.value,
+                metadataToolState = metadataToolState.value,
                 imagePdfMergePrompt = imagePdfMergePrompt.value,
                 gifFrameModePrompt = gifFrameModePrompt.value,
                 gifPdfFramePrompt = gifPdfFramePrompt.value,
                 pdfPasswordPrompt = pdfPasswordPrompt.value,
                 pdfOutputPasswordPrompt = pdfOutputPasswordPrompt.value,
+                onPickMetadataImage = {
+                    openMetadataPicker(MetadataTargetKind.Image)
+                },
+                onPickMetadataVideo = {
+                    openMetadataPicker(MetadataTargetKind.Video)
+                },
+                onCleanMetadata = {
+                    cleanSelectedMetadata()
+                },
+                onRestoreMetadata = { backupId ->
+                    restoreSelectedMetadata(backupId)
+                },
                 onChooseSinglePdf = {
                     pendingImagePdfSelection?.let { selection ->
                         queuedFiles.add(selection.toSinglePdfQueuedFile())
@@ -420,6 +519,241 @@ class MainActivity : ComponentActivity() {
             Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
             checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
                 PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun openMetadataPicker(kind: MetadataTargetKind) {
+        pendingMetadataTargetKind = kind
+        val mimeTypes = when (kind) {
+            MetadataTargetKind.Image -> arrayOf(
+                "image/jpeg",
+                "image/jpg",
+                "image/jfif",
+                "image/png",
+                "image/webp",
+                "image/heic",
+                "image/heif"
+            )
+            MetadataTargetKind.Video -> arrayOf("video/*")
+        }
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = if (kind == MetadataTargetKind.Image) "image/*" else "video/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            if (kind == MetadataTargetKind.Image) {
+                addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            }
+        }
+        openMetadataDocument.launch(intent)
+    }
+
+    private fun inspectMetadataSelection(
+        uri: Uri,
+        kind: MetadataTargetKind,
+        canWrite: Boolean,
+        message: MetadataStatusMessage? = null
+    ) {
+        metadataToolState.value = MetadataToolState.Loading
+        lifecycleScope.launch {
+            val nextState = withContext(Dispatchers.IO) {
+                runCatching {
+                    val metadata = queryOpenableMetadata(uri)
+                    val mimeType = contentResolver.getType(uri)
+                    MetadataToolState.Ready(
+                        inspection = MetadataPrivacyManager.inspect(
+                            context = this@MainActivity,
+                            uri = uri,
+                            displayName = metadata.displayName,
+                            sizeBytes = metadata.sizeBytes,
+                            mimeType = mimeType,
+                            kind = kind,
+                            canWrite = canWrite
+                        ),
+                        message = message
+                    )
+                }.getOrElse { throwable ->
+                    MetadataToolState.Error(metadataStatusFor(throwable, MetadataMessageKey.CouldNotRead))
+                }
+            }
+            metadataToolState.value = nextState
+        }
+    }
+
+    private fun cleanSelectedMetadata(allowMediaWriteRequest: Boolean = true) {
+        val ready = metadataToolState.value as? MetadataToolState.Ready ?: return
+        val inspection = ready.inspection
+        metadataToolState.value = ready.copy(busy = true, message = null)
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    MetadataPrivacyManager.requireJpegWriteAccess(this@MainActivity, inspection)
+                    MetadataPrivacyManager.cleanJpegInPlace(this@MainActivity, inspection)
+                }
+            }
+            result.onSuccess { message ->
+                inspectMetadataSelection(
+                    uri = inspection.uri,
+                    kind = inspection.kind,
+                    canWrite = inspection.canWrite,
+                    message = message
+                )
+            }.onFailure { throwable ->
+                if (
+                    allowMediaWriteRequest &&
+                    requestMetadataMediaWritePermission(
+                        throwable = throwable,
+                        inspection = inspection,
+                        operation = MetadataWriteOperation.Clean
+                    )
+                ) {
+                    metadataToolState.value = ready.copy(busy = false, message = null)
+                    return@onFailure
+                }
+                metadataToolState.value = ready.copy(
+                    busy = false,
+                    message = metadataStatusFor(throwable, MetadataMessageKey.CouldNotWrite)
+                )
+            }
+        }
+    }
+
+    private fun restoreSelectedMetadata(
+        backupId: String,
+        allowMediaWriteRequest: Boolean = true
+    ) {
+        val ready = metadataToolState.value as? MetadataToolState.Ready ?: return
+        val inspection = ready.inspection
+        metadataToolState.value = ready.copy(busy = true, message = null)
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    MetadataPrivacyManager.requireJpegWriteAccess(this@MainActivity, inspection)
+                    MetadataPrivacyManager.restoreJpegMetadataInPlace(
+                        context = this@MainActivity,
+                        inspection = inspection,
+                        backupId = backupId
+                    )
+                }
+            }
+            result.onSuccess { message ->
+                inspectMetadataSelection(
+                    uri = inspection.uri,
+                    kind = inspection.kind,
+                    canWrite = inspection.canWrite,
+                    message = message
+                )
+            }.onFailure { throwable ->
+                if (
+                    allowMediaWriteRequest &&
+                    requestMetadataMediaWritePermission(
+                        throwable = throwable,
+                        inspection = inspection,
+                        operation = MetadataWriteOperation.Restore,
+                        backupId = backupId
+                    )
+                ) {
+                    metadataToolState.value = ready.copy(busy = false, message = null)
+                    return@onFailure
+                }
+                metadataToolState.value = ready.copy(
+                    busy = false,
+                    message = metadataStatusFor(throwable, MetadataMessageKey.CouldNotWrite)
+                )
+            }
+        }
+    }
+
+    private fun requestMetadataMediaWritePermission(
+        throwable: Throwable,
+        inspection: MetadataInspection,
+        operation: MetadataWriteOperation,
+        backupId: String? = null
+    ): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
+        if (!MetadataPrivacyManager.isMediaWritePermissionFailure(throwable)) return false
+        val writeUri = MetadataPrivacyManager.mediaStoreUriForWriteRequest(this, inspection) ?: return false
+        val pendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            runCatching {
+                MediaStore.createWriteRequest(contentResolver, listOf(writeUri))
+            }.getOrElse { exception ->
+                Log.w(TAG, "Could not create media write request for $writeUri", exception)
+                return false
+            }
+        } else {
+            MetadataPrivacyManager.recoverableSecurityExceptionFor(throwable)
+                ?.userAction
+                ?.actionIntent
+                ?: run {
+                    if (requestAndroid10MetadataReadPermission(inspection, operation, backupId)) {
+                        return true
+                    }
+                    Log.w(TAG, "Media write failure was not recoverable on Android 10 for $writeUri", throwable)
+                    return false
+                }
+        }
+        pendingMetadataMediaWriteGrant = PendingMetadataMediaWriteGrant(
+            uri = inspection.uri,
+            operation = operation,
+            backupId = backupId
+        )
+        requestMetadataMediaWrite.launch(
+            IntentSenderRequest.Builder(pendingIntent.intentSender).build()
+        )
+        return true
+    }
+
+    private fun requestAndroid10MetadataReadPermission(
+        inspection: MetadataInspection,
+        operation: MetadataWriteOperation,
+        backupId: String?
+    ): Boolean {
+        if (Build.VERSION.SDK_INT != Build.VERSION_CODES.Q) return false
+        if (
+            checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return false
+        }
+        pendingMetadataReadPermissionRetry = PendingMetadataMediaWriteGrant(
+            uri = inspection.uri,
+            operation = operation,
+            backupId = backupId
+        )
+        requestMetadataMediaReadPermission.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+        return true
+    }
+
+    private fun persistMetadataFilePermission(
+        uri: Uri,
+        requestWrite: Boolean
+    ): Boolean {
+        val readFlag = Intent.FLAG_GRANT_READ_URI_PERMISSION
+        val writeFlag = Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        return if (requestWrite) {
+            runCatching {
+                contentResolver.takePersistableUriPermission(uri, readFlag or writeFlag)
+                true
+            }.getOrElse {
+                runCatching {
+                    contentResolver.takePersistableUriPermission(uri, readFlag)
+                }
+                false
+            }
+        } else {
+            runCatching {
+                contentResolver.takePersistableUriPermission(uri, readFlag)
+            }
+            false
+        }
+    }
+
+    private fun metadataStatusFor(
+        throwable: Throwable,
+        fallback: MetadataMessageKey
+    ): MetadataStatusMessage {
+        return (throwable as? MetadataOperationException)?.status
+            ?: MetadataStatusMessage(fallback)
     }
 
     private fun queryOpenableMetadata(uri: Uri): OpenableMetadata {
@@ -858,6 +1192,17 @@ private data class PendingGifPdfFrameSelection(
 private data class PendingPdfOutputPasswordSelection(
     val request: PendingSelection,
     val documents: List<SelectedDocument>
+)
+
+private enum class MetadataWriteOperation {
+    Clean,
+    Restore
+}
+
+private data class PendingMetadataMediaWriteGrant(
+    val uri: Uri,
+    val operation: MetadataWriteOperation,
+    val backupId: String? = null
 )
 
 private data class PendingPdfSelection(
