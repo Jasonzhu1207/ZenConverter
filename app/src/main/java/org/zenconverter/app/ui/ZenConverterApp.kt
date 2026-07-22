@@ -123,6 +123,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
@@ -137,6 +139,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import org.zenconverter.app.conversion.AudioAdvancedOptions
@@ -291,6 +294,31 @@ data class PdfPasswordPrompt(
 
 data class PdfOutputPasswordPrompt(
     val fileCount: Int
+)
+
+data class ExternalImportPrompt(
+    val files: List<ExternalImportFile>
+)
+
+data class ExternalImportFile(
+    val id: String,
+    val displayName: String,
+    val sizeBytes: Long?,
+    val mimeType: String?,
+    val inputInfo: FileBasicInfo?,
+    val detectedCategory: FileCategory?,
+    val targets: List<ExternalImportTarget>,
+    val defaultTarget: ExternalImportTarget?
+)
+
+data class ExternalImportTarget(
+    val category: FileCategory,
+    val targetFormat: TargetFormat
+)
+
+data class ExternalImportChoice(
+    val fileId: String,
+    val target: ExternalImportTarget
 )
 
 data class OutputDirectory(
@@ -631,6 +659,7 @@ fun ZenConverterApp(
     gifPdfFramePrompt: GifPdfFramePrompt?,
     pdfPasswordPrompt: PdfPasswordPrompt?,
     pdfOutputPasswordPrompt: PdfOutputPasswordPrompt?,
+    externalImportPrompt: ExternalImportPrompt?,
     onChooseSinglePdf: () -> Unit,
     onChooseOnePdfPerImage: () -> Unit,
     onDismissImagePdfPrompt: () -> Unit,
@@ -644,6 +673,8 @@ fun ZenConverterApp(
     onCancelPdfPassword: () -> Unit,
     onSubmitPdfOutputPassword: (String) -> Unit,
     onCancelPdfOutputPassword: () -> Unit,
+    onConfirmExternalImport: (List<ExternalImportChoice>) -> Unit,
+    onDismissExternalImport: () -> Unit,
     onStartConversion: (VideoExportOptions, AudioExportOptions, ImageExportOptions, PdfExportOptions) -> Unit,
     onCancelConversion: () -> Unit
 ) {
@@ -732,6 +763,14 @@ fun ZenConverterApp(
                     prompt = prompt,
                     onSubmit = onSubmitPdfOutputPassword,
                     onCancel = onCancelPdfOutputPassword
+                )
+            }
+            externalImportPrompt?.let { prompt ->
+                ExternalImportDialog(
+                    texts = texts,
+                    prompt = prompt,
+                    onConfirm = onConfirmExternalImport,
+                    onDismiss = onDismissExternalImport
                 )
             }
         }
@@ -1254,6 +1293,376 @@ private fun PdfOutputPasswordDialog(
             onConfirm = { onSubmit(password) },
             onDismissAction = onCancel
         )
+    }
+}
+
+@Composable
+private fun ExternalImportDialog(
+    texts: UiText,
+    prompt: ExternalImportPrompt,
+    onConfirm: (List<ExternalImportChoice>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    if (prompt.files.isEmpty()) return
+
+    var currentIndex by remember(prompt) { mutableStateOf(0) }
+    var selectedTargets by remember(prompt) {
+        mutableStateOf<Map<String, ExternalImportTarget?>>(
+            prompt.files.associate { file -> file.id to file.defaultTarget }
+        )
+    }
+    var skippedIds by remember(prompt) { mutableStateOf<Set<String>>(emptySet()) }
+
+    fun confirmImport() {
+        val choices = prompt.files.mapNotNull { file ->
+            val target = selectedTargets[file.id] ?: file.defaultTarget
+            if (file.id in skippedIds || target == null) {
+                null
+            } else {
+                ExternalImportChoice(fileId = file.id, target = target)
+            }
+        }
+        onConfirm(choices)
+    }
+
+    fun moveNextOrConfirm() {
+        if (currentIndex >= prompt.files.lastIndex) {
+            confirmImport()
+        } else {
+            currentIndex += 1
+        }
+    }
+
+    fun skipCurrent() {
+        skippedIds = skippedIds + prompt.files[currentIndex].id
+        moveNextOrConfirm()
+    }
+
+    ZenPromptFrame(onDismissRequest = onDismiss) {
+        SectionTitle(
+            icon = Icons.Rounded.Share,
+            title = texts.externalImportTitle
+        )
+        Text(
+            text = texts.externalImportNote,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        val safeIndex = currentIndex.coerceIn(0, prompt.files.lastIndex)
+        AnimatedContent(
+            targetState = safeIndex,
+            transitionSpec = {
+                val forward = targetState > initialState
+                val slideIn = slideInHorizontally(
+                    animationSpec = tween(ZenAnimations.ContentFadeDuration),
+                    initialOffsetX = { width -> if (forward) width / 5 else -width / 5 }
+                ) + fadeIn(animationSpec = tween(ZenAnimations.ContentFadeDuration))
+                val slideOut = slideOutHorizontally(
+                    animationSpec = tween(ZenAnimations.ContentFadeOutDuration),
+                    targetOffsetX = { width -> if (forward) -width / 5 else width / 5 }
+                ) + fadeOut(animationSpec = tween(ZenAnimations.ContentFadeOutDuration))
+                slideIn togetherWith slideOut using SizeTransform(clip = false)
+            },
+            label = "ExternalImportFile"
+        ) { targetIndex ->
+            val file = prompt.files[targetIndex]
+            ExternalImportFilePane(
+                texts = texts,
+                file = file,
+                index = targetIndex,
+                totalCount = prompt.files.size,
+                selectedTarget = selectedTargets[file.id] ?: file.defaultTarget,
+                onTargetSelected = { target ->
+                    selectedTargets = selectedTargets + (file.id to target)
+                    skippedIds = skippedIds - file.id
+                }
+            )
+        }
+
+        val currentFile = prompt.files[safeIndex]
+        val currentTarget = selectedTargets[currentFile.id] ?: currentFile.defaultTarget
+        val isLast = safeIndex == prompt.files.lastIndex
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedButton(
+                onClick = onDismiss,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = Color.White,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp)
+            ) {
+                Text(texts.cancel, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            OutlinedButton(
+                onClick = { currentIndex = (safeIndex - 1).coerceAtLeast(0) },
+                enabled = safeIndex > 0,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = Color.White,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp)
+            ) {
+                Text(texts.externalImportPrevious, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedButton(
+                onClick = { skipCurrent() },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.045f),
+                    contentColor = MaterialTheme.colorScheme.primary
+                ),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp)
+            ) {
+                Text(
+                    text = if (isLast) texts.externalImportSkipDone else texts.externalImportSkipNext,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Button(
+                onClick = {
+                    skippedIds = skippedIds - currentFile.id
+                    moveNextOrConfirm()
+                },
+                enabled = currentTarget != null,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    disabledContainerColor = Color(0xFFE8E8E8),
+                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp)
+            ) {
+                Text(
+                    text = if (isLast) texts.externalImportAddDone else texts.externalImportAddNext,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExternalImportFilePane(
+    texts: UiText,
+    file: ExternalImportFile,
+    index: Int,
+    totalCount: Int,
+    selectedTarget: ExternalImportTarget?,
+    onTargetSelected: (ExternalImportTarget) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Color(0xFFEAEAEA), RoundedCornerShape(8.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = file.displayName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = formatFileInfoLine(
+                        info = file.inputInfo,
+                        texts = texts,
+                        fallbackType = file.mimeType ?: texts.unknownType,
+                        fallbackSizeBytes = file.sizeBytes
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            SmallTag(texts.externalImportCounter(index + 1, totalCount))
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SmallTag(
+                file.detectedCategory?.let { texts.categoryLabel(it) } ?: texts.unknownType
+            )
+            file.inputInfo?.formatLabel?.let { format ->
+                SmallTag(format)
+            }
+        }
+
+        if (file.targets.isEmpty()) {
+            StatusLine(
+                text = texts.externalImportUnsupported,
+                isError = true
+            )
+        } else {
+            Text(
+                text = texts.target,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            CenteredFlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalSpacing = 8.dp,
+                verticalSpacing = 8.dp
+            ) {
+                file.targets.forEach { target ->
+                    ExternalImportTargetChip(
+                        texts = texts,
+                        target = target,
+                        selected = target == selectedTarget,
+                        onSelected = { onTargetSelected(target) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CenteredFlowRow(
+    modifier: Modifier = Modifier,
+    horizontalSpacing: Dp = 8.dp,
+    verticalSpacing: Dp = 8.dp,
+    content: @Composable () -> Unit
+) {
+    Layout(
+        modifier = modifier,
+        content = content
+    ) { measurables, constraints ->
+        val horizontalSpacingPx = horizontalSpacing.roundToPx()
+        val verticalSpacingPx = verticalSpacing.roundToPx()
+        val maxWidth = constraints.maxWidth
+        val placeables = measurables.map { measurable ->
+            measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
+        }
+        val rows = mutableListOf<MutableList<Placeable>>()
+        val rowWidths = mutableListOf<Int>()
+        val rowHeights = mutableListOf<Int>()
+        var currentRow = mutableListOf<Placeable>()
+        var currentWidth = 0
+        var currentHeight = 0
+
+        fun commitRow() {
+            if (currentRow.isEmpty()) return
+            rows.add(currentRow)
+            rowWidths.add(currentWidth)
+            rowHeights.add(currentHeight)
+            currentRow = mutableListOf()
+            currentWidth = 0
+            currentHeight = 0
+        }
+
+        placeables.forEach { placeable ->
+            val nextWidth = if (currentRow.isEmpty()) {
+                placeable.width
+            } else {
+                currentWidth + horizontalSpacingPx + placeable.width
+            }
+            if (currentRow.isNotEmpty() && nextWidth > maxWidth) {
+                commitRow()
+            }
+            currentWidth = if (currentRow.isEmpty()) {
+                placeable.width
+            } else {
+                currentWidth + horizontalSpacingPx + placeable.width
+            }
+            currentHeight = maxOf(currentHeight, placeable.height)
+            currentRow.add(placeable)
+        }
+        commitRow()
+
+        val contentHeight = rowHeights.sum() +
+            verticalSpacingPx * (rows.size - 1).coerceAtLeast(0)
+        val width = if (constraints.hasBoundedWidth) {
+            constraints.maxWidth
+        } else {
+            rowWidths.maxOrNull() ?: 0
+        }
+        val height = contentHeight.coerceIn(constraints.minHeight, constraints.maxHeight)
+        val layoutWidth = width.coerceIn(constraints.minWidth, constraints.maxWidth)
+
+        layout(width = layoutWidth, height = height) {
+            var y = 0
+            rows.forEachIndexed { rowIndex, row ->
+                val rowWidth = rowWidths[rowIndex]
+                var x = ((layoutWidth - rowWidth) / 2).coerceAtLeast(0)
+                row.forEach { placeable ->
+                    placeable.placeRelative(x, y)
+                    x += placeable.width + horizontalSpacingPx
+                }
+                y += rowHeights[rowIndex] + verticalSpacingPx
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExternalImportTargetChip(
+    texts: UiText,
+    target: ExternalImportTarget,
+    selected: Boolean,
+    onSelected: () -> Unit
+) {
+    val label = texts.externalImportTargetLabel(target)
+    if (selected) {
+        Button(
+            onClick = onSelected,
+            shape = RoundedCornerShape(100.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 9.dp)
+        ) {
+            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    } else {
+        OutlinedButton(
+            onClick = onSelected,
+            shape = RoundedCornerShape(100.dp),
+            border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = Color.White,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 9.dp)
+        ) {
+            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
@@ -4610,6 +5019,14 @@ private data class UiText(
     val outputMode: String,
     val password: String,
     val skip: String,
+    val externalImportTitle: String,
+    val externalImportNote: String,
+    val externalImportUnsupported: String,
+    val externalImportPrevious: String,
+    val externalImportAddNext: String,
+    val externalImportAddDone: String,
+    val externalImportSkipNext: String,
+    val externalImportSkipDone: String,
     val imagePdfPromptTitle: String,
     val gifFramePromptTitle: String,
     val gifPdfFramePromptTitle: String,
@@ -4619,6 +5036,18 @@ private data class UiText(
     val toPrefix: String
 ) {
     fun selectedCount(count: Int): String = "$count $selectedSuffix"
+
+    fun externalImportCounter(index: Int, total: Int): String {
+        return when (this) {
+            englishText -> "$index of $total"
+            simplifiedChineseText -> "$index / $total"
+            else -> "$index / $total"
+        }
+    }
+
+    fun externalImportTargetLabel(target: ExternalImportTarget): String {
+        return "${categoryLabel(target.category)} · ${optionValue(target.targetFormat.label)}"
+    }
 
     fun fileCountLabel(count: Int): String {
         return when (this) {
@@ -6222,6 +6651,14 @@ private val englishText = UiText(
     outputMode = "Output",
     password = "Password",
     skip = "Skip",
+    externalImportTitle = "Choose shared targets",
+    externalImportNote = "Shared files stay local. Pick a target for each file before adding tasks.",
+    externalImportUnsupported = "This file type is not supported by the experimental external picker.",
+    externalImportPrevious = "Previous",
+    externalImportAddNext = "Add / next",
+    externalImportAddDone = "Add tasks",
+    externalImportSkipNext = "Skip / next",
+    externalImportSkipDone = "Skip / done",
     imagePdfPromptTitle = "Image to PDF",
     gifFramePromptTitle = "GIF frames",
     gifPdfFramePromptTitle = "GIF frames to PDF",
@@ -6323,6 +6760,14 @@ private val simplifiedChineseText = UiText(
     outputMode = "输出方式",
     password = "密码",
     skip = "跳过",
+    externalImportTitle = "选择分享目标",
+    externalImportNote = "分享来的文件仍在本机处理。逐个选择目标后再加入任务列表。",
+    externalImportUnsupported = "实验性外部选择器暂不支持此文件类型。",
+    externalImportPrevious = "上一个",
+    externalImportAddNext = "加入/下一个",
+    externalImportAddDone = "加入任务",
+    externalImportSkipNext = "跳过/下一个",
+    externalImportSkipDone = "跳过/完成",
     imagePdfPromptTitle = "图片转 PDF",
     gifFramePromptTitle = "GIF 拆帧",
     gifPdfFramePromptTitle = "GIF 拆帧转 PDF",
@@ -6424,6 +6869,14 @@ private val traditionalChineseText = UiText(
     outputMode = "輸出方式",
     password = "密碼",
     skip = "略過",
+    externalImportTitle = "選擇分享目標",
+    externalImportNote = "分享來的檔案仍在本機處理。逐一選擇目標後再加入任務列表。",
+    externalImportUnsupported = "實驗性外部選擇器暫不支援此檔案類型。",
+    externalImportPrevious = "上一個",
+    externalImportAddNext = "加入/下一個",
+    externalImportAddDone = "加入任務",
+    externalImportSkipNext = "略過/下一個",
+    externalImportSkipDone = "略過/完成",
     imagePdfPromptTitle = "圖片轉 PDF",
     gifFramePromptTitle = "GIF 拆幀",
     gifPdfFramePromptTitle = "GIF 拆幀轉 PDF",

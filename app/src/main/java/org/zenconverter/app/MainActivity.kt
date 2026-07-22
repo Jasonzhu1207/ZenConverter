@@ -49,6 +49,10 @@ import org.zenconverter.app.metadata.MetadataPrivacyManager
 import org.zenconverter.app.metadata.MetadataStatusMessage
 import org.zenconverter.app.metadata.MetadataTargetKind
 import org.zenconverter.app.metadata.MetadataToolState
+import org.zenconverter.app.ui.ExternalImportChoice
+import org.zenconverter.app.ui.ExternalImportFile
+import org.zenconverter.app.ui.ExternalImportPrompt
+import org.zenconverter.app.ui.ExternalImportTarget
 import org.zenconverter.app.ui.FileCategory
 import org.zenconverter.app.ui.GifFrameModePrompt
 import org.zenconverter.app.ui.GifPdfFramePrompt
@@ -79,8 +83,10 @@ class MainActivity : ComponentActivity() {
     private val gifPdfFramePrompt = mutableStateOf<GifPdfFramePrompt?>(null)
     private val pdfPasswordPrompt = mutableStateOf<PdfPasswordPrompt?>(null)
     private val pdfOutputPasswordPrompt = mutableStateOf<PdfOutputPasswordPrompt?>(null)
+    private val externalImportPrompt = mutableStateOf<ExternalImportPrompt?>(null)
     private val metadataToolState = mutableStateOf<MetadataToolState>(MetadataToolState.Empty)
     private val pendingPdfSelections = ArrayDeque<PendingPdfSelection>()
+    private val pendingExternalImportGroups = ArrayDeque<PendingExternalImportGroup>()
     private var pendingImagePdfSelection: PendingImagePdfSelection? = null
     private var pendingGifFrameSelection: PendingGifFrameSelection? = null
     private var pendingGifPdfFrameSelection: PendingGifPdfFrameSelection? = null
@@ -88,6 +94,7 @@ class MainActivity : ComponentActivity() {
     private var pendingMetadataTargetKind: MetadataTargetKind? = null
     private var pendingMetadataMediaWriteGrant: PendingMetadataMediaWriteGrant? = null
     private var pendingMetadataReadPermissionRetry: PendingMetadataMediaWriteGrant? = null
+    private var pendingExternalImportItems: List<PendingExternalImportItem> = emptyList()
     private var activePdfPasswordSelection: PendingPdfSelection? = null
     private var pendingSelection: PendingSelection? = null
     private var pendingVideoOptions: VideoExportOptions = VideoExportOptions()
@@ -97,6 +104,7 @@ class MainActivity : ComponentActivity() {
     private var pdfProbeRunning = false
     private var pdfBoxReady = false
     private var pdfSelectionGeneration = 0
+    private var externalImportGeneration = 0
     private val supportedVideoMimeTypes = setOf(
         VideoExportOptions.VIDEO_MIME_TYPE_H264,
         VideoExportOptions.VIDEO_MIME_TYPE_H265
@@ -266,12 +274,16 @@ class MainActivity : ComponentActivity() {
                     pendingGifFrameSelection = null
                     pendingGifPdfFrameSelection = null
                     pendingPdfOutputPasswordSelection = null
+                    pendingExternalImportItems = emptyList()
+                    pendingExternalImportGroups.clear()
                     pdfSelectionGeneration += 1
+                    externalImportGeneration += 1
                     imagePdfMergePrompt.value = null
                     gifFrameModePrompt.value = null
                     gifPdfFramePrompt.value = null
                     pdfPasswordPrompt.value = null
                     pdfOutputPasswordPrompt.value = null
+                    externalImportPrompt.value = null
                     ConversionTaskStore.clear()
                 },
                 conversionTasks = ConversionTaskStore.tasks.map { it.toUiProgress() },
@@ -283,6 +295,7 @@ class MainActivity : ComponentActivity() {
                 gifPdfFramePrompt = gifPdfFramePrompt.value,
                 pdfPasswordPrompt = pdfPasswordPrompt.value,
                 pdfOutputPasswordPrompt = pdfOutputPasswordPrompt.value,
+                externalImportPrompt = externalImportPrompt.value,
                 onPickMetadataImage = {
                     openMetadataPicker(MetadataTargetKind.Image)
                 },
@@ -301,6 +314,7 @@ class MainActivity : ComponentActivity() {
                     }
                     pendingImagePdfSelection = null
                     imagePdfMergePrompt.value = null
+                    processPendingExternalImportGroups()
                 },
                 onChooseOnePdfPerImage = {
                     pendingImagePdfSelection?.let { selection ->
@@ -316,10 +330,12 @@ class MainActivity : ComponentActivity() {
                     }
                     pendingImagePdfSelection = null
                     imagePdfMergePrompt.value = null
+                    processPendingExternalImportGroups()
                 },
                 onDismissImagePdfPrompt = {
                     pendingImagePdfSelection = null
                     imagePdfMergePrompt.value = null
+                    processPendingExternalImportGroups()
                 },
                 onChooseGifFirstFrame = {
                     val selection = pendingGifFrameSelection
@@ -333,6 +349,7 @@ class MainActivity : ComponentActivity() {
                             allowGifPrompt = false
                         )
                     }
+                    processPendingExternalImportGroups()
                 },
                 onChooseGifSplitFrames = {
                     val selection = pendingGifFrameSelection
@@ -341,10 +358,12 @@ class MainActivity : ComponentActivity() {
                     if (selection != null) {
                         enqueueGifSplitDocuments(selection.request, selection.documents)
                     }
+                    processPendingExternalImportGroups()
                 },
                 onDismissGifFramePrompt = {
                     pendingGifFrameSelection = null
                     gifFrameModePrompt.value = null
+                    processPendingExternalImportGroups()
                 },
                 onChooseGifFramesSinglePdf = {
                     val selection = pendingGifPdfFrameSelection
@@ -357,6 +376,7 @@ class MainActivity : ComponentActivity() {
                             GifFrameExportMode.FramesAsSinglePdf
                         )
                     }
+                    processPendingExternalImportGroups()
                 },
                 onChooseGifFramePdfFiles = {
                     val selection = pendingGifPdfFrameSelection
@@ -369,10 +389,12 @@ class MainActivity : ComponentActivity() {
                             GifFrameExportMode.FramesAsPdfFiles
                         )
                     }
+                    processPendingExternalImportGroups()
                 },
                 onDismissGifPdfFramePrompt = {
                     pendingGifPdfFrameSelection = null
                     gifPdfFramePrompt.value = null
+                    processPendingExternalImportGroups()
                 },
                 onSubmitPdfPassword = { password ->
                     val prompt = activePdfPasswordSelection
@@ -414,11 +436,20 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
+                    processPendingExternalImportGroups()
                 },
                 onCancelPdfOutputPassword = {
                     pendingPdfOutputPasswordSelection = null
                     pdfOutputPasswordPrompt.value = null
                     ConversionTaskStore.showMessage("PDF encryption was skipped")
+                    processPendingExternalImportGroups()
+                },
+                onConfirmExternalImport = { choices ->
+                    enqueueExternalImportChoices(choices)
+                },
+                onDismissExternalImport = {
+                    pendingExternalImportItems = emptyList()
+                    externalImportPrompt.value = null
                 },
                 onStartConversion = { videoOptions, audioOptions, imageOptions, pdfOptions ->
                     pendingVideoOptions = videoOptions
@@ -432,6 +463,13 @@ class MainActivity : ComponentActivity() {
                 }
             )
         }
+        handleExternalIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleExternalIntent(intent)
     }
 
     private fun requestNotificationPermissionThenStart() {
@@ -512,6 +550,244 @@ class MainActivity : ComponentActivity() {
         )
         ConversionService.start(this)
         clearQueuedPdfPasswords()
+    }
+
+    private fun handleExternalIntent(intent: Intent?) {
+        if (intent == null || intent.action !in EXTERNAL_IMPORT_ACTIONS) return
+        val externalUris = externalUrisFromIntent(intent)
+        if (externalUris.isEmpty()) return
+
+        val generation = ++externalImportGeneration
+        pendingExternalImportGroups.clear()
+        pendingExternalImportItems = emptyList()
+        externalImportPrompt.value = null
+        setIntent(Intent(Intent.ACTION_MAIN))
+
+        lifecycleScope.launch {
+            val items = withContext(Dispatchers.IO) {
+                buildExternalImportItems(externalUris)
+            }
+            if (generation != externalImportGeneration) return@launch
+            if (items.isEmpty()) {
+                ConversionTaskStore.showMessage("No shared files were found")
+                return@launch
+            }
+            pendingExternalImportItems = items
+            externalImportPrompt.value = ExternalImportPrompt(
+                files = items.map { it.promptFile }
+            )
+        }
+    }
+
+    private fun externalUrisFromIntent(intent: Intent): List<ExternalImportUri> {
+        val results = linkedMapOf<String, ExternalImportUri>()
+
+        fun addUri(uri: Uri?, typeHint: String?) {
+            if (uri == null) return
+            results.putIfAbsent(uri.toString(), ExternalImportUri(uri, typeHint))
+        }
+
+        when (intent.action) {
+            Intent.ACTION_VIEW -> addUri(intent.data, intent.type)
+            Intent.ACTION_SEND -> addUri(intent.streamUri(), intent.type)
+            Intent.ACTION_SEND_MULTIPLE -> {
+                intent.streamUris().forEach { uri -> addUri(uri, intent.type) }
+            }
+        }
+        intent.clipData?.let { clipData ->
+            for (index in 0 until clipData.itemCount) {
+                addUri(clipData.getItemAt(index).uri, intent.type)
+            }
+        }
+
+        return results.values.toList()
+    }
+
+    private fun buildExternalImportItems(
+        externalUris: List<ExternalImportUri>
+    ): List<PendingExternalImportItem> {
+        val prepared = externalUris.map { externalUri ->
+            persistInputFilePermission(externalUri.uri)
+            val document = selectedDocumentForExternalUri(externalUri)
+            val extension = extensionFor(document.displayName)
+            val category = detectExternalImportCategory(document.mimeType, extension)
+            PreparedExternalImportDocument(
+                document = document,
+                extension = extension,
+                detectedCategory = category
+            )
+        }
+        val pdfCount = prepared.count { it.detectedCategory == FileCategory.Pdf }
+
+        return prepared.map { candidate ->
+            val targets = externalTargetsFor(candidate.detectedCategory, pdfCount)
+            val defaultTarget = defaultExternalTargetFor(
+                category = candidate.detectedCategory,
+                extension = candidate.extension,
+                targets = targets
+            )
+            val id = UUID.randomUUID().toString()
+            PendingExternalImportItem(
+                id = id,
+                document = candidate.document,
+                promptFile = ExternalImportFile(
+                    id = id,
+                    displayName = candidate.document.displayName,
+                    sizeBytes = candidate.document.sizeBytes,
+                    mimeType = candidate.document.mimeType,
+                    inputInfo = candidate.document.inputInfo,
+                    detectedCategory = candidate.detectedCategory,
+                    targets = targets,
+                    defaultTarget = defaultTarget
+                )
+            )
+        }
+    }
+
+    private fun selectedDocumentForExternalUri(externalUri: ExternalImportUri): SelectedDocument {
+        val metadata = queryOpenableMetadata(externalUri.uri)
+        val mimeType = externalMimeTypeFor(externalUri)
+        return SelectedDocument(
+            uri = externalUri.uri,
+            displayName = metadata.displayName,
+            sizeBytes = metadata.sizeBytes,
+            mimeType = mimeType,
+            inputInfo = FileBasicInfoReader.read(
+                context = this,
+                uri = externalUri.uri,
+                displayName = metadata.displayName,
+                mimeType = mimeType,
+                fallbackSizeBytes = metadata.sizeBytes
+            )
+        )
+    }
+
+    private fun externalMimeTypeFor(externalUri: ExternalImportUri): String? {
+        val resolverMimeType = runCatching {
+            contentResolver.getType(externalUri.uri)
+        }.getOrNull()
+        return listOf(resolverMimeType, externalUri.typeHint)
+            .firstOrNull { type ->
+                !type.isNullOrBlank() && type != MIME_TYPE_ANY
+            }
+    }
+
+    private fun detectExternalImportCategory(
+        mimeType: String?,
+        extension: String
+    ): FileCategory? {
+        val normalizedMimeType = mimeType.orEmpty().lowercase(Locale.US)
+        return when {
+            normalizedMimeType.startsWith("video/") ||
+                extension in VIDEO_INPUT_EXTENSIONS -> FileCategory.Video
+            normalizedMimeType.startsWith("audio/") ||
+                extension in AUDIO_INPUT_EXTENSIONS -> FileCategory.Audio
+            normalizedMimeType == MIME_TYPE_PDF ||
+                extension == "pdf" -> FileCategory.Pdf
+            normalizedMimeType in OFFICE_MIME_TYPES ||
+                extension in OFFICE_INPUT_EXTENSIONS -> FileCategory.Document
+            normalizedMimeType in IMAGE_MIME_TYPES ||
+                extension in IMAGE_INPUT_EXTENSIONS -> FileCategory.Image
+            else -> null
+        }
+    }
+
+    private fun externalTargetsFor(
+        category: FileCategory?,
+        pdfCount: Int
+    ): List<ExternalImportTarget> {
+        return when (category) {
+            FileCategory.Video -> FileCategory.Video.formats.map {
+                ExternalImportTarget(FileCategory.Video, it)
+            } + FileCategory.Audio.formats.map {
+                ExternalImportTarget(FileCategory.Audio, it)
+            }
+            FileCategory.Audio -> FileCategory.Audio.formats.map {
+                ExternalImportTarget(FileCategory.Audio, it)
+            }
+            FileCategory.Image -> FileCategory.Image.formats.map {
+                ExternalImportTarget(FileCategory.Image, it)
+            }
+            FileCategory.Pdf -> FileCategory.Pdf.formats
+                .filter { pdfCount > 1 || !it.label.equals("PDF", ignoreCase = true) }
+                .map { ExternalImportTarget(FileCategory.Pdf, it) }
+            FileCategory.Document -> FileCategory.Document.formats.map {
+                ExternalImportTarget(FileCategory.Document, it)
+            }
+            null -> emptyList()
+        }
+    }
+
+    private fun defaultExternalTargetFor(
+        category: FileCategory?,
+        extension: String,
+        targets: List<ExternalImportTarget>
+    ): ExternalImportTarget? {
+        val preferredLabel = when (category) {
+            FileCategory.Video -> "MP4"
+            FileCategory.Audio -> "M4A (AAC)"
+            FileCategory.Image -> if (extension in JPEG_INPUT_EXTENSIONS) "PNG" else "JPG"
+            FileCategory.Pdf -> "PNG"
+            FileCategory.Document -> "PDF"
+            null -> null
+        }
+        return targets.firstOrNull { target ->
+            target.targetFormat.label.equals(preferredLabel, ignoreCase = true) &&
+                target.category == category
+        } ?: targets.firstOrNull()
+    }
+
+    private fun enqueueExternalImportChoices(choices: List<ExternalImportChoice>) {
+        val pendingById = pendingExternalImportItems.associateBy { it.id }
+        pendingExternalImportItems = emptyList()
+        externalImportPrompt.value = null
+        pendingExternalImportGroups.clear()
+
+        val grouped = linkedMapOf<PendingSelection, MutableList<SelectedDocument>>()
+        choices.forEach { choice ->
+            val pendingItem = pendingById[choice.fileId] ?: return@forEach
+            val request = PendingSelection(
+                category = choice.target.category,
+                targetFormat = choice.target.targetFormat
+            )
+            grouped.getOrPut(request) { mutableListOf() }.add(pendingItem.document)
+        }
+
+        if (grouped.isEmpty()) {
+            ConversionTaskStore.showMessage("No external files were added")
+            return
+        }
+
+        grouped.forEach { (request, documents) ->
+            pendingExternalImportGroups.add(
+                PendingExternalImportGroup(
+                    request = request,
+                    documents = documents
+                )
+            )
+        }
+        processPendingExternalImportGroups()
+    }
+
+    private fun processPendingExternalImportGroups() {
+        if (hasBlockingPromptOrProbe()) return
+        val group = pendingExternalImportGroups.poll() ?: return
+        enqueuePickedDocuments(group.request, group.documents)
+        if (!hasBlockingPromptOrProbe()) {
+            processPendingExternalImportGroups()
+        }
+    }
+
+    private fun hasBlockingPromptOrProbe(): Boolean {
+        return externalImportPrompt.value != null ||
+            imagePdfMergePrompt.value != null ||
+            gifFrameModePrompt.value != null ||
+            gifPdfFramePrompt.value != null ||
+            pdfPasswordPrompt.value != null ||
+            pdfOutputPasswordPrompt.value != null ||
+            activePdfPasswordSelection != null ||
+            pendingPdfSelections.isNotEmpty() ||
+            pdfProbeRunning
     }
 
     private fun needsLegacyWritePermission(): Boolean {
@@ -781,8 +1057,14 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        val fallbackName = uri.path
+            ?.substringAfterLast('/')
+            ?.takeIf { it.isNotBlank() }
+            ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+            ?: "Selected file"
+
         return OpenableMetadata(
-            displayName = displayName?.takeIf { it.isNotBlank() } ?: "Selected file",
+            displayName = displayName?.takeIf { it.isNotBlank() } ?: fallbackName,
             sizeBytes = sizeBytes
         )
     }
@@ -952,7 +1234,10 @@ class MainActivity : ComponentActivity() {
 
     private fun processNextPendingPdfSelection() {
         if (pdfProbeRunning || pdfPasswordPrompt.value != null) return
-        val selection = pendingPdfSelections.poll() ?: return
+        val selection = pendingPdfSelections.poll() ?: run {
+            processPendingExternalImportGroups()
+            return
+        }
         if (selection.generation != pdfSelectionGeneration) {
             processNextPendingPdfSelection()
             return
@@ -1158,6 +1443,28 @@ class MainActivity : ComponentActivity() {
         private const val PDF_PASSWORD_EXTENSION = 13
     }
 }
+
+private data class ExternalImportUri(
+    val uri: Uri,
+    val typeHint: String?
+)
+
+private data class PreparedExternalImportDocument(
+    val document: SelectedDocument,
+    val extension: String,
+    val detectedCategory: FileCategory?
+)
+
+private data class PendingExternalImportItem(
+    val id: String,
+    val document: SelectedDocument,
+    val promptFile: ExternalImportFile
+)
+
+private data class PendingExternalImportGroup(
+    val request: PendingSelection,
+    val documents: List<SelectedDocument>
+)
 
 private data class PendingSelection(
     val category: FileCategory,
@@ -1379,6 +1686,31 @@ private fun audioTargetExtensionFor(targetFormat: String): String? {
     }
 }
 
+private fun extensionFor(displayName: String): String {
+    return displayName.substringAfterLast('.', missingDelimiterValue = "")
+        .takeIf { it.length in 1..12 }
+        ?.lowercase(Locale.US)
+        .orEmpty()
+}
+
+private fun Intent.streamUri(): Uri? {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+    } else {
+        @Suppress("DEPRECATION")
+        getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+    }
+}
+
+private fun Intent.streamUris(): List<Uri> {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
+    } else {
+        @Suppress("DEPRECATION")
+        getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM).orEmpty()
+    }
+}
+
 private fun FileCategory.toConversionCategory(): ConversionMediaCategory {
     return when (this) {
         FileCategory.Video -> ConversionMediaCategory.Video
@@ -1410,4 +1742,71 @@ private fun ConversionTaskState.toUiProgress(): TaskProgress {
 }
 
 private val CONNECTED_AUDIO_TARGETS = setOf("mp3", "m4a", "wav", "flac", "wma")
+private val EXTERNAL_IMPORT_ACTIONS = setOf(
+    Intent.ACTION_VIEW,
+    Intent.ACTION_SEND,
+    Intent.ACTION_SEND_MULTIPLE
+)
+private val VIDEO_INPUT_EXTENSIONS = setOf(
+    "mp4",
+    "m4v",
+    "mov",
+    "mkv",
+    "webm",
+    "avi",
+    "3gp",
+    "3gpp",
+    "ts",
+    "mts",
+    "m2ts",
+    "mpg",
+    "mpeg",
+    "vob",
+    "flv",
+    "ogv"
+)
+private val AUDIO_INPUT_EXTENSIONS = setOf(
+    "mp3",
+    "m4a",
+    "aac",
+    "wav",
+    "flac",
+    "wma",
+    "ogg"
+)
+private val JPEG_INPUT_EXTENSIONS = setOf("jpg", "jpeg", "jfif", "jpe")
+private val IMAGE_INPUT_EXTENSIONS = JPEG_INPUT_EXTENSIONS + setOf(
+    "png",
+    "webp",
+    "gif",
+    "heic",
+    "heif",
+    "ico"
+)
+private val IMAGE_MIME_TYPES = setOf(
+    "image/jpeg",
+    "image/jpg",
+    "image/jfif",
+    "image/png",
+    "image/webp",
+    "image/gif",
+    "image/heic",
+    "image/heif",
+    "image/vnd.microsoft.icon",
+    "image/x-icon",
+    "image/ico"
+)
+private val OFFICE_INPUT_EXTENSIONS = setOf("docx", "pptx", "xlsx")
+private val OFFICE_MIME_TYPES = setOf(
+    MIME_TYPE_DOCX,
+    MIME_TYPE_PPTX,
+    MIME_TYPE_XLSX
+)
+private const val MIME_TYPE_ANY = "*/*"
 private const val MIME_TYPE_PDF = "application/pdf"
+private const val MIME_TYPE_DOCX =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+private const val MIME_TYPE_PPTX =
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+private const val MIME_TYPE_XLSX =
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

@@ -19,10 +19,86 @@
         android:theme="@style/Theme.ZenConverter">
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="image/*" />
+                <data android:mimeType="video/*" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="content" android:mimeType="image/*" />
+                <data android:scheme="content" android:mimeType="video/*" />
+                <data android:scheme="content" android:mimeType="audio/*" />
+                <data android:scheme="content" android:mimeType="application/pdf" />
+                <data android:scheme="content" android:mimeType="application/octet-stream" />
+                <data android:scheme="content" android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+                <data android:scheme="content" android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation" />
+                <data android:scheme="content" android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+                <data android:scheme="file" android:mimeType="image/*" />
+                <data android:scheme="file" android:mimeType="video/*" />
+                <data android:scheme="file" android:mimeType="audio/*" />
+                <data android:scheme="file" android:mimeType="application/pdf" />
+                <data android:scheme="file" android:mimeType="application/octet-stream" />
+                <data android:scheme="file" android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+                <data android:scheme="file" android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation" />
+                <data android:scheme="file" android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="file" android:pathPattern=".*\\.mp4" />
+                <data android:scheme="file" android:pathPattern=".*\\.m4v" />
+                <data android:scheme="file" android:pathPattern=".*\\.mov" />
+                <data android:scheme="file" android:pathPattern=".*\\.mkv" />
+                <data android:scheme="file" android:pathPattern=".*\\.webm" />
+                <data android:scheme="file" android:pathPattern=".*\\.avi" />
+                <data android:scheme="file" android:pathPattern=".*\\.3gp" />
+                <data android:scheme="file" android:pathPattern=".*\\.mp3" />
+                <data android:scheme="file" android:pathPattern=".*\\.m4a" />
+                <data android:scheme="file" android:pathPattern=".*\\.aac" />
+                <data android:scheme="file" android:pathPattern=".*\\.wav" />
+                <data android:scheme="file" android:pathPattern=".*\\.flac" />
+                <data android:scheme="file" android:pathPattern=".*\\.wma" />
+                <data android:scheme="file" android:pathPattern=".*\\.ogg" />
+                <data android:scheme="file" android:pathPattern=".*\\.jpg" />
+                <data android:scheme="file" android:pathPattern=".*\\.jpeg" />
+                <data android:scheme="file" android:pathPattern=".*\\.jfif" />
+                <data android:scheme="file" android:pathPattern=".*\\.jpe" />
+                <data android:scheme="file" android:pathPattern=".*\\.png" />
+                <data android:scheme="file" android:pathPattern=".*\\.webp" />
+                <data android:scheme="file" android:pathPattern=".*\\.gif" />
+                <data android:scheme="file" android:pathPattern=".*\\.heic" />
+                <data android:scheme="file" android:pathPattern=".*\\.heif" />
+                <data android:scheme="file" android:pathPattern=".*\\.ico" />
+                <data android:scheme="file" android:pathPattern=".*\\.pdf" />
+                <data android:scheme="file" android:pathPattern=".*\\.docx" />
+                <data android:scheme="file" android:pathPattern=".*\\.pptx" />
+                <data android:scheme="file" android:pathPattern=".*\\.xlsx" />
             </intent-filter>
         </activity>
         <service
