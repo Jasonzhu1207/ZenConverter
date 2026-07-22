@@ -165,6 +165,7 @@ import org.zenconverter.app.metadata.MetadataMessageKey
 import org.zenconverter.app.metadata.MetadataStatusMessage
 import org.zenconverter.app.metadata.MetadataTargetKind
 import org.zenconverter.app.metadata.MetadataToolState
+import org.zenconverter.app.settings.AppPreferences
 import org.zenconverter.app.updates.ApkInstaller
 import org.zenconverter.app.updates.ApkOpenResult
 import org.zenconverter.app.updates.ApkUpdateDownloader
@@ -678,8 +679,13 @@ fun ZenConverterApp(
     onStartConversion: (VideoExportOptions, AudioExportOptions, ImageExportOptions, PdfExportOptions) -> Unit,
     onCancelConversion: () -> Unit
 ) {
-    var accent by remember { mutableStateOf(AccentColorOption.Charcoal) }
-    var languageOption by remember { mutableStateOf(LanguageOption.System) }
+    val context = LocalContext.current.applicationContext
+    var accent by remember(context) {
+        mutableStateOf(accentColorFromPreference(AppPreferences.accentColor(context)))
+    }
+    var languageOption by remember(context) {
+        mutableStateOf(languageFromPreference(AppPreferences.language(context)))
+    }
     val texts = uiTextFor(resolveLanguage(languageOption))
     val rootView = LocalView.current
 
@@ -708,8 +714,14 @@ fun ZenConverterApp(
                 conversionSummary = conversionSummary,
                 isConversionRunning = isConversionRunning,
                 metadataToolState = metadataToolState,
-                onAccentSelected = { accent = it },
-                onLanguageSelected = { languageOption = it },
+                onAccentSelected = {
+                    accent = it
+                    AppPreferences.setAccentColor(context, it.name)
+                },
+                onLanguageSelected = {
+                    languageOption = it
+                    AppPreferences.setLanguage(context, it.name)
+                },
                 onOutputLocationModeChange = onOutputLocationModeChange,
                 onPickFiles = onPickFiles,
                 onPickOutputDirectory = onPickOutputDirectory,
@@ -4674,6 +4686,16 @@ private fun zenConverterColorScheme(accent: AccentColorOption): ColorScheme {
         onSurfaceVariant = Color(0xFF666666),
         outline = Color(0xFFD8D8D8)
     )
+}
+
+private fun accentColorFromPreference(value: String?): AccentColorOption {
+    return AccentColorOption.entries.firstOrNull { it.name == value }
+        ?: AccentColorOption.Charcoal
+}
+
+private fun languageFromPreference(value: String?): LanguageOption {
+    return LanguageOption.entries.firstOrNull { it.name == value }
+        ?: LanguageOption.System
 }
 
 private fun resolveLanguage(option: LanguageOption): ResolvedLanguage {

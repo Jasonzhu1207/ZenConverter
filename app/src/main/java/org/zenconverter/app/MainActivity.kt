@@ -49,6 +49,8 @@ import org.zenconverter.app.metadata.MetadataPrivacyManager
 import org.zenconverter.app.metadata.MetadataStatusMessage
 import org.zenconverter.app.metadata.MetadataTargetKind
 import org.zenconverter.app.metadata.MetadataToolState
+import org.zenconverter.app.settings.AppPreferences
+import org.zenconverter.app.settings.SavedOutputDirectory
 import org.zenconverter.app.ui.ExternalImportChoice
 import org.zenconverter.app.ui.ExternalImportFile
 import org.zenconverter.app.ui.ExternalImportPrompt
@@ -160,11 +162,20 @@ class MainActivity : ComponentActivity() {
         if (uri == null) return@registerForActivityResult
 
         val persisted = persistOutputDirectoryPermission(uri)
-        outputDirectory.value = OutputDirectory(
+        val directory = OutputDirectory(
             uri = uri,
             label = describeTreeUri(uri),
             persistablePermissionSaved = persisted
         )
+        outputDirectory.value = directory
+        if (persisted) {
+            AppPreferences.saveOutputDirectory(
+                this,
+                SavedOutputDirectory(uri = directory.uri, label = directory.label)
+            )
+        } else {
+            AppPreferences.clearOutputDirectory(this)
+        }
     }
 
     private val openMetadataDocument = registerForActivityResult(
@@ -247,6 +258,7 @@ class MainActivity : ComponentActivity() {
             )
         )
         super.onCreate(savedInstanceState)
+        restoreOutputLocationPreference()
         setContent {
             ZenConverterApp(
                 queuedFiles = queuedFiles,
@@ -255,6 +267,10 @@ class MainActivity : ComponentActivity() {
                 outputDirectory = outputDirectory.value,
                 onOutputLocationModeChange = { mode ->
                     outputLocationMode.value = mode
+                    AppPreferences.setUsesCustomOutput(
+                        this,
+                        mode == OutputLocationMode.Custom
+                    )
                 },
                 onPickFiles = { category, targetFormat ->
                     pendingSelection = PendingSelection(category, targetFormat)
@@ -1199,6 +1215,35 @@ class MainActivity : ComponentActivity() {
         val segment = uri.lastPathSegment ?: return "Selected folder"
         val label = segment.substringAfter(':', segment).ifBlank { "Device storage" }
         return label
+    }
+
+    private fun restoreOutputLocationPreference() {
+        val savedDirectory = AppPreferences.savedOutputDirectory(this)
+        if (savedDirectory == null) {
+            if (AppPreferences.usesCustomOutput(this)) {
+                AppPreferences.setUsesCustomOutput(this, false)
+            }
+            return
+        }
+
+        val hasWritePermission =
+            contentResolver.persistedUriPermissions.any { permission ->
+                permission.uri == savedDirectory.uri && permission.isWritePermission
+            }
+        if (!hasWritePermission) {
+            AppPreferences.clearOutputDirectory(this)
+            AppPreferences.setUsesCustomOutput(this, false)
+            return
+        }
+
+        outputDirectory.value = OutputDirectory(
+            uri = savedDirectory.uri,
+            label = savedDirectory.label,
+            persistablePermissionSaved = true
+        )
+        if (AppPreferences.usesCustomOutput(this)) {
+            outputLocationMode.value = OutputLocationMode.Custom
+        }
     }
 
     private fun enqueuePdfDocumentsWithProbe(
