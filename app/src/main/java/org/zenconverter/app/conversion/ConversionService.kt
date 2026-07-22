@@ -38,6 +38,7 @@ import androidx.annotation.RequiresApi
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.FFmpegKitConfig
 import com.arthenica.ffmpegkit.FFmpegSession
+import com.arthenica.ffmpegkit.FFprobeKit
 import com.arthenica.ffmpegkit.ReturnCode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -2009,30 +2010,6 @@ class ConversionService : Service() {
             )
         }
 
-        val durationMs = ffmpegProgressDurationMsFor(input)
-        ffmpegMissingAdvancedMetadataMessageFor(input, durationMs)?.let { message ->
-            return@withContext FfmpegRunResult(
-                success = false,
-                cancelled = false,
-                message = message
-            )
-        }
-        ffmpegUnsupportedAdvancedSelectionMessageFor(input, durationMs)?.let { message ->
-            return@withContext FfmpegRunResult(
-                success = false,
-                cancelled = false,
-                message = message
-            )
-        }
-        ffmpegMissingFilterMessageFor(input)?.let { message ->
-            return@withContext FfmpegRunResult(
-                success = false,
-                cancelled = false,
-                message = message
-            )
-        }
-        val logTail = mutableListOf<String>()
-
         val inputSource = openFfmpegInputSource(input.inputUri)
             ?: return@withContext FfmpegRunResult(
                 success = false,
@@ -2041,6 +2018,29 @@ class ConversionService : Service() {
             )
 
         try {
+            val durationMs = ffmpegProgressDurationMsFor(input, inputSource.path)
+            ffmpegMissingAdvancedMetadataMessageFor(input, durationMs)?.let { message ->
+                return@withContext FfmpegRunResult(
+                    success = false,
+                    cancelled = false,
+                    message = message
+                )
+            }
+            ffmpegUnsupportedAdvancedSelectionMessageFor(input, durationMs)?.let { message ->
+                return@withContext FfmpegRunResult(
+                    success = false,
+                    cancelled = false,
+                    message = message
+                )
+            }
+            ffmpegMissingFilterMessageFor(input)?.let { message ->
+                return@withContext FfmpegRunResult(
+                    success = false,
+                    cancelled = false,
+                    message = message
+                )
+            }
+            val logTail = mutableListOf<String>()
             if (isVideoGifOutput(input)) {
                 return@withContext runFfmpegVideoGifExport(
                     input = input,
@@ -3415,13 +3415,38 @@ class ConversionService : Service() {
         }
     }
 
-    private fun ffmpegProgressDurationMsFor(input: ConversionTaskInput): Long? {
-        val durationMs = readDurationMs(input.inputUri)
+    private fun ffmpegProgressDurationMsFor(
+        input: ConversionTaskInput,
+        inputPath: String
+    ): Long? {
+        val durationMs = readDurationMs(input.inputUri) ?: readFfmpegDurationMs(inputPath)
         return if (isVideoGifOutput(input)) {
             durationMs?.coerceAtMost(FFMPEG_VIDEO_GIF_MAX_DURATION_MS)
         } else {
             durationMs
         }
+    }
+
+    private fun readFfmpegDurationMs(inputPath: String): Long? {
+        val durationMs = runCatching {
+            FFprobeKit.getMediaInformation(
+                inputPath,
+                FFMPEG_MEDIA_INFORMATION_PROBE_TIMEOUT_MS
+            ).getMediaInformation()
+                ?.getDuration()
+                ?.toDoubleOrNull()
+                ?.takeIf { it.isFinite() && it > 0.0 }
+                ?.times(1_000.0)
+                ?.toLong()
+                ?.takeIf { it > 0L }
+        }.onFailure { exception ->
+            Log.d(TAG, "FFprobe could not read media duration", exception)
+        }.getOrNull()
+
+        if (durationMs != null) {
+            Log.d(TAG, "FFprobe provided media durationMs=$durationMs")
+        }
+        return durationMs
     }
 
     private fun shouldUseCompatibilityEngine(input: ConversionTaskInput): Boolean {
@@ -4482,6 +4507,7 @@ class ConversionService : Service() {
         private const val FFMPEG_MAX_PROGRESS_BEFORE_SAVE = 0.98f
         private const val FFMPEG_LOG_DRAIN_TIMEOUT_MS = 1_000
         private const val FFMPEG_ENCODER_PROBE_TIMEOUT_MS = 2_000
+        private const val FFMPEG_MEDIA_INFORMATION_PROBE_TIMEOUT_MS = 3_000
         private const val FFMPEG_LOG_TAIL_LINES = 16
         private const val FFMPEG_LOG_LINE_LIMIT = 600
         private const val FFMPEG_VIDEO_ENCODER_H264 = "libx264"
