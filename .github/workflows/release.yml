@@ -7,6 +7,17 @@ on:
       - main
     tags:
       - "v*"
+    paths:
+      # Only branch pushes are path-filtered. Version tags always build so a
+      # formal release remains reproducible even when its tag is documentation-only.
+      - "app/**"
+      - "gradle/**"
+      - "gradlew"
+      - "gradlew.bat"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - ".github/workflows/release.yml"
 
 permissions:
   contents: write
@@ -236,6 +247,7 @@ jobs:
           cat > release-notes.md <<EOF
           Continuous pre-release build from main.
 
+          Built at (UTC): $(date -u +'%Y-%m-%dT%H:%M:%SZ')
           Android version: ${{ steps.app_version.outputs.version_name }} (${{ steps.app_version.outputs.version_code }})
           Version source tag: ${{ steps.app_version.outputs.source_tag }}
           APK SHA-256: ${{ steps.package.outputs.asset_sha256 }}
@@ -244,17 +256,16 @@ jobs:
           EOF
 
           if gh release view "$PRE_RELEASE_TAG" >/dev/null 2>&1; then
-            gh release edit "$PRE_RELEASE_TAG" \
-              --title "Continuous pre-release for ${{ steps.app_version.outputs.source_tag }}" \
-              --notes-file release-notes.md \
-              --prerelease
-          else
-            gh release create "$PRE_RELEASE_TAG" \
-              --title "Continuous pre-release for ${{ steps.app_version.outputs.source_tag }}" \
-              --notes-file release-notes.md \
-              --prerelease \
-              --target "$GITHUB_SHA"
+            # GitHub keeps a published release's timestamp immutable. Recreate
+            # this one fixed-tag pre-release so its visible publication date
+            # represents the current APK instead of its original creation.
+            gh release delete "$PRE_RELEASE_TAG" --yes
           fi
+          gh release create "$PRE_RELEASE_TAG" \
+            --title "Continuous pre-release for ${{ steps.app_version.outputs.source_tag }}" \
+            --notes-file release-notes.md \
+            --prerelease \
+            --target "$GITHUB_SHA"
           gh release delete-asset "$PRE_RELEASE_TAG" "${APP_NAME}-${PRE_RELEASE_TAG}-armeabi-v7a-arm64-v8a.apk" --yes >/dev/null 2>&1 || true
           gh release delete-asset "$PRE_RELEASE_TAG" "${APP_NAME}-${PRE_RELEASE_TAG}-arm64-v8a.apk" --yes >/dev/null 2>&1 || true
           gh release delete-asset "$PRE_RELEASE_TAG" "${APP_NAME}-${PRE_RELEASE_TAG}-universal.apk" --yes >/dev/null 2>&1 || true

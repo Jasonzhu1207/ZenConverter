@@ -1,4 +1,4 @@
-# 0016 - FFmpeg Smart Video Compression
+# 0016 - FFmpeg Video Compression Presets
 
 ## Status
 
@@ -20,7 +20,7 @@ sources can become larger after re-encoding.
 
 ## Decision
 
-Add a compact smart compression option for MP4/MKV/MOV outputs only:
+Add a compact fixed compression preset control for MP4/MKV/MOV outputs only:
 
 - Off/manual: keep the existing behavior. Fixed bitrate uses `-b:v`; Auto
   bitrate uses CRF 23 for H.264 or CRF 28 for H.265 with the current fast
@@ -36,7 +36,7 @@ Add a compact smart compression option for MP4/MKV/MOV outputs only:
   `medium`; prefer H.265 when available; cap the short side at 720 px and frame
   rate at 30 fps; encode AAC audio at 128 kbps.
 
-The three smart modes hide and ignore manual video codec, fixed bitrate,
+The three fixed presets hide and ignore manual video codec, fixed bitrate,
 resolution, frame-rate, audio options, and advanced controls. This keeps them
 honest as one-click size/quality strategies instead of partial bitrate presets.
 
@@ -50,7 +50,7 @@ audio losslessness.
   changing the FFmpeg binary.
 - MP4/MKV/MOV output behavior remains true re-encoding, so advanced filters and
   audio options continue to apply.
-- Smart modes may be slower than off/manual mode because they use preset
+- Fixed presets may be slower than off/manual mode because they use preset
   `medium`.
 - The app should continue showing output size changes. If output is larger than
   the input, the UI should explain that the source may already be efficiently

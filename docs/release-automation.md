@@ -4,7 +4,10 @@ GitHub Actions builds signed release APKs from repository secrets.
 
 ## Triggers
 
-- Pushes to `main` update a permanent pre-release named `pre-release`.
+- Pushes to `main` update a permanent pre-release named `pre-release` only
+  when APK-relevant files change: `app/`, Gradle build files/wrapper, or the
+  release workflow itself. Documentation, issue-template, attribution, and
+  other non-APK changes do not consume a release build.
 - Tags starting with `v`, such as `v0.1.0`, create or update the matching GitHub
   Release.
 - The workflow can also be started manually with `workflow_dispatch`.
@@ -105,6 +108,22 @@ APK SHA-256: ...
 
 The in-app update checker reads the Android version line and verifies downloaded
 APKs when the checksum is present.
+
+## Continuous Pre-release Behavior
+
+The `pre-release` tag is permanent and always points to the commit used for the
+current continuous APK. GitHub does not update the visible `published at` time
+when a release is edited or an asset is replaced. Therefore, each qualifying
+main-branch build deletes and immediately recreates the release under the same
+tag. This keeps one stable pre-release URL and asset name while making the
+release page's publication date match the latest APK. The notes also record the
+exact UTC build time.
+
+Releases created by the workflow use the repository-scoped `GITHUB_TOKEN` and
+are attributed to `github-actions[bot]`. GitHub does not allow the author of an
+existing release to be changed. To retain bot attribution for future formal
+releases, push the `vX.Y.Z` tag and let this workflow create the release; do
+not create the release manually in the GitHub UI.
 
 The app probes for `libmp3lame` before MP3 export, but MP3 output remains
 experimental until physical-device sample conversion passes.

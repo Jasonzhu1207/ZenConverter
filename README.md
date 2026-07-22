@@ -57,7 +57,7 @@ Completed items are listed first, experimental paths next, and planned work last
 | --- | --- | --- |
 | Native Android shell | Done | Kotlin, Compose, Material 3, foreground service pipeline. |
 | Task queue and results | Done | File basics, per-task progress and failures, compact before/after conversion details, cancellation, output sharing, and best-effort opening of the result or its location. |
-| Video conversion | Done | MP4 / MKV / MOV outputs use FFmpeg true video and audio re-encoding, including MP4-to-MP4. Off/manual mode exposes codec, bitrate, resolution, frame-rate, audio, and advanced controls; smart CRF compression modes own the core video size/quality strategy plus AAC audio bitrate. |
+| Video conversion | Done | MP4 / MKV / MOV outputs use FFmpeg true video and audio re-encoding, including MP4-to-MP4. Codec, bitrate, resolution, frame rate, audio, and advanced processing can be adjusted. Enabling a compression preset fixes the CRF, video quality/size strategy, and AAC audio bitrate. |
 | Video to animated GIF | Done | FFmpeg palette-based GIF export automatically uses at most the first 30 seconds, 30 fps, and 900 frames. The default short-side cap is 480 px, with 720 px and Original options. |
 | Audio extraction and conversion | Done | Video audio extraction and MP3 / M4A / WAV / FLAC / WMA targets all use FFmpeg true audio re-encoding. Applicable bitrate, sample-rate, channel, and encoder checks are wired. |
 | Advanced audio/video processing | Experimental | Video supports short reverse playback, fade, mirror, rotation, and frame fit/crop. Audio supports reverse playback, non-model `afftdn` noise reduction, fade, volume/mute, and echo. Reverse playback has conservative safety limits. |
