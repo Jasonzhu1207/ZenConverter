@@ -41,12 +41,20 @@ data class VideoExportOptions(
     val videoBitrate: Int? = null,
     val videoMimeType: String = VIDEO_MIME_TYPE_H264,
     val maxFrameRate: Int? = null,
+    val compressionMode: VideoCompressionMode = VideoCompressionMode.Standard,
     val advanced: VideoAdvancedOptions = VideoAdvancedOptions()
 ) {
     companion object {
         const val VIDEO_MIME_TYPE_H264 = "video/avc"
         const val VIDEO_MIME_TYPE_H265 = "video/hevc"
     }
+}
+
+enum class VideoCompressionMode {
+    Standard,
+    VisualLossless,
+    BalancedShrink,
+    SmallFile
 }
 
 data class AudioExportOptions(

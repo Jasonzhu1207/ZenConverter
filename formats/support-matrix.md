@@ -17,11 +17,11 @@ as supported until it has a tested path, sample files, and failure behavior.
 | --- | --- | --- | --- | --- |
 | Any | Any | Planned | None | Do not imply universal support. |
 | MP4 / MKV / MOV / WEBM / AVI / 3GP / 3GPP / TS / MTS video audio tracks | MP3 / M4A / WAV / FLAC / WMA | Experimental | FFmpeg compatible | Extracts the first audio stream and encodes the selected audio target. M4A is AAC re-encode, not stream copy. The app probes encoders before export where possible. Bitrate, sample-rate, and channel options are passed when the target supports them; video, subtitle, attachment, and extra audio tracks are not copied. |
-| MP4 | MP4 | Experimental | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in MP4. Video bitrate, codec, short-side resolution cap, max frame-rate, and advanced filters are applied where selected. Subtitles, attachments, and extra tracks are not copied. |
-| MP4 | MKV | Experimental | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in Matroska. Video bitrate, codec, short-side resolution cap, max frame-rate, and advanced filters are applied where selected. Subtitles, attachments, and extra tracks are not copied. |
-| MP4 / MKV / MOV / WEBM / AVI / 3GP / 3GPP / TS / MTS | MOV | Experimental | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in QuickTime MOV. Video bitrate, codec, short-side resolution cap, max frame-rate, and advanced filters are applied where selected. Subtitles, attachments, and extra tracks are not copied. |
+| MP4 | MP4 | Experimental | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in MP4. Manual mode exposes codec, bitrate, short-side resolution cap, max frame-rate, audio options, and advanced filters. Smart compression modes own the video codec/CRF/preset/resolution/frame-rate strategy and AAC audio bitrate. Subtitles, attachments, and extra tracks are not copied. |
+| MP4 | MKV | Experimental | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in Matroska. Manual mode exposes codec, bitrate, short-side resolution cap, max frame-rate, audio options, and advanced filters. Smart compression modes own the video codec/CRF/preset/resolution/frame-rate strategy and AAC audio bitrate. Subtitles, attachments, and extra tracks are not copied. |
+| MP4 / MKV / MOV / WEBM / AVI / 3GP / 3GPP / TS / MTS | MOV | Experimental | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in QuickTime MOV. Manual mode exposes codec, bitrate, short-side resolution cap, max frame-rate, audio options, and advanced filters. Smart compression modes own the video codec/CRF/preset/resolution/frame-rate strategy and AAC audio bitrate. Subtitles, attachments, and extra tracks are not copied. |
 | MP4 / MKV / MOV / WEBM / AVI / 3GP / 3GPP / TS / MTS | GIF | Experimental | FFmpeg compatible | Creates an animated GIF from the first video track with palettegen/paletteuse. Output is automatically limited to the first 30 seconds, 30 fps, and 900 frames. The default short-side cap is 480 px, with 720 px and Original options. Audio, subtitles, data streams, timing metadata, and container metadata are not copied. |
-| MKV / MOV / WEBM / AVI / 3GP / 3GPP / TS / MTS | MP4 | Experimental | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in MP4. Video bitrate, codec, short-side resolution cap, max frame-rate, and advanced filters are applied where selected. Subtitles, attachments, and extra tracks are not copied. |
+| MKV / MOV / WEBM / AVI / 3GP / 3GPP / TS / MTS | MP4 | Experimental | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in MP4. Manual mode exposes codec, bitrate, short-side resolution cap, max frame-rate, audio options, and advanced filters. Smart compression modes own the video codec/CRF/preset/resolution/frame-rate strategy and AAC audio bitrate. Subtitles, attachments, and extra tracks are not copied. |
 | MP3 / M4A / AAC / FLAC / WAV / WMA / OGG | MP3 / M4A / WAV / FLAC / WMA | Experimental | FFmpeg compatible | Common audio conversion path. MP3 uses `libmp3lame`; M4A uses AAC; WAV uses PCM; FLAC uses FLAC; WMA uses WMA v2 in ASF/WMA. Bitrate is applied for MP3/M4A/WMA when selected. Sample-rate, channel, reverse, fade, volume/mute, echo, and audio noise-reduction controls are applied when selected. WAV/FLAC ignore bitrate. |
 | JPG / JPEG / JFIF / JPE / PNG / WEBP | JPG / JFIF / PNG / WEBP / ICO | Experimental | Native Bitmap | Static image conversion through Android platform bitmap APIs; physical-device smoke testing is still pending. JFIF output is JPEG-encoded pixels with a `.jfif` extension. JPG/JFIF/WEBP quality presets are Original 100, High 95, Balanced 85, Small 60; WEBP also offers Android 11+ lossless output. ICO output is a multi-size PNG-in-ICO file. PNG is written as lossless output. Transparency is preserved for PNG/WEBP/ICO and flattened to white for JPG/JFIF. Metadata is not copied, though JPEG EXIF orientation is applied best-effort; animated WEBP is not preserved as animation. |
 | JPG / JPEG / JFIF / JPE | Inspect / clean / restore metadata | Experimental | Native JPEG segment tool | Separate privacy tool, not a conversion task. It inspects common EXIF values and removable JPEG metadata segments, then can remove EXIF/XMP, IPTC/Photoshop, and comment segments in place without re-encoding pixels. JFIF, ICC, and Adobe display-related segments are preserved. Removed metadata is backed up in app-private data and can be restored only when the selected image's metadata-stripped core SHA-256 and dimensions match. |
@@ -67,6 +67,14 @@ as supported until it has a tested path, sample files, and failure behavior.
   `-map 0:v:0 -map 0:a:0? -sn -dn -c:v libx264|libx265 -c:a aac`.
   MP4 output writes `-f mp4` plus `+faststart`; MKV output writes
   `-f matroska`; MOV output writes `-f mov` plus `+faststart`.
+- Video smart compression is CRF-based visual compression, not mathematical
+  lossless compression. The off/manual state keeps the existing fixed-bitrate
+  or Auto CRF behavior and exposes manual video/audio controls. Visual lossless,
+  balanced compression, and small-file modes force CRF output and use preset
+  `medium`; they hide/ignore manual video codec, bitrate, resolution,
+  frame-rate, audio options, and advanced controls. High-bitrate sources usually
+  shrink substantially, but already efficient low-bitrate sources can become
+  larger.
 - Advanced filters are experimental and only apply to MP4/MKV/MOV video outputs
   and audio outputs. Video outputs support reverse playback, fade, mirror,
   rotate, and fit/crop frame shape. Audio outputs and video-output audio tracks
@@ -84,10 +92,17 @@ as supported until it has a tested path, sample files, and failure behavior.
   `fps=30`, applies `-frames:v 900`, clips processing to the first 30 seconds,
   drops audio/subtitle/data streams, and loops by default.
 - Video compatibility options are wired as follows: codec selects
-  `libx264`/`libx265`; selected bitrate becomes `-b:v`; Auto bitrate uses CRF
-  23 for H.264 or CRF 28 for H.265; resolution caps the short side and keeps
-  even dimensions; frame-rate uses `-fpsmax` as an upper bound rather than
-  forcing low-FPS sources upward.
+  `libx264`/`libx265`; off/manual selected bitrate becomes `-b:v`; off/manual
+  Auto bitrate uses CRF 23 for H.264 or CRF 28 for H.265 with preset
+  `veryfast`. Visual lossless prefers H.265 when available and uses CRF 18 for
+  H.264 or CRF 20 for H.265 while keeping original resolution and frame rate.
+  Balanced compression prefers H.265, uses CRF 21 for H.264 or CRF 24 for
+  H.265, and caps the short side at 1080 px. Small-file mode prefers H.265,
+  uses CRF 24 for H.264 or CRF 28 for H.265, caps the short side at 720 px, and
+  caps frame rate at 30 fps. The three smart modes use preset `medium`; their
+  resolution caps keep even dimensions and their frame-rate cap uses `-fpsmax`
+  rather than forcing low-FPS sources upward. Their AAC audio bitrate is 192k,
+  160k, and 128k respectively.
 - Video compatibility AAC audio options are wired as follows: selected audio
   bitrate becomes `-b:a`; selected sample-rate becomes `-ar`; selected channel
   count becomes `-ac`; selected audio advanced filters become `-af` unless

@@ -15,17 +15,17 @@ groups:
         to: mp4
         engine: ffmpeg-compatible
         status: experimental
-        note: "FFmpeg re-encode path. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio. Video/audio options and advanced filters are applied where selected."
+        note: "FFmpeg re-encode path. Encodes the first video track with H.264/H.265 and writes AAC audio. Manual mode exposes video/audio controls; smart compression modes own CRF/preset/resolution/frame-rate strategy and AAC audio bitrate. Manual-mode advanced filters apply where selected."
       - from: mp4
         to: mkv
         engine: ffmpeg-compatible
         status: experimental
-        note: "FFmpeg re-encode path. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio; selected advanced filters apply. Subtitles, attachments, and extra tracks are not copied."
+        note: "FFmpeg re-encode path. Encodes the first video track with H.264/H.265 and writes AAC audio. Manual mode exposes video/audio controls; smart compression modes own CRF/preset/resolution/frame-rate strategy and AAC audio bitrate. Manual-mode advanced filters apply. Subtitles, attachments, and extra tracks are not copied."
       - from: video
         to: mov
         engine: ffmpeg-compatible
         status: experimental
-        note: "FFmpeg re-encode path for video inputs. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio in a QuickTime MOV container; selected advanced filters apply."
+        note: "FFmpeg re-encode path for video inputs. Encodes the first video track with H.264/H.265 and writes AAC audio in a QuickTime MOV container. Smart compression modes own CRF/preset/resolution/frame-rate strategy and AAC audio bitrate; manual-mode advanced filters apply."
       - from: video
         to: gif
         engine: ffmpeg-compatible
@@ -35,42 +35,42 @@ groups:
         to: mp4
         engine: ffmpeg-compatible
         status: experimental
-        note: "FFmpeg re-encode path. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio."
+        note: "FFmpeg re-encode path. Encodes the first video track with H.264/H.265 and writes AAC audio. Smart compression modes own CRF/preset/resolution/frame-rate strategy and AAC audio bitrate."
       - from: mov
         to: mp4
         engine: ffmpeg-compatible
         status: experimental
-        note: "FFmpeg re-encode path. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio."
+        note: "FFmpeg re-encode path. Encodes the first video track with H.264/H.265 and writes AAC audio. Smart compression modes own CRF/preset/resolution/frame-rate strategy and AAC audio bitrate."
       - from: webm
         to: mp4
         engine: ffmpeg-compatible
         status: experimental
-        note: "FFmpeg re-encode path. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio."
+        note: "FFmpeg re-encode path. Encodes the first video track with H.264/H.265 and writes AAC audio. Smart compression modes own CRF/preset/resolution/frame-rate strategy and AAC audio bitrate."
       - from: avi
         to: mp4
         engine: ffmpeg-compatible
         status: experimental
-        note: "FFmpeg re-encode path. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio."
+        note: "FFmpeg re-encode path. Encodes the first video track with H.264/H.265 and writes AAC audio. Smart compression modes own CRF/preset/resolution/frame-rate strategy and AAC audio bitrate."
       - from: 3gp
         to: mp4
         engine: ffmpeg-compatible
         status: experimental
-        note: "FFmpeg re-encode path. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio."
+        note: "FFmpeg re-encode path. Encodes the first video track with H.264/H.265 and writes AAC audio. Smart compression modes own CRF/preset/resolution/frame-rate strategy and AAC audio bitrate."
       - from: 3gpp
         to: mp4
         engine: ffmpeg-compatible
         status: experimental
-        note: "Alias of 3GP for routing. Uses the same FFmpeg re-encode path."
+        note: "Alias of 3GP for routing. Uses the same FFmpeg re-encode path and video smart compression modes."
       - from: ts
         to: mp4
         engine: ffmpeg-compatible
         status: experimental
-        note: "FFmpeg re-encode path. Encodes the first video track with the selected H.264/H.265 option and writes AAC audio."
+        note: "FFmpeg re-encode path. Encodes the first video track with H.264/H.265 and writes AAC audio. Smart compression modes own CRF/preset/resolution/frame-rate strategy and AAC audio bitrate."
       - from: mts
         to: mp4
         engine: ffmpeg-compatible
         status: experimental
-        note: "TS-family alias for routing. Uses the same FFmpeg re-encode path."
+        note: "TS-family alias for routing. Uses the same FFmpeg re-encode path and video smart compression modes."
       - from: mp3
         to: mp3
         engine: ffmpeg-compatible

@@ -2343,7 +2343,11 @@ class ConversionService : Service() {
     ): List<String> {
         val videoProfile = ffmpegVideoProfileFor(input)
             ?: error("Unsupported video target ${input.targetFormat}")
-        val includeAudio = input.audioOptions.advanced.volume != AudioVolumeMode.Mute
+        val videoAudioOptions = ffmpegVideoAudioOptionsFor(
+            compressionMode = input.videoOptions.compressionMode,
+            manualAudioOptions = input.audioOptions
+        )
+        val includeAudio = videoAudioOptions.advanced.volume != AudioVolumeMode.Mute
         return buildList {
             add("-hide_banner")
             add("-nostdin")
@@ -2393,10 +2397,11 @@ class ConversionService : Service() {
                 add("-c:a")
                 add(FFMPEG_AAC_ENCODER)
                 addFfmpegAudioOptions(
-                    audioOptions = input.audioOptions,
+                    audioOptions = videoAudioOptions,
                     audioProfile = ffmpegAacAudioProfile(),
                     durationMs = durationMs,
-                    forceReverse = input.videoOptions.advanced.reverse
+                    forceReverse = input.videoOptions.compressionMode == VideoCompressionMode.Standard &&
+                        input.videoOptions.advanced.reverse
                 )
             }
             if (videoProfile.useFastStart) {
@@ -2406,6 +2411,18 @@ class ConversionService : Service() {
             add("-f")
             add(videoProfile.format)
             add(outputFile.absolutePath)
+        }
+    }
+
+    private fun ffmpegVideoAudioOptionsFor(
+        compressionMode: VideoCompressionMode,
+        manualAudioOptions: AudioExportOptions
+    ): AudioExportOptions {
+        return when (compressionMode) {
+            VideoCompressionMode.Standard -> manualAudioOptions
+            VideoCompressionMode.VisualLossless -> AudioExportOptions(audioBitrate = 192_000)
+            VideoCompressionMode.BalancedShrink -> AudioExportOptions(audioBitrate = 160_000)
+            VideoCompressionMode.SmallFile -> AudioExportOptions(audioBitrate = 128_000)
         }
     }
 
@@ -2520,21 +2537,60 @@ class ConversionService : Service() {
                 format = "mp4",
                 useFastStart = true,
                 videoTag = if (videoCodec == FFMPEG_VIDEO_ENCODER_H265) "hvc1" else null,
-                crf = defaultVideoCrfFor(videoCodec)
+                preset = videoPresetFor(input.videoOptions.compressionMode),
+                crf = videoCrfFor(videoCodec, input.videoOptions.compressionMode)
             )
             "mov" -> FfmpegVideoProfile(
                 videoCodec = videoCodec,
                 format = "mov",
                 useFastStart = true,
                 videoTag = if (videoCodec == FFMPEG_VIDEO_ENCODER_H265) "hvc1" else null,
-                crf = defaultVideoCrfFor(videoCodec)
+                preset = videoPresetFor(input.videoOptions.compressionMode),
+                crf = videoCrfFor(videoCodec, input.videoOptions.compressionMode)
             )
             "mkv" -> FfmpegVideoProfile(
                 videoCodec = videoCodec,
                 format = "matroska",
-                crf = defaultVideoCrfFor(videoCodec)
+                preset = videoPresetFor(input.videoOptions.compressionMode),
+                crf = videoCrfFor(videoCodec, input.videoOptions.compressionMode)
             )
             else -> null
+        }
+    }
+
+    private fun videoPresetFor(compressionMode: VideoCompressionMode): String {
+        return when (compressionMode) {
+            VideoCompressionMode.Standard -> FFMPEG_STANDARD_VIDEO_PRESET
+            VideoCompressionMode.VisualLossless,
+            VideoCompressionMode.BalancedShrink,
+            VideoCompressionMode.SmallFile -> FFMPEG_PRESET_COMPRESSION_MEDIUM
+        }
+    }
+
+    private fun videoCrfFor(videoCodec: String, compressionMode: VideoCompressionMode): String {
+        return when (compressionMode) {
+            VideoCompressionMode.Standard -> defaultVideoCrfFor(videoCodec)
+            VideoCompressionMode.VisualLossless -> {
+                if (videoCodec == FFMPEG_VIDEO_ENCODER_H265) {
+                    FFMPEG_VISUAL_LOSSLESS_CRF_H265
+                } else {
+                    FFMPEG_VISUAL_LOSSLESS_CRF_H264
+                }
+            }
+            VideoCompressionMode.BalancedShrink -> {
+                if (videoCodec == FFMPEG_VIDEO_ENCODER_H265) {
+                    FFMPEG_BALANCED_SHRINK_CRF_H265
+                } else {
+                    FFMPEG_BALANCED_SHRINK_CRF_H264
+                }
+            }
+            VideoCompressionMode.SmallFile -> {
+                if (videoCodec == FFMPEG_VIDEO_ENCODER_H265) {
+                    FFMPEG_SMALL_FILE_CRF_H265
+                } else {
+                    FFMPEG_SMALL_FILE_CRF_H264
+                }
+            }
         }
     }
 
@@ -2550,7 +2606,11 @@ class ConversionService : Service() {
         input: ConversionTaskInput,
         durationMs: Long?
     ): String? {
-        val advanced = input.videoOptions.advanced
+        val advanced = if (input.videoOptions.compressionMode == VideoCompressionMode.Standard) {
+            input.videoOptions.advanced
+        } else {
+            VideoAdvancedOptions()
+        }
         val filters = buildList {
             addAll(ffmpegVideoRotationFiltersFor(advanced.rotation))
             addAll(ffmpegVideoMirrorFiltersFor(advanced.mirror))
@@ -2921,19 +2981,33 @@ class ConversionService : Service() {
         durationMs: Long?
     ): String? {
         if (durationMs != null) return null
+        val presetCompressionActive =
+            input.category == ConversionMediaCategory.Video &&
+                !isVideoGifOutput(input) &&
+                input.videoOptions.compressionMode != VideoCompressionMode.Standard
+        val videoAdvanced = if (presetCompressionActive) {
+            VideoAdvancedOptions()
+        } else {
+            input.videoOptions.advanced
+        }
+        val audioAdvanced = if (presetCompressionActive) {
+            ffmpegVideoAudioOptionsFor(input.videoOptions.compressionMode, input.audioOptions).advanced
+        } else {
+            input.audioOptions.advanced
+        }
         val videoReverseApplies =
             input.category == ConversionMediaCategory.Video &&
                 !isVideoGifOutput(input) &&
-                input.videoOptions.advanced.reverse
+                videoAdvanced.reverse
         val audioFadeOutApplies =
-            input.audioOptions.advanced.volume != AudioVolumeMode.Mute &&
-                input.audioOptions.advanced.fadeOutSeconds != null
+            audioAdvanced.volume != AudioVolumeMode.Mute &&
+                audioAdvanced.fadeOutSeconds != null
         val needsDuration = when (input.category) {
             ConversionMediaCategory.Video ->
                 !isVideoGifOutput(input) &&
-                    (input.videoOptions.advanced.fadeOutSeconds != null || audioFadeOutApplies)
+                    (videoAdvanced.fadeOutSeconds != null || audioFadeOutApplies)
             ConversionMediaCategory.Audio ->
-                input.audioOptions.advanced.fadeOutSeconds != null
+                audioAdvanced.fadeOutSeconds != null
             ConversionMediaCategory.Image,
             ConversionMediaCategory.Pdf,
             ConversionMediaCategory.Document -> false
@@ -2954,6 +3028,7 @@ class ConversionService : Service() {
         if (
             input.category == ConversionMediaCategory.Video &&
             !isVideoGifOutput(input) &&
+            input.videoOptions.compressionMode == VideoCompressionMode.Standard &&
             input.videoOptions.advanced.reverse
         ) {
             val reverseBudgetMessage = ffmpegUnsafeVideoReverseMessageFor(input, durationMs)
@@ -3050,8 +3125,16 @@ class ConversionService : Service() {
 
     private fun requiredFfmpegFiltersFor(input: ConversionTaskInput): Set<String> {
         return buildSet {
+            val presetCompressionActive =
+                input.category == ConversionMediaCategory.Video &&
+                    !isVideoGifOutput(input) &&
+                    input.videoOptions.compressionMode != VideoCompressionMode.Standard
             if (input.category == ConversionMediaCategory.Video && !isVideoGifOutput(input)) {
-                val videoAdvanced = input.videoOptions.advanced
+                val videoAdvanced = if (presetCompressionActive) {
+                    VideoAdvancedOptions()
+                } else {
+                    input.videoOptions.advanced
+                }
                 if (videoAdvanced.reverse) add("reverse")
                 if (
                     videoAdvanced.rotation == VideoRotationMode.Clockwise90 ||
@@ -3086,7 +3169,12 @@ class ConversionService : Service() {
                 }
             }
 
-            val audioAdvanced = input.audioOptions.advanced
+            val audioOptions = if (presetCompressionActive) {
+                ffmpegVideoAudioOptionsFor(input.videoOptions.compressionMode, input.audioOptions)
+            } else {
+                input.audioOptions
+            }
+            val audioAdvanced = audioOptions.advanced
             val audioFiltersApply = when (input.category) {
                 ConversionMediaCategory.Audio -> true
                 ConversionMediaCategory.Video ->
@@ -3101,6 +3189,7 @@ class ConversionService : Service() {
                     audioAdvanced.reverse ||
                     (
                         input.category == ConversionMediaCategory.Video &&
+                            input.videoOptions.compressionMode == VideoCompressionMode.Standard &&
                             input.videoOptions.advanced.reverse
                         )
                 ) {
@@ -3134,9 +3223,13 @@ class ConversionService : Service() {
                     listOf(FFMPEG_GIF_ENCODER)
                 } else {
                     val profile = ffmpegVideoProfileFor(input) ?: return null
+                    val audioOptions = ffmpegVideoAudioOptionsFor(
+                        compressionMode = input.videoOptions.compressionMode,
+                        manualAudioOptions = input.audioOptions
+                    )
                     buildList {
                         add(profile.videoCodec)
-                        if (input.audioOptions.advanced.volume != AudioVolumeMode.Mute) {
+                        if (audioOptions.advanced.volume != AudioVolumeMode.Mute) {
                             add(FFMPEG_AAC_ENCODER)
                         }
                     }
@@ -4520,6 +4613,14 @@ class ConversionService : Service() {
         private const val FFMPEG_WMA_ENCODER = "wmav2"
         private const val FFMPEG_DEFAULT_CRF_H264 = "23"
         private const val FFMPEG_DEFAULT_CRF_H265 = "28"
+        private const val FFMPEG_VISUAL_LOSSLESS_CRF_H264 = "18"
+        private const val FFMPEG_VISUAL_LOSSLESS_CRF_H265 = "20"
+        private const val FFMPEG_BALANCED_SHRINK_CRF_H264 = "21"
+        private const val FFMPEG_BALANCED_SHRINK_CRF_H265 = "24"
+        private const val FFMPEG_SMALL_FILE_CRF_H264 = "24"
+        private const val FFMPEG_SMALL_FILE_CRF_H265 = "28"
+        private const val FFMPEG_STANDARD_VIDEO_PRESET = "veryfast"
+        private const val FFMPEG_PRESET_COMPRESSION_MEDIUM = "medium"
         private const val FFMPEG_VIDEO_REVERSE_MAX_DURATION_MS = 60_000L
         private const val FFMPEG_VIDEO_REVERSE_MAX_BUFFER_BYTES = 256L * 1024L * 1024L
         private const val FFMPEG_VIDEO_REVERSE_BYTES_PER_PIXEL = 4L

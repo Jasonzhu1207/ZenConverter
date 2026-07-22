@@ -156,6 +156,7 @@ import org.zenconverter.app.conversion.PdfRenderQuality
 import org.zenconverter.app.conversion.PdfSecurityOptions
 import org.zenconverter.app.conversion.VideoAdvancedOptions
 import org.zenconverter.app.conversion.VideoAspectRatioMode
+import org.zenconverter.app.conversion.VideoCompressionMode
 import org.zenconverter.app.conversion.VideoExportOptions
 import org.zenconverter.app.conversion.VideoMirrorMode
 import org.zenconverter.app.conversion.VideoRotationMode
@@ -463,6 +464,17 @@ private val VIDEO_GIF_RESOLUTION_OPTIONS = listOf(
     VIDEO_RESOLUTION_480P,
     VIDEO_RESOLUTION_720P,
     VIDEO_RESOLUTION_ORIGINAL
+)
+
+private const val VIDEO_COMPRESSION_STANDARD = "Video compression standard"
+private const val VIDEO_COMPRESSION_VISUAL_LOSSLESS = "Video compression visual lossless"
+private const val VIDEO_COMPRESSION_BALANCED = "Video compression balanced"
+private const val VIDEO_COMPRESSION_SMALL = "Video compression small"
+private val VIDEO_COMPRESSION_OPTIONS = listOf(
+    VIDEO_COMPRESSION_STANDARD,
+    VIDEO_COMPRESSION_VISUAL_LOSSLESS,
+    VIDEO_COMPRESSION_BALANCED,
+    VIDEO_COMPRESSION_SMALL
 )
 
 private const val VIDEO_BITRATE_AUTO = "Auto bitrate"
@@ -829,6 +841,7 @@ private fun ZenConverterContent(
     var queueMessage by remember { mutableStateOf<String?>(null) }
     var openMenuId by remember { mutableStateOf<String?>(null) }
     var videoResolution by remember { mutableStateOf(VIDEO_RESOLUTION_ORIGINAL) }
+    var videoCompressionMode by remember { mutableStateOf(VIDEO_COMPRESSION_STANDARD) }
     var videoBitrate by remember { mutableStateOf(VIDEO_BITRATE_AUTO) }
     var videoCodec by remember(supportedVideoMimeTypes) {
         mutableStateOf(defaultVideoCodecFor(supportedVideoMimeTypes))
@@ -895,19 +908,39 @@ private fun ZenConverterContent(
                 maxFrameRate = 30
             )
         }
+        val compressionModeValue = videoCompressionModeFor(videoCompressionMode)
+        val presetCompressionActive = compressionModeValue != VideoCompressionMode.Standard
         return VideoExportOptions(
-            maxShortSidePixels = videoResolutionToShortSide(videoResolution),
-            videoBitrate = videoBitrateToBits(videoBitrate),
-            videoMimeType = videoCodecToMimeType(videoCodec),
-            maxFrameRate = videoFrameRateToCap(videoFrameRate),
-            advanced = VideoAdvancedOptions(
-                reverse = videoReverse,
-                fadeInSeconds = fadeDurationSeconds(videoFadeIn),
-                fadeOutSeconds = fadeDurationSeconds(videoFadeOut),
-                mirror = videoMirrorModeFor(videoMirror),
-                rotation = videoRotationModeFor(videoRotation),
-                aspectRatio = videoAspectRatioModeFor(videoAspectRatio)
-            )
+            maxShortSidePixels = videoCompressionShortSideFor(compressionModeValue)
+                ?: videoResolutionToShortSide(videoResolution),
+            videoBitrate = if (!presetCompressionActive) {
+                videoBitrateToBits(videoBitrate)
+            } else {
+                null
+            },
+            videoMimeType = if (
+                presetCompressionActive &&
+                VideoExportOptions.VIDEO_MIME_TYPE_H265 in supportedVideoMimeTypes
+            ) {
+                VideoExportOptions.VIDEO_MIME_TYPE_H265
+            } else {
+                videoCodecToMimeType(videoCodec)
+            },
+            maxFrameRate = videoCompressionFrameRateCapFor(compressionModeValue)
+                ?: videoFrameRateToCap(videoFrameRate),
+            compressionMode = compressionModeValue,
+            advanced = if (presetCompressionActive) {
+                VideoAdvancedOptions()
+            } else {
+                VideoAdvancedOptions(
+                    reverse = videoReverse,
+                    fadeInSeconds = fadeDurationSeconds(videoFadeIn),
+                    fadeOutSeconds = fadeDurationSeconds(videoFadeOut),
+                    mirror = videoMirrorModeFor(videoMirror),
+                    rotation = videoRotationModeFor(videoRotation),
+                    aspectRatio = videoAspectRatioModeFor(videoAspectRatio)
+                )
+            }
         )
     }
 
@@ -1043,6 +1076,7 @@ private fun ZenConverterContent(
                         texts = texts,
                         category = activeCategory,
                         videoResolution = videoResolution,
+                        videoCompressionMode = videoCompressionMode,
                         videoBitrate = videoBitrate,
                         videoCodec = videoCodec,
                         videoCodecOptions = videoCodecOptionsFor(supportedVideoMimeTypes),
@@ -1079,6 +1113,9 @@ private fun ZenConverterContent(
                         openMenuId = openMenuId,
                         onOpenMenuChange = { openMenuId = it },
                         onVideoResolutionChange = { videoResolution = it },
+                        onVideoCompressionModeChange = { nextMode ->
+                            videoCompressionMode = nextMode
+                        },
                         onVideoBitrateChange = { videoBitrate = it },
                         onVideoCodecChange = { videoCodec = it },
                         onVideoFrameRateChange = { videoFrameRate = it },
@@ -3314,6 +3351,7 @@ private fun EncodingPanel(
     texts: UiText,
     category: FileCategory,
     videoResolution: String,
+    videoCompressionMode: String,
     videoBitrate: String,
     videoCodec: String,
     videoCodecOptions: List<String>,
@@ -3334,6 +3372,7 @@ private fun EncodingPanel(
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onVideoResolutionChange: (String) -> Unit,
+    onVideoCompressionModeChange: (String) -> Unit,
     onVideoBitrateChange: (String) -> Unit,
     onVideoCodecChange: (String) -> Unit,
     onVideoFrameRateChange: (String) -> Unit,
@@ -3391,6 +3430,7 @@ private fun EncodingPanel(
             FileCategory.Video -> VideoOptions(
                 texts = texts,
                 resolution = videoResolution,
+                compressionMode = videoCompressionMode,
                 bitrate = videoBitrate,
                 codec = videoCodec,
                 codecOptions = videoCodecOptions,
@@ -3404,6 +3444,7 @@ private fun EncodingPanel(
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
                 onResolutionChange = onVideoResolutionChange,
+                onCompressionModeChange = onVideoCompressionModeChange,
                 onBitrateChange = onVideoBitrateChange,
                 onCodecChange = onVideoCodecChange,
                 onFrameRateChange = onVideoFrameRateChange,
@@ -3477,6 +3518,7 @@ private fun EncodingPanel(
 private fun VideoOptions(
     texts: UiText,
     resolution: String,
+    compressionMode: String,
     bitrate: String,
     codec: String,
     codecOptions: List<String>,
@@ -3490,6 +3532,7 @@ private fun VideoOptions(
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onResolutionChange: (String) -> Unit,
+    onCompressionModeChange: (String) -> Unit,
     onBitrateChange: (String) -> Unit,
     onCodecChange: (String) -> Unit,
     onFrameRateChange: (String) -> Unit,
@@ -3512,18 +3555,48 @@ private fun VideoOptions(
     onAudioNoiseReductionChange: (String) -> Unit
 ) {
     val isGifTarget = targetFormat.extension.equals("gif", ignoreCase = true)
+    val isStandardCompression = videoCompressionModeFor(compressionMode) == VideoCompressionMode.Standard
+    val presetCompressionActive = !isGifTarget && !isStandardCompression
     OptionGrid {
-        OptionDropdown(
-            "video-size",
-            texts.resolution,
-            resolution,
-            if (isGifTarget) VIDEO_GIF_RESOLUTION_OPTIONS else VIDEO_RESOLUTION_OPTIONS,
-            texts,
-            openMenuId,
-            onOpenMenuChange,
-            onResolutionChange
-        )
         if (!isGifTarget) {
+            OptionDropdown(
+                "video-compression-mode",
+                texts.videoCompressionMode,
+                compressionMode,
+                VIDEO_COMPRESSION_OPTIONS,
+                texts,
+                openMenuId,
+                onOpenMenuChange,
+                onCompressionModeChange
+            )
+        }
+        if (isGifTarget || isStandardCompression) {
+            OptionDropdown(
+                "video-size",
+                texts.resolution,
+                resolution,
+                if (isGifTarget) VIDEO_GIF_RESOLUTION_OPTIONS else VIDEO_RESOLUTION_OPTIONS,
+                texts,
+                openMenuId,
+                onOpenMenuChange,
+                onResolutionChange
+            )
+        }
+        if (presetCompressionActive) {
+            Text(
+                text = texts.compressionPresetSummary(compressionMode),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.06f), RoundedCornerShape(8.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.14f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp, vertical = 7.dp)
+            )
+        }
+        if (!isGifTarget && isStandardCompression) {
             OptionDropdown(
                 "video-bitrate",
                 texts.bitrate,
@@ -4740,6 +4813,33 @@ private fun videoResolutionToShortSide(value: String): Int? {
     }
 }
 
+private fun videoCompressionModeFor(value: String): VideoCompressionMode {
+    return when (value) {
+        VIDEO_COMPRESSION_VISUAL_LOSSLESS -> VideoCompressionMode.VisualLossless
+        VIDEO_COMPRESSION_BALANCED -> VideoCompressionMode.BalancedShrink
+        VIDEO_COMPRESSION_SMALL -> VideoCompressionMode.SmallFile
+        else -> VideoCompressionMode.Standard
+    }
+}
+
+private fun videoCompressionShortSideFor(mode: VideoCompressionMode): Int? {
+    return when (mode) {
+        VideoCompressionMode.BalancedShrink -> 1080
+        VideoCompressionMode.SmallFile -> 720
+        VideoCompressionMode.Standard,
+        VideoCompressionMode.VisualLossless -> null
+    }
+}
+
+private fun videoCompressionFrameRateCapFor(mode: VideoCompressionMode): Int? {
+    return when (mode) {
+        VideoCompressionMode.SmallFile -> 30
+        VideoCompressionMode.Standard,
+        VideoCompressionMode.VisualLossless,
+        VideoCompressionMode.BalancedShrink -> null
+    }
+}
+
 private fun videoBitrateToBits(value: String): Int? {
     return when (value) {
         VIDEO_BITRATE_LOW -> 1_000_000
@@ -5033,6 +5133,7 @@ private data class UiText(
     val pageSize: String,
     val renderQuality: String,
     val resolution: String,
+    val videoCompressionMode: String,
     val bitrate: String,
     val codec: String,
     val frameRate: String,
@@ -5100,6 +5201,35 @@ private data class UiText(
             englishText -> "Overall bitrate $value"
             simplifiedChineseText -> "总码率 $value"
             else -> "總碼率 $value"
+        }
+    }
+
+    fun outputLargerHint(): String {
+        return when (this) {
+            englishText -> "Source may already be efficiently compressed"
+            simplifiedChineseText -> "源文件可能已经高效压缩"
+            else -> "來源檔案可能已高效壓縮"
+        }
+    }
+
+    fun compressionPresetSummary(value: String): String {
+        return when (value) {
+            VIDEO_COMPRESSION_VISUAL_LOSSLESS -> when (this) {
+                englishText -> "H.265 preferred · Original resolution · Original frame rate · AAC 192 kbps"
+                simplifiedChineseText -> "优先 H.265 · 原分辨率 · 原帧率 · AAC 192 kbps"
+                else -> "優先 H.265 · 原解析度 · 原幀率 · AAC 192 kbps"
+            }
+            VIDEO_COMPRESSION_BALANCED -> when (this) {
+                englishText -> "H.265 preferred · Short side 1080p · Original frame rate · AAC 160 kbps"
+                simplifiedChineseText -> "优先 H.265 · 短边 1080p · 原帧率 · AAC 160 kbps"
+                else -> "優先 H.265 · 短邊 1080p · 原幀率 · AAC 160 kbps"
+            }
+            VIDEO_COMPRESSION_SMALL -> when (this) {
+                englishText -> "H.265 preferred · Short side 720p · Max 30 fps · AAC 128 kbps"
+                simplifiedChineseText -> "优先 H.265 · 短边 720p · 最高 30fps · AAC 128 kbps"
+                else -> "優先 H.265 · 短邊 720p · 最高 30fps · AAC 128 kbps"
+            }
+            else -> ""
         }
     }
 
@@ -6350,6 +6480,26 @@ private data class UiText(
                 simplifiedChineseText -> "标准"
                 else -> "標準"
             }
+            VIDEO_COMPRESSION_STANDARD -> when (this) {
+                englishText -> "Off (manual)"
+                simplifiedChineseText -> "关闭（手动）"
+                else -> "關閉（手動）"
+            }
+            VIDEO_COMPRESSION_VISUAL_LOSSLESS -> when (this) {
+                englishText -> "Visual lossless"
+                simplifiedChineseText -> "视觉无损"
+                else -> "視覺無損"
+            }
+            VIDEO_COMPRESSION_BALANCED -> when (this) {
+                englishText -> "Balanced shrink"
+                simplifiedChineseText -> "均衡压缩"
+                else -> "均衡壓縮"
+            }
+            VIDEO_COMPRESSION_SMALL -> when (this) {
+                englishText -> "Small file"
+                simplifiedChineseText -> "小体积"
+                else -> "小體積"
+            }
             "Auto bitrate" -> when (this) {
                 englishText -> "Auto (recommended)"
                 simplifiedChineseText -> "自动（推荐）"
@@ -6436,10 +6586,10 @@ private data class UiText(
                 simplifiedChineseText -> "保持原画"
                 else -> "保留原畫"
             }
-            "Smart allocation" -> when (this) {
-                englishText -> "Smart allocation"
-                simplifiedChineseText -> "智能分配"
-                else -> "智慧分配"
+            "Auto allocation" -> when (this) {
+                englishText -> "Auto allocation"
+                simplifiedChineseText -> "自动分配"
+                else -> "自動分配"
             }
             "Medium" -> when (this) {
                 englishText -> "Medium"
@@ -6665,6 +6815,7 @@ private val englishText = UiText(
     pageSize = "Page size",
     renderQuality = "Render quality",
     resolution = "Resolution",
+    videoCompressionMode = "Compression preset",
     bitrate = "Bitrate",
     codec = "Codec",
     frameRate = "Frame rate",
@@ -6774,6 +6925,7 @@ private val simplifiedChineseText = UiText(
     pageSize = "页面尺寸",
     renderQuality = "渲染质量",
     resolution = "分辨率",
+    videoCompressionMode = "压缩预设",
     bitrate = "码率",
     codec = "编码",
     frameRate = "帧率",
@@ -6883,6 +7035,7 @@ private val traditionalChineseText = UiText(
     pageSize = "頁面尺寸",
     renderQuality = "渲染品質",
     resolution = "解析度",
+    videoCompressionMode = "壓縮預設",
     bitrate = "位元率",
     codec = "編碼",
     frameRate = "幀率",
@@ -7180,13 +7333,30 @@ private fun formatResultInfoLine(
 ): String {
     val inputInfo = file.inputInfo
     val formatChange = formatChangeLabel(inputInfo, outputInfo)
-    val sizeChange = formatSizeChangeLabel(inputInfo?.sizeBytes ?: file.sizeBytes, outputInfo.sizeBytes, texts)
-    return fileInfoParts(
+    val inputSizeBytes = inputInfo?.sizeBytes ?: file.sizeBytes
+    val sizeChange = formatSizeChangeLabel(inputSizeBytes, outputInfo.sizeBytes, texts)
+    val parts = fileInfoParts(
         info = outputInfo,
         texts = texts,
         formatOverride = formatChange,
         sizeOverride = sizeChange
-    ).joinToString(" · ")
+    ).toMutableList()
+    if (shouldShowVideoOutputLargerHint(file, inputSizeBytes, outputInfo.sizeBytes)) {
+        parts.add(texts.outputLargerHint())
+    }
+    return parts.joinToString(" · ")
+}
+
+private fun shouldShowVideoOutputLargerHint(
+    file: QueuedFile,
+    inputSizeBytes: Long?,
+    outputSizeBytes: Long?
+): Boolean {
+    val inputSize = inputSizeBytes?.takeIf { it > 0L } ?: return false
+    val outputSize = outputSizeBytes?.takeIf { it > 0L } ?: return false
+    return file.category == FileCategory.Video &&
+        !file.targetFormat.equals("GIF", ignoreCase = true) &&
+        outputSize > inputSize
 }
 
 private fun fileInfoParts(

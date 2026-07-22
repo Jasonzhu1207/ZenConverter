@@ -38,6 +38,13 @@
   physical-device smoke testing.
 - Video to MOV re-encode. FFmpeg QuickTime MOV output is connected and needs
   physical-device smoke testing.
+- Video smart compression. Implemented for MP4/MKV/MOV outputs through FFmpeg
+  CRF presets: the off/manual state keeps the existing fixed-bitrate/Auto
+  behavior, while visual lossless, balanced compression, and small-file modes
+  own codec/CRF/preset/resolution/frame-rate strategy plus AAC audio bitrate
+  and hide manual video/audio controls. These are visual-quality modes, not
+  mathematical lossless
+  compression, and already efficient sources can grow.
 - Advanced audio/video processing. Implemented through existing FFmpeg filters
   for MP4/MKV/MOV video outputs and audio outputs: video reverse playback,
   fade, mirror, rotate, frame fit/crop; audio reverse playback, `afftdn` audio
