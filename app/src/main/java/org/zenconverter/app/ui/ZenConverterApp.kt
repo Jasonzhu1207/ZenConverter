@@ -12,13 +12,22 @@ import android.provider.DocumentsContract
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import org.zenconverter.app.ui.theme.ZenAnimations
+import org.zenconverter.app.ui.theme.ZenPanelVisibility
+import org.zenconverter.app.ui.theme.bounceClick
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -107,6 +116,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -916,15 +926,7 @@ private fun ZenConverterContent(
                                 showAbout = !showAbout
                             }
                         )
-                        AnimatedVisibility(
-                            visible = showSettings,
-                            enter = fadeIn() + expandVertically(
-                                animationSpec = spring(stiffness = 420f)
-                            ),
-                            exit = fadeOut() + shrinkVertically(
-                                animationSpec = spring(stiffness = 520f)
-                            )
-                        ) {
+                        ZenPanelVisibility(visible = showSettings) {
                             Column {
                                 Spacer(modifier = Modifier.height(12.dp))
                                 SettingsPanel(
@@ -937,15 +939,7 @@ private fun ZenConverterContent(
                             }
                         }
 
-                        AnimatedVisibility(
-                            visible = showAbout,
-                            enter = fadeIn() + expandVertically(
-                                animationSpec = spring(stiffness = 420f)
-                            ),
-                            exit = fadeOut() + shrinkVertically(
-                                animationSpec = spring(stiffness = 520f)
-                            )
-                        ) {
+                        ZenPanelVisibility(visible = showAbout) {
                             Column {
                                 Spacer(modifier = Modifier.height(12.dp))
                                 AboutPanel(
@@ -954,158 +948,159 @@ private fun ZenConverterContent(
                                 )
                             }
                         }
+
+                        ZenPanelVisibility(visible = showMetadataSecurity) {
+                            Column {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                MetadataSecurityPanel(
+                                    texts = texts,
+                                    state = metadataToolState,
+                                    onPickImage = onPickMetadataImage,
+                                    onPickVideo = onPickMetadataVideo,
+                                    onClean = onCleanMetadata,
+                                    onRestore = onRestoreMetadata
+                                )
+                            }
+                        }
                     }
                 }
 
-                if (showMetadataSecurity) {
-                    item(key = "metadata-security") {
-                        MetadataSecurityPanel(
-                            texts = texts,
-                            state = metadataToolState,
-                            onPickImage = onPickMetadataImage,
-                            onPickVideo = onPickMetadataVideo,
-                            onClean = onCleanMetadata,
-                            onRestore = onRestoreMetadata
-                        )
-                    }
-                } else {
-                    item(key = "conversion-lanes") {
-                        ConversionLanes(
-                            texts = texts,
-                            activeCategory = activeCategory,
-                            targetFor = ::targetFor,
-                            onTargetChange = ::setTarget,
-                            onActivate = { activeCategory = it },
-                            openMenuId = openMenuId,
-                            onOpenMenuChange = { openMenuId = it },
-                            onPickFiles = { category, target ->
-                                activeCategory = category
-                                openMenuId = null
-                                queueMessage = null
-                                onPickFiles(category, target)
-                            }
-                        )
-                    }
-
-                    item(key = "encoding-panel") {
-                        EncodingPanel(
-                            texts = texts,
-                            category = activeCategory,
-                            videoResolution = videoResolution,
-                            videoBitrate = videoBitrate,
-                            videoCodec = videoCodec,
-                            videoCodecOptions = videoCodecOptionsFor(supportedVideoMimeTypes),
-                            videoFrameRate = videoFrameRate,
-                            videoTarget = videoTarget,
-                            audioBitrate = audioBitrate,
-                            audioSampleRate = audioSampleRate,
-                            audioChannels = audioChannels,
-                            videoAdvanced = VideoAdvancedUiState(
-                                expanded = videoAdvancedExpanded,
-                                reverse = videoReverse,
-                                fadeIn = videoFadeIn,
-                                fadeOut = videoFadeOut,
-                                mirror = videoMirror,
-                                rotation = videoRotation,
-                                aspectRatio = videoAspectRatio
-                            ),
-                            audioAdvanced = AudioAdvancedUiState(
-                                expanded = audioAdvancedExpanded,
-                                reverse = audioReverse,
-                                fadeIn = audioFadeIn,
-                                fadeOut = audioFadeOut,
-                                volume = audioVolume,
-                                echo = audioEcho,
-                                noiseReduction = audioNoiseReduction
-                            ),
-                            audioTarget = audioTarget,
-                            imageTarget = imageTarget,
-                            pdfTarget = pdfTarget,
-                            documentTarget = documentTarget,
-                            imageQuality = imageQuality,
-                            pdfPageMode = pdfPageMode,
-                            pdfRenderQuality = pdfRenderQuality,
-                            openMenuId = openMenuId,
-                            onOpenMenuChange = { openMenuId = it },
-                            onVideoResolutionChange = { videoResolution = it },
-                            onVideoBitrateChange = { videoBitrate = it },
-                            onVideoCodecChange = { videoCodec = it },
-                            onVideoFrameRateChange = { videoFrameRate = it },
-                            onAudioBitrateChange = { audioBitrate = it },
-                            onAudioSampleRateChange = { audioSampleRate = it },
-                            onAudioChannelsChange = { audioChannels = it },
-                            onVideoAdvancedExpandedChange = { videoAdvancedExpanded = it },
-                            onVideoReverseChange = { videoReverse = it },
-                            onVideoFadeInChange = { videoFadeIn = it },
-                            onVideoFadeOutChange = { videoFadeOut = it },
-                            onVideoMirrorChange = { videoMirror = it },
-                            onVideoRotationChange = { videoRotation = it },
-                            onVideoAspectRatioChange = { videoAspectRatio = it },
-                            onAudioAdvancedExpandedChange = { audioAdvancedExpanded = it },
-                            onAudioReverseChange = { audioReverse = it },
-                            onAudioFadeInChange = { audioFadeIn = it },
-                            onAudioFadeOutChange = { audioFadeOut = it },
-                            onAudioVolumeChange = { audioVolume = it },
-                            onAudioEchoChange = { audioEcho = it },
-                            onAudioNoiseReductionChange = { audioNoiseReduction = it },
-                            onImageQualityChange = { imageQuality = it },
-                            onPdfPageModeChange = { pdfPageMode = it },
-                            onPdfRenderQualityChange = { pdfRenderQuality = it }
-                        )
-                    }
-
-                    item(key = "output-panel") {
-                        OutputPanel(
-                            texts = texts,
-                            outputLocationMode = outputLocationMode,
-                            outputDirectory = outputDirectory,
-                            onOutputLocationModeChange = onOutputLocationModeChange,
-                            onPickOutputDirectory = onPickOutputDirectory
-                        )
-                    }
-
-                    item(key = "queue-actions") {
-                        QueueActions(
-                            texts = texts,
-                            hasFiles = queuedFiles.isNotEmpty(),
-                            isRunning = isConversionRunning,
-                            onStart = {
-                                openMenuId = null
-                                queueMessage = null
-                                onStartConversion(
-                                    currentVideoOptions(),
-                                    currentAudioOptions(),
-                                    currentImageOptions(),
-                                    currentPdfOptions()
-                                )
-                            },
-                            onCancel = {
-                                openMenuId = null
-                                queueMessage = null
-                                if (isConversionRunning) {
-                                    onCancelConversion()
-                                } else {
-                                    onClearQueue()
-                                }
-                            }
-                        )
-                    }
-
-                    (conversionSummary ?: queueMessage)?.let { message ->
-                        item(key = "status-line") {
-                            StatusLine(text = texts.summaryMessage(message))
+                item(key = "conversion-lanes") {
+                    ConversionLanes(
+                        texts = texts,
+                        activeCategory = activeCategory,
+                        targetFor = ::targetFor,
+                        onTargetChange = ::setTarget,
+                        onActivate = { activeCategory = it },
+                        openMenuId = openMenuId,
+                        onOpenMenuChange = { openMenuId = it },
+                        onPickFiles = { category, target ->
+                            activeCategory = category
+                            openMenuId = null
+                            queueMessage = null
+                            onPickFiles(category, target)
                         }
-                    }
+                    )
+                }
 
-                    item(key = "file-queue") {
-                        FileQueue(
-                            texts = texts,
-                            files = queuedFiles,
-                            taskProgress = conversionTasks.associateBy { it.fileId },
-                            canRemove = !isConversionRunning,
-                            onRemoveFile = onRemoveFile
-                        )
+                item(key = "encoding-panel") {
+                    EncodingPanel(
+                        texts = texts,
+                        category = activeCategory,
+                        videoResolution = videoResolution,
+                        videoBitrate = videoBitrate,
+                        videoCodec = videoCodec,
+                        videoCodecOptions = videoCodecOptionsFor(supportedVideoMimeTypes),
+                        videoFrameRate = videoFrameRate,
+                        videoTarget = videoTarget,
+                        audioBitrate = audioBitrate,
+                        audioSampleRate = audioSampleRate,
+                        audioChannels = audioChannels,
+                        videoAdvanced = VideoAdvancedUiState(
+                            expanded = videoAdvancedExpanded,
+                            reverse = videoReverse,
+                            fadeIn = videoFadeIn,
+                            fadeOut = videoFadeOut,
+                            mirror = videoMirror,
+                            rotation = videoRotation,
+                            aspectRatio = videoAspectRatio
+                        ),
+                        audioAdvanced = AudioAdvancedUiState(
+                            expanded = audioAdvancedExpanded,
+                            reverse = audioReverse,
+                            fadeIn = audioFadeIn,
+                            fadeOut = audioFadeOut,
+                            volume = audioVolume,
+                            echo = audioEcho,
+                            noiseReduction = audioNoiseReduction
+                        ),
+                        audioTarget = audioTarget,
+                        imageTarget = imageTarget,
+                        pdfTarget = pdfTarget,
+                        documentTarget = documentTarget,
+                        imageQuality = imageQuality,
+                        pdfPageMode = pdfPageMode,
+                        pdfRenderQuality = pdfRenderQuality,
+                        openMenuId = openMenuId,
+                        onOpenMenuChange = { openMenuId = it },
+                        onVideoResolutionChange = { videoResolution = it },
+                        onVideoBitrateChange = { videoBitrate = it },
+                        onVideoCodecChange = { videoCodec = it },
+                        onVideoFrameRateChange = { videoFrameRate = it },
+                        onAudioBitrateChange = { audioBitrate = it },
+                        onAudioSampleRateChange = { audioSampleRate = it },
+                        onAudioChannelsChange = { audioChannels = it },
+                        onVideoAdvancedExpandedChange = { videoAdvancedExpanded = it },
+                        onVideoReverseChange = { videoReverse = it },
+                        onVideoFadeInChange = { videoFadeIn = it },
+                        onVideoFadeOutChange = { videoFadeOut = it },
+                        onVideoMirrorChange = { videoMirror = it },
+                        onVideoRotationChange = { videoRotation = it },
+                        onVideoAspectRatioChange = { videoAspectRatio = it },
+                        onAudioAdvancedExpandedChange = { audioAdvancedExpanded = it },
+                        onAudioReverseChange = { audioReverse = it },
+                        onAudioFadeInChange = { audioFadeIn = it },
+                        onAudioFadeOutChange = { audioFadeOut = it },
+                        onAudioVolumeChange = { audioVolume = it },
+                        onAudioEchoChange = { audioEcho = it },
+                        onAudioNoiseReductionChange = { audioNoiseReduction = it },
+                        onImageQualityChange = { imageQuality = it },
+                        onPdfPageModeChange = { pdfPageMode = it },
+                        onPdfRenderQualityChange = { pdfRenderQuality = it }
+                    )
+                }
+
+                item(key = "output-panel") {
+                    OutputPanel(
+                        texts = texts,
+                        outputLocationMode = outputLocationMode,
+                        outputDirectory = outputDirectory,
+                        onOutputLocationModeChange = onOutputLocationModeChange,
+                        onPickOutputDirectory = onPickOutputDirectory
+                    )
+                }
+
+                item(key = "queue-actions") {
+                    QueueActions(
+                        texts = texts,
+                        hasFiles = queuedFiles.isNotEmpty(),
+                        isRunning = isConversionRunning,
+                        onStart = {
+                            openMenuId = null
+                            queueMessage = null
+                            onStartConversion(
+                                currentVideoOptions(),
+                                currentAudioOptions(),
+                                currentImageOptions(),
+                                currentPdfOptions()
+                            )
+                        },
+                        onCancel = {
+                            openMenuId = null
+                            queueMessage = null
+                            if (isConversionRunning) {
+                                onCancelConversion()
+                            } else {
+                                onClearQueue()
+                            }
+                        }
+                    )
+                }
+
+                (conversionSummary ?: queueMessage)?.let { message ->
+                    item(key = "status-line") {
+                        StatusLine(text = texts.summaryMessage(message))
                     }
+                }
+
+                item(key = "file-queue") {
+                    FileQueue(
+                        texts = texts,
+                        files = queuedFiles,
+                        taskProgress = conversionTasks.associateBy { it.fileId },
+                        canRemove = !isConversionRunning,
+                        onRemoveFile = onRemoveFile
+                    )
                 }
             }
         }
@@ -1298,11 +1293,27 @@ private fun ZenPromptFrame(
             usePlatformDefaultWidth = false
         )
     ) {
+        val dialogScale by animateFloatAsState(
+            targetValue = 1f,
+            animationSpec = tween(ZenAnimations.DialogScaleDuration),
+            label = "dialogScale"
+        )
+        val dialogAlpha by animateFloatAsState(
+            targetValue = 1f,
+            animationSpec = tween(ZenAnimations.DialogScaleDuration),
+            label = "dialogAlpha"
+        )
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
-                .heightIn(max = 520.dp),
+                .heightIn(max = 520.dp)
+                .graphicsLayer {
+                    scaleX = ZenAnimations.DialogScaleFrom +
+                        (1f - ZenAnimations.DialogScaleFrom) * dialogScale
+                    scaleY = scaleX
+                    alpha = dialogAlpha
+                },
             shape = RoundedCornerShape(8.dp),
             color = Color.White,
             tonalElevation = 0.dp,
@@ -1418,17 +1429,20 @@ private fun Header(
                     texts.closeMetadataSecurity
                 } else {
                     texts.openMetadataSecurity
-                }
+                },
+                active = showMetadataSecurity
             )
             HeaderIconButton(
                 onClick = onToggleAbout,
                 icon = if (showAbout) Icons.Rounded.Close else Icons.Rounded.ErrorOutline,
-                contentDescription = if (showAbout) texts.closeAbout else texts.openAbout
+                contentDescription = if (showAbout) texts.closeAbout else texts.openAbout,
+                active = showAbout
             )
             HeaderIconButton(
                 onClick = onToggleSettings,
                 icon = if (showSettings) Icons.Rounded.Close else Icons.Rounded.Settings,
-                contentDescription = if (showSettings) texts.closeSettings else texts.openSettings
+                contentDescription = if (showSettings) texts.closeSettings else texts.openSettings,
+                active = showSettings
             )
         }
     }
@@ -1438,30 +1452,48 @@ private fun Header(
 private fun HeaderIconButton(
     onClick: () -> Unit,
     icon: ImageVector,
-    contentDescription: String
+    contentDescription: String,
+    active: Boolean = false
 ) {
+    val bgColor by animateFloatAsState(
+        targetValue = if (active) 1f else 0f,
+        animationSpec = tween(ZenAnimations.ContentFadeDuration),
+        label = "headerBtnBg"
+    )
     Box(
         modifier = Modifier
             .size(44.dp)
             .clip(CircleShape)
-            .border(1.dp, Color(0xFFE7E7E7), CircleShape)
-            .clickable(
-                onClickLabel = contentDescription,
-                role = Role.Button,
-                onClick = onClick
+            .background(
+                MaterialTheme.colorScheme.primary.copy(alpha = bgColor * 0.08f),
+                CircleShape
             )
+            .border(
+                1.dp,
+                if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                else Color(0xFFE7E7E7),
+                CircleShape
+            )
+            .bounceClick(onClick = onClick, scaleDown = 0.90f)
             .semantics {
                 this.contentDescription = contentDescription
                 role = Role.Button
             },
         contentAlignment = Alignment.Center
     ) {
-        AppIcon(
-            icon = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.size(24.dp)
-        )
+        Crossfade(
+            targetState = icon,
+            animationSpec = tween(ZenAnimations.ContentFadeDuration),
+            label = "headerIconCrossfade"
+        ) { targetIcon ->
+            AppIcon(
+                icon = targetIcon,
+                contentDescription = null,
+                tint = if (active) MaterialTheme.colorScheme.primary
+                       else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(24.dp)
+            )
+        }
     }
 }
 
@@ -1706,36 +1738,48 @@ private fun MetadataSecurityPanel(
         StatusLine(text = texts.metadataBackupNote)
 
         Spacer(modifier = Modifier.height(12.dp))
-        when (state) {
-            MetadataToolState.Empty -> {
-                Text(
-                    text = texts.metadataEmpty,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            MetadataToolState.Loading -> {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = texts.processing,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            is MetadataToolState.Error -> {
-                StatusLine(
-                    text = texts.metadataMessage(state.message),
-                    isError = true
-                )
-            }
-            is MetadataToolState.Ready -> {
-                MetadataInspectionCard(
-                    texts = texts,
-                    state = state,
-                    onClean = onClean,
-                    onRestore = onRestore
-                )
+        AnimatedContent(
+            targetState = state,
+            transitionSpec = {
+                fadeIn(animationSpec = tween(ZenAnimations.ContentFadeDuration)) togetherWith
+                fadeOut(animationSpec = tween(ZenAnimations.ContentFadeOutDuration)) using
+                SizeTransform(clip = false)
+            },
+            label = "MetadataState"
+        ) { targetState ->
+            Column(modifier = Modifier.fillMaxWidth()) {
+                when (targetState) {
+                    MetadataToolState.Empty -> {
+                        Text(
+                            text = texts.metadataEmpty,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    MetadataToolState.Loading -> {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = texts.processing,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    is MetadataToolState.Error -> {
+                        StatusLine(
+                            text = texts.metadataMessage(targetState.message),
+                            isError = true
+                        )
+                    }
+                    is MetadataToolState.Ready -> {
+                        MetadataInspectionCard(
+                            texts = texts,
+                            state = targetState,
+                            onClean = onClean,
+                            onRestore = onRestore
+                        )
+                    }
+                }
             }
         }
     }
@@ -2821,6 +2865,18 @@ private fun EncodingPanel(
 
         AnimatedContent(
             targetState = category,
+            transitionSpec = {
+                val forward = targetState.ordinal > initialState.ordinal
+                val slideIn = slideInHorizontally(
+                    initialOffsetX = { fullWidth -> if (forward) fullWidth / 4 else -fullWidth / 4 },
+                    animationSpec = tween(ZenAnimations.ContentFadeDuration)
+                ) + fadeIn(animationSpec = tween(ZenAnimations.ContentFadeDuration))
+                val slideOut = slideOutHorizontally(
+                    targetOffsetX = { fullWidth -> if (forward) -fullWidth / 4 else fullWidth / 4 },
+                    animationSpec = tween(ZenAnimations.ContentFadeOutDuration)
+                ) + fadeOut(animationSpec = tween(ZenAnimations.ContentFadeOutDuration))
+                slideIn togetherWith slideOut using SizeTransform(clip = false)
+            },
             label = "EncodingPanelCategory"
         ) { targetCategory ->
             when (targetCategory) {
@@ -3335,12 +3391,19 @@ private fun AdvancedOptionsPanel(
     onExpandedChange: (Boolean) -> Unit,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = ZenAnimations.IconRotationSpring,
+        label = "advancedArrow"
+    )
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.045f), RoundedCornerShape(8.dp))
             .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
-            .animateContentSize()
+            .animateContentSize(
+                animationSpec = spring(stiffness = ZenAnimations.DropdownEnterStiffness)
+            )
     ) {
         Row(
             modifier = Modifier
@@ -3373,13 +3436,13 @@ private fun AdvancedOptionsPanel(
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
                     .size(20.dp)
-                    .rotate(if (expanded) 180f else 0f)
+                    .rotate(arrowRotation)
             )
         }
         AnimatedVisibility(
             visible = expanded,
-            enter = fadeIn() + expandVertically(animationSpec = spring(stiffness = 520f)),
-            exit = fadeOut() + shrinkVertically(animationSpec = spring(stiffness = 620f))
+            enter = ZenAnimations.DropdownEnter,
+            exit = ZenAnimations.DropdownExit
         ) {
             Column(
                 modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
@@ -3884,6 +3947,7 @@ private fun PillMenuButton(
 ) {
     val rotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
+        animationSpec = ZenAnimations.IconRotationSpring,
         label = "dropdownArrow"
     )
     OutlinedButton(
@@ -3923,13 +3987,13 @@ private fun InlineDropdownPanel(
 ) {
     AnimatedVisibility(
         visible = expanded,
-        enter = fadeIn(animationSpec = spring(stiffness = 520f)) + expandVertically(
+        enter = fadeIn(animationSpec = spring(stiffness = ZenAnimations.DropdownEnterStiffness)) + expandVertically(
             expandFrom = Alignment.Top,
-            animationSpec = spring(stiffness = 520f)
+            animationSpec = spring(stiffness = ZenAnimations.DropdownEnterStiffness)
         ),
-        exit = fadeOut(animationSpec = spring(stiffness = 620f)) + shrinkVertically(
+        exit = fadeOut(animationSpec = spring(stiffness = ZenAnimations.DropdownExitStiffness)) + shrinkVertically(
             shrinkTowards = Alignment.Top,
-            animationSpec = spring(stiffness = 620f)
+            animationSpec = spring(stiffness = ZenAnimations.DropdownExitStiffness)
         )
     ) {
         Surface(
@@ -4060,7 +4124,9 @@ private fun QuietPanel(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize(),
+            .animateContentSize(
+                animationSpec = spring(stiffness = ZenAnimations.PanelEnterStiffness)
+            ),
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, borderColor),
