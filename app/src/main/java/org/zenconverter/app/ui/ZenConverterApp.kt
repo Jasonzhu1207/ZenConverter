@@ -39,6 +39,7 @@ import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -75,6 +76,7 @@ import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PictureAsPdf
@@ -88,6 +90,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -1379,70 +1383,153 @@ private fun Header(
     onToggleSettings: () -> Unit,
     onToggleAbout: () -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    val headerActions = listOf(
+        HeaderAction(
+            icon = if (showMetadataSecurity) Icons.Rounded.Close else Icons.Rounded.Security,
+            label = if (showMetadataSecurity) {
+                texts.closeMetadataSecurity
+            } else {
+                texts.openMetadataSecurity
+            },
+            active = showMetadataSecurity,
+            onClick = onToggleMetadataSecurity
+        ),
+        HeaderAction(
+            icon = if (showAbout) Icons.Rounded.Close else Icons.Rounded.ErrorOutline,
+            label = if (showAbout) texts.closeAbout else texts.openAbout,
+            active = showAbout,
+            onClick = onToggleAbout
+        ),
+        HeaderAction(
+            icon = if (showSettings) Icons.Rounded.Close else Icons.Rounded.Settings,
+            label = if (showSettings) texts.closeSettings else texts.openSettings,
+            active = showSettings,
+            onClick = onToggleSettings
+        )
+    )
+
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val useOverflowActions = maxWidth < HEADER_INLINE_MIN_WIDTH
+
         Row(
-            modifier = Modifier
-                .weight(1f)
-                .semantics(mergeDescendants = true) {},
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            BrandImage(
-                painter = painterResource(id = R.drawable.zenconverter),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
+            Row(
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(8.dp))
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+                    .weight(1f)
+                    .semantics(mergeDescendants = true) {},
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "ZenConverter",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                BrandImage(
+                    painter = painterResource(id = R.drawable.zenconverter),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
                 )
-                Text(
-                    text = texts.tagline,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = "ZenConverter",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = texts.tagline,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+
+            if (useOverflowActions) {
+                HeaderOverflowActions(
+                    actions = headerActions,
+                    texts = texts
+                )
+            } else {
+                HeaderActions(actions = headerActions)
+            }
+        }
+    }
+}
+
+private val HEADER_INLINE_MIN_WIDTH = 350.dp
+
+private data class HeaderAction(
+    val icon: ImageVector,
+    val label: String,
+    val active: Boolean,
+    val onClick: () -> Unit
+)
+
+@Composable
+private fun HeaderOverflowActions(
+    actions: List<HeaderAction>,
+    texts: UiText
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box {
+        HeaderIconButton(
+            onClick = { expanded = true },
+            icon = Icons.Rounded.MoreHoriz,
+            contentDescription = texts.moreHeaderActions,
+            active = actions.any { action -> action.active }
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            shape = RoundedCornerShape(8.dp),
+            containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp,
+            shadowElevation = 2.dp,
+            border = BorderStroke(1.dp, Color(0xFFE5E5E5))
+        ) {
+            actions.forEach { action ->
+                DropdownMenuItem(
+                    text = { Text(action.label) },
+                    onClick = {
+                        expanded = false
+                        action.onClick()
+                    },
+                    leadingIcon = {
+                        AppIcon(
+                            icon = action.icon,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 )
             }
         }
-        Spacer(modifier = Modifier.width(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    }
+}
+
+@Composable
+private fun HeaderActions(actions: List<HeaderAction>) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        actions.forEach { action ->
             HeaderIconButton(
-                onClick = onToggleMetadataSecurity,
-                icon = if (showMetadataSecurity) Icons.Rounded.Close else Icons.Rounded.Security,
-                contentDescription = if (showMetadataSecurity) {
-                    texts.closeMetadataSecurity
-                } else {
-                    texts.openMetadataSecurity
-                },
-                active = showMetadataSecurity
-            )
-            HeaderIconButton(
-                onClick = onToggleAbout,
-                icon = if (showAbout) Icons.Rounded.Close else Icons.Rounded.ErrorOutline,
-                contentDescription = if (showAbout) texts.closeAbout else texts.openAbout,
-                active = showAbout
-            )
-            HeaderIconButton(
-                onClick = onToggleSettings,
-                icon = if (showSettings) Icons.Rounded.Close else Icons.Rounded.Settings,
-                contentDescription = if (showSettings) texts.closeSettings else texts.openSettings,
-                active = showSettings
+                onClick = action.onClick,
+                icon = action.icon,
+                contentDescription = action.label,
+                active = action.active
             )
         }
     }
@@ -1453,7 +1540,7 @@ private fun HeaderIconButton(
     onClick: () -> Unit,
     icon: ImageVector,
     contentDescription: String,
-    active: Boolean = false
+    active: Boolean
 ) {
     val bgColor by animateFloatAsState(
         targetValue = if (active) 1f else 0f,
@@ -4433,6 +4520,7 @@ private val AUDIO_LOSSLESS_OUTPUT_EXTENSIONS = setOf("wav", "flac")
 
 private data class UiText(
     val tagline: String,
+    val moreHeaderActions: String,
     val openMetadataSecurity: String,
     val closeMetadataSecurity: String,
     val openAbout: String,
@@ -6043,6 +6131,7 @@ private data class UiText(
 }
 
 private val englishText = UiText(
+    moreHeaderActions = "More actions",
     tagline = "Files stay on this device",
     openMetadataSecurity = "Open privacy tools",
     closeMetadataSecurity = "Close privacy tools",
@@ -6143,6 +6232,7 @@ private val englishText = UiText(
 )
 
 private val simplifiedChineseText = UiText(
+    moreHeaderActions = "更多操作",
     tagline = "本机转换，文件不上云",
     openMetadataSecurity = "打开隐私工具",
     closeMetadataSecurity = "关闭隐私工具",
@@ -6243,6 +6333,7 @@ private val simplifiedChineseText = UiText(
 )
 
 private val traditionalChineseText = UiText(
+    moreHeaderActions = "更多操作",
     tagline = "本機轉換，檔案不上雲",
     openMetadataSecurity = "開啟隱私工具",
     closeMetadataSecurity = "關閉隱私工具",
