@@ -64,6 +64,8 @@ import org.zenconverter.app.ui.PdfPasswordPrompt
 import org.zenconverter.app.ui.ZenConverterApp
 import org.zenconverter.app.ui.OutputDirectory
 import org.zenconverter.app.ui.OutputLocationMode
+import org.zenconverter.app.ui.PdfMergeGroup
+import org.zenconverter.app.ui.PdfMergeType
 import org.zenconverter.app.ui.QueuedFile
 import org.zenconverter.app.ui.TaskProgress
 import org.zenconverter.app.ui.TaskProgressStatus
@@ -78,6 +80,7 @@ import java.util.UUID
 
 class MainActivity : ComponentActivity() {
     private val queuedFiles = mutableStateListOf<QueuedFile>()
+    private val pdfMergeGroups = mutableStateListOf<PdfMergeGroup>()
     private val outputDirectory = mutableStateOf<OutputDirectory?>(null)
     private val outputLocationMode = mutableStateOf(OutputLocationMode.Default)
     private val imagePdfMergePrompt = mutableStateOf<ImagePdfMergePrompt?>(null)
@@ -88,21 +91,19 @@ class MainActivity : ComponentActivity() {
     private val externalImportPrompt = mutableStateOf<ExternalImportPrompt?>(null)
     private val metadataToolState = mutableStateOf<MetadataToolState>(MetadataToolState.Empty)
     private val pendingPdfSelections = ArrayDeque<PendingPdfSelection>()
+    private val pendingQueuedPdfSelections = ArrayDeque<PendingQueuedPdfSelection>()
     private val pendingExternalImportGroups = ArrayDeque<PendingExternalImportGroup>()
     private var pendingImagePdfSelection: PendingImagePdfSelection? = null
     private var pendingGifFrameSelection: PendingGifFrameSelection? = null
     private var pendingGifPdfFrameSelection: PendingGifPdfFrameSelection? = null
     private var pendingPdfOutputPasswordSelection: PendingPdfOutputPasswordSelection? = null
+    private var pendingPdfOutputPasswordQueuedFileIds: List<String> = emptyList()
     private var pendingMetadataTargetKind: MetadataTargetKind? = null
     private var pendingMetadataMediaWriteGrant: PendingMetadataMediaWriteGrant? = null
     private var pendingMetadataReadPermissionRetry: PendingMetadataMediaWriteGrant? = null
     private var pendingExternalImportItems: List<PendingExternalImportItem> = emptyList()
     private var activePdfPasswordSelection: PendingPdfSelection? = null
-    private var pendingSelection: PendingSelection? = null
-    private var pendingVideoOptions: VideoExportOptions = VideoExportOptions()
-    private var pendingAudioOptions: AudioExportOptions = AudioExportOptions()
-    private var pendingImageOptions: ImageExportOptions = ImageExportOptions()
-    private var pendingPdfOptions: PdfExportOptions = PdfExportOptions()
+    private var activeQueuedPdfPasswordSelection: PendingQueuedPdfSelection? = null
     private var pdfProbeRunning = false
     private var pdfBoxReady = false
     private var pdfSelectionGeneration = 0
@@ -131,9 +132,6 @@ class MainActivity : ComponentActivity() {
     private val openDocuments = registerForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
-        val request = pendingSelection ?: return@registerForActivityResult
-        pendingSelection = null
-
         val documents = uris.map { uri ->
             persistInputFilePermission(uri)
             val metadata = queryOpenableMetadata(uri)
@@ -153,7 +151,7 @@ class MainActivity : ComponentActivity() {
             )
         }
 
-        enqueuePickedDocuments(request, documents)
+        enqueueUnifiedDocuments(documents)
     }
 
     private val openOutputDirectory = registerForActivityResult(
@@ -262,6 +260,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             ZenConverterApp(
                 queuedFiles = queuedFiles,
+                pdfMergeGroups = pdfMergeGroups,
                 supportedVideoMimeTypes = supportedVideoMimeTypes,
                 outputLocationMode = outputLocationMode.value,
                 outputDirectory = outputDirectory.value,
@@ -272,24 +271,48 @@ class MainActivity : ComponentActivity() {
                         mode == OutputLocationMode.Custom
                     )
                 },
-                onPickFiles = { category, targetFormat ->
-                    pendingSelection = PendingSelection(category, targetFormat)
-                    openDocuments.launch(category.mimeTypes.toTypedArray())
+                onPickFiles = {
+                    openDocuments.launch(arrayOf(MIME_TYPE_ANY))
+                },
+                onUpdateQueuedFile = { nextFile ->
+                    updateQueuedFile(nextFile)
+                },
+                onUpdateQueuedFiles = { nextFiles ->
+                    updateQueuedFiles(nextFiles)
+                },
+                onCreatePdfMergeGroup = { type ->
+                    createPdfMergeGroup(type)
+                },
+                onUpdatePdfMergeGroup = { group ->
+                    updatePdfMergeGroup(group)
+                },
+                onRemovePdfMergeGroup = { groupId ->
+                    pdfMergeGroups.removeAll { it.id == groupId }
+                },
+                onAddFileToPdfMergeGroup = { groupId, fileId ->
+                    addFileToPdfMergeGroup(groupId, fileId)
+                },
+                onRemoveFileFromPdfMergeGroup = { groupId, fileId ->
+                    removeFileFromPdfMergeGroup(groupId, fileId)
                 },
                 onPickOutputDirectory = {
                     openOutputDirectory.launch(null)
                 },
                 onRemoveFile = { fileId ->
-                    queuedFiles.removeAll { it.id == fileId }
+                    removeQueuedFile(fileId)
                 },
                 onClearQueue = {
                     queuedFiles.clear()
+                    pdfMergeGroups.clear()
                     pendingPdfSelections.clear()
+                    pendingQueuedPdfSelections.clear()
                     pendingImagePdfSelection = null
                     activePdfPasswordSelection = null
+                    activeQueuedPdfPasswordSelection = null
                     pendingGifFrameSelection = null
                     pendingGifPdfFrameSelection = null
                     pendingPdfOutputPasswordSelection = null
+                    pendingPdfOutputPasswordQueuedFileIds = emptyList()
                     pendingExternalImportItems = emptyList()
                     pendingExternalImportGroups.clear()
                     pdfSelectionGeneration += 1
@@ -413,52 +436,93 @@ class MainActivity : ComponentActivity() {
                     processPendingExternalImportGroups()
                 },
                 onSubmitPdfPassword = { password ->
-                    val prompt = activePdfPasswordSelection
-                    pdfPasswordPrompt.value = null
-                    activePdfPasswordSelection = null
-                    if (prompt != null) {
-                        retryPdfWithPassword(prompt, password)
+                    val queuedPrompt = activeQueuedPdfPasswordSelection
+                    if (queuedPrompt != null) {
+                        pdfPasswordPrompt.value = null
+                        activeQueuedPdfPasswordSelection = null
+                        retryQueuedPdfWithPassword(queuedPrompt, password)
                     } else {
-                        processNextPendingPdfSelection()
+                        val prompt = activePdfPasswordSelection
+                        pdfPasswordPrompt.value = null
+                        activePdfPasswordSelection = null
+                        if (prompt != null) {
+                            retryPdfWithPassword(prompt, password)
+                        } else {
+                            processNextPendingPdfSelection()
+                        }
                     }
                 },
                 onCancelPdfPassword = {
-                    val selection = activePdfPasswordSelection
-                    pdfPasswordPrompt.value = null
-                    activePdfPasswordSelection = null
-                    ConversionTaskStore.showMessage("Password-protected PDF was skipped")
-                    if (selection != null) {
-                        finishPendingPdfSelection(selection)
+                    val queuedPrompt = activeQueuedPdfPasswordSelection
+                    if (queuedPrompt != null) {
+                        pdfPasswordPrompt.value = null
+                        activeQueuedPdfPasswordSelection = null
+                        queuedFiles.removeAll { it.id == queuedPrompt.fileId }
+                        ConversionTaskStore.showMessage("Password-protected PDF was skipped")
+                        processNextQueuedPdfSelection()
                     } else {
-                        processNextPendingPdfSelection()
+                        val selection = activePdfPasswordSelection
+                        pdfPasswordPrompt.value = null
+                        activePdfPasswordSelection = null
+                        ConversionTaskStore.showMessage("Password-protected PDF was skipped")
+                        if (selection != null) {
+                            finishPendingPdfSelection(selection)
+                        } else {
+                            processNextPendingPdfSelection()
+                        }
                     }
                 },
                 onSubmitPdfOutputPassword = { password ->
-                    val selection = pendingPdfOutputPasswordSelection
-                    pendingPdfOutputPasswordSelection = null
-                    pdfOutputPasswordPrompt.value = null
-                    if (selection != null) {
+                    val queuedEncryptIds = pendingPdfOutputPasswordQueuedFileIds
+                    if (queuedEncryptIds.isNotEmpty()) {
+                        pendingPdfOutputPasswordQueuedFileIds = emptyList()
+                        pdfOutputPasswordPrompt.value = null
                         if (password.isBlank()) {
                             ConversionTaskStore.showMessage("PDF password was empty")
                         } else {
-                            enqueuePdfDocumentsWithProbe(
-                                request = selection.request.copy(
+                            updateQueuedFilesById(queuedEncryptIds.toSet()) { file ->
+                                file.copy(
                                     pdfSecurityOptions = PdfSecurityOptions(
                                         mode = PdfSecurityMode.Encrypt,
                                         outputPassword = password
                                     )
-                                ),
-                                documents = selection.documents
-                            )
+                                )
+                            }
+                            requestNotificationPermissionThenStart()
                         }
+                    } else {
+                        val selection = pendingPdfOutputPasswordSelection
+                        pendingPdfOutputPasswordSelection = null
+                        pdfOutputPasswordPrompt.value = null
+                        if (selection != null) {
+                            if (password.isBlank()) {
+                                ConversionTaskStore.showMessage("PDF password was empty")
+                            } else {
+                                enqueuePdfDocumentsWithProbe(
+                                    request = selection.request.copy(
+                                        pdfSecurityOptions = PdfSecurityOptions(
+                                            mode = PdfSecurityMode.Encrypt,
+                                            outputPassword = password
+                                        )
+                                    ),
+                                    documents = selection.documents
+                                )
+                            }
+                        }
+                        processPendingExternalImportGroups()
                     }
-                    processPendingExternalImportGroups()
                 },
                 onCancelPdfOutputPassword = {
-                    pendingPdfOutputPasswordSelection = null
-                    pdfOutputPasswordPrompt.value = null
-                    ConversionTaskStore.showMessage("PDF encryption was skipped")
-                    processPendingExternalImportGroups()
+                    if (pendingPdfOutputPasswordQueuedFileIds.isNotEmpty()) {
+                        pendingPdfOutputPasswordQueuedFileIds = emptyList()
+                        pdfOutputPasswordPrompt.value = null
+                        ConversionTaskStore.showMessage("PDF encryption was skipped")
+                    } else {
+                        pendingPdfOutputPasswordSelection = null
+                        pdfOutputPasswordPrompt.value = null
+                        ConversionTaskStore.showMessage("PDF encryption was skipped")
+                        processPendingExternalImportGroups()
+                    }
                 },
                 onConfirmExternalImport = { choices ->
                     enqueueExternalImportChoices(choices)
@@ -467,11 +531,7 @@ class MainActivity : ComponentActivity() {
                     pendingExternalImportItems = emptyList()
                     externalImportPrompt.value = null
                 },
-                onStartConversion = { videoOptions, audioOptions, imageOptions, pdfOptions ->
-                    pendingVideoOptions = videoOptions
-                    pendingAudioOptions = audioOptions
-                    pendingImageOptions = imageOptions
-                    pendingPdfOptions = pdfOptions
+                onStartConversion = {
                     requestNotificationPermissionThenStart()
                 },
                 onCancelConversion = {
@@ -542,30 +602,271 @@ class MainActivity : ComponentActivity() {
             return
         }
 
+        if (enqueueQueuedPdfPasswordProbesIfNeeded()) {
+            processNextQueuedPdfSelection()
+            return
+        }
+
+        val encryptFilesNeedingPassword = queuedFiles.filter {
+            it.pdfSecurityOptions.mode == PdfSecurityMode.Encrypt &&
+                it.pdfSecurityOptions.outputPassword.isNullOrBlank()
+        }
+        if (encryptFilesNeedingPassword.isNotEmpty()) {
+            pendingPdfOutputPasswordQueuedFileIds = encryptFilesNeedingPassword.map { it.id }
+            pdfOutputPasswordPrompt.value = PdfOutputPasswordPrompt(fileCount = encryptFilesNeedingPassword.size)
+            return
+        }
+
         ConversionTaskStore.prepareRun(
-            queuedFiles.map { file ->
-                ConversionTaskInput(
-                    fileId = file.id,
-                    inputUri = file.uri,
-                    inputUris = file.inputUris,
-                    displayName = file.displayName,
-                    mimeType = file.mimeType,
-                    category = file.category.toConversionCategory(),
-                    targetFormat = file.targetFormat,
-                    outputDestination = outputDestination,
-                    videoOptions = pendingVideoOptions,
-                    audioOptions = pendingAudioOptions,
-                    imageOptions = pendingImageOptions,
-                    pdfOptions = pendingPdfOptions,
-                    pdfSecurityOptions = file.pdfSecurityOptions,
-                    inputInfo = file.inputInfo,
-                    gifFrameMode = file.gifFrameMode,
-                    pdfPasswords = file.pdfPasswords
-                )
-            }
+            buildConversionInputs(outputDestination)
         )
         ConversionService.start(this)
         clearQueuedPdfPasswords()
+    }
+
+    private fun enqueueQueuedPdfPasswordProbesIfNeeded(): Boolean {
+        if (
+            pdfProbeRunning ||
+            pdfPasswordPrompt.value != null ||
+            pendingQueuedPdfSelections.isNotEmpty()
+        ) {
+            return true
+        }
+        val selections = queuedFiles
+            .filter { it.needsQueuedPdfPasswordProbe() }
+            .map { PendingQueuedPdfSelection(fileId = it.id, generation = pdfSelectionGeneration) }
+        if (selections.isEmpty()) return false
+        pendingQueuedPdfSelections.addAll(selections)
+        return true
+    }
+
+    private fun processNextQueuedPdfSelection() {
+        if (pdfProbeRunning || pdfPasswordPrompt.value != null) return
+        val selection = pendingQueuedPdfSelections.poll() ?: run {
+            requestNotificationPermissionThenStart()
+            return
+        }
+        if (selection.generation != pdfSelectionGeneration) {
+            processNextQueuedPdfSelection()
+            return
+        }
+        val file = queuedFiles.firstOrNull { it.id == selection.fileId } ?: run {
+            processNextQueuedPdfSelection()
+            return
+        }
+        pdfProbeRunning = true
+        Thread {
+            val result = probeQueuedPdf(file, password = null)
+            runOnUiThread {
+                pdfProbeRunning = false
+                if (selection.generation != pdfSelectionGeneration) {
+                    processNextQueuedPdfSelection()
+                    return@runOnUiThread
+                }
+                when (result) {
+                    PdfProbeResult.Opened -> {
+                        markQueuedPdfPassword(file.id, null)
+                        processNextQueuedPdfSelection()
+                    }
+                    PdfProbeResult.PasswordRequired -> {
+                        activeQueuedPdfPasswordSelection = selection
+                        pdfPasswordPrompt.value = PdfPasswordPrompt(file.displayName)
+                    }
+                    is PdfProbeResult.Failed -> {
+                        ConversionTaskStore.showMessage(result.message)
+                        queuedFiles.removeAll { it.id == file.id }
+                        processNextQueuedPdfSelection()
+                    }
+                }
+            }
+        }.start()
+    }
+
+    private fun retryQueuedPdfWithPassword(selection: PendingQueuedPdfSelection, password: String) {
+        if (password.isBlank()) {
+            ConversionTaskStore.showMessage("PDF password was empty")
+            queuedFiles.removeAll { it.id == selection.fileId }
+            processNextQueuedPdfSelection()
+            return
+        }
+        val file = queuedFiles.firstOrNull { it.id == selection.fileId } ?: run {
+            processNextQueuedPdfSelection()
+            return
+        }
+        pdfProbeRunning = true
+        Thread {
+            val result = probeQueuedPdf(file, password)
+            runOnUiThread {
+                pdfProbeRunning = false
+                if (selection.generation != pdfSelectionGeneration) {
+                    processNextQueuedPdfSelection()
+                    return@runOnUiThread
+                }
+                when (result) {
+                    PdfProbeResult.Opened -> markQueuedPdfPassword(file.id, password)
+                    PdfProbeResult.PasswordRequired -> {
+                        ConversionTaskStore.showMessage("PDF password was incorrect or unsupported")
+                        queuedFiles.removeAll { it.id == file.id }
+                    }
+                    is PdfProbeResult.Failed -> {
+                        ConversionTaskStore.showMessage(result.message)
+                        queuedFiles.removeAll { it.id == file.id }
+                    }
+                }
+                processNextQueuedPdfSelection()
+            }
+        }.start()
+    }
+
+    private fun probeQueuedPdf(file: QueuedFile, password: String?): PdfProbeResult {
+        val selection = PendingPdfSelection(
+            request = file.toPendingSelection(),
+            document = file.toSelectedDocument(),
+            generation = pdfSelectionGeneration
+        )
+        return probePdf(selection, password)
+    }
+
+    private fun markQueuedPdfPassword(fileId: String, password: String?) {
+        val index = queuedFiles.indexOfFirst { it.id == fileId }
+        if (index >= 0) {
+            queuedFiles[index] = queuedFiles[index].copy(pdfPasswords = listOf(password))
+        }
+    }
+
+    private fun updateQueuedFile(nextFile: QueuedFile) {
+        val index = queuedFiles.indexOfFirst { it.id == nextFile.id }
+        if (index >= 0) {
+            queuedFiles[index] = nextFile
+            sanitizePdfMergeGroups()
+        }
+    }
+
+    private fun updateQueuedFiles(nextFiles: List<QueuedFile>) {
+        nextFiles.forEach { nextFile ->
+            val index = queuedFiles.indexOfFirst { it.id == nextFile.id }
+            if (index >= 0) {
+                queuedFiles[index] = nextFile
+            }
+        }
+        sanitizePdfMergeGroups()
+    }
+
+    private fun removeQueuedFile(fileId: String) {
+        queuedFiles.removeAll { it.id == fileId }
+        sanitizePdfMergeGroups()
+    }
+
+    private fun createPdfMergeGroup(type: PdfMergeType) {
+        val memberIds = mergeablePdfFiles(type)
+            .map { it.id }
+        if (memberIds.size < 2) {
+            ConversionTaskStore.showMessage("Select at least two files to merge")
+            return
+        }
+        pdfMergeGroups.add(
+            PdfMergeGroup(
+                id = UUID.randomUUID().toString(),
+                type = type,
+                memberFileIds = memberIds
+            )
+        )
+    }
+
+    private fun updatePdfMergeGroup(group: PdfMergeGroup) {
+        val index = pdfMergeGroups.indexOfFirst { it.id == group.id }
+        if (index >= 0) {
+            pdfMergeGroups[index] = group.copy(
+                memberFileIds = group.memberFileIds.orderedByQueue()
+            )
+            sanitizePdfMergeGroups()
+        }
+    }
+
+    private fun addFileToPdfMergeGroup(groupId: String, fileId: String) {
+        val index = pdfMergeGroups.indexOfFirst { it.id == groupId }
+        if (index < 0) return
+        val group = pdfMergeGroups[index]
+        val file = queuedFiles.firstOrNull { it.id == fileId } ?: return
+        if (!file.isMergeableFor(group.type) || fileId in groupedPdfMergeFileIds()) return
+        pdfMergeGroups[index] = group.copy(
+            memberFileIds = (group.memberFileIds + fileId).distinct().orderedByQueue()
+        )
+        sanitizePdfMergeGroups()
+    }
+
+    private fun removeFileFromPdfMergeGroup(groupId: String, fileId: String) {
+        val index = pdfMergeGroups.indexOfFirst { it.id == groupId }
+        if (index < 0) return
+        val group = pdfMergeGroups[index]
+        val nextMemberIds = group.memberFileIds
+            .filterNot { it == fileId }
+            .orderedByQueue()
+        if (nextMemberIds.size < 2) {
+            pdfMergeGroups.removeAt(index)
+        } else {
+            pdfMergeGroups[index] = group.copy(memberFileIds = nextMemberIds)
+        }
+    }
+
+    private fun sanitizePdfMergeGroups() {
+        if (pdfMergeGroups.isEmpty()) return
+        val sanitizedGroups = mutableListOf<PdfMergeGroup>()
+        val usedIds = mutableSetOf<String>()
+        pdfMergeGroups.forEach { group ->
+            val memberIds = group.memberFileIds
+                .orderedByQueue()
+                .filter { fileId ->
+                    fileId !in usedIds &&
+                        queuedFiles.firstOrNull { it.id == fileId }?.isMergeableFor(group.type) == true
+                }
+            if (memberIds.size >= 2) {
+                sanitizedGroups += group.copy(memberFileIds = memberIds)
+                usedIds += memberIds
+            }
+        }
+        pdfMergeGroups.clear()
+        pdfMergeGroups.addAll(sanitizedGroups)
+    }
+
+    private fun mergeablePdfFiles(type: PdfMergeType): List<QueuedFile> {
+        val groupedIds = groupedPdfMergeFileIds()
+        return queuedFiles.filter { file ->
+            file.id !in groupedIds && file.isMergeableFor(type)
+        }
+    }
+
+    private fun groupedPdfMergeFileIds(): Set<String> {
+        return pdfMergeGroups.flatMap { it.memberFileIds }.toSet()
+    }
+
+    private fun List<String>.orderedByQueue(): List<String> {
+        val ids = toSet()
+        return queuedFiles.map { it.id }.filter { it in ids }
+    }
+
+    private fun buildConversionInputs(outputDestination: OutputDestination): List<ConversionTaskInput> {
+        sanitizePdfMergeGroups()
+        val activeGroups = pdfMergeGroups
+            .mapNotNull { group ->
+                val members = group.memberFileIds.mapNotNull { fileId ->
+                    queuedFiles.firstOrNull { it.id == fileId }
+                }
+                if (members.size >= 2) group to members else null
+            }
+        val groupedIds = activeGroups.flatMap { it.second.map { file -> file.id } }.toSet()
+        val groupByFirstMemberId = activeGroups.associateBy { (_, members) -> members.first().id }
+        return buildList {
+            queuedFiles.forEach { file ->
+                val group = groupByFirstMemberId[file.id]
+                if (group != null) {
+                    add(group.first.toConversionTaskInput(group.second, outputDestination))
+                }
+                if (file.id !in groupedIds) {
+                    add(file.toConversionTaskInput(outputDestination))
+                }
+            }
+        }
     }
 
     private fun handleExternalIntent(intent: Intent?) {
@@ -588,11 +889,78 @@ class MainActivity : ComponentActivity() {
                 ConversionTaskStore.showMessage("No shared files were found")
                 return@launch
             }
-            pendingExternalImportItems = items
-            externalImportPrompt.value = ExternalImportPrompt(
-                files = items.map { it.promptFile }
+            enqueueExternalImportDefaults(items)
+        }
+    }
+
+    private fun enqueueUnifiedDocuments(documents: List<SelectedDocument>) {
+        if (documents.isEmpty()) return
+        val prepared = documents.map { document ->
+            val extension = extensionFor(document.displayName)
+            PreparedExternalImportDocument(
+                document = document,
+                extension = extension,
+                detectedCategory = detectExternalImportCategory(document.mimeType, extension)
             )
         }
+        enqueuePreparedDocuments(prepared)
+    }
+
+    private fun enqueueExternalImportDefaults(items: List<PendingExternalImportItem>) {
+        enqueuePreparedDocuments(
+            items.map { item ->
+                PreparedExternalImportDocument(
+                    document = item.document,
+                    extension = extensionFor(item.document.displayName),
+                    detectedCategory = item.promptFile.detectedCategory
+                )
+            }
+        )
+    }
+
+    private fun enqueuePreparedDocuments(prepared: List<PreparedExternalImportDocument>) {
+        val pdfCount = prepared.count { it.detectedCategory == FileCategory.Pdf }
+        val nextFiles = prepared.mapNotNull { candidate ->
+            val category = candidate.detectedCategory ?: return@mapNotNull null
+            val targets = externalTargetsFor(category, pdfCount)
+            if (targets.isEmpty()) return@mapNotNull null
+            val defaultTarget = defaultExternalTargetFor(
+                category = category,
+                extension = candidate.extension,
+                targets = targets
+            ) ?: return@mapNotNull null
+            candidate.document.toQueuedFile(
+                request = PendingSelection(
+                    category = defaultTarget.category,
+                    targetFormat = defaultTarget.targetFormat
+                ),
+                sourceCategory = category,
+                targetOptions = targets
+            )
+        }
+        if (nextFiles.isNotEmpty()) {
+            queuedFiles.addAll(nextFiles)
+        }
+        val skippedCount = prepared.size - nextFiles.size
+        when {
+            nextFiles.isEmpty() && prepared.isNotEmpty() ->
+                ConversionTaskStore.showMessage("No supported files were added")
+            skippedCount > 0 ->
+                ConversionTaskStore.showMessage("$skippedCount unsupported file(s) skipped")
+        }
+    }
+
+    private fun updateQueuedFilesById(
+        ids: Set<String>,
+        transform: (QueuedFile) -> QueuedFile
+    ) {
+        queuedFiles.indices.forEach { index ->
+            val file = queuedFiles[index]
+            if (file.id in ids) {
+                queuedFiles[index] = transform(file)
+            }
+        }
+        sanitizePdfMergeGroups()
     }
 
     private fun externalUrisFromIntent(intent: Intent): List<ExternalImportUri> {
@@ -801,6 +1169,8 @@ class MainActivity : ComponentActivity() {
             gifPdfFramePrompt.value != null ||
             pdfPasswordPrompt.value != null ||
             pdfOutputPasswordPrompt.value != null ||
+            activeQueuedPdfPasswordSelection != null ||
+            pendingQueuedPdfSelections.isNotEmpty() ||
             activePdfPasswordSelection != null ||
             pendingPdfSelections.isNotEmpty() ||
             pdfProbeRunning
@@ -1564,6 +1934,11 @@ private data class PendingPdfSelection(
     val batch: PendingPdfBatch? = null
 )
 
+private data class PendingQueuedPdfSelection(
+    val fileId: String,
+    val generation: Int
+)
+
 private data class PendingPdfBatch(
     val request: PendingSelection,
     val documents: List<SelectedDocument>,
@@ -1584,8 +1959,36 @@ private sealed interface PdfProbeResult {
     data class Failed(val message: String) : PdfProbeResult
 }
 
+private fun externalTargetsFor(
+    category: FileCategory?,
+    pdfCount: Int
+): List<ExternalImportTarget> {
+    return when (category) {
+        FileCategory.Video -> FileCategory.Video.formats.map {
+            ExternalImportTarget(FileCategory.Video, it)
+        } + FileCategory.Audio.formats.map {
+            ExternalImportTarget(FileCategory.Audio, it)
+        }
+        FileCategory.Audio -> FileCategory.Audio.formats.map {
+            ExternalImportTarget(FileCategory.Audio, it)
+        }
+        FileCategory.Image -> FileCategory.Image.formats.map {
+            ExternalImportTarget(FileCategory.Image, it)
+        }
+        FileCategory.Pdf -> FileCategory.Pdf.formats
+            .filter { pdfCount > 1 || !it.label.equals("PDF", ignoreCase = true) }
+            .map { ExternalImportTarget(FileCategory.Pdf, it) }
+        FileCategory.Document -> FileCategory.Document.formats.map {
+            ExternalImportTarget(FileCategory.Document, it)
+        }
+        null -> emptyList()
+    }
+}
+
 private fun SelectedDocument.toQueuedFile(
     request: PendingSelection,
+    sourceCategory: FileCategory = request.category,
+    targetOptions: List<ExternalImportTarget> = emptyList(),
     gifFrameMode: GifFrameExportMode = GifFrameExportMode.FirstFrame,
     pdfPassword: String? = null
 ): QueuedFile {
@@ -1597,7 +2000,13 @@ private fun SelectedDocument.toQueuedFile(
         sizeBytes = sizeBytes,
         mimeType = mimeType,
         category = request.category,
+        sourceCategory = sourceCategory,
+        targetOptions = targetOptions,
         targetFormat = request.targetFormat.label,
+        videoOptions = defaultVideoOptionsFor(request.targetFormat),
+        audioOptions = AudioExportOptions(),
+        imageOptions = ImageExportOptions(quality = 85),
+        pdfOptions = PdfExportOptions(),
         inputInfo = inputInfo,
         gifFrameMode = gifFrameMode,
         pdfSecurityOptions = request.pdfSecurityOptions,
@@ -1618,7 +2027,13 @@ private fun PendingPdfBatch.toMergedPdfQueuedFile(): QueuedFile {
         sizeBytes = totalSize,
         mimeType = MIME_TYPE_PDF,
         category = request.category,
+        sourceCategory = FileCategory.Pdf,
+        targetOptions = externalTargetsFor(FileCategory.Pdf, openedDocuments.size),
         targetFormat = request.targetFormat.label,
+        videoOptions = VideoExportOptions(),
+        audioOptions = AudioExportOptions(),
+        imageOptions = ImageExportOptions(quality = 85),
+        pdfOptions = PdfExportOptions(),
         inputInfo = FileBasicInfoReader.aggregate(
             documents = openedDocuments.map { it.inputInfo },
             fallbackSizeBytes = totalSize,
@@ -1641,13 +2056,190 @@ private fun PendingImagePdfSelection.toSinglePdfQueuedFile(): QueuedFile {
         sizeBytes = totalSize,
         mimeType = "image/*",
         category = request.category,
+        sourceCategory = FileCategory.Image,
+        targetOptions = externalTargetsFor(FileCategory.Image, documents.size),
         targetFormat = request.targetFormat.label,
+        videoOptions = VideoExportOptions(),
+        audioOptions = AudioExportOptions(),
+        imageOptions = ImageExportOptions(quality = 85),
+        pdfOptions = PdfExportOptions(),
         inputInfo = FileBasicInfoReader.aggregate(
             documents = documents.map { it.inputInfo },
             fallbackSizeBytes = totalSize
         ),
         gifFrameMode = gifFrameMode
     )
+}
+
+private fun QueuedFile.needsQueuedPdfPasswordProbe(): Boolean {
+    return category == FileCategory.Pdf && pdfPasswords.isEmpty()
+}
+
+private fun QueuedFile.isMergeableFor(type: PdfMergeType): Boolean {
+    return when (type) {
+        PdfMergeType.Images -> category == FileCategory.Image &&
+            targetFormat.equals("PDF", ignoreCase = true)
+        PdfMergeType.Pdfs -> category == FileCategory.Pdf &&
+            targetFormat.equals("PDF", ignoreCase = true) &&
+            pdfSecurityOptions.mode == PdfSecurityMode.None
+    }
+}
+
+private fun QueuedFile.toPendingSelection(): PendingSelection {
+    return PendingSelection(
+        category = category,
+        targetFormat = targetFormatObject(),
+        pdfSecurityOptions = pdfSecurityOptions
+    )
+}
+
+private fun QueuedFile.targetFormatObject(): TargetFormat {
+    return category.formats.firstOrNull {
+        it.label.equals(targetFormat, ignoreCase = true)
+    } ?: TargetFormat(
+        label = targetFormat,
+        extension = targetFormat.lowercase(Locale.US),
+        modeHint = ""
+    )
+}
+
+private fun QueuedFile.toSelectedDocument(): SelectedDocument {
+    return SelectedDocument(
+        uri = uri,
+        displayName = displayName,
+        sizeBytes = sizeBytes,
+        mimeType = mimeType,
+        inputInfo = inputInfo
+    )
+}
+
+private fun QueuedFile.toConversionTaskInput(
+    outputDestination: OutputDestination
+): ConversionTaskInput {
+    return ConversionTaskInput(
+        fileId = id,
+        inputUri = uri,
+        inputUris = inputUris,
+        displayName = displayName,
+        mimeType = mimeType,
+        category = category.toConversionCategory(),
+        targetFormat = targetFormat,
+        outputDestination = outputDestination,
+        videoOptions = videoOptions,
+        audioOptions = audioOptions,
+        imageOptions = imageOptions,
+        pdfOptions = pdfOptions,
+        pdfSecurityOptions = pdfSecurityOptions,
+        inputInfo = inputInfo,
+        gifFrameMode = gifFrameMode,
+        pdfPasswords = pdfPasswords
+    )
+}
+
+private fun PdfMergeGroup.toConversionTaskInput(
+    members: List<QueuedFile>,
+    outputDestination: OutputDestination
+): ConversionTaskInput {
+    return when (type) {
+        PdfMergeType.Images -> members.toMergedImagePdfInput(
+            outputDestination = outputDestination,
+            fileId = id,
+            pdfOptions = pdfOptions
+        )
+        PdfMergeType.Pdfs -> members.toMergedPdfInput(
+            outputDestination = outputDestination,
+            fileId = id
+        )
+    }
+}
+
+private fun List<QueuedFile>.toMergedImagePdfInput(
+    outputDestination: OutputDestination,
+    fileId: String = first().id,
+    pdfOptions: PdfExportOptions = first().pdfOptions
+): ConversionTaskInput {
+    val first = first()
+    val totalSize = mapNotNull { it.sizeBytes }
+        .takeIf { it.size == size }
+        ?.sum()
+    val gifFrameMode = if (any { it.gifFrameMode == GifFrameExportMode.FramesAsSinglePdf }) {
+        GifFrameExportMode.FramesAsSinglePdf
+    } else {
+        GifFrameExportMode.FirstFrame
+    }
+    return ConversionTaskInput(
+        fileId = fileId,
+        inputUri = first.uri,
+        inputUris = flatMap { file ->
+            file.inputUris.ifEmpty { listOf(file.uri) }
+        },
+        displayName = "$size images",
+        mimeType = "image/*",
+        category = ConversionMediaCategory.Image,
+        targetFormat = "PDF",
+        outputDestination = outputDestination,
+        videoOptions = VideoExportOptions(),
+        audioOptions = AudioExportOptions(),
+        imageOptions = first.imageOptions,
+        pdfOptions = pdfOptions,
+        inputInfo = FileBasicInfoReader.aggregate(
+            documents = map { it.inputInfo },
+            fallbackSizeBytes = totalSize
+        ),
+        gifFrameMode = gifFrameMode
+    )
+}
+
+private fun List<QueuedFile>.toMergedPdfInput(
+    outputDestination: OutputDestination,
+    fileId: String
+): ConversionTaskInput {
+    val first = first()
+    val totalSize = mapNotNull { it.sizeBytes }
+        .takeIf { it.size == size }
+        ?.sum()
+    val inputUris = flatMap { file -> file.inputUris.ifEmpty { listOf(file.uri) } }
+    val passwords = flatMap { file ->
+        val uriCount = file.inputUris.ifEmpty { listOf(file.uri) }.size
+        when {
+            file.pdfPasswords.isEmpty() -> List(uriCount) { null }
+            file.pdfPasswords.size >= uriCount -> file.pdfPasswords.take(uriCount)
+            else -> file.pdfPasswords + List(uriCount - file.pdfPasswords.size) { null }
+        }
+    }
+    return ConversionTaskInput(
+        fileId = fileId,
+        inputUri = first.uri,
+        inputUris = inputUris,
+        displayName = "$size PDFs",
+        mimeType = MIME_TYPE_PDF,
+        category = ConversionMediaCategory.Pdf,
+        targetFormat = "PDF",
+        outputDestination = outputDestination,
+        videoOptions = VideoExportOptions(),
+        audioOptions = AudioExportOptions(),
+        imageOptions = ImageExportOptions(quality = 85),
+        pdfOptions = PdfExportOptions(),
+        inputInfo = FileBasicInfoReader.aggregate(
+            documents = map { it.inputInfo },
+            fallbackSizeBytes = totalSize,
+            formatLabel = "PDF"
+        ),
+        pdfPasswords = passwords
+    )
+}
+
+private fun defaultVideoOptionsFor(targetFormat: TargetFormat): VideoExportOptions {
+    return if (targetFormat.extension.equals("gif", ignoreCase = true)) {
+        VideoExportOptions(
+            maxShortSidePixels = 480,
+            videoBitrate = null,
+            videoMimeType = VideoExportOptions.VIDEO_MIME_TYPE_H264,
+            maxFrameRate = 30
+        )
+    } else {
+        VideoExportOptions()
+    }
 }
 
 private fun SelectedDocument.isGifInput(): Boolean {
