@@ -124,7 +124,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.Placeable
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -136,6 +138,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
@@ -826,195 +829,234 @@ private fun ZenConverterContent(
         lastQueueIds = queueIds
     }
 
+    @Composable
+    fun HeaderContent(modifier: Modifier = Modifier) {
+        Column(modifier = modifier) {
+            Header(
+                texts = texts,
+                showMetadataSecurity = showMetadataSecurity,
+                showSettings = showSettings,
+                showAbout = showAbout,
+                onToggleMetadataSecurity = {
+                    openMenuId = null
+                    showSettings = false
+                    showAbout = false
+                    showMetadataSecurity = !showMetadataSecurity
+                },
+                onToggleSettings = {
+                    openMenuId = null
+                    showAbout = false
+                    showMetadataSecurity = false
+                    showSettings = !showSettings
+                },
+                onToggleAbout = {
+                    openMenuId = null
+                    showSettings = false
+                    showMetadataSecurity = false
+                    showAbout = !showAbout
+                }
+            )
+            ZenPanelVisibility(visible = showSettings) {
+                Column {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    SettingsPanel(
+                        texts = texts,
+                        selectedAccent = accent,
+                        selectedLanguage = languageOption,
+                        outputLocationMode = outputLocationMode,
+                        outputDirectory = outputDirectory,
+                        onAccentSelected = onAccentSelected,
+                        onLanguageSelected = onLanguageSelected,
+                        onOutputLocationModeChange = onOutputLocationModeChange,
+                        onPickOutputDirectory = onPickOutputDirectory
+                    )
+                }
+            }
+
+            ZenPanelVisibility(visible = showAbout) {
+                Column {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    AboutPanel(
+                        texts = texts,
+                        onShowSupport = { showSupport = true }
+                    )
+                }
+            }
+
+            ZenPanelVisibility(visible = showMetadataSecurity) {
+                Column {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    MetadataSecurityPanel(
+                        texts = texts,
+                        state = metadataToolState,
+                        onPickImage = onPickMetadataImage,
+                        onPickVideo = onPickMetadataVideo,
+                        onClean = onCleanMetadata,
+                        onRestore = onRestoreMetadata
+                    )
+                }
+            }
+        }
+    }
+
+    val statusMessage = conversionSummary ?: queueMessage
+    val shouldCenterEmptyState = queuedFiles.isEmpty() &&
+        !showSettings &&
+        !showAbout &&
+        !showMetadataSecurity &&
+        statusMessage == null
+    var headerHeightPx by remember { mutableStateOf(0) }
+
     NoOverscroll {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets.safeDrawing
         ) { contentPadding ->
-            LazyColumn(
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(contentPadding)
-                    .consumeWindowInsets(contentPadding),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .consumeWindowInsets(contentPadding)
             ) {
-                item(key = "header") {
-                    Column {
-                        Header(
-                            texts = texts,
-                            showMetadataSecurity = showMetadataSecurity,
-                            showSettings = showSettings,
-                            showAbout = showAbout,
-                            onToggleMetadataSecurity = {
-                                openMenuId = null
-                                showSettings = false
-                                showAbout = false
-                                showMetadataSecurity = !showMetadataSecurity
-                            },
-                            onToggleSettings = {
-                                openMenuId = null
-                                showAbout = false
-                                showMetadataSecurity = false
-                                showSettings = !showSettings
-                            },
-                            onToggleAbout = {
-                                openMenuId = null
-                                showSettings = false
-                                showMetadataSecurity = false
-                                showAbout = !showAbout
+                val density = LocalDensity.current
+                val headerHeight = with(density) { headerHeightPx.toDp() }
+                val emptyEntryHeight = run {
+                    val available = maxHeight - headerHeight - 44.dp
+                    if (available > 280.dp) available else 280.dp
+                }
+
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item(key = "header") {
+                        HeaderContent(
+                            modifier = Modifier.onSizeChanged { size ->
+                                if (headerHeightPx != size.height) {
+                                    headerHeightPx = size.height
+                                }
                             }
                         )
-                        ZenPanelVisibility(visible = showSettings) {
-                            Column {
-                                Spacer(modifier = Modifier.height(12.dp))
-                                SettingsPanel(
-                                    texts = texts,
-                                    selectedAccent = accent,
-                                    selectedLanguage = languageOption,
-                                    onAccentSelected = onAccentSelected,
-                                    onLanguageSelected = onLanguageSelected
-                                )
-                            }
-                        }
-
-                        ZenPanelVisibility(visible = showAbout) {
-                            Column {
-                                Spacer(modifier = Modifier.height(12.dp))
-                                AboutPanel(
-                                    texts = texts,
-                                    onShowSupport = { showSupport = true }
-                                )
-                            }
-                        }
-
-                        ZenPanelVisibility(visible = showMetadataSecurity) {
-                            Column {
-                                Spacer(modifier = Modifier.height(12.dp))
-                                MetadataSecurityPanel(
-                                    texts = texts,
-                                    state = metadataToolState,
-                                    onPickImage = onPickMetadataImage,
-                                    onPickVideo = onPickMetadataVideo,
-                                    onClean = onCleanMetadata,
-                                    onRestore = onRestoreMetadata
-                                )
-                            }
-                        }
                     }
-                }
 
-                item(key = "file-entry") {
-                    AddFilesPanel(
-                        texts = texts,
-                        onPickFiles = {
-                            openMenuId = null
-                            queueMessage = null
-                            onPickFiles()
-                        }
-                    )
-                }
-
-                if (queuedFiles.isNotEmpty() && !isConversionRunning) {
-                    item(key = "batch-settings") {
-                        BatchSettingsPanel(
+                    item(key = "file-entry") {
+                        AddFilesPanel(
                             texts = texts,
-                            files = queuedFiles,
-                            supportedVideoMimeTypes = supportedVideoMimeTypes,
-                            openMenuId = openMenuId,
-                            onOpenMenuChange = { openMenuId = it },
-                            onUpdateFiles = onUpdateQueuedFiles
-                        )
-                    }
-                }
-                if (queuedFiles.isNotEmpty()) {
-                    item(key = "pdf-merge-groups") {
-                        PdfMergeGroupsPanel(
-                            texts = texts,
-                            files = queuedFiles,
-                            groups = pdfMergeGroups,
-                            taskProgress = taskProgressById,
-                            canEdit = !isConversionRunning,
-                            openMenuId = openMenuId,
-                            onOpenMenuChange = { openMenuId = it },
-                            onCreateGroup = onCreatePdfMergeGroup,
-                            onUpdateGroup = onUpdatePdfMergeGroup,
-                            onRemoveGroup = onRemovePdfMergeGroup,
-                            onAddFileToGroup = onAddFileToPdfMergeGroup,
-                            onRemoveFileFromGroup = onRemoveFileFromPdfMergeGroup
-                        )
-                    }
-                }
-
-                item(key = "output-panel") {
-                    OutputPanel(
-                        texts = texts,
-                        outputLocationMode = outputLocationMode,
-                        outputDirectory = outputDirectory,
-                        onOutputLocationModeChange = onOutputLocationModeChange,
-                        onPickOutputDirectory = onPickOutputDirectory
-                    )
-                }
-
-                item(key = "queue-actions") {
-                    QueueActions(
-                        texts = texts,
-                        hasFiles = queuedFiles.isNotEmpty(),
-                        isRunning = isConversionRunning,
-                        onStart = {
-                            openMenuId = null
-                            queueMessage = null
-                            onStartConversion()
-                        },
-                        onCancel = {
-                            openMenuId = null
-                            queueMessage = null
-                            if (isConversionRunning) {
-                                onCancelConversion()
+                            expanded = shouldCenterEmptyState,
+                            modifier = if (shouldCenterEmptyState) {
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(emptyEntryHeight)
+                                    .animateContentSize(
+                                        animationSpec = spring(
+                                            stiffness = ZenAnimations.PanelEnterStiffness
+                                        )
+                                    )
                             } else {
-                                onClearQueue()
-                            }
-                        }
-                    )
-                }
-
-                item(key = "queue-header") {
-                    QueueHeader(
-                        texts = texts,
-                        fileCount = queuedFiles.size
-                    )
-                }
-
-                (conversionSummary ?: queueMessage)?.let { message ->
-                    item(key = "status-line") {
-                        StatusLine(text = texts.summaryMessage(message))
-                    }
-                }
-
-                if (queuedFiles.isEmpty()) {
-                    item(key = "empty-queue") {
-                        EmptyQueuePanel(texts = texts)
-                    }
-                } else {
-                    items(queuedFiles, key = { it.id }) { file ->
-                        FileRow(
-                            modifier = Modifier.animateItem(),
-                            texts = texts,
-                            file = file,
-                            progress = taskProgressById[file.id],
-                            canEdit = !isConversionRunning,
-                            supportedVideoMimeTypes = supportedVideoMimeTypes,
-                            openMenuId = openMenuId,
-                            optionsExpanded = expandedFileId == file.id,
-                            groupedInPdfMerge = file.id in groupedFileIds,
-                            onOpenMenuChange = { openMenuId = it },
-                            onUpdateFile = onUpdateQueuedFile,
-                            onOptionsExpandedChange = { expanded ->
-                                expandedFileId = if (expanded) file.id else null
-                                if (!expanded) openMenuId = null
+                                Modifier.animateContentSize(
+                                    animationSpec = spring(
+                                        stiffness = ZenAnimations.PanelEnterStiffness
+                                    )
+                                )
                             },
-                            onRemove = { onRemoveFile(file.id) }
+                            onPickFiles = {
+                                openMenuId = null
+                                queueMessage = null
+                                onPickFiles()
+                            }
                         )
+                    }
+
+                    if (queuedFiles.isNotEmpty() && !isConversionRunning) {
+                        item(key = "batch-settings") {
+                            BatchSettingsPanel(
+                                texts = texts,
+                                files = queuedFiles,
+                                supportedVideoMimeTypes = supportedVideoMimeTypes,
+                                openMenuId = openMenuId,
+                                onOpenMenuChange = { openMenuId = it },
+                                onUpdateFiles = onUpdateQueuedFiles
+                            )
+                        }
+                    }
+                    if (queuedFiles.isNotEmpty()) {
+                        item(key = "pdf-merge-groups") {
+                            PdfMergeGroupsPanel(
+                                texts = texts,
+                                files = queuedFiles,
+                                groups = pdfMergeGroups,
+                                taskProgress = taskProgressById,
+                                canEdit = !isConversionRunning,
+                                openMenuId = openMenuId,
+                                onOpenMenuChange = { openMenuId = it },
+                                onCreateGroup = onCreatePdfMergeGroup,
+                                onUpdateGroup = onUpdatePdfMergeGroup,
+                                onRemoveGroup = onRemovePdfMergeGroup,
+                                onAddFileToGroup = onAddFileToPdfMergeGroup,
+                                onRemoveFileFromGroup = onRemoveFileFromPdfMergeGroup
+                            )
+                        }
+                    }
+
+                    if (queuedFiles.isNotEmpty()) {
+                        item(key = "queue-actions") {
+                            QueueActions(
+                                texts = texts,
+                                isRunning = isConversionRunning,
+                                onStart = {
+                                    openMenuId = null
+                                    queueMessage = null
+                                    onStartConversion()
+                                },
+                                onCancel = {
+                                    openMenuId = null
+                                    queueMessage = null
+                                    if (isConversionRunning) {
+                                        onCancelConversion()
+                                    } else {
+                                        onClearQueue()
+                                    }
+                                }
+                            )
+                        }
+
+                        item(key = "queue-header") {
+                            QueueHeader(
+                                texts = texts,
+                                fileCount = queuedFiles.size
+                            )
+                        }
+                    }
+
+                    statusMessage?.let { message ->
+                        item(key = "status-line") {
+                            StatusLine(text = texts.summaryMessage(message))
+                        }
+                    }
+
+                    if (queuedFiles.isNotEmpty()) {
+                        items(queuedFiles, key = { it.id }) { file ->
+                            FileRow(
+                                modifier = Modifier.animateItem(),
+                                texts = texts,
+                                file = file,
+                                progress = taskProgressById[file.id],
+                                canEdit = !isConversionRunning,
+                                supportedVideoMimeTypes = supportedVideoMimeTypes,
+                                openMenuId = openMenuId,
+                                optionsExpanded = expandedFileId == file.id,
+                                groupedInPdfMerge = file.id in groupedFileIds,
+                                onOpenMenuChange = { openMenuId = it },
+                                onUpdateFile = onUpdateQueuedFile,
+                                onOptionsExpandedChange = { expanded ->
+                                    expandedFileId = if (expanded) file.id else null
+                                    if (!expanded) openMenuId = null
+                                },
+                                onRemove = { onRemoveFile(file.id) }
+                            )
+                        }
                     }
                 }
             }
@@ -1347,7 +1389,9 @@ private fun Header(
     )
 
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-        val useOverflowActions = maxWidth < HEADER_INLINE_MIN_WIDTH
+        val availableWidth = maxWidth
+        val secondaryActions = headerActions.take(2)
+        val settingsAction = headerActions.last()
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1392,19 +1436,31 @@ private fun Header(
             }
             Spacer(modifier = Modifier.width(8.dp))
 
-            if (useOverflowActions) {
-                HeaderOverflowActions(
-                    actions = headerActions,
-                    texts = texts
-                )
-            } else {
-                HeaderActions(actions = headerActions)
+            when {
+                availableWidth >= HEADER_ALL_INLINE_MIN_WIDTH -> {
+                    HeaderActions(actions = headerActions)
+                }
+                availableWidth >= HEADER_SETTINGS_INLINE_MIN_WIDTH -> {
+                    HeaderActions(actions = listOf(settingsAction))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    HeaderOverflowActions(
+                        actions = secondaryActions,
+                        texts = texts
+                    )
+                }
+                else -> {
+                    HeaderOverflowActions(
+                        actions = headerActions,
+                        texts = texts
+                    )
+                }
             }
         }
     }
 }
 
-private val HEADER_INLINE_MIN_WIDTH = 350.dp
+private val HEADER_SETTINGS_INLINE_MIN_WIDTH = 300.dp
+private val HEADER_ALL_INLINE_MIN_WIDTH = 380.dp
 
 private data class HeaderAction(
     val icon: ImageVector,
@@ -1527,10 +1583,28 @@ private fun SettingsPanel(
     texts: UiText,
     selectedAccent: AccentColorOption,
     selectedLanguage: LanguageOption,
+    outputLocationMode: OutputLocationMode,
+    outputDirectory: OutputDirectory?,
     onAccentSelected: (AccentColorOption) -> Unit,
-    onLanguageSelected: (LanguageOption) -> Unit
+    onLanguageSelected: (LanguageOption) -> Unit,
+    onOutputLocationModeChange: (OutputLocationMode) -> Unit,
+    onPickOutputDirectory: () -> Unit
 ) {
     QuietPanel {
+        SectionTitle(
+            icon = Icons.Rounded.FolderOpen,
+            title = texts.output
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        OutputLocationSection(
+            texts = texts,
+            outputLocationMode = outputLocationMode,
+            outputDirectory = outputDirectory,
+            onOutputLocationModeChange = onOutputLocationModeChange,
+            onPickOutputDirectory = onPickOutputDirectory
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
         SectionTitle(
             icon = Icons.Rounded.Palette,
             title = texts.accentColor
@@ -2700,9 +2774,67 @@ private fun AccentSwatch(
 @Composable
 private fun AddFilesPanel(
     texts: UiText,
+    expanded: Boolean,
+    modifier: Modifier = Modifier,
     onPickFiles: () -> Unit
 ) {
-    QuietPanel {
+    if (expanded) {
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(vertical = 20.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(118.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                        .border(
+                            1.dp,
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                            CircleShape
+                        )
+                        .bounceClick(onClick = onPickFiles, scaleDown = 0.94f)
+                        .semantics {
+                            contentDescription = texts.addFiles
+                            role = Role.Button
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    AppIcon(
+                        icon = Icons.Rounded.Add,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(58.dp)
+                    )
+                }
+                Text(
+                    text = texts.addFilesTitle,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = texts.addFilesNote,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(0.82f)
+                )
+            }
+        }
+        return
+    }
+
+    QuietPanel(modifier = modifier) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -3355,19 +3487,6 @@ private fun QueueHeader(
 }
 
 @Composable
-private fun EmptyQueuePanel(
-    texts: UiText
-) {
-    QuietPanel {
-        Text(
-            text = texts.emptyQueue,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
 private fun VideoOptions(
     texts: UiText,
     menuPrefix: String = "",
@@ -3996,101 +4115,87 @@ private fun OptionGrid(content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
-private fun OutputPanel(
+private fun OutputLocationSection(
     texts: UiText,
     outputLocationMode: OutputLocationMode,
     outputDirectory: OutputDirectory?,
     onOutputLocationModeChange: (OutputLocationMode) -> Unit,
     onPickOutputDirectory: () -> Unit
 ) {
-    QuietPanel {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics(mergeDescendants = true) {},
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .semantics(mergeDescendants = true) {},
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AppIcon(
-                    icon = Icons.Rounded.FolderOpen,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(23.dp)
+            AppIcon(
+                icon = Icons.Rounded.FolderOpen,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = when (outputLocationMode) {
+                        OutputLocationMode.Default -> texts.defaultOutputNote
+                        OutputLocationMode.Custom ->
+                            outputDirectory?.label ?: texts.chooseFolderBeforeConversion
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = texts.output,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = when (outputLocationMode) {
-                            OutputLocationMode.Default -> texts.defaultOutputNote
-                            OutputLocationMode.Custom ->
-                                outputDirectory?.label ?: texts.chooseFolderBeforeConversion
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (outputLocationMode == OutputLocationMode.Default) {
-                        Text(
-                            text = texts.defaultOutputLocation,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    } else if (outputDirectory != null) {
-                        Text(
-                            text = if (outputDirectory.persistablePermissionSaved) {
-                                texts.folderPermissionSaved
-                            } else {
-                                texts.folderSelectedForSession
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
+                Text(
+                    text = when {
+                        outputLocationMode == OutputLocationMode.Default -> texts.defaultOutputLocation
+                        outputDirectory?.persistablePermissionSaved == true -> texts.folderPermissionSaved
+                        outputDirectory != null -> texts.folderSelectedForSession
+                        else -> texts.chooseFolderBeforeConversion
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (outputLocationMode == OutputLocationMode.Default) {
-                    Button(onClick = { onOutputLocationModeChange(OutputLocationMode.Default) }) {
-                        Text(texts.defaultOutputLocation)
+        }
+
+        CenteredFlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalSpacing = 8.dp,
+            verticalSpacing = 8.dp
+        ) {
+            if (outputLocationMode == OutputLocationMode.Default) {
+                Button(onClick = { onOutputLocationModeChange(OutputLocationMode.Default) }) {
+                    Text(texts.defaultOutputLocation)
+                }
+                OutlinedButton(
+                    onClick = {
+                        onOutputLocationModeChange(OutputLocationMode.Custom)
+                        if (outputDirectory == null) onPickOutputDirectory()
                     }
-                    OutlinedButton(
-                        onClick = {
-                            onOutputLocationModeChange(OutputLocationMode.Custom)
-                            if (outputDirectory == null) onPickOutputDirectory()
-                        }
-                    ) {
-                        Text(texts.customOutputLocation)
-                    }
-                } else {
-                    OutlinedButton(
-                        onClick = { onOutputLocationModeChange(OutputLocationMode.Default) }
-                    ) {
-                        Text(texts.defaultOutputLocation)
-                    }
-                    Button(onClick = onPickOutputDirectory) {
-                        AppIcon(
-                            icon = Icons.Rounded.FolderOpen,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(17.dp)
-                        )
-                        Spacer(modifier = Modifier.width(7.dp))
-                        Text(texts.chooseDirectory)
-                    }
+                ) {
+                    Text(texts.customOutputLocation)
+                }
+            } else {
+                OutlinedButton(
+                    onClick = { onOutputLocationModeChange(OutputLocationMode.Default) }
+                ) {
+                    Text(texts.defaultOutputLocation)
+                }
+                Button(onClick = onPickOutputDirectory) {
+                    AppIcon(
+                        icon = Icons.Rounded.FolderOpen,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(17.dp)
+                    )
+                    Spacer(modifier = Modifier.width(7.dp))
+                    Text(texts.chooseDirectory)
                 }
             }
         }
@@ -4100,7 +4205,6 @@ private fun OutputPanel(
 @Composable
 private fun QueueActions(
     texts: UiText,
-    hasFiles: Boolean,
     isRunning: Boolean,
     onStart: () -> Unit,
     onCancel: () -> Unit
@@ -4111,7 +4215,6 @@ private fun QueueActions(
     ) {
         OutlinedButton(
             onClick = onCancel,
-            enabled = hasFiles || isRunning,
             modifier = Modifier.weight(1f)
         ) {
             AppIcon(
@@ -4125,7 +4228,7 @@ private fun QueueActions(
         }
         Button(
             onClick = onStart,
-            enabled = hasFiles && !isRunning,
+            enabled = !isRunning,
             modifier = Modifier.weight(1f)
         ) {
             AppIcon(
@@ -4825,11 +4928,12 @@ private fun StatusLine(
 
 @Composable
 private fun QuietPanel(
+    modifier: Modifier = Modifier,
     borderColor: Color = Color(0xFFE7E7E7),
     content: @Composable ColumnScope.() -> Unit
 ) {
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .animateContentSize(
                 animationSpec = spring(stiffness = ZenAnimations.PanelEnterStiffness)
@@ -5639,7 +5743,6 @@ private data class UiText(
     val cancelOrClearTasks: String,
     val queue: String,
     val selectedSuffix: String,
-    val emptyQueue: String,
     val unknownType: String,
     val unknownSize: String,
     val remove: String,
@@ -7234,7 +7337,6 @@ private val englishText = UiText(
     cancelOrClearTasks = "Cancel / Clear tasks",
     queue = "Conversion tasks",
     selectedSuffix = "selected",
-    emptyQueue = "No tasks yet",
     unknownType = "Unknown type",
     unknownSize = "Unknown size",
     remove = "Remove",
@@ -7344,7 +7446,6 @@ private val simplifiedChineseText = UiText(
     cancelOrClearTasks = "取消/清空任务列表",
     queue = "转换任务",
     selectedSuffix = "个已选",
-    emptyQueue = "暂无任务，先在上方选择文件",
     unknownType = "未知类型",
     unknownSize = "未知大小",
     remove = "移除",
@@ -7454,7 +7555,6 @@ private val traditionalChineseText = UiText(
     cancelOrClearTasks = "取消／清空任務列表",
     queue = "轉換任務",
     selectedSuffix = "個已選",
-    emptyQueue = "暫無任務，先在上方選擇檔案",
     unknownType = "未知類型",
     unknownSize = "未知大小",
     remove = "移除",
