@@ -22,8 +22,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import org.zenconverter.app.ui.theme.ZenAnimations
 import org.zenconverter.app.ui.theme.ZenPanelVisibility
@@ -302,44 +300,12 @@ data class QueuedFile(
     val pdfPasswords: List<String?> = emptyList()
 )
 
-data class ImagePdfMergePrompt(
-    val fileCount: Int
-)
-
-data class GifFrameModePrompt(
-    val gifCount: Int
-)
-
-data class GifPdfFramePrompt(
-    val gifCount: Int
-)
-
 data class PdfPasswordPrompt(
     val displayName: String
 )
 
 data class PdfOutputPasswordPrompt(
     val fileCount: Int
-)
-
-data class ExternalImportPrompt(
-    val files: List<ExternalImportFile>
-)
-
-data class ExternalImportFile(
-    val id: String,
-    val displayName: String,
-    val sizeBytes: Long?,
-    val mimeType: String?,
-    val inputInfo: FileBasicInfo?,
-    val detectedCategory: FileCategory?,
-    val targets: List<ExternalImportTarget>,
-    val defaultTarget: ExternalImportTarget?
-)
-
-data class ExternalImportChoice(
-    val fileId: String,
-    val target: ExternalImportTarget
 )
 
 data class OutputDirectory(
@@ -709,27 +675,12 @@ fun ZenConverterApp(
     onPickMetadataVideo: () -> Unit,
     onCleanMetadata: () -> Unit,
     onRestoreMetadata: (String) -> Unit,
-    imagePdfMergePrompt: ImagePdfMergePrompt?,
-    gifFrameModePrompt: GifFrameModePrompt?,
-    gifPdfFramePrompt: GifPdfFramePrompt?,
     pdfPasswordPrompt: PdfPasswordPrompt?,
     pdfOutputPasswordPrompt: PdfOutputPasswordPrompt?,
-    externalImportPrompt: ExternalImportPrompt?,
-    onChooseSinglePdf: () -> Unit,
-    onChooseOnePdfPerImage: () -> Unit,
-    onDismissImagePdfPrompt: () -> Unit,
-    onChooseGifFirstFrame: () -> Unit,
-    onChooseGifSplitFrames: () -> Unit,
-    onDismissGifFramePrompt: () -> Unit,
-    onChooseGifFramesSinglePdf: () -> Unit,
-    onChooseGifFramePdfFiles: () -> Unit,
-    onDismissGifPdfFramePrompt: () -> Unit,
     onSubmitPdfPassword: (String) -> Unit,
     onCancelPdfPassword: () -> Unit,
     onSubmitPdfOutputPassword: (String) -> Unit,
     onCancelPdfOutputPassword: () -> Unit,
-    onConfirmExternalImport: (List<ExternalImportChoice>) -> Unit,
-    onDismissExternalImport: () -> Unit,
     onStartConversion: () -> Unit,
     onCancelConversion: () -> Unit
 ) {
@@ -796,33 +747,6 @@ fun ZenConverterApp(
                 onStartConversion = onStartConversion,
                 onCancelConversion = onCancelConversion
             )
-            imagePdfMergePrompt?.let { prompt ->
-                ImagePdfMergeDialog(
-                    texts = texts,
-                    prompt = prompt,
-                    onSinglePdf = onChooseSinglePdf,
-                    onOnePdfPerImage = onChooseOnePdfPerImage,
-                    onDismiss = onDismissImagePdfPrompt
-                )
-            }
-            gifFrameModePrompt?.let { prompt ->
-                GifFrameModeDialog(
-                    texts = texts,
-                    prompt = prompt,
-                    onFirstFrame = onChooseGifFirstFrame,
-                    onSplitFrames = onChooseGifSplitFrames,
-                    onDismiss = onDismissGifFramePrompt
-                )
-            }
-            gifPdfFramePrompt?.let { prompt ->
-                GifPdfFrameDialog(
-                    texts = texts,
-                    prompt = prompt,
-                    onSinglePdf = onChooseGifFramesSinglePdf,
-                    onPdfFiles = onChooseGifFramePdfFiles,
-                    onDismiss = onDismissGifPdfFramePrompt
-                )
-            }
             pdfPasswordPrompt?.let { prompt ->
                 PdfPasswordDialog(
                     texts = texts,
@@ -837,14 +761,6 @@ fun ZenConverterApp(
                     prompt = prompt,
                     onSubmit = onSubmitPdfOutputPassword,
                     onCancel = onCancelPdfOutputPassword
-                )
-            }
-            externalImportPrompt?.let { prompt ->
-                ExternalImportDialog(
-                    texts = texts,
-                    prompt = prompt,
-                    onConfirm = onConfirmExternalImport,
-                    onDismiss = onDismissExternalImport
                 )
             }
         }
@@ -890,150 +806,10 @@ private fun ZenConverterContent(
     var showAbout by remember { mutableStateOf(false) }
     var showMetadataSecurity by remember { mutableStateOf(false) }
     var showSupport by remember { mutableStateOf(false) }
-    var activeCategory by remember { mutableStateOf(FileCategory.Video) }
-    var videoTarget by remember { mutableStateOf(FileCategory.Video.formats.first()) }
-    var audioTarget by remember { mutableStateOf(FileCategory.Audio.formats.first()) }
-    var imageTarget by remember { mutableStateOf(FileCategory.Image.formats.first()) }
-    var pdfTarget by remember { mutableStateOf(FileCategory.Pdf.formats.first()) }
-    var documentTarget by remember { mutableStateOf(FileCategory.Document.formats.first()) }
     var queueMessage by remember { mutableStateOf<String?>(null) }
     var openMenuId by remember { mutableStateOf<String?>(null) }
     var expandedFileId by remember { mutableStateOf<String?>(null) }
     var lastQueueIds by remember { mutableStateOf<List<String>>(emptyList()) }
-    var videoResolution by remember { mutableStateOf(VIDEO_RESOLUTION_ORIGINAL) }
-    var videoCompressionMode by remember { mutableStateOf(VIDEO_COMPRESSION_STANDARD) }
-    var videoBitrate by remember { mutableStateOf(VIDEO_BITRATE_AUTO) }
-    var videoCodec by remember(supportedVideoMimeTypes) {
-        mutableStateOf(defaultVideoCodecFor(supportedVideoMimeTypes))
-    }
-    var videoFrameRate by remember { mutableStateOf(VIDEO_FRAME_RATE_ORIGINAL) }
-    var audioBitrate by remember { mutableStateOf(AUDIO_BITRATE_AUTO) }
-    var audioSampleRate by remember { mutableStateOf(AUDIO_SAMPLE_RATE_ORIGINAL) }
-    var audioChannels by remember { mutableStateOf(AUDIO_CHANNELS_ORIGINAL) }
-    var videoAdvancedExpanded by remember { mutableStateOf(false) }
-    var videoReverse by remember { mutableStateOf(false) }
-    var videoFadeIn by remember { mutableStateOf(ADVANCED_FADE_OFF) }
-    var videoFadeOut by remember { mutableStateOf(ADVANCED_FADE_OFF) }
-    var videoMirror by remember { mutableStateOf(VIDEO_MIRROR_OFF) }
-    var videoRotation by remember { mutableStateOf(VIDEO_ROTATION_NONE) }
-    var videoAspectRatio by remember { mutableStateOf(VIDEO_ASPECT_KEEP) }
-    var audioAdvancedExpanded by remember { mutableStateOf(false) }
-    var audioReverse by remember { mutableStateOf(false) }
-    var audioFadeIn by remember { mutableStateOf(ADVANCED_FADE_OFF) }
-    var audioFadeOut by remember { mutableStateOf(ADVANCED_FADE_OFF) }
-    var audioVolume by remember { mutableStateOf(AUDIO_VOLUME_100) }
-    var audioEcho by remember { mutableStateOf(AUDIO_ECHO_OFF) }
-    var audioNoiseReduction by remember { mutableStateOf(AUDIO_DENOISE_OFF) }
-    var imageQuality by remember { mutableStateOf(IMAGE_QUALITY_BALANCED) }
-    var pdfPageMode by remember { mutableStateOf(PDF_PAGE_MODE_A4_FIT) }
-    var pdfRenderQuality by remember { mutableStateOf(PDF_RENDER_QUALITY_BALANCED) }
-
-    fun targetFor(category: FileCategory): TargetFormat = when (category) {
-        FileCategory.Video -> videoTarget
-        FileCategory.Audio -> audioTarget
-        FileCategory.Image -> imageTarget
-        FileCategory.Pdf -> pdfTarget
-        FileCategory.Document -> documentTarget
-    }
-
-    fun setTarget(category: FileCategory, targetFormat: TargetFormat) {
-        when (category) {
-            FileCategory.Video -> {
-                videoTarget = targetFormat
-                if (targetFormat.extension.equals("gif", ignoreCase = true)) {
-                    videoResolution = VIDEO_RESOLUTION_480P
-                }
-            }
-            FileCategory.Audio -> audioTarget = targetFormat
-            FileCategory.Image -> {
-                imageTarget = targetFormat
-                if (
-                    imageQuality == IMAGE_QUALITY_LOSSLESS &&
-                    !supportsWebpLosslessQuality(targetFormat)
-                ) {
-                    imageQuality = IMAGE_QUALITY_BALANCED
-                }
-            }
-            FileCategory.Pdf -> pdfTarget = targetFormat
-            FileCategory.Document -> documentTarget = targetFormat
-        }
-    }
-
-    fun currentVideoOptions(): VideoExportOptions {
-        if (videoTarget.extension.equals("gif", ignoreCase = true)) {
-            return VideoExportOptions(
-                maxShortSidePixels = videoResolutionToShortSide(videoResolution),
-                videoBitrate = null,
-                videoMimeType = VideoExportOptions.VIDEO_MIME_TYPE_H264,
-                maxFrameRate = 30
-            )
-        }
-        val compressionModeValue = videoCompressionModeFor(videoCompressionMode)
-        val presetCompressionActive = compressionModeValue != VideoCompressionMode.Standard
-        return VideoExportOptions(
-            maxShortSidePixels = videoCompressionShortSideFor(compressionModeValue)
-                ?: videoResolutionToShortSide(videoResolution),
-            videoBitrate = if (!presetCompressionActive) {
-                videoBitrateToBits(videoBitrate)
-            } else {
-                null
-            },
-            videoMimeType = if (
-                presetCompressionActive &&
-                VideoExportOptions.VIDEO_MIME_TYPE_H265 in supportedVideoMimeTypes
-            ) {
-                VideoExportOptions.VIDEO_MIME_TYPE_H265
-            } else {
-                videoCodecToMimeType(videoCodec)
-            },
-            maxFrameRate = videoCompressionFrameRateCapFor(compressionModeValue)
-                ?: videoFrameRateToCap(videoFrameRate),
-            compressionMode = compressionModeValue,
-            advanced = if (presetCompressionActive) {
-                VideoAdvancedOptions()
-            } else {
-                VideoAdvancedOptions(
-                    reverse = videoReverse,
-                    fadeInSeconds = fadeDurationSeconds(videoFadeIn),
-                    fadeOutSeconds = fadeDurationSeconds(videoFadeOut),
-                    mirror = videoMirrorModeFor(videoMirror),
-                    rotation = videoRotationModeFor(videoRotation),
-                    aspectRatio = videoAspectRatioModeFor(videoAspectRatio)
-                )
-            }
-        )
-    }
-
-    fun currentAudioOptions(): AudioExportOptions {
-        return AudioExportOptions(
-            audioBitrate = audioBitrateToBits(audioBitrate),
-            sampleRateHz = audioSampleRateToHz(audioSampleRate),
-            channelCount = audioChannelsToCount(audioChannels),
-            advanced = AudioAdvancedOptions(
-                reverse = audioReverse,
-                fadeInSeconds = fadeDurationSeconds(audioFadeIn),
-                fadeOutSeconds = fadeDurationSeconds(audioFadeOut),
-                volume = audioVolumeModeFor(audioVolume),
-                echo = audioEchoModeFor(audioEcho),
-                noiseReduction = audioNoiseReductionModeFor(audioNoiseReduction)
-            )
-        )
-    }
-
-    fun currentImageOptions(): ImageExportOptions {
-        return ImageExportOptions(
-            quality = imageQualityToPercent(imageQuality),
-            webpLossless = supportsWebpLosslessQuality(imageTarget) &&
-                imageQuality == IMAGE_QUALITY_LOSSLESS
-        )
-    }
-
-    fun currentPdfOptions(): PdfExportOptions {
-        return PdfExportOptions(
-            imagePageMode = pdfPageModeToOption(pdfPageMode),
-            renderQuality = pdfRenderQualityToOption(pdfRenderQuality)
-        )
-    }
 
     val taskProgressById = conversionTasks.associateBy { it.fileId }
     val queueIds = queuedFiles.map { it.id }
@@ -1263,66 +1039,6 @@ private fun NoOverscroll(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun ImagePdfMergeDialog(
-    texts: UiText,
-    prompt: ImagePdfMergePrompt,
-    onSinglePdf: () -> Unit,
-    onOnePdfPerImage: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    ZenPromptDialog(
-        title = texts.imagePdfPromptTitle,
-        message = texts.imagePdfPromptMessage(prompt.fileCount),
-        icon = Icons.Rounded.PictureAsPdf,
-        confirmText = texts.optionValue("Single PDF"),
-        dismissText = texts.optionValue("One PDF per image"),
-        onConfirm = onSinglePdf,
-        onDismissAction = onOnePdfPerImage,
-        onDismissRequest = onDismiss
-    )
-}
-
-@Composable
-private fun GifFrameModeDialog(
-    texts: UiText,
-    prompt: GifFrameModePrompt,
-    onFirstFrame: () -> Unit,
-    onSplitFrames: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    ZenPromptDialog(
-        title = texts.gifFramePromptTitle,
-        message = texts.gifFramePromptMessage(prompt.gifCount),
-        icon = Icons.Rounded.Image,
-        confirmText = texts.optionValue("Split frames"),
-        dismissText = texts.optionValue("First frame"),
-        onConfirm = onSplitFrames,
-        onDismissAction = onFirstFrame,
-        onDismissRequest = onDismiss
-    )
-}
-
-@Composable
-private fun GifPdfFrameDialog(
-    texts: UiText,
-    prompt: GifPdfFramePrompt,
-    onSinglePdf: () -> Unit,
-    onPdfFiles: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    ZenPromptDialog(
-        title = texts.gifPdfFramePromptTitle,
-        message = texts.gifPdfFramePromptMessage(prompt.gifCount),
-        icon = Icons.Rounded.PictureAsPdf,
-        confirmText = texts.optionValue("All frames in one PDF"),
-        dismissText = texts.optionValue("One PDF per frame"),
-        onConfirm = onSinglePdf,
-        onDismissAction = onPdfFiles,
-        onDismissRequest = onDismiss
-    )
-}
-
-@Composable
 private fun PdfPasswordDialog(
     texts: UiText,
     prompt: PdfPasswordPrompt,
@@ -1389,262 +1105,6 @@ private fun PdfOutputPasswordDialog(
             onConfirm = { onSubmit(password) },
             onDismissAction = onCancel
         )
-    }
-}
-
-@Composable
-private fun ExternalImportDialog(
-    texts: UiText,
-    prompt: ExternalImportPrompt,
-    onConfirm: (List<ExternalImportChoice>) -> Unit,
-    onDismiss: () -> Unit
-) {
-    if (prompt.files.isEmpty()) return
-
-    var currentIndex by remember(prompt) { mutableStateOf(0) }
-    var selectedTargets by remember(prompt) {
-        mutableStateOf<Map<String, ExternalImportTarget?>>(
-            prompt.files.associate { file -> file.id to file.defaultTarget }
-        )
-    }
-    var skippedIds by remember(prompt) { mutableStateOf<Set<String>>(emptySet()) }
-
-    fun confirmImport() {
-        val choices = prompt.files.mapNotNull { file ->
-            val target = selectedTargets[file.id] ?: file.defaultTarget
-            if (file.id in skippedIds || target == null) {
-                null
-            } else {
-                ExternalImportChoice(fileId = file.id, target = target)
-            }
-        }
-        onConfirm(choices)
-    }
-
-    fun moveNextOrConfirm() {
-        if (currentIndex >= prompt.files.lastIndex) {
-            confirmImport()
-        } else {
-            currentIndex += 1
-        }
-    }
-
-    fun skipCurrent() {
-        skippedIds = skippedIds + prompt.files[currentIndex].id
-        moveNextOrConfirm()
-    }
-
-    ZenPromptFrame(onDismissRequest = onDismiss) {
-        SectionTitle(
-            icon = Icons.Rounded.Share,
-            title = texts.externalImportTitle
-        )
-        Text(
-            text = texts.externalImportNote,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        val safeIndex = currentIndex.coerceIn(0, prompt.files.lastIndex)
-        AnimatedContent(
-            targetState = safeIndex,
-            transitionSpec = {
-                val forward = targetState > initialState
-                val slideIn = slideInHorizontally(
-                    animationSpec = tween(ZenAnimations.ContentFadeDuration),
-                    initialOffsetX = { width -> if (forward) width / 5 else -width / 5 }
-                ) + fadeIn(animationSpec = tween(ZenAnimations.ContentFadeDuration))
-                val slideOut = slideOutHorizontally(
-                    animationSpec = tween(ZenAnimations.ContentFadeOutDuration),
-                    targetOffsetX = { width -> if (forward) -width / 5 else width / 5 }
-                ) + fadeOut(animationSpec = tween(ZenAnimations.ContentFadeOutDuration))
-                slideIn togetherWith slideOut using SizeTransform(clip = false)
-            },
-            label = "ExternalImportFile"
-        ) { targetIndex ->
-            val file = prompt.files[targetIndex]
-            ExternalImportFilePane(
-                texts = texts,
-                file = file,
-                index = targetIndex,
-                totalCount = prompt.files.size,
-                selectedTarget = selectedTargets[file.id] ?: file.defaultTarget,
-                onTargetSelected = { target ->
-                    selectedTargets = selectedTargets + (file.id to target)
-                    skippedIds = skippedIds - file.id
-                }
-            )
-        }
-
-        val currentFile = prompt.files[safeIndex]
-        val currentTarget = selectedTargets[currentFile.id] ?: currentFile.defaultTarget
-        val isLast = safeIndex == prompt.files.lastIndex
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedButton(
-                onClick = onDismiss,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = Color.White,
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                ),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp)
-            ) {
-                Text(texts.cancel, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            OutlinedButton(
-                onClick = { currentIndex = (safeIndex - 1).coerceAtLeast(0) },
-                enabled = safeIndex > 0,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = Color.White,
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                ),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp)
-            ) {
-                Text(texts.externalImportPrevious, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedButton(
-                onClick = { skipCurrent() },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.045f),
-                    contentColor = MaterialTheme.colorScheme.primary
-                ),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp)
-            ) {
-                Text(
-                    text = if (isLast) texts.externalImportSkipDone else texts.externalImportSkipNext,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Button(
-                onClick = {
-                    skippedIds = skippedIds - currentFile.id
-                    moveNextOrConfirm()
-                },
-                enabled = currentTarget != null,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    disabledContainerColor = Color(0xFFE8E8E8),
-                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp)
-            ) {
-                Text(
-                    text = if (isLast) texts.externalImportAddDone else texts.externalImportAddNext,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ExternalImportFilePane(
-    texts: UiText,
-    file: ExternalImportFile,
-    index: Int,
-    totalCount: Int,
-    selectedTarget: ExternalImportTarget?,
-    onTargetSelected: (ExternalImportTarget) -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, Color(0xFFEAEAEA), RoundedCornerShape(8.dp))
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
-        ) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(end = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = file.displayName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = formatFileInfoLine(
-                        info = file.inputInfo,
-                        texts = texts,
-                        fallbackType = file.mimeType ?: texts.unknownType,
-                        fallbackSizeBytes = file.sizeBytes
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            SmallTag(texts.externalImportCounter(index + 1, totalCount))
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SmallTag(
-                file.detectedCategory?.let { texts.categoryLabel(it) } ?: texts.unknownType
-            )
-            file.inputInfo?.formatLabel?.let { format ->
-                SmallTag(format)
-            }
-        }
-
-        if (file.targets.isEmpty()) {
-            StatusLine(
-                text = texts.externalImportUnsupported,
-                isError = true
-            )
-        } else {
-            Text(
-                text = texts.target,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            CenteredFlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalSpacing = 8.dp,
-                verticalSpacing = 8.dp
-            ) {
-                file.targets.forEach { target ->
-                    ExternalImportTargetChip(
-                        texts = texts,
-                        target = target,
-                        selected = target == selectedTarget,
-                        onSelected = { onTargetSelected(target) }
-                    )
-                }
-            }
-        }
     }
 }
 
@@ -1759,33 +1219,6 @@ private fun ExternalImportTargetChip(
         ) {
             Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-    }
-}
-
-@Composable
-private fun ZenPromptDialog(
-    title: String,
-    message: String,
-    icon: ImageVector,
-    confirmText: String,
-    dismissText: String,
-    onConfirm: () -> Unit,
-    onDismissAction: () -> Unit,
-    onDismissRequest: () -> Unit
-) {
-    ZenPromptFrame(onDismissRequest = onDismissRequest) {
-        SectionTitle(icon = icon, title = title)
-        Text(
-            text = message,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        ZenPromptActions(
-            confirmText = confirmText,
-            dismissText = dismissText,
-            onConfirm = onConfirm,
-            onDismissAction = onDismissAction
-        )
     }
 }
 
@@ -3935,303 +3368,6 @@ private fun EmptyQueuePanel(
 }
 
 @Composable
-private fun ConversionLanes(
-    texts: UiText,
-    activeCategory: FileCategory,
-    targetFor: (FileCategory) -> TargetFormat,
-    onTargetChange: (FileCategory, TargetFormat) -> Unit,
-    onActivate: (FileCategory) -> Unit,
-    openMenuId: String?,
-    onOpenMenuChange: (String?) -> Unit,
-    onPickFiles: (FileCategory, TargetFormat) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(
-            text = texts.chooseConversion,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold
-        )
-        FileCategory.entries.forEach { category ->
-            ConversionLane(
-                texts = texts,
-                category = category,
-                selected = category == activeCategory,
-                targetFormat = targetFor(category),
-                openMenuId = openMenuId,
-                onOpenMenuChange = onOpenMenuChange,
-                onTargetChange = {
-                    onActivate(category)
-                    onTargetChange(category, it)
-                },
-                onActivate = { onActivate(category) },
-                onPickFiles = { onPickFiles(category, targetFor(category)) }
-            )
-        }
-    }
-}
-
-@Composable
-private fun ConversionLane(
-    texts: UiText,
-    category: FileCategory,
-    selected: Boolean,
-    targetFormat: TargetFormat,
-    openMenuId: String?,
-    onOpenMenuChange: (String?) -> Unit,
-    onTargetChange: (TargetFormat) -> Unit,
-    onActivate: () -> Unit,
-    onPickFiles: () -> Unit
-) {
-    QuietPanel(
-        borderColor = if (selected) MaterialTheme.colorScheme.primary else Color(0xFFE7E7E7)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .semantics(mergeDescendants = true) {},
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AppIcon(
-                    icon = category.icon(),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(22.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = texts.categoryLabel(category),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = texts.categoryPurpose(category),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            EngineHint(texts.engineHint(targetFormat.modeHint))
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                FormatDropdown(
-                    label = texts.target,
-                    selected = targetFormat,
-                    options = category.formats,
-                    texts = texts,
-                    expanded = openMenuId == "format-${category.name}",
-                    onExpandedChange = { expanded ->
-                        onActivate()
-                        onOpenMenuChange(if (expanded) "format-${category.name}" else null)
-                    },
-                    onSelected = onTargetChange
-                )
-            }
-            Button(
-                onClick = onPickFiles,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                )
-            ) {
-                AppIcon(
-                    icon = Icons.Rounded.Add,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(texts.select)
-            }
-        }
-    }
-}
-
-@Composable
-private fun EncodingPanel(
-    texts: UiText,
-    category: FileCategory,
-    videoResolution: String,
-    videoCompressionMode: String,
-    videoBitrate: String,
-    videoCodec: String,
-    videoCodecOptions: List<String>,
-    videoFrameRate: String,
-    videoTarget: TargetFormat,
-    audioBitrate: String,
-    audioSampleRate: String,
-    audioChannels: String,
-    videoAdvanced: VideoAdvancedUiState,
-    audioAdvanced: AudioAdvancedUiState,
-    audioTarget: TargetFormat,
-    imageTarget: TargetFormat,
-    pdfTarget: TargetFormat,
-    documentTarget: TargetFormat,
-    imageQuality: String,
-    pdfPageMode: String,
-    pdfRenderQuality: String,
-    openMenuId: String?,
-    onOpenMenuChange: (String?) -> Unit,
-    onVideoResolutionChange: (String) -> Unit,
-    onVideoCompressionModeChange: (String) -> Unit,
-    onVideoBitrateChange: (String) -> Unit,
-    onVideoCodecChange: (String) -> Unit,
-    onVideoFrameRateChange: (String) -> Unit,
-    onAudioBitrateChange: (String) -> Unit,
-    onAudioSampleRateChange: (String) -> Unit,
-    onAudioChannelsChange: (String) -> Unit,
-    onVideoAdvancedExpandedChange: (Boolean) -> Unit,
-    onVideoReverseChange: (Boolean) -> Unit,
-    onVideoFadeInChange: (String) -> Unit,
-    onVideoFadeOutChange: (String) -> Unit,
-    onVideoMirrorChange: (String) -> Unit,
-    onVideoRotationChange: (String) -> Unit,
-    onVideoAspectRatioChange: (String) -> Unit,
-    onAudioAdvancedExpandedChange: (Boolean) -> Unit,
-    onAudioReverseChange: (Boolean) -> Unit,
-    onAudioFadeInChange: (String) -> Unit,
-    onAudioFadeOutChange: (String) -> Unit,
-    onAudioVolumeChange: (String) -> Unit,
-    onAudioEchoChange: (String) -> Unit,
-    onAudioNoiseReductionChange: (String) -> Unit,
-    onImageQualityChange: (String) -> Unit,
-    onPdfPageModeChange: (String) -> Unit,
-    onPdfRenderQualityChange: (String) -> Unit
-) {
-    QuietPanel {
-        Text(
-            text = texts.optionsTitle(category),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold
-        )
-        Text(
-            text = texts.presetNote(category),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-
-        AnimatedContent(
-            targetState = category,
-            transitionSpec = {
-                val forward = targetState.ordinal > initialState.ordinal
-                val slideIn = slideInHorizontally(
-                    initialOffsetX = { fullWidth -> if (forward) fullWidth / 4 else -fullWidth / 4 },
-                    animationSpec = tween(ZenAnimations.ContentFadeDuration)
-                ) + fadeIn(animationSpec = tween(ZenAnimations.ContentFadeDuration))
-                val slideOut = slideOutHorizontally(
-                    targetOffsetX = { fullWidth -> if (forward) -fullWidth / 4 else fullWidth / 4 },
-                    animationSpec = tween(ZenAnimations.ContentFadeOutDuration)
-                ) + fadeOut(animationSpec = tween(ZenAnimations.ContentFadeOutDuration))
-                slideIn togetherWith slideOut using SizeTransform(clip = false)
-            },
-            label = "EncodingPanelCategory"
-        ) { targetCategory ->
-            when (targetCategory) {
-            FileCategory.Video -> VideoOptions(
-                texts = texts,
-                resolution = videoResolution,
-                compressionMode = videoCompressionMode,
-                bitrate = videoBitrate,
-                codec = videoCodec,
-                codecOptions = videoCodecOptions,
-                frameRate = videoFrameRate,
-                audioBitrate = audioBitrate,
-                audioSampleRate = audioSampleRate,
-                audioChannels = audioChannels,
-                videoAdvanced = videoAdvanced,
-                audioAdvanced = audioAdvanced,
-                targetFormat = videoTarget,
-                openMenuId = openMenuId,
-                onOpenMenuChange = onOpenMenuChange,
-                onResolutionChange = onVideoResolutionChange,
-                onCompressionModeChange = onVideoCompressionModeChange,
-                onBitrateChange = onVideoBitrateChange,
-                onCodecChange = onVideoCodecChange,
-                onFrameRateChange = onVideoFrameRateChange,
-                onAudioBitrateChange = onAudioBitrateChange,
-                onAudioSampleRateChange = onAudioSampleRateChange,
-                onAudioChannelsChange = onAudioChannelsChange,
-                onVideoAdvancedExpandedChange = onVideoAdvancedExpandedChange,
-                onVideoReverseChange = onVideoReverseChange,
-                onVideoFadeInChange = onVideoFadeInChange,
-                onVideoFadeOutChange = onVideoFadeOutChange,
-                onVideoMirrorChange = onVideoMirrorChange,
-                onVideoRotationChange = onVideoRotationChange,
-                onVideoAspectRatioChange = onVideoAspectRatioChange,
-                onAudioAdvancedExpandedChange = onAudioAdvancedExpandedChange,
-                onAudioReverseChange = onAudioReverseChange,
-                onAudioFadeInChange = onAudioFadeInChange,
-                onAudioFadeOutChange = onAudioFadeOutChange,
-                onAudioVolumeChange = onAudioVolumeChange,
-                onAudioEchoChange = onAudioEchoChange,
-                onAudioNoiseReductionChange = onAudioNoiseReductionChange
-            )
-            FileCategory.Audio -> AudioOptions(
-                texts = texts,
-                bitrate = audioBitrate,
-                sampleRate = audioSampleRate,
-                channels = audioChannels,
-                advanced = audioAdvanced,
-                targetFormat = audioTarget,
-                openMenuId = openMenuId,
-                onOpenMenuChange = onOpenMenuChange,
-                onBitrateChange = onAudioBitrateChange,
-                onSampleRateChange = onAudioSampleRateChange,
-                onChannelsChange = onAudioChannelsChange,
-                onAdvancedExpandedChange = onAudioAdvancedExpandedChange,
-                onReverseChange = onAudioReverseChange,
-                onFadeInChange = onAudioFadeInChange,
-                onFadeOutChange = onAudioFadeOutChange,
-                onVolumeChange = onAudioVolumeChange,
-                onEchoChange = onAudioEchoChange,
-                onNoiseReductionChange = onAudioNoiseReductionChange
-            )
-            FileCategory.Image -> ImageOptions(
-                texts = texts,
-                targetFormat = imageTarget,
-                quality = imageQuality,
-                pdfPageMode = pdfPageMode,
-                openMenuId = openMenuId,
-                onOpenMenuChange = onOpenMenuChange,
-                onQualityChange = onImageQualityChange,
-                onPdfPageModeChange = onPdfPageModeChange
-            )
-            FileCategory.Pdf -> PdfOptions(
-                texts = texts,
-                targetFormat = pdfTarget,
-                renderQuality = pdfRenderQuality,
-                openMenuId = openMenuId,
-                onOpenMenuChange = onOpenMenuChange,
-                onRenderQualityChange = onPdfRenderQualityChange
-            )
-            FileCategory.Document -> Text(
-                text = texts.optionValue(documentTarget.modeHint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-    }
-}
-
-@Composable
 private fun VideoOptions(
     texts: UiText,
     menuPrefix: String = "",
@@ -5005,69 +4141,6 @@ private fun QueueActions(
 }
 
 @Composable
-private fun FileQueue(
-    texts: UiText,
-    files: List<QueuedFile>,
-    taskProgress: Map<String, TaskProgress>,
-    canRemove: Boolean,
-    onRemoveFile: (String) -> Unit
-) {
-    QuietPanel {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .semantics(mergeDescendants = true) {},
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = texts.queue,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = texts.selectedCount(files.size),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        if (files.isEmpty()) {
-            Text(
-                text = texts.emptyQueue,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        } else {
-            LazyColumn(
-                modifier = Modifier.heightIn(max = 300.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(files, key = { it.id }) { file ->
-                    FileRow(
-                        modifier = Modifier.animateItem(),
-                        texts = texts,
-                        file = file,
-                        progress = taskProgress[file.id],
-                        canEdit = canRemove,
-                        supportedVideoMimeTypes = emptySet(),
-                        openMenuId = null,
-                        optionsExpanded = false,
-                        groupedInPdfMerge = false,
-                        onOpenMenuChange = {},
-                        onUpdateFile = {},
-                        onOptionsExpandedChange = {},
-                        onRemove = { onRemoveFile(file.id) }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun FileRow(
     modifier: Modifier = Modifier,
     texts: UiText,
@@ -5531,39 +4604,6 @@ private fun GifImageOptions(
 }
 
 @Composable
-private fun FormatDropdown(
-    label: String,
-    selected: TargetFormat,
-    options: List<TargetFormat>,
-    texts: UiText,
-    expanded: Boolean,
-    onExpandedChange: (Boolean) -> Unit,
-    onSelected: (TargetFormat) -> Unit
-) {
-    Column(horizontalAlignment = Alignment.End) {
-        PillMenuButton(
-            onClick = { onExpandedChange(!expanded) },
-            text = "$label: ${texts.optionValue(selected.label)}",
-            expanded = expanded
-        )
-        InlineDropdownPanel(
-            expanded = expanded
-        ) {
-            options.forEach { option ->
-                DropdownOption(
-                    text = "${texts.optionValue(option.label)} / ${texts.engineHint(option.modeHint)}",
-                    selected = option == selected,
-                    onClick = {
-                        onExpandedChange(false)
-                        onSelected(option)
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun OptionDropdown(
     menuId: String,
     label: String,
@@ -5734,20 +4774,6 @@ private fun DropdownOption(
             )
         }
     }
-}
-
-@Composable
-private fun EngineHint(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.primary,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier
-            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.28f), RoundedCornerShape(100.dp))
-            .padding(horizontal = 10.dp, vertical = 5.dp)
-    )
 }
 
 @Composable
@@ -6350,11 +5376,6 @@ private fun videoCodecToMimeType(value: String): String {
     }
 }
 
-@Suppress("UNUSED_PARAMETER")
-private fun defaultVideoCodecFor(supportedVideoMimeTypes: Set<String>): String {
-    return VIDEO_CODEC_H264
-}
-
 private fun videoFrameRateToCap(value: String): Int? {
     return when (value) {
         VIDEO_FRAME_RATE_25 -> 25
@@ -6602,9 +5623,7 @@ private data class UiText(
     val pdfMergeMember: String,
     val addToMerge: String,
     val removeMergeGroup: String,
-    val chooseConversion: String,
     val target: String,
-    val select: String,
     val output: String,
     val choose: String,
     val chooseDirectory: String,
@@ -6645,25 +5664,11 @@ private data class UiText(
     val frameRate: String,
     val sampleRate: String,
     val channels: String,
-    val outputMode: String,
-    val pdfOutputMode: String,
     val gifFrameMode: String,
     val password: String,
     val skip: String,
-    val externalImportTitle: String,
-    val externalImportNote: String,
-    val externalImportUnsupported: String,
-    val externalImportPrevious: String,
-    val externalImportAddNext: String,
-    val externalImportAddDone: String,
-    val externalImportSkipNext: String,
-    val externalImportSkipDone: String,
-    val imagePdfPromptTitle: String,
-    val gifFramePromptTitle: String,
-    val gifPdfFramePromptTitle: String,
     val pdfPasswordTitle: String,
     val pdfOutputPasswordTitle: String,
-    val uiPresetSuffix: String,
     val toPrefix: String
 ) {
     fun selectedCount(count: Int): String = "$count $selectedSuffix"
@@ -6680,14 +5685,6 @@ private data class UiText(
         return when (type) {
             PdfMergeType.Images -> createImagePdfMerge
             PdfMergeType.Pdfs -> createPdfMerge
-        }
-    }
-
-    fun externalImportCounter(index: Int, total: Int): String {
-        return when (this) {
-            englishText -> "$index of $total"
-            simplifiedChineseText -> "$index / $total"
-            else -> "$index / $total"
         }
     }
 
@@ -7154,40 +6151,6 @@ private data class UiText(
         }
     }
 
-    fun imagePdfPromptMessage(count: Int): String {
-        return when (this) {
-            englishText -> "Create one PDF from $count selected images, or one PDF per image?"
-            simplifiedChineseText -> "已选择 $count 张图片。要合并成一个 PDF，还是每张图片各生成一个 PDF？"
-            else -> "已選擇 $count 張圖片。要合併成一個 PDF，還是每張圖片各生成一個 PDF？"
-        }
-    }
-
-    fun gifFramePromptMessage(count: Int): String {
-        return when (this) {
-            englishText -> {
-                val label = if (count == 1) "GIF" else "$count GIFs"
-                "Convert only the first frame, or split $label into numbered frame files?"
-            }
-            simplifiedChineseText ->
-                "已选择 $count 个 GIF。只转换首帧，还是拆成按顺序编号的帧文件？"
-            else ->
-                "已選擇 $count 個 GIF。只轉換首幀，還是拆成按順序編號的幀檔案？"
-        }
-    }
-
-    fun gifPdfFramePromptMessage(count: Int): String {
-        return when (this) {
-            englishText -> {
-                val label = if (count == 1) "this GIF" else "each GIF"
-                "For split GIF output, put all frames from $label into one PDF, or create one PDF per frame?"
-            }
-            simplifiedChineseText ->
-                "GIF 拆帧输出到 PDF 时，全部帧放进一个 PDF，还是每帧生成一个 PDF？"
-            else ->
-                "GIF 拆幀輸出到 PDF 時，全部幀放進一個 PDF，還是每幀產生一個 PDF？"
-        }
-    }
-
     fun pdfPasswordMessage(fileName: String): String {
         return when (this) {
             englishText -> "$fileName is password-protected. Enter the password to add it."
@@ -7589,77 +6552,7 @@ private data class UiText(
         }
     }
 
-    fun categoryPurpose(category: FileCategory): String {
-        return when (category) {
-            FileCategory.Video -> when (this) {
-                englishText -> "Convert or compress video"
-                simplifiedChineseText -> "换格式，压缩体积"
-                else -> "換格式，壓縮體積"
-            }
-            FileCategory.Audio -> when (this) {
-                englishText -> "Convert or extract audio"
-                simplifiedChineseText -> "换格式，提取声音"
-                else -> "換格式，提取聲音"
-            }
-            FileCategory.Image -> when (this) {
-                englishText -> "Convert image formats"
-                simplifiedChineseText -> "转换图片格式"
-                else -> "轉換圖片格式"
-            }
-            FileCategory.Pdf -> when (this) {
-                englishText -> "Render, extract, merge, or secure"
-                simplifiedChineseText -> "渲染、提取、合并、加密"
-                else -> "渲染、提取、合併、加密"
-            }
-            FileCategory.Document -> when (this) {
-                englishText -> "Convert Office files"
-                simplifiedChineseText -> "转换 Office 文档"
-                else -> "轉換 Office 文件"
-            }
-        }
-    }
-
-    fun optionsTitle(category: FileCategory): String {
-        return when (this) {
-            englishText -> "${categoryLabel(category)} options"
-            simplifiedChineseText -> "${categoryLabel(category)}选项"
-            else -> "${categoryLabel(category)}選項"
-        }
-    }
-
-    fun presetNote(category: FileCategory): String {
-        return when (category) {
-            FileCategory.Video -> when (this) {
-                englishText -> "Tune quality and size"
-                simplifiedChineseText -> "调画质，控体积"
-                else -> "調畫質，控體積"
-            }
-            FileCategory.Audio -> when (this) {
-                englishText -> "Tune sound and compatibility"
-                simplifiedChineseText -> "调音质和兼容性"
-                else -> "調音質和相容性"
-            }
-            FileCategory.Image -> when (this) {
-                englishText -> "Set quality when available"
-                simplifiedChineseText -> "可用时调整输出质量"
-                else -> "可用時調整輸出品質"
-            }
-            FileCategory.Pdf -> when (this) {
-                englishText -> "PDF pages, text, merge, and password tools"
-                simplifiedChineseText -> "PDF 页面、文本、合并和密码工具"
-                else -> "PDF 頁面、文字、合併和密碼工具"
-            }
-            FileCategory.Document -> when (this) {
-                englishText -> "Experimental DOCX, PPTX, and XLSX path"
-                simplifiedChineseText -> "DOCX、PPTX、XLSX 实验转换"
-                else -> "DOCX、PPTX、XLSX 實驗轉換"
-            }
-        }
-    }
-
     fun toFormat(format: String): String = "$toPrefix $format"
-
-    fun engineHint(value: String): String = optionValue(value)
 
     fun accentLabel(option: AccentColorOption): String = optionValue(option.englishLabel)
 
@@ -8325,9 +7218,7 @@ private val englishText = UiText(
     pdfMergeMember = "In PDF merge",
     addToMerge = "Add to merge",
     removeMergeGroup = "Remove merge",
-    chooseConversion = "Choose conversion",
     target = "Target",
-    select = "Select",
     output = "Save location",
     choose = "Choose",
     chooseDirectory = "Choose folder",
@@ -8368,25 +7259,11 @@ private val englishText = UiText(
     frameRate = "Frame rate",
     sampleRate = "Sample rate",
     channels = "Channels",
-    outputMode = "Output",
-    pdfOutputMode = "PDF output",
     gifFrameMode = "GIF frames",
     password = "Password",
     skip = "Skip",
-    externalImportTitle = "Choose shared targets",
-    externalImportNote = "Shared files stay local. Pick a target for each file before adding tasks.",
-    externalImportUnsupported = "This file type is not supported by the experimental external picker.",
-    externalImportPrevious = "Previous",
-    externalImportAddNext = "Add / next",
-    externalImportAddDone = "Add tasks",
-    externalImportSkipNext = "Skip / next",
-    externalImportSkipDone = "Skip / done",
-    imagePdfPromptTitle = "Image to PDF",
-    gifFramePromptTitle = "GIF frames",
-    gifPdfFramePromptTitle = "GIF frames to PDF",
     pdfPasswordTitle = "PDF password",
     pdfOutputPasswordTitle = "Set PDF password",
-    uiPresetSuffix = "",
     toPrefix = "to"
 )
 
@@ -8451,9 +7328,7 @@ private val simplifiedChineseText = UiText(
     pdfMergeMember = "在 PDF 合并中",
     addToMerge = "加入合并",
     removeMergeGroup = "移除合并",
-    chooseConversion = "选择转换",
     target = "目标",
-    select = "选择",
     output = "保存位置",
     choose = "选择",
     chooseDirectory = "选择目录",
@@ -8494,25 +7369,11 @@ private val simplifiedChineseText = UiText(
     frameRate = "帧率",
     sampleRate = "采样率",
     channels = "声道",
-    outputMode = "输出方式",
-    pdfOutputMode = "PDF 输出",
     gifFrameMode = "GIF 帧",
     password = "密码",
     skip = "跳过",
-    externalImportTitle = "选择分享目标",
-    externalImportNote = "分享来的文件仍在本机处理。逐个选择目标后再加入任务列表。",
-    externalImportUnsupported = "实验性外部选择器暂不支持此文件类型。",
-    externalImportPrevious = "上一个",
-    externalImportAddNext = "加入/下一个",
-    externalImportAddDone = "加入任务",
-    externalImportSkipNext = "跳过/下一个",
-    externalImportSkipDone = "跳过/完成",
-    imagePdfPromptTitle = "图片转 PDF",
-    gifFramePromptTitle = "GIF 拆帧",
-    gifPdfFramePromptTitle = "GIF 拆帧转 PDF",
     pdfPasswordTitle = "PDF 密码",
     pdfOutputPasswordTitle = "设置 PDF 密码",
-    uiPresetSuffix = "",
     toPrefix = "转为"
 )
 
@@ -8577,9 +7438,7 @@ private val traditionalChineseText = UiText(
     pdfMergeMember = "在 PDF 合併中",
     addToMerge = "加入合併",
     removeMergeGroup = "移除合併",
-    chooseConversion = "選擇轉換",
     target = "目標",
-    select = "選擇",
     output = "儲存位置",
     choose = "選擇",
     chooseDirectory = "選擇資料夾",
@@ -8620,25 +7479,11 @@ private val traditionalChineseText = UiText(
     frameRate = "幀率",
     sampleRate = "取樣率",
     channels = "聲道",
-    outputMode = "輸出方式",
-    pdfOutputMode = "PDF 輸出",
     gifFrameMode = "GIF 幀",
     password = "密碼",
     skip = "略過",
-    externalImportTitle = "選擇分享目標",
-    externalImportNote = "分享來的檔案仍在本機處理。逐一選擇目標後再加入任務列表。",
-    externalImportUnsupported = "實驗性外部選擇器暫不支援此檔案類型。",
-    externalImportPrevious = "上一個",
-    externalImportAddNext = "加入/下一個",
-    externalImportAddDone = "加入任務",
-    externalImportSkipNext = "略過/下一個",
-    externalImportSkipDone = "略過/完成",
-    imagePdfPromptTitle = "圖片轉 PDF",
-    gifFramePromptTitle = "GIF 拆幀",
-    gifPdfFramePromptTitle = "GIF 拆幀轉 PDF",
     pdfPasswordTitle = "PDF 密碼",
     pdfOutputPasswordTitle = "設定 PDF 密碼",
-    uiPresetSuffix = "",
     toPrefix = "轉為"
 )
 
