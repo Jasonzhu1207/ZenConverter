@@ -946,6 +946,16 @@ private fun ZenConverterContent(
                     }
                 }
 
+                item(key = "output-panel") {
+                    OutputPanel(
+                        texts = texts,
+                        outputLocationMode = outputLocationMode,
+                        outputDirectory = outputDirectory,
+                        onOutputLocationModeChange = onOutputLocationModeChange,
+                        onPickOutputDirectory = onPickOutputDirectory
+                    )
+                }
+
                 item(key = "queue-actions") {
                     QueueActions(
                         texts = texts,
@@ -965,16 +975,6 @@ private fun ZenConverterContent(
                                 onClearQueue()
                             }
                         }
-                    )
-                }
-
-                item(key = "output-panel") {
-                    OutputPanel(
-                        texts = texts,
-                        outputLocationMode = outputLocationMode,
-                        outputDirectory = outputDirectory,
-                        onOutputLocationModeChange = onOutputLocationModeChange,
-                        onPickOutputDirectory = onPickOutputDirectory
                     )
                 }
 
