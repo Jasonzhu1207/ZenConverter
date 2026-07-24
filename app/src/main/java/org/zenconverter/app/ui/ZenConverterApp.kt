@@ -25,7 +25,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import org.zenconverter.app.ui.theme.ZenAnimations
-import org.zenconverter.app.ui.theme.ZenPanelVisibility
 import org.zenconverter.app.ui.theme.bounceClick
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -398,6 +397,14 @@ private const val AFDIAN_URL = "https://afdian.com/a/Jason1207"
 private const val USDT_TRC20_ADDRESS = "TL88m9Wfdy4dAGhkLQ5jn9g8kZBTkRKrwf"
 private const val BTC_ADDRESS = "bc1p4s8e4pgwse4336vtwuqrxs58jdwkyaqcxtg0txg2xjzxpls07zjsjamy77"
 private const val ETH_ERC20_ADDRESS = "0x53a2d13bf808AC104cB09C722f01Ad68AFc9Da1F"
+
+private val HomeHorizontalPadding = 20.dp
+private val HomeTopPadding = 16.dp
+private val HomeBottomPadding = 16.dp
+private val HeaderContentGap = 12.dp
+private val HeaderActionSpacing = 6.dp
+private val HeaderButtonSize = 44.dp
+private val HeaderAddSlotWidth = 50.dp
 
 private val supportTargets = listOf(
     SupportTarget("Afdian", AFDIAN_URL, SupportTargetType.Link),
@@ -831,77 +838,6 @@ private fun ZenConverterContent(
         lastQueueIds = queueIds
     }
 
-    @Composable
-    fun HeaderContent(modifier: Modifier = Modifier) {
-        Column(modifier = modifier) {
-            Header(
-                texts = texts,
-                showMetadataSecurity = showMetadataSecurity,
-                showSettings = showSettings,
-                showAbout = showAbout,
-                hasFiles = queueIds.isNotEmpty(),
-                onToggleMetadataSecurity = {
-                    openMenuId = null
-                    showSettings = false
-                    showAbout = false
-                    showMetadataSecurity = !showMetadataSecurity
-                },
-                onToggleSettings = {
-                    openMenuId = null
-                    showAbout = false
-                    showMetadataSecurity = false
-                    showSettings = !showSettings
-                },
-                onToggleAbout = {
-                    openMenuId = null
-                    showSettings = false
-                    showMetadataSecurity = false
-                    showAbout = !showAbout
-                }
-            )
-            ZenPanelVisibility(visible = showSettings) {
-                Column {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    SettingsPanel(
-                        texts = texts,
-                        selectedAccent = accent,
-                        selectedLanguage = languageOption,
-                        outputLocationMode = outputLocationMode,
-                        outputDirectory = outputDirectory,
-                        onAccentSelected = onAccentSelected,
-                        onLanguageSelected = onLanguageSelected,
-                        onOutputLocationModeChange = onOutputLocationModeChange,
-                        onPickOutputDirectory = onPickOutputDirectory
-                    )
-                }
-            }
-
-            ZenPanelVisibility(visible = showAbout) {
-                Column {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    AboutPanel(
-                        texts = texts,
-                        onShowSupport = { showSupport = true }
-                    )
-                }
-            }
-
-            ZenPanelVisibility(visible = showMetadataSecurity) {
-                Column {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    MetadataSecurityPanel(
-                        texts = texts,
-                        state = metadataToolState,
-                        onPickImage = onPickMetadataImage,
-                        onPickVideo = onPickMetadataVideo,
-                        onClean = onCleanMetadata,
-                        onRestore = onRestoreMetadata
-                    )
-                }
-            }
-        }
-    }
-
     val statusMessage = conversionSummary ?: queueMessage
     val shouldCenterEmptyState = queuedFiles.isEmpty() &&
         !showSettings &&
@@ -923,8 +859,10 @@ private fun ZenConverterContent(
             ) {
                 val density = LocalDensity.current
                 val headerHeight = with(density) { headerHeightPx.toDp() }
+                val headerAvailableWidth = headerContentWidth(maxWidth)
+                val listTopPadding = HomeTopPadding + headerHeight + HeaderContentGap
                 val emptyEntryHeight = run {
-                    val available = maxHeight - headerHeight - 44.dp
+                    val available = maxHeight - listTopPadding - HomeBottomPadding
                     if (available > 280.dp) available else 280.dp
                 }
 
@@ -938,17 +876,50 @@ private fun ZenConverterContent(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+                    contentPadding = PaddingValues(
+                        start = HomeHorizontalPadding,
+                        top = listTopPadding,
+                        end = HomeHorizontalPadding,
+                        bottom = HomeBottomPadding
+                    ),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    item(key = "header") {
-                        HeaderContent(
-                            modifier = Modifier.onSizeChanged { size ->
-                                if (headerHeightPx != size.height) {
-                                    headerHeightPx = size.height
-                                }
-                            }
-                        )
+                    if (showSettings) {
+                        item(key = "settings-panel") {
+                            SettingsPanel(
+                                texts = texts,
+                                selectedAccent = accent,
+                                selectedLanguage = languageOption,
+                                outputLocationMode = outputLocationMode,
+                                outputDirectory = outputDirectory,
+                                onAccentSelected = onAccentSelected,
+                                onLanguageSelected = onLanguageSelected,
+                                onOutputLocationModeChange = onOutputLocationModeChange,
+                                onPickOutputDirectory = onPickOutputDirectory
+                            )
+                        }
+                    }
+
+                    if (showAbout) {
+                        item(key = "about-panel") {
+                            AboutPanel(
+                                texts = texts,
+                                onShowSupport = { showSupport = true }
+                            )
+                        }
+                    }
+
+                    if (showMetadataSecurity) {
+                        item(key = "metadata-security-panel") {
+                            MetadataSecurityPanel(
+                                texts = texts,
+                                state = metadataToolState,
+                                onPickImage = onPickMetadataImage,
+                                onPickVideo = onPickMetadataVideo,
+                                onClean = onCleanMetadata,
+                                onRestore = onRestoreMetadata
+                            )
+                        }
                     }
 
                     if (shouldCenterEmptyState || morphProgress < 1f) {
@@ -1077,30 +1048,69 @@ private fun ZenConverterContent(
                     }
                 }
 
-                // ── Hero "+" floating button ────────────────────────────────
-                val allInlineWidth = if (hasFiles) 430.dp else 380.dp
-                val settingsInlineWidth = if (hasFiles) 340.dp else 300.dp
-
-                val rightGroupWidth = when {
-                    maxWidth >= allInlineWidth -> 144.dp
-                    maxWidth >= settingsInlineWidth -> 94.dp
-                    else -> 44.dp
+                // Header stays outside the LazyColumn so it remains pinned while content scrolls.
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.background)
+                        .padding(
+                            start = HomeHorizontalPadding,
+                            top = HomeTopPadding,
+                            end = HomeHorizontalPadding,
+                            bottom = HeaderContentGap
+                        )
+                ) {
+                    Header(
+                        texts = texts,
+                        showMetadataSecurity = showMetadataSecurity,
+                        showSettings = showSettings,
+                        showAbout = showAbout,
+                        hasFiles = hasFiles,
+                        onToggleMetadataSecurity = {
+                            openMenuId = null
+                            showSettings = false
+                            showAbout = false
+                            showMetadataSecurity = !showMetadataSecurity
+                        },
+                        onToggleSettings = {
+                            openMenuId = null
+                            showAbout = false
+                            showMetadataSecurity = false
+                            showSettings = !showSettings
+                        },
+                        onToggleAbout = {
+                            openMenuId = null
+                            showSettings = false
+                            showMetadataSecurity = false
+                            showAbout = !showAbout
+                        },
+                        modifier = Modifier.onSizeChanged { size ->
+                            if (headerHeightPx != size.height) {
+                                headerHeightPx = size.height
+                            }
+                        }
+                    )
                 }
+
+                val rightGroupWidth = headerActionsWidth(
+                    availableWidth = headerAvailableWidth,
+                    hasFiles = hasFiles
+                )
 
                 val currentHeroSize = ZenAnimations.HeroCenterSize +
                     (ZenAnimations.HeroHeaderSize - ZenAnimations.HeroCenterSize) * morphProgress
 
                 val heroX = androidx.compose.ui.unit.lerp(
                     (maxWidth - currentHeroSize.dp) / 2,
-                    maxWidth - 20.dp - rightGroupWidth - 50.dp,
+                    HomeHorizontalPadding + headerAvailableWidth - rightGroupWidth - HeaderAddSlotWidth,
                     morphProgress
                 )
 
-                val emptyCenterY = 16.dp + headerHeight + 12.dp +
+                val emptyCenterY = listTopPadding +
                     (emptyEntryHeight - currentHeroSize.dp) / 2 - 36.dp
                 val heroY = androidx.compose.ui.unit.lerp(
                     emptyCenterY,
-                    16.dp,
+                    HomeTopPadding,
                     morphProgress
                 )
 
@@ -1417,7 +1427,8 @@ private fun Header(
     hasFiles: Boolean,
     onToggleMetadataSecurity: () -> Unit,
     onToggleSettings: () -> Unit,
-    onToggleAbout: () -> Unit
+    onToggleAbout: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val headerActions = listOf(
         HeaderAction(
@@ -1440,17 +1451,15 @@ private fun Header(
         )
     )
 
-    val allInlineWidth = if (hasFiles) 430.dp else 380.dp
-    val settingsInlineWidth = if (hasFiles) 340.dp else 300.dp
-    
     val spacerWidth by animateDpAsState(
-        targetValue = if (hasFiles) 50.dp else 0.dp,
+        targetValue = if (hasFiles) HeaderAddSlotWidth else 0.dp,
         animationSpec = ZenAnimations.HeroMorphDpSpring,
         label = "headerSpacerWidth"
     )
 
-    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val availableWidth = maxWidth
+        val actionMode = headerActionMode(availableWidth, hasFiles)
         val secondaryActions = headerActions.take(2)
         val settingsAction = headerActions.last()
 
@@ -1501,12 +1510,12 @@ private fun Header(
                 Spacer(modifier = Modifier.width(spacerWidth))
                 
                 when {
-                    availableWidth >= allInlineWidth -> {
+                    actionMode == HeaderActionMode.AllInline -> {
                         HeaderActions(actions = headerActions)
                     }
-                    availableWidth >= settingsInlineWidth -> {
+                    actionMode == HeaderActionMode.SettingsInline -> {
                         HeaderActions(actions = listOf(settingsAction))
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(HeaderActionSpacing))
                         HeaderOverflowActions(
                             actions = secondaryActions,
                             texts = texts
@@ -1530,6 +1539,48 @@ private data class HeaderAction(
     val active: Boolean,
     val onClick: () -> Unit
 )
+
+private enum class HeaderActionMode {
+    AllInline,
+    SettingsInline,
+    OverflowOnly
+}
+
+private fun headerContentWidth(containerWidth: Dp): Dp {
+    val horizontalPadding = HomeHorizontalPadding + HomeHorizontalPadding
+    return if (containerWidth > horizontalPadding) {
+        containerWidth - horizontalPadding
+    } else {
+        0.dp
+    }
+}
+
+private fun headerActionMode(
+    availableWidth: Dp,
+    hasFiles: Boolean
+): HeaderActionMode {
+    val allInlineWidth = if (hasFiles) 430.dp else 380.dp
+    val settingsInlineWidth = if (hasFiles) 340.dp else 300.dp
+    return when {
+        availableWidth >= allInlineWidth -> HeaderActionMode.AllInline
+        availableWidth >= settingsInlineWidth -> HeaderActionMode.SettingsInline
+        else -> HeaderActionMode.OverflowOnly
+    }
+}
+
+private fun headerActionsWidth(
+    availableWidth: Dp,
+    hasFiles: Boolean
+): Dp {
+    return when (headerActionMode(availableWidth, hasFiles)) {
+        HeaderActionMode.AllInline ->
+            HeaderButtonSize + HeaderActionSpacing + HeaderButtonSize +
+                HeaderActionSpacing + HeaderButtonSize
+        HeaderActionMode.SettingsInline ->
+            HeaderButtonSize + HeaderActionSpacing + HeaderButtonSize
+        HeaderActionMode.OverflowOnly -> HeaderButtonSize
+    }
+}
 
 @Composable
 private fun HeaderOverflowActions(
@@ -1578,7 +1629,7 @@ private fun HeaderOverflowActions(
 @Composable
 private fun HeaderActions(actions: List<HeaderAction>) {
     Row(
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(HeaderActionSpacing)
     ) {
         actions.forEach { action ->
             HeaderIconButton(
@@ -1605,7 +1656,7 @@ private fun HeaderIconButton(
     )
     Box(
         modifier = Modifier
-            .size(44.dp)
+            .size(HeaderButtonSize)
             .clip(CircleShape)
             .background(
                 MaterialTheme.colorScheme.primary.copy(alpha = bgColor * 0.08f),
