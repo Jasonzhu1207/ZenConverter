@@ -58,6 +58,22 @@ object ZenAnimations {
     const val DialogScaleFrom = 0.94f
     const val DialogScaleDuration = 240  // ms
 
+    // ── Hero "+" morph: center → header ─────────────────────────────
+    /** Critically damped spring for the morph — smooth, no overshoot. */
+    val HeroMorphSpring = spring<Float>(
+        dampingRatio = 1.0f,
+        stiffness = 380f
+    )
+    val HeroMorphDpSpring = spring<androidx.compose.ui.unit.Dp>(
+        dampingRatio = 1.0f,
+        stiffness = 380f
+    )
+
+    const val HeroHeaderSize = 44f
+    const val HeroCenterSize = 118f
+    const val HeroHeaderIconSize = 24f
+    const val HeroCenterIconSize = 58f
+
     // Legacy aliases (kept for compatibility)
     val VisibilityEnterSpring = PanelEnterSpring
     val VisibilityExitSpring = PanelExitSpring

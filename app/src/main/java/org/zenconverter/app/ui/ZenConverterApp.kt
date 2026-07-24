@@ -15,6 +15,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -49,6 +50,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -837,6 +839,7 @@ private fun ZenConverterContent(
                 showMetadataSecurity = showMetadataSecurity,
                 showSettings = showSettings,
                 showAbout = showAbout,
+                hasFiles = queueIds.isNotEmpty(),
                 onToggleMetadataSecurity = {
                     openMenuId = null
                     showSettings = false
@@ -925,6 +928,13 @@ private fun ZenConverterContent(
                     if (available > 280.dp) available else 280.dp
                 }
 
+                val hasFiles = queuedFiles.isNotEmpty()
+                val morphProgress by animateFloatAsState(
+                    targetValue = if (hasFiles) 1f else 0f,
+                    animationSpec = ZenAnimations.HeroMorphSpring,
+                    label = "heroMorphProgress"
+                )
+
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize(),
@@ -941,32 +951,39 @@ private fun ZenConverterContent(
                         )
                     }
 
-                    item(key = "file-entry") {
-                        AddFilesPanel(
-                            texts = texts,
-                            expanded = shouldCenterEmptyState,
-                            modifier = if (shouldCenterEmptyState) {
-                                Modifier
+                    if (shouldCenterEmptyState || morphProgress < 1f) {
+                        item(key = "file-entry") {
+                            Box(
+                                modifier = Modifier
                                     .fillMaxWidth()
                                     .height(emptyEntryHeight)
-                                    .animateContentSize(
-                                        animationSpec = spring(
-                                            stiffness = ZenAnimations.PanelEnterStiffness
-                                        )
+                                    .graphicsLayer { alpha = 1f - morphProgress },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.offset(y = 82.dp)
+                                ) {
+                                    Text(
+                                        text = texts.addFilesTitle,
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onBackground,
+                                        textAlign = TextAlign.Center
                                     )
-                            } else {
-                                Modifier.animateContentSize(
-                                    animationSpec = spring(
-                                        stiffness = ZenAnimations.PanelEnterStiffness
+                                    Spacer(modifier = Modifier.height(14.dp))
+                                    Text(
+                                        text = texts.addFilesNote,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.fillMaxWidth(0.82f)
                                     )
-                                )
-                            },
-                            onPickFiles = {
-                                openMenuId = null
-                                queueMessage = null
-                                onPickFiles()
+                                }
                             }
-                        )
+                        }
                     }
 
                     if (queuedFiles.isNotEmpty() && !isConversionRunning) {
@@ -1059,6 +1076,44 @@ private fun ZenConverterContent(
                         }
                     }
                 }
+
+                // ── Hero "+" floating button ────────────────────────────────
+                val allInlineWidth = if (hasFiles) 430.dp else 380.dp
+                val settingsInlineWidth = if (hasFiles) 340.dp else 300.dp
+
+                val rightGroupWidth = when {
+                    maxWidth >= allInlineWidth -> 144.dp
+                    maxWidth >= settingsInlineWidth -> 94.dp
+                    else -> 44.dp
+                }
+
+                val currentHeroSize = ZenAnimations.HeroCenterSize +
+                    (ZenAnimations.HeroHeaderSize - ZenAnimations.HeroCenterSize) * morphProgress
+
+                val heroX = androidx.compose.ui.unit.lerp(
+                    (maxWidth - currentHeroSize.dp) / 2,
+                    maxWidth - 20.dp - rightGroupWidth - 50.dp,
+                    morphProgress
+                )
+
+                val emptyCenterY = 16.dp + headerHeight + 12.dp +
+                    (emptyEntryHeight - currentHeroSize.dp) / 2 - 36.dp
+                val heroY = androidx.compose.ui.unit.lerp(
+                    emptyCenterY,
+                    16.dp,
+                    morphProgress
+                )
+
+                HeroAddButton(
+                    morphProgress = morphProgress,
+                    texts = texts,
+                    onPickFiles = {
+                        openMenuId = null
+                        queueMessage = null
+                        onPickFiles()
+                    },
+                    modifier = Modifier.offset(x = heroX, y = heroY)
+                )
             }
         }
 
@@ -1359,6 +1414,7 @@ private fun Header(
     showMetadataSecurity: Boolean,
     showSettings: Boolean,
     showAbout: Boolean,
+    hasFiles: Boolean,
     onToggleMetadataSecurity: () -> Unit,
     onToggleSettings: () -> Unit,
     onToggleAbout: () -> Unit
@@ -1366,11 +1422,7 @@ private fun Header(
     val headerActions = listOf(
         HeaderAction(
             icon = if (showMetadataSecurity) Icons.Rounded.Close else Icons.Rounded.Security,
-            label = if (showMetadataSecurity) {
-                texts.closeMetadataSecurity
-            } else {
-                texts.openMetadataSecurity
-            },
+            label = if (showMetadataSecurity) texts.closeMetadataSecurity else texts.openMetadataSecurity,
             active = showMetadataSecurity,
             onClick = onToggleMetadataSecurity
         ),
@@ -1386,6 +1438,15 @@ private fun Header(
             active = showSettings,
             onClick = onToggleSettings
         )
+    )
+
+    val allInlineWidth = if (hasFiles) 430.dp else 380.dp
+    val settingsInlineWidth = if (hasFiles) 340.dp else 300.dp
+    
+    val spacerWidth by animateDpAsState(
+        targetValue = if (hasFiles) 50.dp else 0.dp,
+        animationSpec = ZenAnimations.HeroMorphDpSpring,
+        label = "headerSpacerWidth"
     )
 
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
@@ -1436,31 +1497,32 @@ private fun Header(
             }
             Spacer(modifier = Modifier.width(8.dp))
 
-            when {
-                availableWidth >= HEADER_ALL_INLINE_MIN_WIDTH -> {
-                    HeaderActions(actions = headerActions)
-                }
-                availableWidth >= HEADER_SETTINGS_INLINE_MIN_WIDTH -> {
-                    HeaderActions(actions = listOf(settingsAction))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    HeaderOverflowActions(
-                        actions = secondaryActions,
-                        texts = texts
-                    )
-                }
-                else -> {
-                    HeaderOverflowActions(
-                        actions = headerActions,
-                        texts = texts
-                    )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(modifier = Modifier.width(spacerWidth))
+                
+                when {
+                    availableWidth >= allInlineWidth -> {
+                        HeaderActions(actions = headerActions)
+                    }
+                    availableWidth >= settingsInlineWidth -> {
+                        HeaderActions(actions = listOf(settingsAction))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        HeaderOverflowActions(
+                            actions = secondaryActions,
+                            texts = texts
+                        )
+                    }
+                    else -> {
+                        HeaderOverflowActions(
+                            actions = headerActions,
+                            texts = texts
+                        )
+                    }
                 }
             }
         }
     }
 }
-
-private val HEADER_SETTINGS_INLINE_MIN_WIDTH = 300.dp
-private val HEADER_ALL_INLINE_MIN_WIDTH = 380.dp
 
 private data class HeaderAction(
     val icon: ImageVector,
@@ -2772,112 +2834,41 @@ private fun AccentSwatch(
 }
 
 @Composable
-private fun AddFilesPanel(
+private fun HeroAddButton(
+    morphProgress: Float,
+    onPickFiles: () -> Unit,
     texts: UiText,
-    expanded: Boolean,
-    modifier: Modifier = Modifier,
-    onPickFiles: () -> Unit
+    modifier: Modifier = Modifier
 ) {
-    if (expanded) {
-        Box(
-            modifier = modifier
-                .fillMaxWidth()
-                .padding(vertical = 20.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(118.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary, CircleShape)
-                        .border(
-                            1.dp,
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                            CircleShape
-                        )
-                        .bounceClick(onClick = onPickFiles, scaleDown = 0.94f)
-                        .semantics {
-                            contentDescription = texts.addFiles
-                            role = Role.Button
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    AppIcon(
-                        icon = Icons.Rounded.Add,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(58.dp)
-                    )
-                }
-                Text(
-                    text = texts.addFilesTitle,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    textAlign = TextAlign.Center
-                )
-                Text(
-                    text = texts.addFilesNote,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth(0.82f)
-                )
-            }
-        }
-        return
-    }
-
-    QuietPanel(modifier = modifier) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(end = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = texts.addFilesTitle,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = texts.addFilesNote,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Button(
-                onClick = onPickFiles,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
-            ) {
-                AppIcon(
-                    icon = Icons.Rounded.Add,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(texts.addFiles)
-            }
-        }
+    val size = ZenAnimations.HeroCenterSize + (ZenAnimations.HeroHeaderSize - ZenAnimations.HeroCenterSize) * morphProgress
+    val iconSize = ZenAnimations.HeroCenterIconSize + (ZenAnimations.HeroHeaderIconSize - ZenAnimations.HeroCenterIconSize) * morphProgress
+    
+    Box(
+        modifier = modifier
+            .size(size.dp)
+            .clip(CircleShape)
+            .background(
+                color = MaterialTheme.colorScheme.primary,
+                shape = CircleShape
+            )
+            .border(
+                1.dp,
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                CircleShape
+            )
+            .bounceClick(onClick = onPickFiles, scaleDown = if (morphProgress < 0.5f) 0.94f else 0.90f)
+            .semantics {
+                contentDescription = texts.addFiles
+                role = Role.Button
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        AppIcon(
+            icon = Icons.Rounded.Add,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.size(iconSize.dp)
+        )
     }
 }
 
