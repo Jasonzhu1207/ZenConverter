@@ -22,8 +22,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import org.zenconverter.app.ui.theme.ZenAnimations
 import org.zenconverter.app.ui.theme.ZenPanelVisibility
@@ -108,6 +106,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -192,6 +191,11 @@ data class TargetFormat(
     val modeHint: String
 )
 
+data class ExternalImportTarget(
+    val category: FileCategory,
+    val targetFormat: TargetFormat
+)
+
 enum class FileCategory(
     val mimeTypes: List<String>,
     val formats: List<TargetFormat>
@@ -263,6 +267,18 @@ enum class FileCategory(
     )
 }
 
+enum class PdfMergeType {
+    Images,
+    Pdfs
+}
+
+data class PdfMergeGroup(
+    val id: String,
+    val type: PdfMergeType,
+    val memberFileIds: List<String>,
+    val pdfOptions: PdfExportOptions = PdfExportOptions()
+)
+
 data class QueuedFile(
     val id: String,
     val uri: Uri,
@@ -271,23 +287,17 @@ data class QueuedFile(
     val sizeBytes: Long?,
     val mimeType: String?,
     val category: FileCategory,
+    val sourceCategory: FileCategory = category,
+    val targetOptions: List<ExternalImportTarget> = emptyList(),
     val targetFormat: String,
+    val videoOptions: VideoExportOptions = VideoExportOptions(),
+    val audioOptions: AudioExportOptions = AudioExportOptions(),
+    val imageOptions: ImageExportOptions = ImageExportOptions(quality = 85),
+    val pdfOptions: PdfExportOptions = PdfExportOptions(),
     val inputInfo: FileBasicInfo? = null,
     val gifFrameMode: GifFrameExportMode = GifFrameExportMode.FirstFrame,
     val pdfSecurityOptions: PdfSecurityOptions = PdfSecurityOptions(),
     val pdfPasswords: List<String?> = emptyList()
-)
-
-data class ImagePdfMergePrompt(
-    val fileCount: Int
-)
-
-data class GifFrameModePrompt(
-    val gifCount: Int
-)
-
-data class GifPdfFramePrompt(
-    val gifCount: Int
 )
 
 data class PdfPasswordPrompt(
@@ -296,31 +306,6 @@ data class PdfPasswordPrompt(
 
 data class PdfOutputPasswordPrompt(
     val fileCount: Int
-)
-
-data class ExternalImportPrompt(
-    val files: List<ExternalImportFile>
-)
-
-data class ExternalImportFile(
-    val id: String,
-    val displayName: String,
-    val sizeBytes: Long?,
-    val mimeType: String?,
-    val inputInfo: FileBasicInfo?,
-    val detectedCategory: FileCategory?,
-    val targets: List<ExternalImportTarget>,
-    val defaultTarget: ExternalImportTarget?
-)
-
-data class ExternalImportTarget(
-    val category: FileCategory,
-    val targetFormat: TargetFormat
-)
-
-data class ExternalImportChoice(
-    val fileId: String,
-    val target: ExternalImportTarget
 )
 
 data class OutputDirectory(
@@ -625,6 +610,7 @@ private const val IMAGE_QUALITY_LOSSLESS = "Lossless"
 private const val IMAGE_QUALITY_HIGH = "High"
 private const val IMAGE_QUALITY_BALANCED = "Balanced"
 private const val IMAGE_QUALITY_SMALL = "Small"
+private const val BATCH_MIXED_OPTION = "Mixed"
 private val IMAGE_QUALITY_OPTIONS = listOf(
     IMAGE_QUALITY_ORIGINAL,
     IMAGE_QUALITY_HIGH,
@@ -648,9 +634,24 @@ private val PDF_RENDER_QUALITY_OPTIONS = listOf(
     PDF_RENDER_QUALITY_HIGH
 )
 
+private const val GIF_FRAME_FIRST = "First frame"
+private const val GIF_FRAME_IMAGES = "Split frames"
+private const val GIF_FRAMES_SINGLE_PDF = "All frames in one PDF"
+private const val GIF_FRAMES_PDF_FILES = "One PDF per frame"
+private val GIF_IMAGE_FRAME_MODE_OPTIONS = listOf(
+    GIF_FRAME_FIRST,
+    GIF_FRAME_IMAGES
+)
+private val GIF_PDF_FRAME_MODE_OPTIONS = listOf(
+    GIF_FRAME_FIRST,
+    GIF_FRAMES_SINGLE_PDF,
+    GIF_FRAMES_PDF_FILES
+)
+
 @Composable
 fun ZenConverterApp(
     queuedFiles: List<QueuedFile>,
+    pdfMergeGroups: List<PdfMergeGroup>,
     supportedVideoMimeTypes: Set<String>,
     outputLocationMode: OutputLocationMode,
     outputDirectory: OutputDirectory?,
@@ -659,7 +660,14 @@ fun ZenConverterApp(
     isConversionRunning: Boolean,
     metadataToolState: MetadataToolState,
     onOutputLocationModeChange: (OutputLocationMode) -> Unit,
-    onPickFiles: (FileCategory, TargetFormat) -> Unit,
+    onPickFiles: () -> Unit,
+    onUpdateQueuedFile: (QueuedFile) -> Unit,
+    onUpdateQueuedFiles: (List<QueuedFile>) -> Unit,
+    onCreatePdfMergeGroup: (PdfMergeType) -> Unit,
+    onUpdatePdfMergeGroup: (PdfMergeGroup) -> Unit,
+    onRemovePdfMergeGroup: (String) -> Unit,
+    onAddFileToPdfMergeGroup: (String, String) -> Unit,
+    onRemoveFileFromPdfMergeGroup: (String, String) -> Unit,
     onPickOutputDirectory: () -> Unit,
     onRemoveFile: (String) -> Unit,
     onClearQueue: () -> Unit,
@@ -667,28 +675,13 @@ fun ZenConverterApp(
     onPickMetadataVideo: () -> Unit,
     onCleanMetadata: () -> Unit,
     onRestoreMetadata: (String) -> Unit,
-    imagePdfMergePrompt: ImagePdfMergePrompt?,
-    gifFrameModePrompt: GifFrameModePrompt?,
-    gifPdfFramePrompt: GifPdfFramePrompt?,
     pdfPasswordPrompt: PdfPasswordPrompt?,
     pdfOutputPasswordPrompt: PdfOutputPasswordPrompt?,
-    externalImportPrompt: ExternalImportPrompt?,
-    onChooseSinglePdf: () -> Unit,
-    onChooseOnePdfPerImage: () -> Unit,
-    onDismissImagePdfPrompt: () -> Unit,
-    onChooseGifFirstFrame: () -> Unit,
-    onChooseGifSplitFrames: () -> Unit,
-    onDismissGifFramePrompt: () -> Unit,
-    onChooseGifFramesSinglePdf: () -> Unit,
-    onChooseGifFramePdfFiles: () -> Unit,
-    onDismissGifPdfFramePrompt: () -> Unit,
     onSubmitPdfPassword: (String) -> Unit,
     onCancelPdfPassword: () -> Unit,
     onSubmitPdfOutputPassword: (String) -> Unit,
     onCancelPdfOutputPassword: () -> Unit,
-    onConfirmExternalImport: (List<ExternalImportChoice>) -> Unit,
-    onDismissExternalImport: () -> Unit,
-    onStartConversion: (VideoExportOptions, AudioExportOptions, ImageExportOptions, PdfExportOptions) -> Unit,
+    onStartConversion: () -> Unit,
     onCancelConversion: () -> Unit
 ) {
     val context = LocalContext.current.applicationContext
@@ -719,6 +712,7 @@ fun ZenConverterApp(
                 languageOption = languageOption,
                 texts = texts,
                 queuedFiles = queuedFiles,
+                pdfMergeGroups = pdfMergeGroups,
                 supportedVideoMimeTypes = supportedVideoMimeTypes,
                 outputLocationMode = outputLocationMode,
                 outputDirectory = outputDirectory,
@@ -736,6 +730,13 @@ fun ZenConverterApp(
                 },
                 onOutputLocationModeChange = onOutputLocationModeChange,
                 onPickFiles = onPickFiles,
+                onUpdateQueuedFile = onUpdateQueuedFile,
+                onUpdateQueuedFiles = onUpdateQueuedFiles,
+                onCreatePdfMergeGroup = onCreatePdfMergeGroup,
+                onUpdatePdfMergeGroup = onUpdatePdfMergeGroup,
+                onRemovePdfMergeGroup = onRemovePdfMergeGroup,
+                onAddFileToPdfMergeGroup = onAddFileToPdfMergeGroup,
+                onRemoveFileFromPdfMergeGroup = onRemoveFileFromPdfMergeGroup,
                 onPickOutputDirectory = onPickOutputDirectory,
                 onRemoveFile = onRemoveFile,
                 onClearQueue = onClearQueue,
@@ -746,33 +747,6 @@ fun ZenConverterApp(
                 onStartConversion = onStartConversion,
                 onCancelConversion = onCancelConversion
             )
-            imagePdfMergePrompt?.let { prompt ->
-                ImagePdfMergeDialog(
-                    texts = texts,
-                    prompt = prompt,
-                    onSinglePdf = onChooseSinglePdf,
-                    onOnePdfPerImage = onChooseOnePdfPerImage,
-                    onDismiss = onDismissImagePdfPrompt
-                )
-            }
-            gifFrameModePrompt?.let { prompt ->
-                GifFrameModeDialog(
-                    texts = texts,
-                    prompt = prompt,
-                    onFirstFrame = onChooseGifFirstFrame,
-                    onSplitFrames = onChooseGifSplitFrames,
-                    onDismiss = onDismissGifFramePrompt
-                )
-            }
-            gifPdfFramePrompt?.let { prompt ->
-                GifPdfFrameDialog(
-                    texts = texts,
-                    prompt = prompt,
-                    onSinglePdf = onChooseGifFramesSinglePdf,
-                    onPdfFiles = onChooseGifFramePdfFiles,
-                    onDismiss = onDismissGifPdfFramePrompt
-                )
-            }
             pdfPasswordPrompt?.let { prompt ->
                 PdfPasswordDialog(
                     texts = texts,
@@ -789,14 +763,6 @@ fun ZenConverterApp(
                     onCancel = onCancelPdfOutputPassword
                 )
             }
-            externalImportPrompt?.let { prompt ->
-                ExternalImportDialog(
-                    texts = texts,
-                    prompt = prompt,
-                    onConfirm = onConfirmExternalImport,
-                    onDismiss = onDismissExternalImport
-                )
-            }
         }
     }
 }
@@ -807,6 +773,7 @@ private fun ZenConverterContent(
     languageOption: LanguageOption,
     texts: UiText,
     queuedFiles: List<QueuedFile>,
+    pdfMergeGroups: List<PdfMergeGroup>,
     supportedVideoMimeTypes: Set<String>,
     outputLocationMode: OutputLocationMode,
     outputDirectory: OutputDirectory?,
@@ -817,7 +784,14 @@ private fun ZenConverterContent(
     onAccentSelected: (AccentColorOption) -> Unit,
     onLanguageSelected: (LanguageOption) -> Unit,
     onOutputLocationModeChange: (OutputLocationMode) -> Unit,
-    onPickFiles: (FileCategory, TargetFormat) -> Unit,
+    onPickFiles: () -> Unit,
+    onUpdateQueuedFile: (QueuedFile) -> Unit,
+    onUpdateQueuedFiles: (List<QueuedFile>) -> Unit,
+    onCreatePdfMergeGroup: (PdfMergeType) -> Unit,
+    onUpdatePdfMergeGroup: (PdfMergeGroup) -> Unit,
+    onRemovePdfMergeGroup: (String) -> Unit,
+    onAddFileToPdfMergeGroup: (String, String) -> Unit,
+    onRemoveFileFromPdfMergeGroup: (String, String) -> Unit,
     onPickOutputDirectory: () -> Unit,
     onRemoveFile: (String) -> Unit,
     onClearQueue: () -> Unit,
@@ -825,154 +799,31 @@ private fun ZenConverterContent(
     onPickMetadataVideo: () -> Unit,
     onCleanMetadata: () -> Unit,
     onRestoreMetadata: (String) -> Unit,
-    onStartConversion: (VideoExportOptions, AudioExportOptions, ImageExportOptions, PdfExportOptions) -> Unit,
+    onStartConversion: () -> Unit,
     onCancelConversion: () -> Unit
 ) {
     var showSettings by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
     var showMetadataSecurity by remember { mutableStateOf(false) }
     var showSupport by remember { mutableStateOf(false) }
-    var activeCategory by remember { mutableStateOf(FileCategory.Video) }
-    var videoTarget by remember { mutableStateOf(FileCategory.Video.formats.first()) }
-    var audioTarget by remember { mutableStateOf(FileCategory.Audio.formats.first()) }
-    var imageTarget by remember { mutableStateOf(FileCategory.Image.formats.first()) }
-    var pdfTarget by remember { mutableStateOf(FileCategory.Pdf.formats.first()) }
-    var documentTarget by remember { mutableStateOf(FileCategory.Document.formats.first()) }
     var queueMessage by remember { mutableStateOf<String?>(null) }
     var openMenuId by remember { mutableStateOf<String?>(null) }
-    var videoResolution by remember { mutableStateOf(VIDEO_RESOLUTION_ORIGINAL) }
-    var videoCompressionMode by remember { mutableStateOf(VIDEO_COMPRESSION_STANDARD) }
-    var videoBitrate by remember { mutableStateOf(VIDEO_BITRATE_AUTO) }
-    var videoCodec by remember(supportedVideoMimeTypes) {
-        mutableStateOf(defaultVideoCodecFor(supportedVideoMimeTypes))
-    }
-    var videoFrameRate by remember { mutableStateOf(VIDEO_FRAME_RATE_ORIGINAL) }
-    var audioBitrate by remember { mutableStateOf(AUDIO_BITRATE_AUTO) }
-    var audioSampleRate by remember { mutableStateOf(AUDIO_SAMPLE_RATE_ORIGINAL) }
-    var audioChannels by remember { mutableStateOf(AUDIO_CHANNELS_ORIGINAL) }
-    var videoAdvancedExpanded by remember { mutableStateOf(false) }
-    var videoReverse by remember { mutableStateOf(false) }
-    var videoFadeIn by remember { mutableStateOf(ADVANCED_FADE_OFF) }
-    var videoFadeOut by remember { mutableStateOf(ADVANCED_FADE_OFF) }
-    var videoMirror by remember { mutableStateOf(VIDEO_MIRROR_OFF) }
-    var videoRotation by remember { mutableStateOf(VIDEO_ROTATION_NONE) }
-    var videoAspectRatio by remember { mutableStateOf(VIDEO_ASPECT_KEEP) }
-    var audioAdvancedExpanded by remember { mutableStateOf(false) }
-    var audioReverse by remember { mutableStateOf(false) }
-    var audioFadeIn by remember { mutableStateOf(ADVANCED_FADE_OFF) }
-    var audioFadeOut by remember { mutableStateOf(ADVANCED_FADE_OFF) }
-    var audioVolume by remember { mutableStateOf(AUDIO_VOLUME_100) }
-    var audioEcho by remember { mutableStateOf(AUDIO_ECHO_OFF) }
-    var audioNoiseReduction by remember { mutableStateOf(AUDIO_DENOISE_OFF) }
-    var imageQuality by remember { mutableStateOf(IMAGE_QUALITY_BALANCED) }
-    var pdfPageMode by remember { mutableStateOf(PDF_PAGE_MODE_A4_FIT) }
-    var pdfRenderQuality by remember { mutableStateOf(PDF_RENDER_QUALITY_BALANCED) }
+    var expandedFileId by remember { mutableStateOf<String?>(null) }
+    var lastQueueIds by remember { mutableStateOf<List<String>>(emptyList()) }
 
-    fun targetFor(category: FileCategory): TargetFormat = when (category) {
-        FileCategory.Video -> videoTarget
-        FileCategory.Audio -> audioTarget
-        FileCategory.Image -> imageTarget
-        FileCategory.Pdf -> pdfTarget
-        FileCategory.Document -> documentTarget
-    }
+    val taskProgressById = conversionTasks.associateBy { it.fileId }
+    val queueIds = queuedFiles.map { it.id }
+    val groupedFileIds = pdfMergeGroups.flatMap { it.memberFileIds }.toSet()
 
-    fun setTarget(category: FileCategory, targetFormat: TargetFormat) {
-        when (category) {
-            FileCategory.Video -> {
-                videoTarget = targetFormat
-                if (targetFormat.extension.equals("gif", ignoreCase = true)) {
-                    videoResolution = VIDEO_RESOLUTION_480P
-                }
-            }
-            FileCategory.Audio -> audioTarget = targetFormat
-            FileCategory.Image -> {
-                imageTarget = targetFormat
-                if (
-                    imageQuality == IMAGE_QUALITY_LOSSLESS &&
-                    !supportsWebpLosslessQuality(targetFormat)
-                ) {
-                    imageQuality = IMAGE_QUALITY_BALANCED
-                }
-            }
-            FileCategory.Pdf -> pdfTarget = targetFormat
-            FileCategory.Document -> documentTarget = targetFormat
+    LaunchedEffect(queueIds) {
+        val wasEmpty = lastQueueIds.isEmpty()
+        expandedFileId = when {
+            queueIds.isEmpty() -> null
+            queueIds.size == 1 && wasEmpty -> queueIds.first()
+            expandedFileId != null && expandedFileId in queueIds -> expandedFileId
+            else -> null
         }
-    }
-
-    fun currentVideoOptions(): VideoExportOptions {
-        if (videoTarget.extension.equals("gif", ignoreCase = true)) {
-            return VideoExportOptions(
-                maxShortSidePixels = videoResolutionToShortSide(videoResolution),
-                videoBitrate = null,
-                videoMimeType = VideoExportOptions.VIDEO_MIME_TYPE_H264,
-                maxFrameRate = 30
-            )
-        }
-        val compressionModeValue = videoCompressionModeFor(videoCompressionMode)
-        val presetCompressionActive = compressionModeValue != VideoCompressionMode.Standard
-        return VideoExportOptions(
-            maxShortSidePixels = videoCompressionShortSideFor(compressionModeValue)
-                ?: videoResolutionToShortSide(videoResolution),
-            videoBitrate = if (!presetCompressionActive) {
-                videoBitrateToBits(videoBitrate)
-            } else {
-                null
-            },
-            videoMimeType = if (
-                presetCompressionActive &&
-                VideoExportOptions.VIDEO_MIME_TYPE_H265 in supportedVideoMimeTypes
-            ) {
-                VideoExportOptions.VIDEO_MIME_TYPE_H265
-            } else {
-                videoCodecToMimeType(videoCodec)
-            },
-            maxFrameRate = videoCompressionFrameRateCapFor(compressionModeValue)
-                ?: videoFrameRateToCap(videoFrameRate),
-            compressionMode = compressionModeValue,
-            advanced = if (presetCompressionActive) {
-                VideoAdvancedOptions()
-            } else {
-                VideoAdvancedOptions(
-                    reverse = videoReverse,
-                    fadeInSeconds = fadeDurationSeconds(videoFadeIn),
-                    fadeOutSeconds = fadeDurationSeconds(videoFadeOut),
-                    mirror = videoMirrorModeFor(videoMirror),
-                    rotation = videoRotationModeFor(videoRotation),
-                    aspectRatio = videoAspectRatioModeFor(videoAspectRatio)
-                )
-            }
-        )
-    }
-
-    fun currentAudioOptions(): AudioExportOptions {
-        return AudioExportOptions(
-            audioBitrate = audioBitrateToBits(audioBitrate),
-            sampleRateHz = audioSampleRateToHz(audioSampleRate),
-            channelCount = audioChannelsToCount(audioChannels),
-            advanced = AudioAdvancedOptions(
-                reverse = audioReverse,
-                fadeInSeconds = fadeDurationSeconds(audioFadeIn),
-                fadeOutSeconds = fadeDurationSeconds(audioFadeOut),
-                volume = audioVolumeModeFor(audioVolume),
-                echo = audioEchoModeFor(audioEcho),
-                noiseReduction = audioNoiseReductionModeFor(audioNoiseReduction)
-            )
-        )
-    }
-
-    fun currentImageOptions(): ImageExportOptions {
-        return ImageExportOptions(
-            quality = imageQualityToPercent(imageQuality),
-            webpLossless = supportsWebpLosslessQuality(imageTarget) &&
-                imageQuality == IMAGE_QUALITY_LOSSLESS
-        )
-    }
-
-    fun currentPdfOptions(): PdfExportOptions {
-        return PdfExportOptions(
-            imagePageMode = pdfPageModeToOption(pdfPageMode),
-            renderQuality = pdfRenderQualityToOption(pdfRenderQuality)
-        )
+        lastQueueIds = queueIds
     }
 
     NoOverscroll {
@@ -1053,103 +904,46 @@ private fun ZenConverterContent(
                     }
                 }
 
-                item(key = "conversion-lanes") {
-                    ConversionLanes(
+                item(key = "file-entry") {
+                    AddFilesPanel(
                         texts = texts,
-                        activeCategory = activeCategory,
-                        targetFor = ::targetFor,
-                        onTargetChange = ::setTarget,
-                        onActivate = { activeCategory = it },
-                        openMenuId = openMenuId,
-                        onOpenMenuChange = { openMenuId = it },
-                        onPickFiles = { category, target ->
-                            activeCategory = category
+                        onPickFiles = {
                             openMenuId = null
                             queueMessage = null
-                            onPickFiles(category, target)
+                            onPickFiles()
                         }
                     )
                 }
 
-                item(key = "encoding-panel") {
-                    EncodingPanel(
-                        texts = texts,
-                        category = activeCategory,
-                        videoResolution = videoResolution,
-                        videoCompressionMode = videoCompressionMode,
-                        videoBitrate = videoBitrate,
-                        videoCodec = videoCodec,
-                        videoCodecOptions = videoCodecOptionsFor(supportedVideoMimeTypes),
-                        videoFrameRate = videoFrameRate,
-                        videoTarget = videoTarget,
-                        audioBitrate = audioBitrate,
-                        audioSampleRate = audioSampleRate,
-                        audioChannels = audioChannels,
-                        videoAdvanced = VideoAdvancedUiState(
-                            expanded = videoAdvancedExpanded,
-                            reverse = videoReverse,
-                            fadeIn = videoFadeIn,
-                            fadeOut = videoFadeOut,
-                            mirror = videoMirror,
-                            rotation = videoRotation,
-                            aspectRatio = videoAspectRatio
-                        ),
-                        audioAdvanced = AudioAdvancedUiState(
-                            expanded = audioAdvancedExpanded,
-                            reverse = audioReverse,
-                            fadeIn = audioFadeIn,
-                            fadeOut = audioFadeOut,
-                            volume = audioVolume,
-                            echo = audioEcho,
-                            noiseReduction = audioNoiseReduction
-                        ),
-                        audioTarget = audioTarget,
-                        imageTarget = imageTarget,
-                        pdfTarget = pdfTarget,
-                        documentTarget = documentTarget,
-                        imageQuality = imageQuality,
-                        pdfPageMode = pdfPageMode,
-                        pdfRenderQuality = pdfRenderQuality,
-                        openMenuId = openMenuId,
-                        onOpenMenuChange = { openMenuId = it },
-                        onVideoResolutionChange = { videoResolution = it },
-                        onVideoCompressionModeChange = { nextMode ->
-                            videoCompressionMode = nextMode
-                        },
-                        onVideoBitrateChange = { videoBitrate = it },
-                        onVideoCodecChange = { videoCodec = it },
-                        onVideoFrameRateChange = { videoFrameRate = it },
-                        onAudioBitrateChange = { audioBitrate = it },
-                        onAudioSampleRateChange = { audioSampleRate = it },
-                        onAudioChannelsChange = { audioChannels = it },
-                        onVideoAdvancedExpandedChange = { videoAdvancedExpanded = it },
-                        onVideoReverseChange = { videoReverse = it },
-                        onVideoFadeInChange = { videoFadeIn = it },
-                        onVideoFadeOutChange = { videoFadeOut = it },
-                        onVideoMirrorChange = { videoMirror = it },
-                        onVideoRotationChange = { videoRotation = it },
-                        onVideoAspectRatioChange = { videoAspectRatio = it },
-                        onAudioAdvancedExpandedChange = { audioAdvancedExpanded = it },
-                        onAudioReverseChange = { audioReverse = it },
-                        onAudioFadeInChange = { audioFadeIn = it },
-                        onAudioFadeOutChange = { audioFadeOut = it },
-                        onAudioVolumeChange = { audioVolume = it },
-                        onAudioEchoChange = { audioEcho = it },
-                        onAudioNoiseReductionChange = { audioNoiseReduction = it },
-                        onImageQualityChange = { imageQuality = it },
-                        onPdfPageModeChange = { pdfPageMode = it },
-                        onPdfRenderQualityChange = { pdfRenderQuality = it }
-                    )
+                if (queuedFiles.isNotEmpty() && !isConversionRunning) {
+                    item(key = "batch-settings") {
+                        BatchSettingsPanel(
+                            texts = texts,
+                            files = queuedFiles,
+                            supportedVideoMimeTypes = supportedVideoMimeTypes,
+                            openMenuId = openMenuId,
+                            onOpenMenuChange = { openMenuId = it },
+                            onUpdateFiles = onUpdateQueuedFiles
+                        )
+                    }
                 }
-
-                item(key = "output-panel") {
-                    OutputPanel(
-                        texts = texts,
-                        outputLocationMode = outputLocationMode,
-                        outputDirectory = outputDirectory,
-                        onOutputLocationModeChange = onOutputLocationModeChange,
-                        onPickOutputDirectory = onPickOutputDirectory
-                    )
+                if (queuedFiles.isNotEmpty()) {
+                    item(key = "pdf-merge-groups") {
+                        PdfMergeGroupsPanel(
+                            texts = texts,
+                            files = queuedFiles,
+                            groups = pdfMergeGroups,
+                            taskProgress = taskProgressById,
+                            canEdit = !isConversionRunning,
+                            openMenuId = openMenuId,
+                            onOpenMenuChange = { openMenuId = it },
+                            onCreateGroup = onCreatePdfMergeGroup,
+                            onUpdateGroup = onUpdatePdfMergeGroup,
+                            onRemoveGroup = onRemovePdfMergeGroup,
+                            onAddFileToGroup = onAddFileToPdfMergeGroup,
+                            onRemoveFileFromGroup = onRemoveFileFromPdfMergeGroup
+                        )
+                    }
                 }
 
                 item(key = "queue-actions") {
@@ -1160,12 +954,7 @@ private fun ZenConverterContent(
                         onStart = {
                             openMenuId = null
                             queueMessage = null
-                            onStartConversion(
-                                currentVideoOptions(),
-                                currentAudioOptions(),
-                                currentImageOptions(),
-                                currentPdfOptions()
-                            )
+                            onStartConversion()
                         },
                         onCancel = {
                             openMenuId = null
@@ -1179,20 +968,54 @@ private fun ZenConverterContent(
                     )
                 }
 
+                item(key = "output-panel") {
+                    OutputPanel(
+                        texts = texts,
+                        outputLocationMode = outputLocationMode,
+                        outputDirectory = outputDirectory,
+                        onOutputLocationModeChange = onOutputLocationModeChange,
+                        onPickOutputDirectory = onPickOutputDirectory
+                    )
+                }
+
+                item(key = "queue-header") {
+                    QueueHeader(
+                        texts = texts,
+                        fileCount = queuedFiles.size
+                    )
+                }
+
                 (conversionSummary ?: queueMessage)?.let { message ->
                     item(key = "status-line") {
                         StatusLine(text = texts.summaryMessage(message))
                     }
                 }
 
-                item(key = "file-queue") {
-                    FileQueue(
-                        texts = texts,
-                        files = queuedFiles,
-                        taskProgress = conversionTasks.associateBy { it.fileId },
-                        canRemove = !isConversionRunning,
-                        onRemoveFile = onRemoveFile
-                    )
+                if (queuedFiles.isEmpty()) {
+                    item(key = "empty-queue") {
+                        EmptyQueuePanel(texts = texts)
+                    }
+                } else {
+                    items(queuedFiles, key = { it.id }) { file ->
+                        FileRow(
+                            modifier = Modifier.animateItem(),
+                            texts = texts,
+                            file = file,
+                            progress = taskProgressById[file.id],
+                            canEdit = !isConversionRunning,
+                            supportedVideoMimeTypes = supportedVideoMimeTypes,
+                            openMenuId = openMenuId,
+                            optionsExpanded = expandedFileId == file.id,
+                            groupedInPdfMerge = file.id in groupedFileIds,
+                            onOpenMenuChange = { openMenuId = it },
+                            onUpdateFile = onUpdateQueuedFile,
+                            onOptionsExpandedChange = { expanded ->
+                                expandedFileId = if (expanded) file.id else null
+                                if (!expanded) openMenuId = null
+                            },
+                            onRemove = { onRemoveFile(file.id) }
+                        )
+                    }
                 }
             }
         }
@@ -1212,66 +1035,6 @@ private fun NoOverscroll(content: @Composable () -> Unit) {
     CompositionLocalProvider(
         LocalOverscrollConfiguration provides null,
         content = content
-    )
-}
-
-@Composable
-private fun ImagePdfMergeDialog(
-    texts: UiText,
-    prompt: ImagePdfMergePrompt,
-    onSinglePdf: () -> Unit,
-    onOnePdfPerImage: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    ZenPromptDialog(
-        title = texts.imagePdfPromptTitle,
-        message = texts.imagePdfPromptMessage(prompt.fileCount),
-        icon = Icons.Rounded.PictureAsPdf,
-        confirmText = texts.optionValue("Single PDF"),
-        dismissText = texts.optionValue("One PDF per image"),
-        onConfirm = onSinglePdf,
-        onDismissAction = onOnePdfPerImage,
-        onDismissRequest = onDismiss
-    )
-}
-
-@Composable
-private fun GifFrameModeDialog(
-    texts: UiText,
-    prompt: GifFrameModePrompt,
-    onFirstFrame: () -> Unit,
-    onSplitFrames: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    ZenPromptDialog(
-        title = texts.gifFramePromptTitle,
-        message = texts.gifFramePromptMessage(prompt.gifCount),
-        icon = Icons.Rounded.Image,
-        confirmText = texts.optionValue("Split frames"),
-        dismissText = texts.optionValue("First frame"),
-        onConfirm = onSplitFrames,
-        onDismissAction = onFirstFrame,
-        onDismissRequest = onDismiss
-    )
-}
-
-@Composable
-private fun GifPdfFrameDialog(
-    texts: UiText,
-    prompt: GifPdfFramePrompt,
-    onSinglePdf: () -> Unit,
-    onPdfFiles: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    ZenPromptDialog(
-        title = texts.gifPdfFramePromptTitle,
-        message = texts.gifPdfFramePromptMessage(prompt.gifCount),
-        icon = Icons.Rounded.PictureAsPdf,
-        confirmText = texts.optionValue("All frames in one PDF"),
-        dismissText = texts.optionValue("One PDF per frame"),
-        onConfirm = onSinglePdf,
-        onDismissAction = onPdfFiles,
-        onDismissRequest = onDismiss
     )
 }
 
@@ -1342,262 +1105,6 @@ private fun PdfOutputPasswordDialog(
             onConfirm = { onSubmit(password) },
             onDismissAction = onCancel
         )
-    }
-}
-
-@Composable
-private fun ExternalImportDialog(
-    texts: UiText,
-    prompt: ExternalImportPrompt,
-    onConfirm: (List<ExternalImportChoice>) -> Unit,
-    onDismiss: () -> Unit
-) {
-    if (prompt.files.isEmpty()) return
-
-    var currentIndex by remember(prompt) { mutableStateOf(0) }
-    var selectedTargets by remember(prompt) {
-        mutableStateOf<Map<String, ExternalImportTarget?>>(
-            prompt.files.associate { file -> file.id to file.defaultTarget }
-        )
-    }
-    var skippedIds by remember(prompt) { mutableStateOf<Set<String>>(emptySet()) }
-
-    fun confirmImport() {
-        val choices = prompt.files.mapNotNull { file ->
-            val target = selectedTargets[file.id] ?: file.defaultTarget
-            if (file.id in skippedIds || target == null) {
-                null
-            } else {
-                ExternalImportChoice(fileId = file.id, target = target)
-            }
-        }
-        onConfirm(choices)
-    }
-
-    fun moveNextOrConfirm() {
-        if (currentIndex >= prompt.files.lastIndex) {
-            confirmImport()
-        } else {
-            currentIndex += 1
-        }
-    }
-
-    fun skipCurrent() {
-        skippedIds = skippedIds + prompt.files[currentIndex].id
-        moveNextOrConfirm()
-    }
-
-    ZenPromptFrame(onDismissRequest = onDismiss) {
-        SectionTitle(
-            icon = Icons.Rounded.Share,
-            title = texts.externalImportTitle
-        )
-        Text(
-            text = texts.externalImportNote,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        val safeIndex = currentIndex.coerceIn(0, prompt.files.lastIndex)
-        AnimatedContent(
-            targetState = safeIndex,
-            transitionSpec = {
-                val forward = targetState > initialState
-                val slideIn = slideInHorizontally(
-                    animationSpec = tween(ZenAnimations.ContentFadeDuration),
-                    initialOffsetX = { width -> if (forward) width / 5 else -width / 5 }
-                ) + fadeIn(animationSpec = tween(ZenAnimations.ContentFadeDuration))
-                val slideOut = slideOutHorizontally(
-                    animationSpec = tween(ZenAnimations.ContentFadeOutDuration),
-                    targetOffsetX = { width -> if (forward) -width / 5 else width / 5 }
-                ) + fadeOut(animationSpec = tween(ZenAnimations.ContentFadeOutDuration))
-                slideIn togetherWith slideOut using SizeTransform(clip = false)
-            },
-            label = "ExternalImportFile"
-        ) { targetIndex ->
-            val file = prompt.files[targetIndex]
-            ExternalImportFilePane(
-                texts = texts,
-                file = file,
-                index = targetIndex,
-                totalCount = prompt.files.size,
-                selectedTarget = selectedTargets[file.id] ?: file.defaultTarget,
-                onTargetSelected = { target ->
-                    selectedTargets = selectedTargets + (file.id to target)
-                    skippedIds = skippedIds - file.id
-                }
-            )
-        }
-
-        val currentFile = prompt.files[safeIndex]
-        val currentTarget = selectedTargets[currentFile.id] ?: currentFile.defaultTarget
-        val isLast = safeIndex == prompt.files.lastIndex
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedButton(
-                onClick = onDismiss,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = Color.White,
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                ),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp)
-            ) {
-                Text(texts.cancel, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            OutlinedButton(
-                onClick = { currentIndex = (safeIndex - 1).coerceAtLeast(0) },
-                enabled = safeIndex > 0,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = Color.White,
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                ),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp)
-            ) {
-                Text(texts.externalImportPrevious, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedButton(
-                onClick = { skipCurrent() },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.045f),
-                    contentColor = MaterialTheme.colorScheme.primary
-                ),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp)
-            ) {
-                Text(
-                    text = if (isLast) texts.externalImportSkipDone else texts.externalImportSkipNext,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Button(
-                onClick = {
-                    skippedIds = skippedIds - currentFile.id
-                    moveNextOrConfirm()
-                },
-                enabled = currentTarget != null,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    disabledContainerColor = Color(0xFFE8E8E8),
-                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp)
-            ) {
-                Text(
-                    text = if (isLast) texts.externalImportAddDone else texts.externalImportAddNext,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ExternalImportFilePane(
-    texts: UiText,
-    file: ExternalImportFile,
-    index: Int,
-    totalCount: Int,
-    selectedTarget: ExternalImportTarget?,
-    onTargetSelected: (ExternalImportTarget) -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, Color(0xFFEAEAEA), RoundedCornerShape(8.dp))
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
-        ) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(end = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = file.displayName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = formatFileInfoLine(
-                        info = file.inputInfo,
-                        texts = texts,
-                        fallbackType = file.mimeType ?: texts.unknownType,
-                        fallbackSizeBytes = file.sizeBytes
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            SmallTag(texts.externalImportCounter(index + 1, totalCount))
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SmallTag(
-                file.detectedCategory?.let { texts.categoryLabel(it) } ?: texts.unknownType
-            )
-            file.inputInfo?.formatLabel?.let { format ->
-                SmallTag(format)
-            }
-        }
-
-        if (file.targets.isEmpty()) {
-            StatusLine(
-                text = texts.externalImportUnsupported,
-                isError = true
-            )
-        } else {
-            Text(
-                text = texts.target,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            CenteredFlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalSpacing = 8.dp,
-                verticalSpacing = 8.dp
-            ) {
-                file.targets.forEach { target ->
-                    ExternalImportTargetChip(
-                        texts = texts,
-                        target = target,
-                        selected = target == selectedTarget,
-                        onSelected = { onTargetSelected(target) }
-                    )
-                }
-            }
-        }
     }
 }
 
@@ -1712,33 +1219,6 @@ private fun ExternalImportTargetChip(
         ) {
             Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-    }
-}
-
-@Composable
-private fun ZenPromptDialog(
-    title: String,
-    message: String,
-    icon: ImageVector,
-    confirmText: String,
-    dismissText: String,
-    onConfirm: () -> Unit,
-    onDismissAction: () -> Unit,
-    onDismissRequest: () -> Unit
-) {
-    ZenPromptFrame(onDismissRequest = onDismissRequest) {
-        SectionTitle(icon = icon, title = title)
-        Text(
-            text = message,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        ZenPromptActions(
-            confirmText = confirmText,
-            dismissText = dismissText,
-            onConfirm = onConfirm,
-            onDismissAction = onDismissAction
-        )
     }
 }
 
@@ -3218,112 +2698,33 @@ private fun AccentSwatch(
 }
 
 @Composable
-private fun ConversionLanes(
+private fun AddFilesPanel(
     texts: UiText,
-    activeCategory: FileCategory,
-    targetFor: (FileCategory) -> TargetFormat,
-    onTargetChange: (FileCategory, TargetFormat) -> Unit,
-    onActivate: (FileCategory) -> Unit,
-    openMenuId: String?,
-    onOpenMenuChange: (String?) -> Unit,
-    onPickFiles: (FileCategory, TargetFormat) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(
-            text = texts.chooseConversion,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold
-        )
-        FileCategory.entries.forEach { category ->
-            ConversionLane(
-                texts = texts,
-                category = category,
-                selected = category == activeCategory,
-                targetFormat = targetFor(category),
-                openMenuId = openMenuId,
-                onOpenMenuChange = onOpenMenuChange,
-                onTargetChange = {
-                    onActivate(category)
-                    onTargetChange(category, it)
-                },
-                onActivate = { onActivate(category) },
-                onPickFiles = { onPickFiles(category, targetFor(category)) }
-            )
-        }
-    }
-}
-
-@Composable
-private fun ConversionLane(
-    texts: UiText,
-    category: FileCategory,
-    selected: Boolean,
-    targetFormat: TargetFormat,
-    openMenuId: String?,
-    onOpenMenuChange: (String?) -> Unit,
-    onTargetChange: (TargetFormat) -> Unit,
-    onActivate: () -> Unit,
     onPickFiles: () -> Unit
 ) {
-    QuietPanel(
-        borderColor = if (selected) MaterialTheme.colorScheme.primary else Color(0xFFE7E7E7)
-    ) {
+    QuietPanel {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .semantics(mergeDescendants = true) {},
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                AppIcon(
-                    icon = category.icon(),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(22.dp)
+                Text(
+                    text = texts.addFilesTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
                 )
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = texts.categoryLabel(category),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = texts.categoryPurpose(category),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            EngineHint(texts.engineHint(targetFormat.modeHint))
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                FormatDropdown(
-                    label = texts.target,
-                    selected = targetFormat,
-                    options = category.formats,
-                    texts = texts,
-                    expanded = openMenuId == "format-${category.name}",
-                    onExpandedChange = { expanded ->
-                        onActivate()
-                        onOpenMenuChange(if (expanded) "format-${category.name}" else null)
-                    },
-                    onSelected = onTargetChange
+                Text(
+                    text = texts.addFilesNote,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
             Button(
@@ -3331,7 +2732,9 @@ private fun ConversionLane(
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary
-                )
+                ),
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
             ) {
                 AppIcon(
                     icon = Icons.Rounded.Add,
@@ -3340,183 +2743,634 @@ private fun ConversionLane(
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(texts.select)
+                Text(texts.addFiles)
             }
         }
     }
 }
 
 @Composable
-private fun EncodingPanel(
+private fun BatchSettingsPanel(
     texts: UiText,
-    category: FileCategory,
-    videoResolution: String,
-    videoCompressionMode: String,
-    videoBitrate: String,
-    videoCodec: String,
-    videoCodecOptions: List<String>,
-    videoFrameRate: String,
-    videoTarget: TargetFormat,
-    audioBitrate: String,
-    audioSampleRate: String,
-    audioChannels: String,
-    videoAdvanced: VideoAdvancedUiState,
-    audioAdvanced: AudioAdvancedUiState,
-    audioTarget: TargetFormat,
-    imageTarget: TargetFormat,
-    pdfTarget: TargetFormat,
-    documentTarget: TargetFormat,
-    imageQuality: String,
-    pdfPageMode: String,
-    pdfRenderQuality: String,
+    files: List<QueuedFile>,
+    supportedVideoMimeTypes: Set<String>,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
-    onVideoResolutionChange: (String) -> Unit,
-    onVideoCompressionModeChange: (String) -> Unit,
-    onVideoBitrateChange: (String) -> Unit,
-    onVideoCodecChange: (String) -> Unit,
-    onVideoFrameRateChange: (String) -> Unit,
-    onAudioBitrateChange: (String) -> Unit,
-    onAudioSampleRateChange: (String) -> Unit,
-    onAudioChannelsChange: (String) -> Unit,
-    onVideoAdvancedExpandedChange: (Boolean) -> Unit,
-    onVideoReverseChange: (Boolean) -> Unit,
-    onVideoFadeInChange: (String) -> Unit,
-    onVideoFadeOutChange: (String) -> Unit,
-    onVideoMirrorChange: (String) -> Unit,
-    onVideoRotationChange: (String) -> Unit,
-    onVideoAspectRatioChange: (String) -> Unit,
-    onAudioAdvancedExpandedChange: (Boolean) -> Unit,
-    onAudioReverseChange: (Boolean) -> Unit,
-    onAudioFadeInChange: (String) -> Unit,
-    onAudioFadeOutChange: (String) -> Unit,
-    onAudioVolumeChange: (String) -> Unit,
-    onAudioEchoChange: (String) -> Unit,
-    onAudioNoiseReductionChange: (String) -> Unit,
-    onImageQualityChange: (String) -> Unit,
-    onPdfPageModeChange: (String) -> Unit,
-    onPdfRenderQualityChange: (String) -> Unit
+    onUpdateFiles: (List<QueuedFile>) -> Unit
 ) {
-    QuietPanel {
+    val groups = files
+        .groupBy { it.sourceCategory }
+        .filterValues { it.size > 1 }
+    if (groups.isEmpty()) return
+
+    var selectedCategory by remember(files.map { it.id to it.sourceCategory }) {
+        mutableStateOf(groups.maxByOrNull { it.value.size }?.key)
+    }
+    val activeCategory = selectedCategory?.takeIf { it in groups.keys }
+        ?: groups.maxByOrNull { it.value.size }?.key
+        ?: return
+    val activeCount = groups[activeCategory]?.size ?: 0
+    val targets = targetsForSourceCategory(activeCategory)
+    if (targets.isEmpty()) return
+
+    val activeFiles = groups[activeCategory].orEmpty()
+    val commonTarget = commonSelectedTargetFor(activeFiles)
+
+    QuietPanel(
+        borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    text = texts.batchSettings,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = texts.batchSettingsNote,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            SmallTag(texts.batchCount(activeCount))
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        CenteredFlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalSpacing = 8.dp,
+            verticalSpacing = 8.dp
+        ) {
+            groups.entries.sortedBy { it.key.ordinal }.forEach { (category, categoryFiles) ->
+                BatchScopeChip(
+                    label = "${texts.categoryLabel(category)} ${categoryFiles.size}",
+                    selected = category == activeCategory,
+                    onClick = {
+                        selectedCategory = category
+                        onOpenMenuChange(null)
+                    }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
         Text(
-            text = texts.optionsTitle(category),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold
-        )
-        Text(
-            text = texts.presetNote(category),
-            style = MaterialTheme.typography.bodySmall,
+            text = texts.target,
+            style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(modifier = Modifier.height(12.dp))
+        CenteredFlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalSpacing = 8.dp,
+            verticalSpacing = 8.dp
+        ) {
+            targets.forEach { target ->
+                ExternalImportTargetChip(
+                    texts = texts,
+                    target = target,
+                    selected = commonTarget == target,
+                    onSelected = {
+                        val updates = files
+                            .filter { it.sourceCategory == activeCategory }
+                            .map { file ->
+                                fileWithTarget(file, target, supportedVideoMimeTypes)
+                            }
+                        onOpenMenuChange(null)
+                        onUpdateFiles(updates)
+                    }
+                )
+            }
+        }
 
-        AnimatedContent(
-            targetState = category,
-            transitionSpec = {
-                val forward = targetState.ordinal > initialState.ordinal
-                val slideIn = slideInHorizontally(
-                    initialOffsetX = { fullWidth -> if (forward) fullWidth / 4 else -fullWidth / 4 },
-                    animationSpec = tween(ZenAnimations.ContentFadeDuration)
-                ) + fadeIn(animationSpec = tween(ZenAnimations.ContentFadeDuration))
-                val slideOut = slideOutHorizontally(
-                    targetOffsetX = { fullWidth -> if (forward) -fullWidth / 4 else fullWidth / 4 },
-                    animationSpec = tween(ZenAnimations.ContentFadeOutDuration)
-                ) + fadeOut(animationSpec = tween(ZenAnimations.ContentFadeOutDuration))
-                slideIn togetherWith slideOut using SizeTransform(clip = false)
-            },
-            label = "EncodingPanelCategory"
-        ) { targetCategory ->
-            when (targetCategory) {
-            FileCategory.Video -> VideoOptions(
+        if (commonTarget == null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = texts.batchMixedTarget,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            BatchTargetOptions(
                 texts = texts,
-                resolution = videoResolution,
-                compressionMode = videoCompressionMode,
-                bitrate = videoBitrate,
-                codec = videoCodec,
-                codecOptions = videoCodecOptions,
-                frameRate = videoFrameRate,
-                audioBitrate = audioBitrate,
-                audioSampleRate = audioSampleRate,
-                audioChannels = audioChannels,
-                videoAdvanced = videoAdvanced,
-                audioAdvanced = audioAdvanced,
-                targetFormat = videoTarget,
+                files = activeFiles,
+                category = activeCategory,
+                target = commonTarget,
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
-                onResolutionChange = onVideoResolutionChange,
-                onCompressionModeChange = onVideoCompressionModeChange,
-                onBitrateChange = onVideoBitrateChange,
-                onCodecChange = onVideoCodecChange,
-                onFrameRateChange = onVideoFrameRateChange,
-                onAudioBitrateChange = onAudioBitrateChange,
-                onAudioSampleRateChange = onAudioSampleRateChange,
-                onAudioChannelsChange = onAudioChannelsChange,
-                onVideoAdvancedExpandedChange = onVideoAdvancedExpandedChange,
-                onVideoReverseChange = onVideoReverseChange,
-                onVideoFadeInChange = onVideoFadeInChange,
-                onVideoFadeOutChange = onVideoFadeOutChange,
-                onVideoMirrorChange = onVideoMirrorChange,
-                onVideoRotationChange = onVideoRotationChange,
-                onVideoAspectRatioChange = onVideoAspectRatioChange,
-                onAudioAdvancedExpandedChange = onAudioAdvancedExpandedChange,
-                onAudioReverseChange = onAudioReverseChange,
-                onAudioFadeInChange = onAudioFadeInChange,
-                onAudioFadeOutChange = onAudioFadeOutChange,
-                onAudioVolumeChange = onAudioVolumeChange,
-                onAudioEchoChange = onAudioEchoChange,
-                onAudioNoiseReductionChange = onAudioNoiseReductionChange
+                onUpdateFiles = onUpdateFiles
             )
-            FileCategory.Audio -> AudioOptions(
-                texts = texts,
-                bitrate = audioBitrate,
-                sampleRate = audioSampleRate,
-                channels = audioChannels,
-                advanced = audioAdvanced,
-                targetFormat = audioTarget,
-                openMenuId = openMenuId,
-                onOpenMenuChange = onOpenMenuChange,
-                onBitrateChange = onAudioBitrateChange,
-                onSampleRateChange = onAudioSampleRateChange,
-                onChannelsChange = onAudioChannelsChange,
-                onAdvancedExpandedChange = onAudioAdvancedExpandedChange,
-                onReverseChange = onAudioReverseChange,
-                onFadeInChange = onAudioFadeInChange,
-                onFadeOutChange = onAudioFadeOutChange,
-                onVolumeChange = onAudioVolumeChange,
-                onEchoChange = onAudioEchoChange,
-                onNoiseReductionChange = onAudioNoiseReductionChange
-            )
-            FileCategory.Image -> ImageOptions(
-                texts = texts,
-                targetFormat = imageTarget,
-                quality = imageQuality,
-                pdfPageMode = pdfPageMode,
-                openMenuId = openMenuId,
-                onOpenMenuChange = onOpenMenuChange,
-                onQualityChange = onImageQualityChange,
-                onPdfPageModeChange = onPdfPageModeChange
-            )
-            FileCategory.Pdf -> PdfOptions(
-                texts = texts,
-                targetFormat = pdfTarget,
-                renderQuality = pdfRenderQuality,
-                openMenuId = openMenuId,
-                onOpenMenuChange = onOpenMenuChange,
-                onRenderQualityChange = onPdfRenderQualityChange
-            )
-            FileCategory.Document -> Text(
-                text = texts.optionValue(documentTarget.modeHint),
+        }
+    }
+}
+
+@Composable
+private fun BatchScopeChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val borderColor = if (selected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        Color(0xFFE1E1E1)
+    }
+    val backgroundColor = if (selected) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+    } else {
+        Color.White
+    }
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelMedium,
+        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+            .clip(RoundedCornerShape(100.dp))
+            .background(backgroundColor)
+            .border(1.dp, borderColor, RoundedCornerShape(100.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp)
+    )
+}
+
+@Composable
+private fun BatchTargetOptions(
+    texts: UiText,
+    files: List<QueuedFile>,
+    category: FileCategory,
+    target: ExternalImportTarget,
+    openMenuId: String?,
+    onOpenMenuChange: (String?) -> Unit,
+    onUpdateFiles: (List<QueuedFile>) -> Unit
+) {
+    if (category != FileCategory.Image) return
+    val commonImageQuality = files
+        .map { imageQualityLabelFor(it.imageOptions, target.targetFormat) }
+        .distinct()
+        .singleOrNull()
+        ?: BATCH_MIXED_OPTION
+    val commonPdfPageMode = files
+        .map { pdfPageModeLabelFor(it.pdfOptions.imagePageMode) }
+        .distinct()
+        .singleOrNull()
+        ?: BATCH_MIXED_OPTION
+    Spacer(modifier = Modifier.height(10.dp))
+    AnimatedContent(
+        targetState = target.targetFormat.label,
+        transitionSpec = {
+            fadeIn(animationSpec = tween(ZenAnimations.ContentFadeDuration)) togetherWith
+                fadeOut(animationSpec = tween(ZenAnimations.ContentFadeOutDuration))
+        },
+        label = "BatchTargetOptions"
+    ) {
+        if (target.targetFormat.extension.equals("pdf", ignoreCase = true)) {
+            OptionGrid {
+                OptionDropdown(
+                    "batch-image-pdf-page-mode",
+                    texts.pageSize,
+                    commonPdfPageMode,
+                    PDF_PAGE_MODE_OPTIONS,
+                    texts,
+                    openMenuId,
+                    onOpenMenuChange
+                ) { value ->
+                    onOpenMenuChange(null)
+                    onUpdateFiles(
+                        files.map { file ->
+                            file.copy(
+                                pdfOptions = file.pdfOptions.copy(
+                                    imagePageMode = pdfPageModeToOption(value)
+                                )
+                            )
+                        }
+                    )
+                }
+            }
+        } else if (
+            !target.targetFormat.extension.equals("png", ignoreCase = true) &&
+            !target.targetFormat.extension.equals("ico", ignoreCase = true)
+        ) {
+            OptionGrid {
+                OptionDropdown(
+                    "batch-image-quality",
+                    texts.quality,
+                    commonImageQuality,
+                    imageQualityOptionsFor(target.targetFormat),
+                    texts,
+                    openMenuId,
+                    onOpenMenuChange
+                ) { value ->
+                    onOpenMenuChange(null)
+                    onUpdateFiles(
+                        files.map { file ->
+                            file.copy(
+                                imageOptions = imageOptionsForQuality(value, target.targetFormat)
+                            )
+                        }
+                    )
+                }
+            }
+        } else {
+            Text(
+                text = texts.optionValue("Lossless output"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
+}
+
+@Composable
+private fun PdfMergeGroupsPanel(
+    texts: UiText,
+    files: List<QueuedFile>,
+    groups: List<PdfMergeGroup>,
+    taskProgress: Map<String, TaskProgress>,
+    canEdit: Boolean,
+    openMenuId: String?,
+    onOpenMenuChange: (String?) -> Unit,
+    onCreateGroup: (PdfMergeType) -> Unit,
+    onUpdateGroup: (PdfMergeGroup) -> Unit,
+    onRemoveGroup: (String) -> Unit,
+    onAddFileToGroup: (String, String) -> Unit,
+    onRemoveFileFromGroup: (String, String) -> Unit
+) {
+    val imageCandidates = mergeablePdfFilesFor(files, groups, PdfMergeType.Images)
+    val pdfCandidates = mergeablePdfFilesFor(files, groups, PdfMergeType.Pdfs)
+    val visibleGroups = groups.filter { group ->
+        group.memberFileIds.count { id -> files.any { it.id == id } } >= 2
+    }
+    if (
+        visibleGroups.isEmpty() &&
+        (!canEdit || (imageCandidates.size < 2 && pdfCandidates.size < 2))
+    ) return
+
+    QuietPanel(
+        borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    text = texts.pdfMergeTitle,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = texts.pdfMergeNote,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            if (visibleGroups.isNotEmpty()) {
+                SmallTag(texts.fileCountLabel(visibleGroups.size))
+            }
+        }
+
+        if (canEdit && (imageCandidates.size >= 2 || pdfCandidates.size >= 2)) {
+            Spacer(modifier = Modifier.height(10.dp))
+            CenteredFlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalSpacing = 8.dp,
+                verticalSpacing = 8.dp
+            ) {
+                if (imageCandidates.size >= 2) {
+                    PdfMergeActionChip(
+                        label = "${texts.createImagePdfMerge} · ${texts.fileCountLabel(imageCandidates.size)}",
+                        onClick = {
+                            onOpenMenuChange(null)
+                            onCreateGroup(PdfMergeType.Images)
+                        }
+                    )
+                }
+                if (pdfCandidates.size >= 2) {
+                    PdfMergeActionChip(
+                        label = "${texts.createPdfMerge} · ${texts.fileCountLabel(pdfCandidates.size)}",
+                        onClick = {
+                            onOpenMenuChange(null)
+                            onCreateGroup(PdfMergeType.Pdfs)
+                        }
+                    )
+                }
+            }
+        }
+
+        visibleGroups.forEach { group ->
+            Spacer(modifier = Modifier.height(10.dp))
+            PdfMergeGroupCard(
+                texts = texts,
+                files = files,
+                groups = groups,
+                group = group,
+                progress = taskProgress[group.id],
+                canEdit = canEdit,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                onUpdateGroup = onUpdateGroup,
+                onRemoveGroup = onRemoveGroup,
+                onAddFileToGroup = onAddFileToGroup,
+                onRemoveFileFromGroup = onRemoveFileFromGroup
+            )
+        }
+    }
+}
+
+@Composable
+private fun PdfMergeActionChip(
+    label: String,
+    onClick: () -> Unit
+) {
+    OutlinedButton(
+        onClick = onClick,
+        shape = RoundedCornerShape(100.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.36f)),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
+            contentColor = MaterialTheme.colorScheme.primary
+        ),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.PictureAsPdf,
+            contentDescription = null,
+            modifier = Modifier.size(17.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun PdfMergeGroupCard(
+    texts: UiText,
+    files: List<QueuedFile>,
+    groups: List<PdfMergeGroup>,
+    group: PdfMergeGroup,
+    progress: TaskProgress?,
+    canEdit: Boolean,
+    openMenuId: String?,
+    onOpenMenuChange: (String?) -> Unit,
+    onUpdateGroup: (PdfMergeGroup) -> Unit,
+    onRemoveGroup: (String) -> Unit,
+    onAddFileToGroup: (String, String) -> Unit,
+    onRemoveFileFromGroup: (String, String) -> Unit
+) {
+    val context = LocalContext.current
+    val filesById = files.associateBy { it.id }
+    val members = group.memberFileIds.mapNotNull { filesById[it] }
+    val addableFiles = mergeablePdfFilesFor(files, groups, group.type)
+    val completedProgress = progress?.takeIf {
+        it.status == TaskProgressStatus.Completed && it.outputUriList().isNotEmpty()
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.035f), RoundedCornerShape(8.dp))
+            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.16f), RoundedCornerShape(8.dp))
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    text = texts.pdfMergeGroupTitle(group.type),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SmallTag(texts.fileCountLabel(members.size))
+                    SmallTag("PDF")
+                }
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (completedProgress != null) {
+                    CompactTaskActionButton(
+                        icon = Icons.Rounded.Share,
+                        contentDescription = texts.shareOutput,
+                        onClick = { shareOutput(context, completedProgress, texts) }
+                    )
+                    CompactTaskActionButton(
+                        icon = Icons.Rounded.FolderOpen,
+                        contentDescription = texts.openOutputLocation,
+                        onClick = { openOutputLocation(context, completedProgress, texts) }
+                    )
+                }
+                CompactTaskActionButton(
+                    icon = Icons.Rounded.DeleteOutline,
+                    contentDescription = texts.removeMergeGroup,
+                    enabled = canEdit,
+                    onClick = { onRemoveGroup(group.id) }
+                )
+            }
+        }
+
+        if (group.type == PdfMergeType.Images && canEdit) {
+            OptionDropdown(
+                "merge-${group.id}-page-mode",
+                texts.pageSize,
+                pdfPageModeLabelFor(group.pdfOptions.imagePageMode),
+                PDF_PAGE_MODE_OPTIONS,
+                texts,
+                openMenuId,
+                onOpenMenuChange
+            ) { value ->
+                onUpdateGroup(
+                    group.copy(
+                        pdfOptions = group.pdfOptions.copy(
+                            imagePageMode = pdfPageModeToOption(value)
+                        )
+                    )
+                )
+            }
+        }
+
+        members.forEach { member ->
+            PdfMergeMemberRow(
+                texts = texts,
+                file = member,
+                canEdit = canEdit,
+                onRemove = {
+                    onOpenMenuChange(null)
+                    onRemoveFileFromGroup(group.id, member.id)
+                }
+            )
+        }
+
+        if (addableFiles.isNotEmpty() && canEdit) {
+            Text(
+                text = texts.addToMerge,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            CenteredFlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalSpacing = 8.dp,
+                verticalSpacing = 8.dp
+            ) {
+                if (addableFiles.size > 6) {
+                    PdfMergeActionChip(
+                        label = "${texts.addToMerge} · ${texts.fileCountLabel(addableFiles.size)}",
+                        onClick = {
+                            onOpenMenuChange(null)
+                            addableFiles.forEach { file ->
+                                onAddFileToGroup(group.id, file.id)
+                            }
+                        }
+                    )
+                }
+                addableFiles.take(6).forEach { file ->
+                    BatchScopeChip(
+                        label = compactMergeFileName(file.displayName),
+                        selected = false,
+                        onClick = {
+                            onOpenMenuChange(null)
+                            onAddFileToGroup(group.id, file.id)
+                        }
+                    )
+                }
+            }
+        }
+        if (progress?.status == TaskProgressStatus.Completed && progress.outputInfo != null) {
+            ResultInfoLine(
+                text = formatMergedResultInfoLine(progress.outputInfo, texts)
+            )
+        }
+        if (progress?.status == TaskProgressStatus.Failed) {
+            Text(
+                text = texts.taskMessage(progress.message),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun PdfMergeMemberRow(
+    texts: UiText,
+    file: QueuedFile,
+    canEdit: Boolean,
+    onRemove: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = file.displayName,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = formatFileInfoLine(
+                    info = file.inputInfo,
+                    texts = texts,
+                    fallbackType = file.mimeType ?: texts.unknownType,
+                    fallbackSizeBytes = file.sizeBytes
+                ),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        CompactTaskActionButton(
+            icon = Icons.Rounded.Close,
+            contentDescription = texts.remove,
+            enabled = canEdit,
+            onClick = onRemove
+        )
+    }
+}
+
+@Composable
+private fun QueueHeader(
+    texts: UiText,
+    fileCount: Int
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = texts.queue,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = texts.selectedCount(fileCount),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun EmptyQueuePanel(
+    texts: UiText
+) {
+    QuietPanel {
+        Text(
+            text = texts.emptyQueue,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
 @Composable
 private fun VideoOptions(
     texts: UiText,
+    menuPrefix: String = "",
     resolution: String,
     compressionMode: String,
     bitrate: String,
@@ -3560,7 +3414,7 @@ private fun VideoOptions(
     OptionGrid {
         if (!isGifTarget) {
             OptionDropdown(
-                "video-compression-mode",
+                "${menuPrefix}video-compression-mode",
                 texts.videoCompressionMode,
                 compressionMode,
                 VIDEO_COMPRESSION_OPTIONS,
@@ -3572,7 +3426,7 @@ private fun VideoOptions(
         }
         if (isGifTarget || isStandardCompression) {
             OptionDropdown(
-                "video-size",
+                "${menuPrefix}video-size",
                 texts.resolution,
                 resolution,
                 if (isGifTarget) VIDEO_GIF_RESOLUTION_OPTIONS else VIDEO_RESOLUTION_OPTIONS,
@@ -3598,7 +3452,7 @@ private fun VideoOptions(
         }
         if (!isGifTarget && isStandardCompression) {
             OptionDropdown(
-                "video-bitrate",
+                "${menuPrefix}video-bitrate",
                 texts.bitrate,
                 bitrate,
                 VIDEO_BITRATE_OPTIONS,
@@ -3608,7 +3462,7 @@ private fun VideoOptions(
                 onBitrateChange
             )
             OptionDropdown(
-                "video-codec",
+                "${menuPrefix}video-codec",
                 texts.codec,
                 codec,
                 codecOptions,
@@ -3618,7 +3472,7 @@ private fun VideoOptions(
                 onCodecChange
             )
             OptionDropdown(
-                "video-frame-rate",
+                "${menuPrefix}video-frame-rate",
                 texts.frameRate,
                 frameRate,
                 VIDEO_FRAME_RATE_OPTIONS,
@@ -3628,7 +3482,7 @@ private fun VideoOptions(
                 onFrameRateChange
             )
             OptionDropdown(
-                "video-audio-bitrate",
+                "${menuPrefix}video-audio-bitrate",
                 texts.audioBitrateLabel(),
                 audioBitrate,
                 AUDIO_BITRATE_OPTIONS,
@@ -3638,7 +3492,7 @@ private fun VideoOptions(
                 onAudioBitrateChange
             )
             OptionDropdown(
-                "video-audio-sample-rate",
+                "${menuPrefix}video-audio-sample-rate",
                 texts.sampleRate,
                 audioSampleRate,
                 AUDIO_SAMPLE_RATE_OPTIONS,
@@ -3648,7 +3502,7 @@ private fun VideoOptions(
                 onAudioSampleRateChange
             )
             OptionDropdown(
-                "video-audio-channels",
+                "${menuPrefix}video-audio-channels",
                 texts.channels,
                 audioChannels,
                 AUDIO_CHANNEL_OPTIONS,
@@ -3660,6 +3514,7 @@ private fun VideoOptions(
             VideoAdvancedOptionsPanel(
                 texts = texts,
                 state = videoAdvanced,
+                menuPrefix = menuPrefix,
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
                 onExpandedChange = onVideoAdvancedExpandedChange,
@@ -3673,6 +3528,7 @@ private fun VideoOptions(
             AudioAdvancedOptionsPanel(
                 texts = texts,
                 state = audioAdvanced,
+                menuPrefix = menuPrefix,
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
                 onExpandedChange = onAudioAdvancedExpandedChange,
@@ -3690,6 +3546,7 @@ private fun VideoOptions(
 @Composable
 private fun AudioOptions(
     texts: UiText,
+    menuPrefix: String = "",
     bitrate: String,
     sampleRate: String,
     channels: String,
@@ -3711,7 +3568,7 @@ private fun AudioOptions(
     OptionGrid {
         if (audioSupportsBitrateOption(targetFormat)) {
             OptionDropdown(
-                "audio-bitrate",
+                "${menuPrefix}audio-bitrate",
                 texts.bitrate,
                 bitrate,
                 AUDIO_BITRATE_OPTIONS,
@@ -3728,7 +3585,7 @@ private fun AudioOptions(
             )
         }
         OptionDropdown(
-            "audio-sample-rate",
+            "${menuPrefix}audio-sample-rate",
             texts.sampleRate,
             sampleRate,
             AUDIO_SAMPLE_RATE_OPTIONS,
@@ -3738,7 +3595,7 @@ private fun AudioOptions(
             onSampleRateChange
         )
         OptionDropdown(
-            "audio-channels",
+            "${menuPrefix}audio-channels",
             texts.channels,
             channels,
             AUDIO_CHANNEL_OPTIONS,
@@ -3750,6 +3607,7 @@ private fun AudioOptions(
         AudioAdvancedOptionsPanel(
             texts = texts,
             state = advanced,
+            menuPrefix = menuPrefix,
             openMenuId = openMenuId,
             onOpenMenuChange = onOpenMenuChange,
             onExpandedChange = onAdvancedExpandedChange,
@@ -3767,6 +3625,7 @@ private fun AudioOptions(
 private fun VideoAdvancedOptionsPanel(
     texts: UiText,
     state: VideoAdvancedUiState,
+    menuPrefix: String = "",
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onExpandedChange: (Boolean) -> Unit,
@@ -3789,7 +3648,7 @@ private fun VideoAdvancedOptionsPanel(
             onCheckedChange = onReverseChange
         )
         OptionDropdown(
-            "video-advanced-fade-in",
+            "${menuPrefix}video-advanced-fade-in",
             texts.fadeInLabel(),
             state.fadeIn,
             ADVANCED_FADE_OPTIONS,
@@ -3799,7 +3658,7 @@ private fun VideoAdvancedOptionsPanel(
             onFadeInChange
         )
         OptionDropdown(
-            "video-advanced-fade-out",
+            "${menuPrefix}video-advanced-fade-out",
             texts.fadeOutLabel(),
             state.fadeOut,
             ADVANCED_FADE_OPTIONS,
@@ -3809,7 +3668,7 @@ private fun VideoAdvancedOptionsPanel(
             onFadeOutChange
         )
         OptionDropdown(
-            "video-advanced-mirror",
+            "${menuPrefix}video-advanced-mirror",
             texts.mirrorLabel(),
             state.mirror,
             VIDEO_MIRROR_OPTIONS,
@@ -3819,7 +3678,7 @@ private fun VideoAdvancedOptionsPanel(
             onMirrorChange
         )
         OptionDropdown(
-            "video-advanced-rotation",
+            "${menuPrefix}video-advanced-rotation",
             texts.rotationLabel(),
             state.rotation,
             VIDEO_ROTATION_OPTIONS,
@@ -3829,7 +3688,7 @@ private fun VideoAdvancedOptionsPanel(
             onRotationChange
         )
         OptionDropdown(
-            "video-advanced-aspect",
+            "${menuPrefix}video-advanced-aspect",
             texts.aspectRatioLabel(),
             state.aspectRatio,
             VIDEO_ASPECT_OPTIONS,
@@ -3845,6 +3704,7 @@ private fun VideoAdvancedOptionsPanel(
 private fun AudioAdvancedOptionsPanel(
     texts: UiText,
     state: AudioAdvancedUiState,
+    menuPrefix: String = "",
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onExpandedChange: (Boolean) -> Unit,
@@ -3867,7 +3727,7 @@ private fun AudioAdvancedOptionsPanel(
             onCheckedChange = onReverseChange
         )
         OptionDropdown(
-            "audio-advanced-fade-in",
+            "${menuPrefix}audio-advanced-fade-in",
             texts.fadeInLabel(),
             state.fadeIn,
             ADVANCED_FADE_OPTIONS,
@@ -3877,7 +3737,7 @@ private fun AudioAdvancedOptionsPanel(
             onFadeInChange
         )
         OptionDropdown(
-            "audio-advanced-fade-out",
+            "${menuPrefix}audio-advanced-fade-out",
             texts.fadeOutLabel(),
             state.fadeOut,
             ADVANCED_FADE_OPTIONS,
@@ -3887,7 +3747,7 @@ private fun AudioAdvancedOptionsPanel(
             onFadeOutChange
         )
         OptionDropdown(
-            "audio-advanced-volume",
+            "${menuPrefix}audio-advanced-volume",
             texts.volumeLabel(),
             state.volume,
             AUDIO_VOLUME_OPTIONS,
@@ -3897,7 +3757,7 @@ private fun AudioAdvancedOptionsPanel(
             onVolumeChange
         )
         OptionDropdown(
-            "audio-advanced-echo",
+            "${menuPrefix}audio-advanced-echo",
             texts.echoLabel(),
             state.echo,
             AUDIO_ECHO_OPTIONS,
@@ -3907,7 +3767,7 @@ private fun AudioAdvancedOptionsPanel(
             onEchoChange
         )
         OptionDropdown(
-            "audio-advanced-denoise",
+            "${menuPrefix}audio-advanced-denoise",
             texts.noiseReductionLabel(),
             state.noiseReduction,
             AUDIO_DENOISE_OPTIONS,
@@ -4037,6 +3897,7 @@ private fun AdvancedOptionsPanel(
 @Composable
 private fun ImageOptions(
     texts: UiText,
+    menuPrefix: String = "",
     targetFormat: TargetFormat,
     quality: String,
     pdfPageMode: String,
@@ -4048,7 +3909,7 @@ private fun ImageOptions(
     if (targetFormat.extension.equals("pdf", ignoreCase = true)) {
         OptionGrid {
             OptionDropdown(
-                "image-pdf-page-mode",
+                "${menuPrefix}image-pdf-page-mode",
                 texts.pageSize,
                 pdfPageMode,
                 PDF_PAGE_MODE_OPTIONS,
@@ -4077,7 +3938,7 @@ private fun ImageOptions(
         val qualityOptions = imageQualityOptionsFor(targetFormat)
         val selectedQuality = if (quality in qualityOptions) quality else IMAGE_QUALITY_BALANCED
         OptionDropdown(
-            "image-quality",
+            "${menuPrefix}image-quality",
             texts.quality,
             selectedQuality,
             qualityOptions,
@@ -4092,6 +3953,7 @@ private fun ImageOptions(
 @Composable
 private fun PdfOptions(
     texts: UiText,
+    menuPrefix: String = "",
     targetFormat: TargetFormat,
     renderQuality: String,
     openMenuId: String?,
@@ -4113,7 +3975,7 @@ private fun PdfOptions(
 
     OptionGrid {
         OptionDropdown(
-            "pdf-render-quality",
+            "${menuPrefix}pdf-render-quality",
             texts.renderQuality,
             renderQuality,
             PDF_RENDER_QUALITY_OPTIONS,
@@ -4279,74 +4141,28 @@ private fun QueueActions(
 }
 
 @Composable
-private fun FileQueue(
-    texts: UiText,
-    files: List<QueuedFile>,
-    taskProgress: Map<String, TaskProgress>,
-    canRemove: Boolean,
-    onRemoveFile: (String) -> Unit
-) {
-    QuietPanel {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .semantics(mergeDescendants = true) {},
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = texts.queue,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = texts.selectedCount(files.size),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        if (files.isEmpty()) {
-            Text(
-                text = texts.emptyQueue,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        } else {
-            LazyColumn(
-                modifier = Modifier.heightIn(max = 300.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(files, key = { it.id }) { file ->
-                    FileRow(
-                        modifier = Modifier.animateItem(),
-                        texts = texts,
-                        file = file,
-                        progress = taskProgress[file.id],
-                        canRemove = canRemove,
-                        onRemove = { onRemoveFile(file.id) }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun FileRow(
     modifier: Modifier = Modifier,
     texts: UiText,
     file: QueuedFile,
     progress: TaskProgress?,
-    canRemove: Boolean,
+    canEdit: Boolean,
+    supportedVideoMimeTypes: Set<String>,
+    openMenuId: String?,
+    optionsExpanded: Boolean,
+    groupedInPdfMerge: Boolean,
+    onOpenMenuChange: (String?) -> Unit,
+    onUpdateFile: (QueuedFile) -> Unit,
+    onOptionsExpandedChange: (Boolean) -> Unit,
     onRemove: () -> Unit
 ) {
     val context = LocalContext.current
     val completedProgress = progress?.takeIf {
         it.status == TaskProgressStatus.Completed && it.outputUriList().isNotEmpty()
     }
+    val selectedTarget = selectedTargetFor(file)
+    var videoAdvancedExpanded by remember(file.id) { mutableStateOf(false) }
+    var audioAdvancedExpanded by remember(file.id) { mutableStateOf(false) }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -4404,16 +4220,74 @@ private fun FileRow(
                 CompactTaskActionButton(
                     icon = Icons.Rounded.DeleteOutline,
                     contentDescription = texts.remove,
-                    enabled = canRemove,
+                    enabled = canEdit,
                     onClick = onRemove
                 )
             }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SmallTag(texts.categoryLabel(file.category))
-            SmallTag(texts.toFormat(texts.optionValue(file.targetFormat)))
-            SmallTag(texts.progressLabel(progress))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                SmallTag(texts.categoryLabel(file.sourceCategory))
+                SmallTag(texts.toFormat(texts.optionValue(file.targetFormat)))
+                SmallTag(texts.progressLabel(progress))
+                if (groupedInPdfMerge) {
+                    SmallTag(texts.pdfMergeMember)
+                }
+            }
+            if (canEdit) {
+                OptionsToggleChip(
+                    texts = texts,
+                    expanded = optionsExpanded,
+                    onClick = { onOptionsExpandedChange(!optionsExpanded) }
+                )
+            }
+        }
+        if (canEdit) {
+            CenteredFlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalSpacing = 8.dp,
+                verticalSpacing = 8.dp
+            ) {
+                targetsForQueuedFile(file).forEach { target ->
+                    ExternalImportTargetChip(
+                        texts = texts,
+                        target = target,
+                        selected = target == selectedTarget,
+                        onSelected = {
+                            onOpenMenuChange(null)
+                            onOptionsExpandedChange(false)
+                            onUpdateFile(fileWithTarget(file, target, supportedVideoMimeTypes))
+                        }
+                    )
+                }
+            }
+            AnimatedVisibility(
+                visible = optionsExpanded,
+                enter = ZenAnimations.DropdownEnter,
+                exit = ZenAnimations.DropdownExit
+            ) {
+                QueuedFileOptionsPanel(
+                    texts = texts,
+                    file = file,
+                    selectedTarget = selectedTarget,
+                    supportedVideoMimeTypes = supportedVideoMimeTypes,
+                    videoAdvancedExpanded = videoAdvancedExpanded,
+                    audioAdvancedExpanded = audioAdvancedExpanded,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    onVideoAdvancedExpandedChange = { videoAdvancedExpanded = it },
+                    onAudioAdvancedExpandedChange = { audioAdvancedExpanded = it },
+                    onUpdateFile = onUpdateFile
+                )
+            }
         }
         if (progress?.status == TaskProgressStatus.Completed && progress.outputInfo != null) {
             ResultInfoLine(
@@ -4431,35 +4305,301 @@ private fun FileRow(
 }
 
 @Composable
-private fun FormatDropdown(
-    label: String,
-    selected: TargetFormat,
-    options: List<TargetFormat>,
+private fun OptionsToggleChip(
     texts: UiText,
     expanded: Boolean,
-    onExpandedChange: (Boolean) -> Unit,
-    onSelected: (TargetFormat) -> Unit
+    onClick: () -> Unit
 ) {
-    Column(horizontalAlignment = Alignment.End) {
-        PillMenuButton(
-            onClick = { onExpandedChange(!expanded) },
-            text = "$label: ${texts.optionValue(selected.label)}",
-            expanded = expanded
+    val rotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = ZenAnimations.IconRotationSpring,
+        label = "OptionsToggleRotation"
+    )
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.heightIn(min = 32.dp),
+        shape = RoundedCornerShape(100.dp),
+        border = BorderStroke(
+            1.dp,
+            if (expanded) {
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+            } else {
+                Color(0xFFE1E1E1)
+            }
+        ),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = if (expanded) {
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+            } else {
+                MaterialTheme.colorScheme.surface
+            },
+            contentColor = if (expanded) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            }
+        ),
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = texts.adjustOptions,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1
         )
-        InlineDropdownPanel(
-            expanded = expanded
-        ) {
-            options.forEach { option ->
-                DropdownOption(
-                    text = "${texts.optionValue(option.label)} / ${texts.engineHint(option.modeHint)}",
-                    selected = option == selected,
-                    onClick = {
-                        onExpandedChange(false)
-                        onSelected(option)
+        Spacer(modifier = Modifier.width(4.dp))
+        Icon(
+            imageVector = Icons.Rounded.ExpandMore,
+            contentDescription = null,
+            modifier = Modifier
+                .size(16.dp)
+                .rotate(rotation)
+        )
+    }
+}
+
+@Composable
+private fun QueuedFileOptionsPanel(
+    texts: UiText,
+    file: QueuedFile,
+    selectedTarget: ExternalImportTarget,
+    supportedVideoMimeTypes: Set<String>,
+    videoAdvancedExpanded: Boolean,
+    audioAdvancedExpanded: Boolean,
+    openMenuId: String?,
+    onOpenMenuChange: (String?) -> Unit,
+    onVideoAdvancedExpandedChange: (Boolean) -> Unit,
+    onAudioAdvancedExpandedChange: (Boolean) -> Unit,
+    onUpdateFile: (QueuedFile) -> Unit
+) {
+    val menuPrefix = "file-${file.id}-"
+    AnimatedContent(
+        targetState = "${file.category.name}-${file.targetFormat}",
+        transitionSpec = {
+            fadeIn(animationSpec = tween(ZenAnimations.ContentFadeDuration)) togetherWith
+                fadeOut(animationSpec = tween(ZenAnimations.ContentFadeOutDuration)) using
+                SizeTransform(clip = false)
+        },
+        label = "QueuedFileOptions"
+    ) {
+        when (file.category) {
+            FileCategory.Video -> VideoOptions(
+                texts = texts,
+                menuPrefix = menuPrefix,
+                resolution = videoResolutionLabelFor(file.videoOptions),
+                compressionMode = videoCompressionLabelFor(file.videoOptions.compressionMode),
+                bitrate = videoBitrateLabelFor(file.videoOptions.videoBitrate),
+                codec = videoCodecLabelFor(file.videoOptions.videoMimeType),
+                codecOptions = videoCodecOptionsFor(supportedVideoMimeTypes),
+                frameRate = videoFrameRateLabelFor(file.videoOptions.maxFrameRate),
+                audioBitrate = audioBitrateLabelFor(file.audioOptions.audioBitrate),
+                audioSampleRate = audioSampleRateLabelFor(file.audioOptions.sampleRateHz),
+                audioChannels = audioChannelsLabelFor(file.audioOptions.channelCount),
+                videoAdvanced = videoAdvancedUiStateFor(file.videoOptions.advanced, videoAdvancedExpanded),
+                audioAdvanced = audioAdvancedUiStateFor(file.audioOptions.advanced, audioAdvancedExpanded),
+                targetFormat = selectedTarget.targetFormat,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                onResolutionChange = { value ->
+                    onUpdateFile(
+                        file.copy(
+                            videoOptions = file.videoOptions.copy(
+                                maxShortSidePixels = videoResolutionToShortSide(value)
+                            )
+                        )
+                    )
+                },
+                onCompressionModeChange = { value ->
+                    val mode = videoCompressionModeFor(value)
+                    val presetActive = mode != VideoCompressionMode.Standard
+                    onUpdateFile(
+                        file.copy(
+                            videoOptions = file.videoOptions.copy(
+                                compressionMode = mode,
+                                videoBitrate = if (presetActive) null else file.videoOptions.videoBitrate,
+                                videoMimeType = if (
+                                    presetActive &&
+                                    VideoExportOptions.VIDEO_MIME_TYPE_H265 in supportedVideoMimeTypes
+                                ) {
+                                    VideoExportOptions.VIDEO_MIME_TYPE_H265
+                                } else {
+                                    file.videoOptions.videoMimeType
+                                },
+                                maxShortSidePixels = videoCompressionShortSideFor(mode)
+                                    ?: file.videoOptions.maxShortSidePixels,
+                                maxFrameRate = videoCompressionFrameRateCapFor(mode)
+                                    ?: file.videoOptions.maxFrameRate,
+                                advanced = if (presetActive) VideoAdvancedOptions() else file.videoOptions.advanced
+                            )
+                        )
+                    )
+                },
+                onBitrateChange = { value ->
+                    onUpdateFile(file.copy(videoOptions = file.videoOptions.copy(videoBitrate = videoBitrateToBits(value))))
+                },
+                onCodecChange = { value ->
+                    onUpdateFile(file.copy(videoOptions = file.videoOptions.copy(videoMimeType = videoCodecToMimeType(value))))
+                },
+                onFrameRateChange = { value ->
+                    onUpdateFile(file.copy(videoOptions = file.videoOptions.copy(maxFrameRate = videoFrameRateToCap(value))))
+                },
+                onAudioBitrateChange = { value ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(audioBitrate = audioBitrateToBits(value))))
+                },
+                onAudioSampleRateChange = { value ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(sampleRateHz = audioSampleRateToHz(value))))
+                },
+                onAudioChannelsChange = { value ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(channelCount = audioChannelsToCount(value))))
+                },
+                onVideoAdvancedExpandedChange = onVideoAdvancedExpandedChange,
+                onVideoReverseChange = { enabled ->
+                    onUpdateFile(file.copy(videoOptions = file.videoOptions.copy(advanced = file.videoOptions.advanced.copy(reverse = enabled))))
+                },
+                onVideoFadeInChange = { value ->
+                    onUpdateFile(file.copy(videoOptions = file.videoOptions.copy(advanced = file.videoOptions.advanced.copy(fadeInSeconds = fadeDurationSeconds(value)))))
+                },
+                onVideoFadeOutChange = { value ->
+                    onUpdateFile(file.copy(videoOptions = file.videoOptions.copy(advanced = file.videoOptions.advanced.copy(fadeOutSeconds = fadeDurationSeconds(value)))))
+                },
+                onVideoMirrorChange = { value ->
+                    onUpdateFile(file.copy(videoOptions = file.videoOptions.copy(advanced = file.videoOptions.advanced.copy(mirror = videoMirrorModeFor(value)))))
+                },
+                onVideoRotationChange = { value ->
+                    onUpdateFile(file.copy(videoOptions = file.videoOptions.copy(advanced = file.videoOptions.advanced.copy(rotation = videoRotationModeFor(value)))))
+                },
+                onVideoAspectRatioChange = { value ->
+                    onUpdateFile(file.copy(videoOptions = file.videoOptions.copy(advanced = file.videoOptions.advanced.copy(aspectRatio = videoAspectRatioModeFor(value)))))
+                },
+                onAudioAdvancedExpandedChange = onAudioAdvancedExpandedChange,
+                onAudioReverseChange = { enabled ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(advanced = file.audioOptions.advanced.copy(reverse = enabled))))
+                },
+                onAudioFadeInChange = { value ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(advanced = file.audioOptions.advanced.copy(fadeInSeconds = fadeDurationSeconds(value)))))
+                },
+                onAudioFadeOutChange = { value ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(advanced = file.audioOptions.advanced.copy(fadeOutSeconds = fadeDurationSeconds(value)))))
+                },
+                onAudioVolumeChange = { value ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(advanced = file.audioOptions.advanced.copy(volume = audioVolumeModeFor(value)))))
+                },
+                onAudioEchoChange = { value ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(advanced = file.audioOptions.advanced.copy(echo = audioEchoModeFor(value)))))
+                },
+                onAudioNoiseReductionChange = { value ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(advanced = file.audioOptions.advanced.copy(noiseReduction = audioNoiseReductionModeFor(value)))))
+                }
+            )
+            FileCategory.Audio -> AudioOptions(
+                texts = texts,
+                menuPrefix = menuPrefix,
+                bitrate = audioBitrateLabelFor(file.audioOptions.audioBitrate),
+                sampleRate = audioSampleRateLabelFor(file.audioOptions.sampleRateHz),
+                channels = audioChannelsLabelFor(file.audioOptions.channelCount),
+                advanced = audioAdvancedUiStateFor(file.audioOptions.advanced, audioAdvancedExpanded),
+                targetFormat = selectedTarget.targetFormat,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                onBitrateChange = { value ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(audioBitrate = audioBitrateToBits(value))))
+                },
+                onSampleRateChange = { value ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(sampleRateHz = audioSampleRateToHz(value))))
+                },
+                onChannelsChange = { value ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(channelCount = audioChannelsToCount(value))))
+                },
+                onAdvancedExpandedChange = onAudioAdvancedExpandedChange,
+                onReverseChange = { enabled ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(advanced = file.audioOptions.advanced.copy(reverse = enabled))))
+                },
+                onFadeInChange = { value ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(advanced = file.audioOptions.advanced.copy(fadeInSeconds = fadeDurationSeconds(value)))))
+                },
+                onFadeOutChange = { value ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(advanced = file.audioOptions.advanced.copy(fadeOutSeconds = fadeDurationSeconds(value)))))
+                },
+                onVolumeChange = { value ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(advanced = file.audioOptions.advanced.copy(volume = audioVolumeModeFor(value)))))
+                },
+                onEchoChange = { value ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(advanced = file.audioOptions.advanced.copy(echo = audioEchoModeFor(value)))))
+                },
+                onNoiseReductionChange = { value ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(advanced = file.audioOptions.advanced.copy(noiseReduction = audioNoiseReductionModeFor(value)))))
+                }
+            )
+            FileCategory.Image -> {
+                ImageOptions(
+                    texts = texts,
+                    menuPrefix = menuPrefix,
+                    targetFormat = selectedTarget.targetFormat,
+                    quality = imageQualityLabelFor(file.imageOptions, selectedTarget.targetFormat),
+                    pdfPageMode = pdfPageModeLabelFor(file.pdfOptions.imagePageMode),
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    onQualityChange = { value ->
+                        onUpdateFile(file.copy(imageOptions = imageOptionsForQuality(value, selectedTarget.targetFormat)))
+                    },
+                    onPdfPageModeChange = { value ->
+                        onUpdateFile(file.copy(pdfOptions = file.pdfOptions.copy(imagePageMode = pdfPageModeToOption(value))))
                     }
                 )
+                if (file.isGifQueuedImage()) {
+                    GifImageOptions(
+                        texts = texts,
+                        file = file,
+                        targetFormat = selectedTarget.targetFormat,
+                        openMenuId = openMenuId,
+                        onOpenMenuChange = onOpenMenuChange,
+                        onUpdateFile = onUpdateFile
+                    )
+                }
             }
+            FileCategory.Pdf -> PdfOptions(
+                texts = texts,
+                menuPrefix = menuPrefix,
+                targetFormat = selectedTarget.targetFormat,
+                renderQuality = pdfRenderQualityLabelFor(file.pdfOptions.renderQuality),
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                onRenderQualityChange = { value ->
+                    onUpdateFile(file.copy(pdfOptions = file.pdfOptions.copy(renderQuality = pdfRenderQualityToOption(value))))
+                }
+            )
+            FileCategory.Document -> Text(
+                text = texts.optionValue(selectedTarget.targetFormat.modeHint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
+    }
+}
+
+@Composable
+private fun GifImageOptions(
+    texts: UiText,
+    file: QueuedFile,
+    targetFormat: TargetFormat,
+    openMenuId: String?,
+    onOpenMenuChange: (String?) -> Unit,
+    onUpdateFile: (QueuedFile) -> Unit
+) {
+    val frameModeOptions = if (targetFormat.extension.equals("pdf", ignoreCase = true)) {
+        GIF_PDF_FRAME_MODE_OPTIONS
+    } else {
+        GIF_IMAGE_FRAME_MODE_OPTIONS
+    }
+    OptionDropdown(
+        "file-${file.id}-gif-frame-mode",
+        texts.gifFrameMode,
+        gifFrameModeLabelFor(file.gifFrameMode, targetFormat),
+        frameModeOptions,
+        texts,
+        openMenuId,
+        onOpenMenuChange
+    ) { value ->
+        onUpdateFile(file.copy(gifFrameMode = gifFrameModeForLabel(value, targetFormat)))
     }
 }
 
@@ -4637,20 +4777,6 @@ private fun DropdownOption(
 }
 
 @Composable
-private fun EngineHint(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.primary,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier
-            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.28f), RoundedCornerShape(100.dp))
-            .padding(horizontal = 10.dp, vertical = 5.dp)
-    )
-}
-
-@Composable
 private fun SmallTag(text: String) {
     Text(
         text = text,
@@ -4802,6 +4928,398 @@ private fun uiTextFor(language: ResolvedLanguage): UiText {
     }
 }
 
+private fun targetsForSourceCategory(category: FileCategory?): List<ExternalImportTarget> {
+    return when (category) {
+        FileCategory.Video -> FileCategory.Video.formats.map {
+            ExternalImportTarget(FileCategory.Video, it)
+        } + FileCategory.Audio.formats.map {
+            ExternalImportTarget(FileCategory.Audio, it)
+        }
+        FileCategory.Audio -> FileCategory.Audio.formats.map {
+            ExternalImportTarget(FileCategory.Audio, it)
+        }
+        FileCategory.Image -> FileCategory.Image.formats.map {
+            ExternalImportTarget(FileCategory.Image, it)
+        }
+        FileCategory.Pdf -> FileCategory.Pdf.formats.map {
+            ExternalImportTarget(FileCategory.Pdf, it)
+        }
+        FileCategory.Document -> FileCategory.Document.formats.map {
+            ExternalImportTarget(FileCategory.Document, it)
+        }
+        null -> emptyList()
+    }
+}
+
+private fun targetsForQueuedFile(file: QueuedFile): List<ExternalImportTarget> {
+    return file.targetOptions.ifEmpty { targetsForSourceCategory(file.sourceCategory) }
+}
+
+private fun mergeablePdfFilesFor(
+    files: List<QueuedFile>,
+    groups: List<PdfMergeGroup>,
+    type: PdfMergeType
+): List<QueuedFile> {
+    val groupedIds = groups.flatMap { it.memberFileIds }.toSet()
+    return files.filter { file ->
+        file.id !in groupedIds && file.isMergeableFor(type)
+    }
+}
+
+private fun QueuedFile.isMergeableFor(type: PdfMergeType): Boolean {
+    return when (type) {
+        PdfMergeType.Images -> category == FileCategory.Image &&
+            targetFormat.equals("PDF", ignoreCase = true)
+        PdfMergeType.Pdfs -> category == FileCategory.Pdf &&
+            targetFormat.equals("PDF", ignoreCase = true) &&
+            pdfSecurityOptions.mode == org.zenconverter.app.conversion.PdfSecurityMode.None
+    }
+}
+
+private fun compactMergeFileName(name: String): String {
+    return if (name.length <= 28) {
+        name
+    } else {
+        "${name.take(13)}...${name.takeLast(10)}"
+    }
+}
+
+private fun commonSelectedTargetFor(files: List<QueuedFile>): ExternalImportTarget? {
+    return files
+        .map { selectedTargetFor(it) }
+        .distinctBy { "${it.category.name}:${it.targetFormat.label}" }
+        .singleOrNull()
+}
+
+private fun selectedTargetFor(file: QueuedFile): ExternalImportTarget {
+    return targetsForQueuedFile(file).firstOrNull { target ->
+        target.category == file.category &&
+            target.targetFormat.label.equals(file.targetFormat, ignoreCase = true)
+    } ?: ExternalImportTarget(
+        category = file.category,
+        targetFormat = file.category.formats.firstOrNull {
+            it.label.equals(file.targetFormat, ignoreCase = true)
+        } ?: file.category.formats.first()
+    )
+}
+
+private fun fileWithTarget(
+    file: QueuedFile,
+    target: ExternalImportTarget,
+    supportedVideoMimeTypes: Set<String>
+): QueuedFile {
+    val targetFormat = target.targetFormat
+    val nextPdfSecurityOptions = when {
+        target.category == FileCategory.Pdf &&
+            targetFormat.label.equals("Encrypt PDF", ignoreCase = true) ->
+            PdfSecurityOptions(mode = org.zenconverter.app.conversion.PdfSecurityMode.Encrypt)
+        target.category == FileCategory.Pdf &&
+            targetFormat.label.equals("Decrypt PDF", ignoreCase = true) ->
+            PdfSecurityOptions(mode = org.zenconverter.app.conversion.PdfSecurityMode.Decrypt)
+        else -> PdfSecurityOptions()
+    }
+    return file.copy(
+        category = target.category,
+        targetFormat = targetFormat.label,
+        videoOptions = videoOptionsForTarget(file.videoOptions, targetFormat, supportedVideoMimeTypes),
+        imageOptions = imageOptionsForTarget(file.imageOptions, targetFormat),
+        pdfSecurityOptions = nextPdfSecurityOptions
+    )
+}
+
+private fun videoOptionsForTarget(
+    current: VideoExportOptions,
+    targetFormat: TargetFormat,
+    supportedVideoMimeTypes: Set<String>
+): VideoExportOptions {
+    if (targetFormat.extension.equals("gif", ignoreCase = true)) {
+        return VideoExportOptions(
+            maxShortSidePixels = 480,
+            videoBitrate = null,
+            videoMimeType = VideoExportOptions.VIDEO_MIME_TYPE_H264,
+            maxFrameRate = 30
+        )
+    }
+    val codec = if (current.videoMimeType in supportedVideoMimeTypes) {
+        current.videoMimeType
+    } else {
+        VideoExportOptions.VIDEO_MIME_TYPE_H264
+    }
+    return if (current.maxFrameRate == 30 && current.maxShortSidePixels == 480 &&
+        current.videoBitrate == null && current.compressionMode == VideoCompressionMode.Standard
+    ) {
+        current.copy(videoMimeType = codec, maxShortSidePixels = null, maxFrameRate = null)
+    } else {
+        current.copy(videoMimeType = codec)
+    }
+}
+
+private fun imageOptionsForTarget(
+    current: ImageExportOptions,
+    targetFormat: TargetFormat
+): ImageExportOptions {
+    return if (supportsWebpLosslessQuality(targetFormat)) {
+        current
+    } else {
+        current.copy(webpLossless = false)
+    }
+}
+
+private fun videoResolutionLabelFor(options: VideoExportOptions): String {
+    return when (options.maxShortSidePixels) {
+        2160 -> VIDEO_RESOLUTION_2160P
+        1440 -> VIDEO_RESOLUTION_1440P
+        1080 -> VIDEO_RESOLUTION_1080P
+        720 -> VIDEO_RESOLUTION_720P
+        480 -> VIDEO_RESOLUTION_480P
+        else -> VIDEO_RESOLUTION_ORIGINAL
+    }
+}
+
+private fun videoCompressionLabelFor(mode: VideoCompressionMode): String {
+    return when (mode) {
+        VideoCompressionMode.VisualLossless -> VIDEO_COMPRESSION_VISUAL_LOSSLESS
+        VideoCompressionMode.BalancedShrink -> VIDEO_COMPRESSION_BALANCED
+        VideoCompressionMode.SmallFile -> VIDEO_COMPRESSION_SMALL
+        VideoCompressionMode.Standard -> VIDEO_COMPRESSION_STANDARD
+    }
+}
+
+private fun videoBitrateLabelFor(value: Int?): String {
+    return when (value) {
+        1_000_000 -> VIDEO_BITRATE_LOW
+        2_500_000 -> VIDEO_BITRATE_MEDIUM
+        5_000_000 -> VIDEO_BITRATE_HIGH
+        8_000_000 -> VIDEO_BITRATE_VERY_HIGH
+        16_000_000 -> VIDEO_BITRATE_ULTRA
+        else -> VIDEO_BITRATE_AUTO
+    }
+}
+
+private fun videoCodecLabelFor(value: String): String {
+    return when (value) {
+        VideoExportOptions.VIDEO_MIME_TYPE_H265 -> VIDEO_CODEC_H265
+        else -> VIDEO_CODEC_H264
+    }
+}
+
+private fun videoFrameRateLabelFor(value: Int?): String {
+    return when (value) {
+        25 -> VIDEO_FRAME_RATE_25
+        30 -> VIDEO_FRAME_RATE_30
+        60 -> VIDEO_FRAME_RATE_60
+        else -> VIDEO_FRAME_RATE_ORIGINAL
+    }
+}
+
+private fun audioBitrateLabelFor(value: Int?): String {
+    return when (value) {
+        192_000 -> AUDIO_BITRATE_RECOMMENDED
+        256_000 -> AUDIO_BITRATE_HIGH
+        128_000 -> AUDIO_BITRATE_COMPACT
+        96_000 -> AUDIO_BITRATE_VOICE
+        else -> AUDIO_BITRATE_AUTO
+    }
+}
+
+private fun audioSampleRateLabelFor(value: Int?): String {
+    return when (value) {
+        48_000 -> AUDIO_SAMPLE_RATE_RECOMMENDED
+        44_100 -> AUDIO_SAMPLE_RATE_44100
+        32_000 -> AUDIO_SAMPLE_RATE_32000
+        else -> AUDIO_SAMPLE_RATE_ORIGINAL
+    }
+}
+
+private fun audioChannelsLabelFor(value: Int?): String {
+    return when (value) {
+        2 -> AUDIO_CHANNELS_STEREO
+        1 -> AUDIO_CHANNELS_MONO
+        else -> AUDIO_CHANNELS_ORIGINAL
+    }
+}
+
+private fun videoAdvancedUiStateFor(
+    advanced: VideoAdvancedOptions,
+    expanded: Boolean
+): VideoAdvancedUiState {
+    return VideoAdvancedUiState(
+        expanded = expanded,
+        reverse = advanced.reverse,
+        fadeIn = fadeLabelFor(advanced.fadeInSeconds),
+        fadeOut = fadeLabelFor(advanced.fadeOutSeconds),
+        mirror = videoMirrorLabelFor(advanced.mirror),
+        rotation = videoRotationLabelFor(advanced.rotation),
+        aspectRatio = videoAspectRatioLabelFor(advanced.aspectRatio)
+    )
+}
+
+private fun audioAdvancedUiStateFor(
+    advanced: AudioAdvancedOptions,
+    expanded: Boolean
+): AudioAdvancedUiState {
+    return AudioAdvancedUiState(
+        expanded = expanded,
+        reverse = advanced.reverse,
+        fadeIn = fadeLabelFor(advanced.fadeInSeconds),
+        fadeOut = fadeLabelFor(advanced.fadeOutSeconds),
+        volume = audioVolumeLabelFor(advanced.volume),
+        echo = audioEchoLabelFor(advanced.echo),
+        noiseReduction = audioNoiseReductionLabelFor(advanced.noiseReduction)
+    )
+}
+
+private fun fadeLabelFor(value: Float?): String {
+    return when (value) {
+        0.5f -> ADVANCED_FADE_HALF_SECOND
+        1f -> ADVANCED_FADE_ONE_SECOND
+        2f -> ADVANCED_FADE_TWO_SECONDS
+        else -> ADVANCED_FADE_OFF
+    }
+}
+
+private fun videoMirrorLabelFor(value: VideoMirrorMode): String {
+    return when (value) {
+        VideoMirrorMode.Horizontal -> VIDEO_MIRROR_HORIZONTAL
+        VideoMirrorMode.Vertical -> VIDEO_MIRROR_VERTICAL
+        VideoMirrorMode.Both -> VIDEO_MIRROR_BOTH
+        VideoMirrorMode.Off -> VIDEO_MIRROR_OFF
+    }
+}
+
+private fun videoRotationLabelFor(value: VideoRotationMode): String {
+    return when (value) {
+        VideoRotationMode.Clockwise90 -> VIDEO_ROTATION_90_CW
+        VideoRotationMode.CounterClockwise90 -> VIDEO_ROTATION_90_CCW
+        VideoRotationMode.Rotate180 -> VIDEO_ROTATION_180
+        VideoRotationMode.None -> VIDEO_ROTATION_NONE
+    }
+}
+
+private fun videoAspectRatioLabelFor(value: VideoAspectRatioMode): String {
+    return when (value) {
+        VideoAspectRatioMode.Fit16By9 -> VIDEO_ASPECT_FIT_16_9
+        VideoAspectRatioMode.Fit9By16 -> VIDEO_ASPECT_FIT_9_16
+        VideoAspectRatioMode.Fit1By1 -> VIDEO_ASPECT_FIT_1_1
+        VideoAspectRatioMode.Crop16By9 -> VIDEO_ASPECT_CROP_16_9
+        VideoAspectRatioMode.Crop9By16 -> VIDEO_ASPECT_CROP_9_16
+        VideoAspectRatioMode.Crop1By1 -> VIDEO_ASPECT_CROP_1_1
+        VideoAspectRatioMode.Keep -> VIDEO_ASPECT_KEEP
+    }
+}
+
+private fun audioVolumeLabelFor(value: AudioVolumeMode): String {
+    return when (value) {
+        AudioVolumeMode.Mute -> AUDIO_VOLUME_MUTE
+        AudioVolumeMode.Half -> AUDIO_VOLUME_50
+        AudioVolumeMode.OneAndHalf -> AUDIO_VOLUME_150
+        AudioVolumeMode.Double -> AUDIO_VOLUME_200
+        AudioVolumeMode.Original -> AUDIO_VOLUME_100
+    }
+}
+
+private fun audioEchoLabelFor(value: AudioEchoMode): String {
+    return when (value) {
+        AudioEchoMode.Light -> AUDIO_ECHO_LIGHT
+        AudioEchoMode.Room -> AUDIO_ECHO_ROOM
+        AudioEchoMode.Off -> AUDIO_ECHO_OFF
+    }
+}
+
+private fun audioNoiseReductionLabelFor(value: AudioNoiseReductionMode): String {
+    return when (value) {
+        AudioNoiseReductionMode.Light -> AUDIO_DENOISE_LIGHT
+        AudioNoiseReductionMode.Standard -> AUDIO_DENOISE_STANDARD
+        AudioNoiseReductionMode.Off -> AUDIO_DENOISE_OFF
+    }
+}
+
+private fun imageQualityLabelFor(
+    options: ImageExportOptions,
+    targetFormat: TargetFormat
+): String {
+    if (supportsWebpLosslessQuality(targetFormat) && options.webpLossless) {
+        return IMAGE_QUALITY_LOSSLESS
+    }
+    return when {
+        options.quality >= 100 -> IMAGE_QUALITY_ORIGINAL
+        options.quality >= 95 -> IMAGE_QUALITY_HIGH
+        options.quality <= 60 -> IMAGE_QUALITY_SMALL
+        else -> IMAGE_QUALITY_BALANCED
+    }
+}
+
+private fun imageOptionsForQuality(
+    value: String,
+    targetFormat: TargetFormat
+): ImageExportOptions {
+    return ImageExportOptions(
+        quality = imageQualityToPercent(value),
+        webpLossless = supportsWebpLosslessQuality(targetFormat) &&
+            value == IMAGE_QUALITY_LOSSLESS
+    )
+}
+
+private fun pdfPageModeLabelFor(value: PdfImagePageMode): String {
+    return when (value) {
+        PdfImagePageMode.OriginalRatio -> PDF_PAGE_MODE_ORIGINAL_RATIO
+        PdfImagePageMode.A4Fit -> PDF_PAGE_MODE_A4_FIT
+    }
+}
+
+private fun pdfRenderQualityLabelFor(value: PdfRenderQuality): String {
+    return when (value) {
+        PdfRenderQuality.LowResolution -> PDF_RENDER_QUALITY_LOW
+        PdfRenderQuality.HighDetail -> PDF_RENDER_QUALITY_HIGH
+        PdfRenderQuality.Balanced -> PDF_RENDER_QUALITY_BALANCED
+    }
+}
+
+private fun gifFrameModeLabelFor(
+    value: GifFrameExportMode,
+    targetFormat: TargetFormat
+): String {
+    return if (targetFormat.extension.equals("pdf", ignoreCase = true)) {
+        when (value) {
+            GifFrameExportMode.FramesAsSinglePdf -> GIF_FRAMES_SINGLE_PDF
+            GifFrameExportMode.FramesAsPdfFiles -> GIF_FRAMES_PDF_FILES
+            else -> GIF_FRAME_FIRST
+        }
+    } else {
+        when (value) {
+            GifFrameExportMode.FramesAsImages -> GIF_FRAME_IMAGES
+            else -> GIF_FRAME_FIRST
+        }
+    }
+}
+
+private fun gifFrameModeForLabel(
+    value: String,
+    targetFormat: TargetFormat
+): GifFrameExportMode {
+    return if (targetFormat.extension.equals("pdf", ignoreCase = true)) {
+        when (value) {
+            GIF_FRAMES_SINGLE_PDF -> GifFrameExportMode.FramesAsSinglePdf
+            GIF_FRAMES_PDF_FILES -> GifFrameExportMode.FramesAsPdfFiles
+            else -> GifFrameExportMode.FirstFrame
+        }
+    } else {
+        when (value) {
+            GIF_FRAME_IMAGES -> GifFrameExportMode.FramesAsImages
+            else -> GifFrameExportMode.FirstFrame
+        }
+    }
+}
+
+private fun QueuedFile.isGifQueuedImage(): Boolean {
+    val normalizedMimeType = mimeType.orEmpty().lowercase(Locale.US)
+    return sourceCategory == FileCategory.Image &&
+        (
+            normalizedMimeType == "image/gif" ||
+                displayName.lowercase(Locale.US).endsWith(".gif")
+            )
+}
+
 private fun videoResolutionToShortSide(value: String): Int? {
     return when (value) {
         VIDEO_RESOLUTION_2160P -> 2160
@@ -4856,11 +5374,6 @@ private fun videoCodecToMimeType(value: String): String {
         VIDEO_CODEC_H265 -> VideoExportOptions.VIDEO_MIME_TYPE_H265
         else -> VideoExportOptions.VIDEO_MIME_TYPE_H264
     }
-}
-
-@Suppress("UNUSED_PARAMETER")
-private fun defaultVideoCodecFor(supportedVideoMimeTypes: Set<String>): String {
-    return VIDEO_CODEC_H264
 }
 
 private fun videoFrameRateToCap(value: String): Int? {
@@ -5096,9 +5609,21 @@ private data class UiText(
     val metadataGps: String,
     val accentColor: String,
     val language: String,
-    val chooseConversion: String,
+    val addFilesTitle: String,
+    val addFilesNote: String,
+    val addFiles: String,
+    val batchSettings: String,
+    val batchSettingsNote: String,
+    val batchMixedTarget: String,
+    val adjustOptions: String,
+    val pdfMergeTitle: String,
+    val pdfMergeNote: String,
+    val createImagePdfMerge: String,
+    val createPdfMerge: String,
+    val pdfMergeMember: String,
+    val addToMerge: String,
+    val removeMergeGroup: String,
     val target: String,
-    val select: String,
     val output: String,
     val choose: String,
     val chooseDirectory: String,
@@ -5139,32 +5664,27 @@ private data class UiText(
     val frameRate: String,
     val sampleRate: String,
     val channels: String,
-    val outputMode: String,
+    val gifFrameMode: String,
     val password: String,
     val skip: String,
-    val externalImportTitle: String,
-    val externalImportNote: String,
-    val externalImportUnsupported: String,
-    val externalImportPrevious: String,
-    val externalImportAddNext: String,
-    val externalImportAddDone: String,
-    val externalImportSkipNext: String,
-    val externalImportSkipDone: String,
-    val imagePdfPromptTitle: String,
-    val gifFramePromptTitle: String,
-    val gifPdfFramePromptTitle: String,
     val pdfPasswordTitle: String,
     val pdfOutputPasswordTitle: String,
-    val uiPresetSuffix: String,
     val toPrefix: String
 ) {
     fun selectedCount(count: Int): String = "$count $selectedSuffix"
 
-    fun externalImportCounter(index: Int, total: Int): String {
+    fun batchCount(count: Int): String {
         return when (this) {
-            englishText -> "$index of $total"
-            simplifiedChineseText -> "$index / $total"
-            else -> "$index / $total"
+            englishText -> if (count == 1) "1 item" else "$count items"
+            simplifiedChineseText -> "$count 个文件"
+            else -> "$count 個檔案"
+        }
+    }
+
+    fun pdfMergeGroupTitle(type: PdfMergeType): String {
+        return when (type) {
+            PdfMergeType.Images -> createImagePdfMerge
+            PdfMergeType.Pdfs -> createPdfMerge
         }
     }
 
@@ -5631,40 +6151,6 @@ private data class UiText(
         }
     }
 
-    fun imagePdfPromptMessage(count: Int): String {
-        return when (this) {
-            englishText -> "Create one PDF from $count selected images, or one PDF per image?"
-            simplifiedChineseText -> "已选择 $count 张图片。要合并成一个 PDF，还是每张图片各生成一个 PDF？"
-            else -> "已選擇 $count 張圖片。要合併成一個 PDF，還是每張圖片各生成一個 PDF？"
-        }
-    }
-
-    fun gifFramePromptMessage(count: Int): String {
-        return when (this) {
-            englishText -> {
-                val label = if (count == 1) "GIF" else "$count GIFs"
-                "Convert only the first frame, or split $label into numbered frame files?"
-            }
-            simplifiedChineseText ->
-                "已选择 $count 个 GIF。只转换首帧，还是拆成按顺序编号的帧文件？"
-            else ->
-                "已選擇 $count 個 GIF。只轉換首幀，還是拆成按順序編號的幀檔案？"
-        }
-    }
-
-    fun gifPdfFramePromptMessage(count: Int): String {
-        return when (this) {
-            englishText -> {
-                val label = if (count == 1) "this GIF" else "each GIF"
-                "For split GIF output, put all frames from $label into one PDF, or create one PDF per frame?"
-            }
-            simplifiedChineseText ->
-                "GIF 拆帧输出到 PDF 时，全部帧放进一个 PDF，还是每帧生成一个 PDF？"
-            else ->
-                "GIF 拆幀輸出到 PDF 時，全部幀放進一個 PDF，還是每幀產生一個 PDF？"
-        }
-    }
-
     fun pdfPasswordMessage(fileName: String): String {
         return when (this) {
             englishText -> "$fileName is password-protected. Enter the password to add it."
@@ -5761,6 +6247,11 @@ private data class UiText(
                 englishText -> "Not enough cache space for this PDF"
                 simplifiedChineseText -> "缓存空间不足，无法处理这个 PDF"
                 else -> "快取空間不足，無法處理這個 PDF"
+            }
+            "Select at least two files to merge" -> when (this) {
+                englishText -> "Select at least two files to merge"
+                simplifiedChineseText -> "至少选择两个文件才能合并"
+                else -> "至少選擇兩個檔案才能合併"
             }
             "Select at least two PDFs to merge" -> when (this) {
                 englishText -> "Select at least two PDFs to merge"
@@ -6061,77 +6552,7 @@ private data class UiText(
         }
     }
 
-    fun categoryPurpose(category: FileCategory): String {
-        return when (category) {
-            FileCategory.Video -> when (this) {
-                englishText -> "Convert or compress video"
-                simplifiedChineseText -> "换格式，压缩体积"
-                else -> "換格式，壓縮體積"
-            }
-            FileCategory.Audio -> when (this) {
-                englishText -> "Convert or extract audio"
-                simplifiedChineseText -> "换格式，提取声音"
-                else -> "換格式，提取聲音"
-            }
-            FileCategory.Image -> when (this) {
-                englishText -> "Convert image formats"
-                simplifiedChineseText -> "转换图片格式"
-                else -> "轉換圖片格式"
-            }
-            FileCategory.Pdf -> when (this) {
-                englishText -> "Render, extract, merge, or secure"
-                simplifiedChineseText -> "渲染、提取、合并、加密"
-                else -> "渲染、提取、合併、加密"
-            }
-            FileCategory.Document -> when (this) {
-                englishText -> "Convert Office files"
-                simplifiedChineseText -> "转换 Office 文档"
-                else -> "轉換 Office 文件"
-            }
-        }
-    }
-
-    fun optionsTitle(category: FileCategory): String {
-        return when (this) {
-            englishText -> "${categoryLabel(category)} options"
-            simplifiedChineseText -> "${categoryLabel(category)}选项"
-            else -> "${categoryLabel(category)}選項"
-        }
-    }
-
-    fun presetNote(category: FileCategory): String {
-        return when (category) {
-            FileCategory.Video -> when (this) {
-                englishText -> "Tune quality and size"
-                simplifiedChineseText -> "调画质，控体积"
-                else -> "調畫質，控體積"
-            }
-            FileCategory.Audio -> when (this) {
-                englishText -> "Tune sound and compatibility"
-                simplifiedChineseText -> "调音质和兼容性"
-                else -> "調音質和相容性"
-            }
-            FileCategory.Image -> when (this) {
-                englishText -> "Set quality when available"
-                simplifiedChineseText -> "可用时调整输出质量"
-                else -> "可用時調整輸出品質"
-            }
-            FileCategory.Pdf -> when (this) {
-                englishText -> "PDF pages, text, merge, and password tools"
-                simplifiedChineseText -> "PDF 页面、文本、合并和密码工具"
-                else -> "PDF 頁面、文字、合併和密碼工具"
-            }
-            FileCategory.Document -> when (this) {
-                englishText -> "Experimental DOCX, PPTX, and XLSX path"
-                simplifiedChineseText -> "DOCX、PPTX、XLSX 实验转换"
-                else -> "DOCX、PPTX、XLSX 實驗轉換"
-            }
-        }
-    }
-
     fun toFormat(format: String): String = "$toPrefix $format"
-
-    fun engineHint(value: String): String = optionValue(value)
 
     fun accentLabel(option: AccentColorOption): String = optionValue(option.englishLabel)
 
@@ -6337,6 +6758,11 @@ private data class UiText(
                 englishText -> "Lossless output"
                 simplifiedChineseText -> "无损输出"
                 else -> "無損輸出"
+            }
+            BATCH_MIXED_OPTION -> when (this) {
+                englishText -> "Mixed"
+                simplifiedChineseText -> "混合"
+                else -> "混合"
             }
             "High" -> when (this) {
                 englishText -> "High"
@@ -6778,9 +7204,21 @@ private val englishText = UiText(
     metadataGps = "GPS",
     accentColor = "Accent color",
     language = "Language",
-    chooseConversion = "Choose conversion",
+    addFilesTitle = "Add files",
+    addFilesNote = "Choose files first, then set targets and options in the task list.",
+    addFiles = "Add files",
+    batchSettings = "Batch settings",
+    batchSettingsNote = "Tap a target to apply it to files with the same source type.",
+    batchMixedTarget = "This group has mixed targets. Choose one target to unify it.",
+    adjustOptions = "Options",
+    pdfMergeTitle = "PDF merge",
+    pdfMergeNote = "Create a visible merge task only when files should become one PDF.",
+    createImagePdfMerge = "Image PDF merge",
+    createPdfMerge = "PDF merge",
+    pdfMergeMember = "In PDF merge",
+    addToMerge = "Add to merge",
+    removeMergeGroup = "Remove merge",
     target = "Target",
-    select = "Select",
     output = "Save location",
     choose = "Choose",
     chooseDirectory = "Choose folder",
@@ -6821,23 +7259,11 @@ private val englishText = UiText(
     frameRate = "Frame rate",
     sampleRate = "Sample rate",
     channels = "Channels",
-    outputMode = "Output",
+    gifFrameMode = "GIF frames",
     password = "Password",
     skip = "Skip",
-    externalImportTitle = "Choose shared targets",
-    externalImportNote = "Shared files stay local. Pick a target for each file before adding tasks.",
-    externalImportUnsupported = "This file type is not supported by the experimental external picker.",
-    externalImportPrevious = "Previous",
-    externalImportAddNext = "Add / next",
-    externalImportAddDone = "Add tasks",
-    externalImportSkipNext = "Skip / next",
-    externalImportSkipDone = "Skip / done",
-    imagePdfPromptTitle = "Image to PDF",
-    gifFramePromptTitle = "GIF frames",
-    gifPdfFramePromptTitle = "GIF frames to PDF",
     pdfPasswordTitle = "PDF password",
     pdfOutputPasswordTitle = "Set PDF password",
-    uiPresetSuffix = "",
     toPrefix = "to"
 )
 
@@ -6888,9 +7314,21 @@ private val simplifiedChineseText = UiText(
     metadataGps = "GPS",
     accentColor = "重点色",
     language = "语言",
-    chooseConversion = "选择转换",
+    addFilesTitle = "添加文件",
+    addFilesNote = "先选择文件，再在任务列表里设置目标格式和选项。",
+    addFiles = "添加文件",
+    batchSettings = "批量设置",
+    batchSettingsNote = "点一个目标，就会立即应用到同一来源类型的文件。",
+    batchMixedTarget = "这一组目标不一致。选择一个目标即可统一。",
+    adjustOptions = "选项",
+    pdfMergeTitle = "PDF 合并",
+    pdfMergeNote = "只有需要合成一个 PDF 时，才新建可见的合并任务。",
+    createImagePdfMerge = "图片 PDF 合并",
+    createPdfMerge = "PDF 合并",
+    pdfMergeMember = "在 PDF 合并中",
+    addToMerge = "加入合并",
+    removeMergeGroup = "移除合并",
     target = "目标",
-    select = "选择",
     output = "保存位置",
     choose = "选择",
     chooseDirectory = "选择目录",
@@ -6931,23 +7369,11 @@ private val simplifiedChineseText = UiText(
     frameRate = "帧率",
     sampleRate = "采样率",
     channels = "声道",
-    outputMode = "输出方式",
+    gifFrameMode = "GIF 帧",
     password = "密码",
     skip = "跳过",
-    externalImportTitle = "选择分享目标",
-    externalImportNote = "分享来的文件仍在本机处理。逐个选择目标后再加入任务列表。",
-    externalImportUnsupported = "实验性外部选择器暂不支持此文件类型。",
-    externalImportPrevious = "上一个",
-    externalImportAddNext = "加入/下一个",
-    externalImportAddDone = "加入任务",
-    externalImportSkipNext = "跳过/下一个",
-    externalImportSkipDone = "跳过/完成",
-    imagePdfPromptTitle = "图片转 PDF",
-    gifFramePromptTitle = "GIF 拆帧",
-    gifPdfFramePromptTitle = "GIF 拆帧转 PDF",
     pdfPasswordTitle = "PDF 密码",
     pdfOutputPasswordTitle = "设置 PDF 密码",
-    uiPresetSuffix = "",
     toPrefix = "转为"
 )
 
@@ -6998,9 +7424,21 @@ private val traditionalChineseText = UiText(
     metadataGps = "GPS",
     accentColor = "重點色",
     language = "語言",
-    chooseConversion = "選擇轉換",
+    addFilesTitle = "新增檔案",
+    addFilesNote = "先選擇檔案，再在任務列表裡設定目標格式和選項。",
+    addFiles = "新增檔案",
+    batchSettings = "批次設定",
+    batchSettingsNote = "點一個目標，就會立即套用到同一來源類型的檔案。",
+    batchMixedTarget = "這一組目標不一致。選擇一個目標即可統一。",
+    adjustOptions = "選項",
+    pdfMergeTitle = "PDF 合併",
+    pdfMergeNote = "只有需要合成一個 PDF 時，才新增可見的合併任務。",
+    createImagePdfMerge = "圖片 PDF 合併",
+    createPdfMerge = "PDF 合併",
+    pdfMergeMember = "在 PDF 合併中",
+    addToMerge = "加入合併",
+    removeMergeGroup = "移除合併",
     target = "目標",
-    select = "選擇",
     output = "儲存位置",
     choose = "選擇",
     chooseDirectory = "選擇資料夾",
@@ -7041,23 +7479,11 @@ private val traditionalChineseText = UiText(
     frameRate = "幀率",
     sampleRate = "取樣率",
     channels = "聲道",
-    outputMode = "輸出方式",
+    gifFrameMode = "GIF 幀",
     password = "密碼",
     skip = "略過",
-    externalImportTitle = "選擇分享目標",
-    externalImportNote = "分享來的檔案仍在本機處理。逐一選擇目標後再加入任務列表。",
-    externalImportUnsupported = "實驗性外部選擇器暫不支援此檔案類型。",
-    externalImportPrevious = "上一個",
-    externalImportAddNext = "加入/下一個",
-    externalImportAddDone = "加入任務",
-    externalImportSkipNext = "略過/下一個",
-    externalImportSkipDone = "略過/完成",
-    imagePdfPromptTitle = "圖片轉 PDF",
-    gifFramePromptTitle = "GIF 拆幀",
-    gifPdfFramePromptTitle = "GIF 拆幀轉 PDF",
     pdfPasswordTitle = "PDF 密碼",
     pdfOutputPasswordTitle = "設定 PDF 密碼",
-    uiPresetSuffix = "",
     toPrefix = "轉為"
 )
 
@@ -7345,6 +7771,17 @@ private fun formatResultInfoLine(
         parts.add(texts.outputLargerHint())
     }
     return parts.joinToString(" · ")
+}
+
+private fun formatMergedResultInfoLine(
+    outputInfo: FileBasicInfo,
+    texts: UiText
+): String {
+    val parts = fileInfoParts(
+        info = outputInfo,
+        texts = texts
+    )
+    return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ") ?: "PDF"
 }
 
 private fun shouldShowVideoOutputLargerHint(
