@@ -14,6 +14,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -405,6 +406,9 @@ private val HeaderContentGap = 12.dp
 private val HeaderActionSpacing = 6.dp
 private val HeaderButtonSize = 44.dp
 private val HeaderAddSlotWidth = 50.dp
+private val EmptyPanelEntryHeight = 360.dp
+private val EmptyHeroButtonOffsetY = (-36).dp
+private val EmptyHeroTextOffsetY = 82.dp
 
 private val supportTargets = listOf(
     SupportTarget("Afdian", AFDIAN_URL, SupportTargetType.Link),
@@ -839,12 +843,22 @@ private fun ZenConverterContent(
     }
 
     val statusMessage = conversionSummary ?: queueMessage
-    val shouldCenterEmptyState = queuedFiles.isEmpty() &&
-        !showSettings &&
-        !showAbout &&
-        !showMetadataSecurity &&
-        statusMessage == null
     var headerHeightPx by remember { mutableStateOf(0) }
+    val activeHeaderPanel = when {
+        showSettings -> HeaderPanel.Settings
+        showAbout -> HeaderPanel.About
+        showMetadataSecurity -> HeaderPanel.MetadataSecurity
+        else -> null
+    }
+    var renderedHeaderPanel by remember { mutableStateOf<HeaderPanel?>(null) }
+    val headerPanelVisibleState = remember { MutableTransitionState(false) }
+
+    LaunchedEffect(activeHeaderPanel) {
+        if (activeHeaderPanel != null) {
+            renderedHeaderPanel = activeHeaderPanel
+        }
+        headerPanelVisibleState.targetState = activeHeaderPanel != null
+    }
 
     NoOverscroll {
         Scaffold(
@@ -861,17 +875,25 @@ private fun ZenConverterContent(
                 val headerHeight = with(density) { headerHeightPx.toDp() }
                 val headerAvailableWidth = headerContentWidth(maxWidth)
                 val listTopPadding = HomeTopPadding + headerHeight + HeaderContentGap
+                val hasFiles = queuedFiles.isNotEmpty()
+                val keepPanelSlot = activeHeaderPanel != null ||
+                    headerPanelVisibleState.currentState ||
+                    headerPanelVisibleState.targetState
                 val emptyEntryHeight = run {
-                    val available = maxHeight - listTopPadding - HomeBottomPadding
-                    if (available > 280.dp) available else 280.dp
+                    if (!hasFiles && keepPanelSlot) {
+                        EmptyPanelEntryHeight
+                    } else {
+                        val available = maxHeight - listTopPadding - HomeBottomPadding
+                        if (available > 280.dp) available else 280.dp
+                    }
                 }
 
-                val hasFiles = queuedFiles.isNotEmpty()
                 val morphProgress by animateFloatAsState(
                     targetValue = if (hasFiles) 1f else 0f,
                     animationSpec = ZenAnimations.HeroMorphSpring,
                     label = "heroMorphProgress"
                 )
+                val showEmptyStateItem = queuedFiles.isEmpty() || morphProgress < 1f
 
                 LazyColumn(
                     modifier = Modifier
@@ -884,73 +906,58 @@ private fun ZenConverterContent(
                     ),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    if (showSettings) {
-                        item(key = "settings-panel") {
-                            SettingsPanel(
-                                texts = texts,
-                                selectedAccent = accent,
-                                selectedLanguage = languageOption,
-                                outputLocationMode = outputLocationMode,
-                                outputDirectory = outputDirectory,
-                                onAccentSelected = onAccentSelected,
-                                onLanguageSelected = onLanguageSelected,
-                                onOutputLocationModeChange = onOutputLocationModeChange,
-                                onPickOutputDirectory = onPickOutputDirectory
-                            )
-                        }
-                    }
-
-                    if (showAbout) {
-                        item(key = "about-panel") {
-                            AboutPanel(
-                                texts = texts,
-                                onShowSupport = { showSupport = true }
-                            )
-                        }
-                    }
-
-                    if (showMetadataSecurity) {
-                        item(key = "metadata-security-panel") {
-                            MetadataSecurityPanel(
-                                texts = texts,
-                                state = metadataToolState,
-                                onPickImage = onPickMetadataImage,
-                                onPickVideo = onPickMetadataVideo,
-                                onClean = onCleanMetadata,
-                                onRestore = onRestoreMetadata
-                            )
-                        }
-                    }
-
-                    if (shouldCenterEmptyState || morphProgress < 1f) {
-                        item(key = "file-entry") {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(emptyEntryHeight)
-                                    .graphicsLayer { alpha = 1f - morphProgress },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.offset(y = 82.dp)
+                    if (keepPanelSlot || showEmptyStateItem) {
+                        item(key = "top-content") {
+                            Column {
+                                AnimatedVisibility(
+                                    visibleState = headerPanelVisibleState,
+                                    enter = ZenAnimations.PanelEnter,
+                                    exit = ZenAnimations.PanelExit
                                 ) {
-                                    Text(
-                                        text = texts.addFilesTitle,
-                                        style = MaterialTheme.typography.headlineSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onBackground,
-                                        textAlign = TextAlign.Center
-                                    )
-                                    Spacer(modifier = Modifier.height(14.dp))
-                                    Text(
-                                        text = texts.addFilesNote,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.fillMaxWidth(0.82f)
+                                    when (renderedHeaderPanel) {
+                                        HeaderPanel.Settings -> SettingsPanel(
+                                            texts = texts,
+                                            selectedAccent = accent,
+                                            selectedLanguage = languageOption,
+                                            outputLocationMode = outputLocationMode,
+                                            outputDirectory = outputDirectory,
+                                            onAccentSelected = onAccentSelected,
+                                            onLanguageSelected = onLanguageSelected,
+                                            onOutputLocationModeChange = onOutputLocationModeChange,
+                                            onPickOutputDirectory = onPickOutputDirectory
+                                        )
+                                        HeaderPanel.About -> AboutPanel(
+                                            texts = texts,
+                                            onShowSupport = { showSupport = true }
+                                        )
+                                        HeaderPanel.MetadataSecurity -> MetadataSecurityPanel(
+                                            texts = texts,
+                                            state = metadataToolState,
+                                            onPickImage = onPickMetadataImage,
+                                            onPickVideo = onPickMetadataVideo,
+                                            onClean = onCleanMetadata,
+                                            onRestore = onRestoreMetadata
+                                        )
+                                        null -> Unit
+                                    }
+                                }
+
+                                if (showEmptyStateItem) {
+                                    if (keepPanelSlot) {
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                    }
+                                    EmptyAddState(
+                                        texts = texts,
+                                        height = emptyEntryHeight,
+                                        showButton = queuedFiles.isEmpty(),
+                                        onPickFiles = {
+                                            openMenuId = null
+                                            queueMessage = null
+                                            onPickFiles()
+                                        },
+                                        modifier = Modifier.graphicsLayer {
+                                            alpha = 1f - morphProgress
+                                        }
                                     )
                                 }
                             }
@@ -1114,16 +1121,18 @@ private fun ZenConverterContent(
                     morphProgress
                 )
 
-                HeroAddButton(
-                    morphProgress = morphProgress,
-                    texts = texts,
-                    onPickFiles = {
-                        openMenuId = null
-                        queueMessage = null
-                        onPickFiles()
-                    },
-                    modifier = Modifier.offset(x = heroX, y = heroY)
-                )
+                if (hasFiles || morphProgress > 0f) {
+                    HeroAddButton(
+                        morphProgress = morphProgress,
+                        texts = texts,
+                        onPickFiles = {
+                            openMenuId = null
+                            queueMessage = null
+                            onPickFiles()
+                        },
+                        modifier = Modifier.offset(x = heroX, y = heroY)
+                    )
+                }
             }
         }
 
@@ -1544,6 +1553,12 @@ private enum class HeaderActionMode {
     AllInline,
     SettingsInline,
     OverflowOnly
+}
+
+private enum class HeaderPanel {
+    Settings,
+    About,
+    MetadataSecurity
 }
 
 private fun headerContentWidth(containerWidth: Dp): Dp {
@@ -2881,6 +2896,57 @@ private fun AccentSwatch(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.clearAndSetSemantics {}
         )
+    }
+}
+
+@Composable
+private fun EmptyAddState(
+    texts: UiText,
+    height: Dp,
+    showButton: Boolean,
+    onPickFiles: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height),
+        contentAlignment = Alignment.Center
+    ) {
+        if (showButton) {
+            HeroAddButton(
+                morphProgress = 0f,
+                texts = texts,
+                onPickFiles = onPickFiles,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .offset(y = EmptyHeroButtonOffsetY)
+            )
+        }
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .align(Alignment.Center)
+                .offset(y = EmptyHeroTextOffsetY)
+        ) {
+            Text(
+                text = texts.addFilesTitle,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            Text(
+                text = texts.addFilesNote,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth(0.82f)
+            )
+        }
     }
 }
 
