@@ -155,12 +155,11 @@ Transitive dependencies required when consuming the local AAR through
   older local test binaries; it cannot use the bundled CJK font directory.
 - Reason platform APIs are not enough: Android platform APIs do not provide a
   DOCX/PPTX/XLSX to PDF renderer.
-- Current scope: experimental local DOCX/PPTX/XLSX to PDF conversion. The
+- Current scope: limited local DOCX/PPTX/XLSX to PDF conversion. The
   Kotlin service reads each input into memory and caps the source file at
   64 MiB before calling the native library.
 - Release guardrail: generate and record a full transitive Cargo dependency
-  license inventory and broader sample results before raising this path beyond
-  experimental.
+  license inventory before promoting this Beta compatibility path to Stable.
 
 ## Bundled Office CJK Font
 

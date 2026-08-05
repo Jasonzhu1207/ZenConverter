@@ -28,11 +28,12 @@ convert it on your phone, and keep it off someone else's server.
 
 The app is built with native Kotlin and Jetpack Compose. File access goes
 through Android's Storage Access Framework, and longer jobs run in a foreground
-service. This is still early, so the app stays deliberately narrow: formats are
-added one by one, with the rough edges written down instead of hidden.
+service. The app deliberately stays narrow: supported routes are verified on a
+physical Android device, and their known limits are written down instead of
+hidden.
 
-**Note:** older phones with limited RAM may crash on large files. Even on newer
-devices, very large files are still something to test carefully.
+**Note:** very large media files still need adequate free storage, memory, and
+power. Keep the device available while a long foreground conversion is running.
 
 ## Why Build It
 
@@ -51,34 +52,35 @@ ZenConverter is the local-first Android converter I wanted to use:
 
 ## Current Status
 
-Completed items are listed first, experimental paths next, and planned work last.
+`Stable` routes have been verified on a physical Android device. `Beta` routes
+work within the stated compatibility limits. Planned work is listed last.
 
 | Area | Status | Notes |
 | --- | --- | --- |
 | Native Android shell | Done | Kotlin, Compose, Material 3, foreground service pipeline. |
-| Task queue and results | Done | File basics, per-task progress and failures, compact before/after conversion details, cancellation, output sharing, and best-effort opening of the result or its location. |
+| Task queue and results | Done | Direct share/open import, mixed-file routing, per-file target selection, file basics, per-task progress and failures, compact before/after conversion details, cancellation, output sharing, and best-effort opening of the result or its location. |
 | Video conversion | Done | MP4 / MKV / MOV outputs use FFmpeg true video and audio re-encoding, including MP4-to-MP4. Codec, bitrate, resolution, frame rate, audio, and advanced processing can be adjusted. Enabling a compression preset fixes the CRF, video quality/size strategy, and AAC audio bitrate. |
 | Video to animated GIF | Done | FFmpeg palette-based GIF export automatically uses at most the first 30 seconds, 30 fps, and 900 frames. The default short-side cap is 480 px, with 720 px and Original options. |
 | Audio extraction and conversion | Done | Video audio extraction and MP3 / M4A / WAV / FLAC / WMA targets all use FFmpeg true audio re-encoding. Applicable bitrate, sample-rate, channel, and encoder checks are wired. |
-| Advanced audio/video processing | Experimental | Video supports short reverse playback, fade, mirror, rotation, and frame fit/crop. Audio supports reverse playback, non-model `afftdn` noise reduction, fade, volume/mute, and echo. Reverse playback has conservative safety limits. |
-| Image conversion | Done | JPG / JPEG / JFIF / JPE, PNG, WEBP, GIF, HEIC / HEIF, and ICO inputs; JPG / JFIF / PNG / WEBP / ICO / PDF outputs. GIF can use its first frame or split frames into a folder. Metadata and animation timing are not copied. |
-| Metadata safety | Experimental | A separate privacy tool can inspect images/videos. JPG / JPEG / JFIF can be cleaned in place without re-encoding, with removed metadata backed up in app data for same-image restore. |
-| PDF tools | Experimental | Image/PDF conversion, PDF merge, selectable-text export to TXT / lightweight MD, plus password-based PDF encryption and decryption. No OCR or password cracking is included. |
-| Office conversion | Experimental | DOCX / PPTX / XLSX can produce PDF, TXT, or lightweight MD locally. Chinese text can render with bundled CJK fonts, but layout fidelity is limited and source files are capped at 64 MiB. |
-| ZIP archive handling | Planned | Added after the current conversion paths are easier to trust. |
+| Advanced audio/video processing | Stable | Video supports short reverse playback, fade, mirror, rotation, and frame fit/crop. Audio supports reverse playback, non-model `afftdn` noise reduction, fade, volume/mute, and echo. Reverse playback has conservative safety limits. |
+| Image conversion | Stable / Beta | JPG / JPEG / JFIF / JPE, PNG, WEBP, GIF, HEIC / HEIF, and ICO inputs; JPG / JFIF / PNG / WEBP / ICO / PDF outputs. HEIC / HEIF remains device-decoder dependent. GIF can use its first frame or split frames into a folder. Metadata and animation timing are not copied. |
+| Metadata safety | Stable | A separate privacy tool can inspect images/videos. JPG / JPEG / JFIF can be cleaned in place without re-encoding, with removed metadata backed up in app data for same-image restore. |
+| PDF tools | Stable | Image/PDF conversion, PDF merge, selectable-text export to TXT / lightweight MD, plus password-based PDF encryption and decryption. No OCR or password cracking is included. |
+| Office conversion | Beta | DOCX / PPTX / XLSX can produce PDF, TXT, or lightweight MD locally. Chinese text can render with bundled CJK fonts, but layout fidelity is limited and source files are capped at 64 MiB. |
+| ZIP archive handling | Planned | A later scope item once streaming and archive-safety boundaries are designed. |
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    Pick["Select file"]
-    Preset["Choose preset"]
-    Queue["Task queue"]
+    Pick["Add files"]
+    Configure["Configure each task"]
+    Queue["Ready queue"]
     Service["Foreground service"]
     Engine["FFmpeg / Native / Office"]
     Output["Save output"]
 
-    Pick --> Preset --> Queue --> Service --> Engine --> Output
+    Pick --> Configure --> Queue --> Service --> Engine --> Output
 ```
 
 The UI does not do conversion work. Each task is routed to an engine based on

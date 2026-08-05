@@ -44,5 +44,6 @@ audio target.
 - Same-format audio conversions are still re-encodes, not byte-identical copies.
 - Only the first audio stream is used; extra audio streams, video, subtitles,
   attachments, and metadata are not copied.
-- Physical-device sample coverage is still required before promoting these
-  rows beyond Experimental.
+- Physical-device coverage has verified the connected audio targets and
+  video-source audio extraction. Automated sample coverage remains a future
+  quality improvement.

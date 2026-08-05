@@ -62,11 +62,12 @@ by git. If the FFmpegKitNext AAR is absent, Gradle fails during configuration
 with a clear message.
 
 MP3 output needs `libmp3lame`. The app probes FFmpeg's encoder list before MP3
-export and keeps the MP3 rows experimental until physical-device samples pass.
+export and shows a clear compatibility failure when the bundled package lacks
+the encoder. MP3 export has been verified on a physical device.
 
 ## Office2PDF Native Rebuild
 
-The experimental Office renderer is reproducible from
+The limited Office compatibility renderer is reproducible from
 `native/office2pdf-jni`. It pins `developer0hye/office2pdf` at commit
 `e9129b3558f7d758922a5530766d19545ebaa28c` and exposes
 `convertBytesWithFontPaths`, which passes app-private CJK font directories
@@ -88,7 +89,7 @@ and exports `convertBytesWithFontPaths`. Do not validate the CJK fix with a
 Kotlin-only build: an older shared library can still start through the legacy
 `convertBytes` fallback, but it cannot pass the bundled CJK font directory.
 Chinese text rendering has been manually verified on an arm64 physical device;
-layout fidelity remains experimental. Codex does not run this build or install
+layout fidelity remains limited. Codex does not run this build or install
 step.
 
 `settings.gradle.kts` maps the `com.android.application` plugin id to

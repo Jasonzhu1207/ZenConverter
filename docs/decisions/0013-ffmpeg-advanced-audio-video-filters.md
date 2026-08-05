@@ -42,5 +42,5 @@ audio noise reduction.
   preservation.
 - MP4-to-MP4 now uses the FFmpeg compatibility path so video/audio options and
   advanced filters apply consistently across MP4/MKV/MOV outputs.
-- Physical-device samples remain required before promoting these features beyond
-  Experimental.
+- Physical-device verification covers the connected advanced filter paths within
+  their documented limits. Automated regression coverage remains future work.

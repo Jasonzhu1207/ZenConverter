@@ -125,5 +125,6 @@ existing release to be changed. To retain bot attribution for future formal
 releases, push the `vX.Y.Z` tag and let this workflow create the release; do
 not create the release manually in the GitHub UI.
 
-The app probes for `libmp3lame` before MP3 export, but MP3 output remains
-experimental until physical-device sample conversion passes.
+The app probes for `libmp3lame` before MP3 export and shows a specific
+compatibility failure if a replacement package lacks that encoder. MP3 output
+has been verified on a physical device.

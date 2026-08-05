@@ -61,21 +61,19 @@ Goal: add flexible media conversion with one predictable audio/video engine.
 Success: FFmpeg jobs run from Kotlin, report progress, and do not require
 duplicating normal local files into cache.
 
-Current first step: a self-built `arthenica/ffmpeg-kit-next` `v7.1.0` AAR is
-wired for MP4/MKV/MOV video re-encode, video-to-GIF output, video-file audio
-extraction to M4A by FFmpeg AAC re-encode, and experimental audio targets for
-MP3/M4A/WAV/FLAC/WMA through FFmpeg arguments. The advanced filter set is also
-connected for MP4/MKV/MOV video outputs and audio outputs: video reverse
-playback, fade, mirror, rotate, frame fit/crop; audio reverse playback,
-non-model `afftdn` noise reduction, volume/mute, fade, and echo. Video reverse
-is limited to inputs with readable duration and size metadata, up to 60 seconds,
-and within a conservative reverse-frame memory budget. The current AAR is
-`arm64-v8a`
-only, and the app probes for needed encoders and selected filters before export
-where possible so the wrong package fails clearly. This is still not universal
-video or audio transcoding: physical-device sample verification is needed
-across MP3, AAC/M4A, WAV, FLAC, WMA, Vorbis, Opus, PCM, mixed video containers,
-and advanced filter combinations before these paths should be treated as stable.
+Current verified path: a self-built `arthenica/ffmpeg-kit-next` `v7.1.0` AAR
+handles MP4/MKV/MOV video re-encode, video-to-GIF output, video-file audio
+extraction, and MP3/M4A/WAV/FLAC/WMA audio targets through FFmpeg arguments.
+The advanced filter set is also verified for MP4/MKV/MOV video outputs and
+audio outputs: video reverse playback, fade, mirror, rotate, frame fit/crop;
+audio reverse playback, non-model `afftdn` noise reduction, volume/mute, fade,
+and echo. Video reverse is limited to inputs with readable duration and size
+metadata, up to 60 seconds, and within a conservative reverse-frame memory
+budget. The current AAR is `arm64-v8a` only, and the app probes needed encoders
+and selected filters before export where possible so a wrong package fails
+clearly. This is intentionally not universal video or audio transcoding:
+unsupported codecs, streams, and device/file-provider limits remain explicit in
+the support matrix.
 
 ## Phase 4: Image, PDF, Archive
 

@@ -34,6 +34,6 @@ flowchart TD
 - FFmpeg handles connected video/audio conversion and advanced processing.
 - Native Android APIs handle bitmap image conversion, image/PDF paths, and
   metadata work where they are reliable enough.
-- The experimental Office path is isolated behind its JNI renderer.
+- The limited Office compatibility path is isolated behind its JNI renderer.
 - The app must stream or pass file descriptors whenever possible.
 - Copying large files to cache is a fallback, not the default path.

@@ -41,9 +41,9 @@ compatibility path.
 ## Consequences
 
 - The feature adds almost no APK size because it reuses the existing FFmpeg AAR.
-- Reverse playback is still an experimental destructive re-encode. It should be
-  smoke-tested only with very short low-resolution samples; normal phone videos
-  can exceed the memory budget quickly.
+- Reverse playback is a bounded destructive re-encode. It has been verified
+  within the app's duration and memory guards; normal phone videos can still
+  exceed those limits and fail clearly rather than risking an unstable export.
 - Audio noise reduction is basic, non-AI denoise. It may change speech/music
   tone and should not be advertised as studio restoration.
 - Metadata, subtitles, attachments, multiple audio tracks, and animation timing
