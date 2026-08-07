@@ -42,6 +42,7 @@ data class VideoExportOptions(
     val videoMimeType: String = VIDEO_MIME_TYPE_H264,
     val maxFrameRate: Int? = null,
     val compressionMode: VideoCompressionMode = VideoCompressionMode.Standard,
+    val trimRange: MediaTrimRange = MediaTrimRange(),
     val advanced: VideoAdvancedOptions = VideoAdvancedOptions()
 ) {
     companion object {
@@ -61,8 +62,17 @@ data class AudioExportOptions(
     val audioBitrate: Int? = null,
     val sampleRateHz: Int? = null,
     val channelCount: Int? = null,
+    val trimRange: MediaTrimRange = MediaTrimRange(),
     val advanced: AudioAdvancedOptions = AudioAdvancedOptions()
 )
+
+data class MediaTrimRange(
+    val startSeconds: Long? = null,
+    val endSeconds: Long? = null
+) {
+    val isEnabled: Boolean
+        get() = startSeconds != null || endSeconds != null
+}
 
 data class VideoAdvancedOptions(
     val reverse: Boolean = false,

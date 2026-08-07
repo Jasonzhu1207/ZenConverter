@@ -10,12 +10,12 @@ groups:
         to: mp3
         engine: ffmpeg-compatible
         status: stable
-        note: "Extracts the first audio track and encodes MP3 through libmp3lame after runtime encoder probing."
+        note: "Extracts the first audio track and encodes MP3 through libmp3lame after runtime encoder probing. Optional start/end-second trim limits the exported range."
       - from: mp4
         to: mp4
         engine: ffmpeg-compatible
         status: stable
-        note: "FFmpeg re-encode path. Encodes the first video track with H.264/H.265 and writes AAC audio. Manual mode exposes video/audio controls; fixed compression presets own CRF/preset/resolution/frame-rate strategy and AAC audio bitrate. Manual-mode advanced filters apply where selected."
+        note: "FFmpeg re-encode path. Encodes the first video track with H.264/H.265 and writes AAC audio. Manual mode exposes video/audio controls and trim range; fixed compression presets own CRF/preset/resolution/frame-rate strategy and AAC audio bitrate while trim still applies. Manual-mode advanced filters apply where selected."
       - from: mp4
         to: mkv
         engine: ffmpeg-compatible
@@ -30,7 +30,7 @@ groups:
         to: gif
         engine: ffmpeg-compatible
         status: stable
-        note: "FFmpeg animated GIF output for video inputs. Uses palettegen/paletteuse, drops audio/subtitles/data streams, loops by default, and automatically limits output to the first 30 seconds, 30 fps, and 900 frames. GIF resolution defaults to a 480 px short side with 720 px and Original options."
+        note: "FFmpeg animated GIF output for video inputs. Uses palettegen/paletteuse, drops audio/subtitles/data streams, loops by default, and automatically limits output to the selected range's first 30 seconds, 30 fps, and 900 frames. GIF resolution defaults to a 480 px short side with 720 px and Original options."
       - from: mkv
         to: mp4
         engine: ffmpeg-compatible
@@ -205,7 +205,7 @@ groups:
         to: m4a
         engine: ffmpeg-compatible
         status: stable
-        note: "Extracts the first audio track and re-encodes AAC in an M4A container through FFmpeg compatibility mode. This is not audio stream copy; advanced audio filters apply where selected."
+        note: "Extracts the first audio track and re-encodes AAC in an M4A container through FFmpeg compatibility mode. This is not audio stream copy; optional start/end-second trim and advanced audio filters apply where selected."
       - from: video
         to: mp3
         engine: ffmpeg-compatible

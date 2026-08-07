@@ -35,6 +35,9 @@
   fixed-bitrate/Auto behavior; visual-lossless, balanced, and small-file modes
   own codec/CRF/preset/resolution/frame-rate strategy plus AAC audio bitrate.
   These are visual-quality modes, not mathematical lossless compression.
+- Verified integer start/end-second trimming for FFmpeg video and audio outputs.
+  Trimming is a re-encode range selection, not byte-exact lossless cutting; GIF
+  output uses the selected range before its 30 second cap.
 - Verified advanced FFmpeg filters: video reverse, fade, mirror, rotate, and
   fit/crop; audio reverse, `afftdn` noise reduction, fade, volume/mute, and
   echo. Video reverse remains capped to inputs with readable duration and size

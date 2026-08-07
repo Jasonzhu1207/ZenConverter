@@ -33,6 +33,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.layout.Arrangement
@@ -46,6 +47,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -98,6 +100,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -139,6 +142,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -154,6 +158,7 @@ import org.zenconverter.app.conversion.AudioVolumeMode
 import org.zenconverter.app.conversion.FileBasicInfo
 import org.zenconverter.app.conversion.GifFrameExportMode
 import org.zenconverter.app.conversion.ImageExportOptions
+import org.zenconverter.app.conversion.MediaTrimRange
 import org.zenconverter.app.conversion.PdfExportOptions
 import org.zenconverter.app.conversion.PdfImagePageMode
 import org.zenconverter.app.conversion.PdfRenderQuality
@@ -3598,6 +3603,8 @@ private fun QueueHeader(
 private fun VideoOptions(
     texts: UiText,
     menuPrefix: String = "",
+    trimRange: MediaTrimRange,
+    sourceDurationMs: Long?,
     resolution: String,
     compressionMode: String,
     bitrate: String,
@@ -3612,6 +3619,8 @@ private fun VideoOptions(
     targetFormat: TargetFormat,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
+    onTrimStartSecondsChange: (Long?) -> Unit,
+    onTrimEndSecondsChange: (Long?) -> Unit,
     onResolutionChange: (String) -> Unit,
     onCompressionModeChange: (String) -> Unit,
     onBitrateChange: (String) -> Unit,
@@ -3639,6 +3648,13 @@ private fun VideoOptions(
     val isStandardCompression = videoCompressionModeFor(compressionMode) == VideoCompressionMode.Standard
     val presetCompressionActive = !isGifTarget && !isStandardCompression
     OptionGrid {
+        MediaTrimOptions(
+            texts = texts,
+            trimRange = trimRange,
+            sourceDurationMs = sourceDurationMs,
+            onStartSecondsChange = onTrimStartSecondsChange,
+            onEndSecondsChange = onTrimEndSecondsChange
+        )
         if (!isGifTarget) {
             OptionDropdown(
                 "${menuPrefix}video-compression-mode",
@@ -3774,6 +3790,8 @@ private fun VideoOptions(
 private fun AudioOptions(
     texts: UiText,
     menuPrefix: String = "",
+    trimRange: MediaTrimRange,
+    sourceDurationMs: Long?,
     bitrate: String,
     sampleRate: String,
     channels: String,
@@ -3781,6 +3799,8 @@ private fun AudioOptions(
     targetFormat: TargetFormat,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
+    onTrimStartSecondsChange: (Long?) -> Unit,
+    onTrimEndSecondsChange: (Long?) -> Unit,
     onBitrateChange: (String) -> Unit,
     onSampleRateChange: (String) -> Unit,
     onChannelsChange: (String) -> Unit,
@@ -3793,6 +3813,13 @@ private fun AudioOptions(
     onNoiseReductionChange: (String) -> Unit
 ) {
     OptionGrid {
+        MediaTrimOptions(
+            texts = texts,
+            trimRange = trimRange,
+            sourceDurationMs = sourceDurationMs,
+            onStartSecondsChange = onTrimStartSecondsChange,
+            onEndSecondsChange = onTrimEndSecondsChange
+        )
         if (audioSupportsBitrateOption(targetFormat)) {
             OptionDropdown(
                 "${menuPrefix}audio-bitrate",
@@ -3846,6 +3873,136 @@ private fun AudioOptions(
             onNoiseReductionChange = onNoiseReductionChange
         )
     }
+}
+
+@Composable
+private fun MediaTrimOptions(
+    texts: UiText,
+    trimRange: MediaTrimRange,
+    sourceDurationMs: Long?,
+    onStartSecondsChange: (Long?) -> Unit,
+    onEndSecondsChange: (Long?) -> Unit
+) {
+    val errorText = mediaTrimErrorText(trimRange, sourceDurationMs, texts)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
+            .border(
+                1.dp,
+                if (errorText == null) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                } else {
+                    MaterialTheme.colorScheme.error.copy(alpha = 0.35f)
+                },
+                RoundedCornerShape(8.dp)
+            )
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = texts.trimRange,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = texts.trimDurationHint(sourceDurationMs?.let { formatDurationMs(it, texts) }),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            TrimSecondsField(
+                value = trimRange.startSeconds,
+                label = texts.trimStartSeconds,
+                isError = errorText != null,
+                onValueChange = onStartSecondsChange,
+                modifier = Modifier.weight(1f)
+            )
+            TrimSecondsField(
+                value = trimRange.endSeconds,
+                label = texts.trimEndSeconds,
+                isError = errorText != null,
+                onValueChange = onEndSecondsChange,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        errorText?.let { message ->
+            Text(
+                text = message,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+    }
+}
+
+@Composable
+private fun TrimSecondsField(
+    value: Long?,
+    label: String,
+    isError: Boolean,
+    onValueChange: (Long?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    OutlinedTextField(
+        value = value?.toString().orEmpty(),
+        onValueChange = { rawValue ->
+            val digits = rawValue.filter { it.isDigit() }.take(7)
+            onValueChange(digits.toLongOrNull())
+        },
+        singleLine = true,
+        label = { Text(label) },
+        isError = isError,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+            focusedLabelColor = MaterialTheme.colorScheme.primary,
+            unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            cursorColor = MaterialTheme.colorScheme.primary,
+            focusedContainerColor = Color.White,
+            unfocusedContainerColor = Color.White,
+            errorBorderColor = MaterialTheme.colorScheme.error,
+            errorLabelColor = MaterialTheme.colorScheme.error,
+            errorCursorColor = MaterialTheme.colorScheme.error,
+            errorContainerColor = Color.White
+        ),
+        modifier = modifier.defaultMinSize(minWidth = 0.dp)
+    )
+}
+
+private fun mediaTrimErrorText(
+    trimRange: MediaTrimRange,
+    durationMs: Long?,
+    texts: UiText
+): String? {
+    if (!trimRange.isEnabled) return null
+    val startSeconds = trimRange.startSeconds ?: 0L
+    val endSeconds = trimRange.endSeconds
+    val startMs = trimSecondsToMs(startSeconds) ?: return texts.trimRangeTooLarge
+    if (endSeconds != null) {
+        val endMs = trimSecondsToMs(endSeconds) ?: return texts.trimRangeTooLarge
+        if (endMs <= startMs) return texts.trimEndAfterStart
+        if (durationMs != null && endMs > durationMs) return texts.trimEndWithinDuration
+    }
+    if (durationMs != null && startMs >= durationMs) return texts.trimStartBeforeDuration
+    return null
+}
+
+private fun trimSecondsToMs(seconds: Long): Long? {
+    return runCatching { Math.multiplyExact(seconds, 1_000L) }.getOrNull()
 }
 
 @Composable
@@ -4596,6 +4753,8 @@ private fun QueuedFileOptionsPanel(
             FileCategory.Video -> VideoOptions(
                 texts = texts,
                 menuPrefix = menuPrefix,
+                trimRange = file.videoOptions.trimRange,
+                sourceDurationMs = file.inputInfo?.durationMs,
                 resolution = videoResolutionLabelFor(file.videoOptions),
                 compressionMode = videoCompressionLabelFor(file.videoOptions.compressionMode),
                 bitrate = videoBitrateLabelFor(file.videoOptions.videoBitrate),
@@ -4610,6 +4769,24 @@ private fun QueuedFileOptionsPanel(
                 targetFormat = selectedTarget.targetFormat,
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
+                onTrimStartSecondsChange = { value ->
+                    onUpdateFile(
+                        file.copy(
+                            videoOptions = file.videoOptions.copy(
+                                trimRange = file.videoOptions.trimRange.copy(startSeconds = value)
+                            )
+                        )
+                    )
+                },
+                onTrimEndSecondsChange = { value ->
+                    onUpdateFile(
+                        file.copy(
+                            videoOptions = file.videoOptions.copy(
+                                trimRange = file.videoOptions.trimRange.copy(endSeconds = value)
+                            )
+                        )
+                    )
+                },
                 onResolutionChange = { value ->
                     onUpdateFile(
                         file.copy(
@@ -4704,6 +4881,8 @@ private fun QueuedFileOptionsPanel(
             FileCategory.Audio -> AudioOptions(
                 texts = texts,
                 menuPrefix = menuPrefix,
+                trimRange = file.audioOptions.trimRange,
+                sourceDurationMs = file.inputInfo?.durationMs,
                 bitrate = audioBitrateLabelFor(file.audioOptions.audioBitrate),
                 sampleRate = audioSampleRateLabelFor(file.audioOptions.sampleRateHz),
                 channels = audioChannelsLabelFor(file.audioOptions.channelCount),
@@ -4711,6 +4890,24 @@ private fun QueuedFileOptionsPanel(
                 targetFormat = selectedTarget.targetFormat,
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
+                onTrimStartSecondsChange = { value ->
+                    onUpdateFile(
+                        file.copy(
+                            audioOptions = file.audioOptions.copy(
+                                trimRange = file.audioOptions.trimRange.copy(startSeconds = value)
+                            )
+                        )
+                    )
+                },
+                onTrimEndSecondsChange = { value ->
+                    onUpdateFile(
+                        file.copy(
+                            audioOptions = file.audioOptions.copy(
+                                trimRange = file.audioOptions.trimRange.copy(endSeconds = value)
+                            )
+                        )
+                    )
+                },
                 onBitrateChange = { value ->
                     onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(audioBitrate = audioBitrateToBits(value))))
                 },
@@ -5221,6 +5418,29 @@ private fun fileWithTarget(
     supportedVideoMimeTypes: Set<String>
 ): QueuedFile {
     val targetFormat = target.targetFormat
+    val nextVideoOptions = videoOptionsForTarget(file.videoOptions, targetFormat, supportedVideoMimeTypes)
+        .let { options ->
+            if (
+                target.category == FileCategory.Video &&
+                file.category == FileCategory.Audio &&
+                !options.trimRange.isEnabled &&
+                file.audioOptions.trimRange.isEnabled
+            ) {
+                options.copy(trimRange = file.audioOptions.trimRange)
+            } else {
+                options
+            }
+        }
+    val nextAudioOptions = if (
+        target.category == FileCategory.Audio &&
+        file.category == FileCategory.Video &&
+        !file.audioOptions.trimRange.isEnabled &&
+        file.videoOptions.trimRange.isEnabled
+    ) {
+        file.audioOptions.copy(trimRange = file.videoOptions.trimRange)
+    } else {
+        file.audioOptions
+    }
     val nextPdfSecurityOptions = when {
         target.category == FileCategory.Pdf &&
             targetFormat.label.equals("Encrypt PDF", ignoreCase = true) ->
@@ -5233,7 +5453,8 @@ private fun fileWithTarget(
     return file.copy(
         category = target.category,
         targetFormat = targetFormat.label,
-        videoOptions = videoOptionsForTarget(file.videoOptions, targetFormat, supportedVideoMimeTypes),
+        videoOptions = nextVideoOptions,
+        audioOptions = nextAudioOptions,
         imageOptions = imageOptionsForTarget(file.imageOptions, targetFormat),
         pdfSecurityOptions = nextPdfSecurityOptions
     )
@@ -5245,11 +5466,13 @@ private fun videoOptionsForTarget(
     supportedVideoMimeTypes: Set<String>
 ): VideoExportOptions {
     if (targetFormat.extension.equals("gif", ignoreCase = true)) {
-        return VideoExportOptions(
+        return current.copy(
             maxShortSidePixels = 480,
             videoBitrate = null,
             videoMimeType = VideoExportOptions.VIDEO_MIME_TYPE_H264,
-            maxFrameRate = 30
+            maxFrameRate = 30,
+            compressionMode = VideoCompressionMode.Standard,
+            advanced = VideoAdvancedOptions()
         )
     }
     val codec = if (current.videoMimeType in supportedVideoMimeTypes) {
@@ -5875,6 +6098,14 @@ private data class UiText(
     val frameRate: String,
     val sampleRate: String,
     val channels: String,
+    val trimRange: String,
+    val trimStartSeconds: String,
+    val trimEndSeconds: String,
+    val trimDurationUnknown: String,
+    val trimRangeTooLarge: String,
+    val trimStartBeforeDuration: String,
+    val trimEndAfterStart: String,
+    val trimEndWithinDuration: String,
     val gifFrameMode: String,
     val password: String,
     val skip: String,
@@ -5969,6 +6200,14 @@ private data class UiText(
             englishText -> "Audio bitrate"
             simplifiedChineseText -> "音频码率"
             else -> "音訊位元率"
+        }
+    }
+
+    fun trimDurationHint(durationText: String?): String {
+        return when (this) {
+            englishText -> durationText?.let { "Duration $it" } ?: trimDurationUnknown
+            simplifiedChineseText -> durationText?.let { "时长 $it" } ?: trimDurationUnknown
+            else -> durationText?.let { "時長 $it" } ?: trimDurationUnknown
         }
     }
 
@@ -6655,6 +6894,20 @@ private data class UiText(
                 simplifiedChineseText -> "倒放需要读取文件时长"
                 else -> "倒放需要讀取檔案時長"
             }
+            "Compatibility engine needs duration metadata for trimming" -> when (this) {
+                englishText -> "Trimming needs readable media duration"
+                simplifiedChineseText -> "裁剪需要读取文件时长"
+                else -> "裁剪需要讀取檔案時長"
+            }
+            "Trim start must be zero or greater" -> when (this) {
+                englishText -> "Trim start must be zero or greater"
+                simplifiedChineseText -> "起始秒不能小于 0"
+                else -> "起始秒不能小於 0"
+            }
+            "Trim range is too large" -> trimRangeTooLarge
+            "Trim start must be before media duration" -> trimStartBeforeDuration
+            "Trim end must be greater than trim start" -> trimEndAfterStart
+            "Trim end must not exceed media duration" -> trimEndWithinDuration
             "Compatibility engine supports reverse video up to 60 seconds" -> when (this) {
                 englishText -> "Reverse video supports files up to 60 seconds"
                 simplifiedChineseText -> "视频倒放暂时只支持 60 秒以内"
@@ -7469,6 +7722,14 @@ private val englishText = UiText(
     frameRate = "Frame rate",
     sampleRate = "Sample rate",
     channels = "Channels",
+    trimRange = "Trim",
+    trimStartSeconds = "Start (s)",
+    trimEndSeconds = "End (s)",
+    trimDurationUnknown = "Duration unknown",
+    trimRangeTooLarge = "Trim range is too large",
+    trimStartBeforeDuration = "Start must be before the media duration",
+    trimEndAfterStart = "End must be greater than start",
+    trimEndWithinDuration = "End must not exceed the media duration",
     gifFrameMode = "GIF frames",
     password = "Password",
     skip = "Skip",
@@ -7578,6 +7839,14 @@ private val simplifiedChineseText = UiText(
     frameRate = "帧率",
     sampleRate = "采样率",
     channels = "声道",
+    trimRange = "裁剪",
+    trimStartSeconds = "起始秒",
+    trimEndSeconds = "结束秒",
+    trimDurationUnknown = "时长未知",
+    trimRangeTooLarge = "裁剪范围过大",
+    trimStartBeforeDuration = "起始秒必须早于文件时长",
+    trimEndAfterStart = "结束秒必须大于起始秒",
+    trimEndWithinDuration = "结束秒不能超过文件时长",
     gifFrameMode = "GIF 帧",
     password = "密码",
     skip = "跳过",
@@ -7687,6 +7956,14 @@ private val traditionalChineseText = UiText(
     frameRate = "幀率",
     sampleRate = "取樣率",
     channels = "聲道",
+    trimRange = "裁剪",
+    trimStartSeconds = "起始秒",
+    trimEndSeconds = "結束秒",
+    trimDurationUnknown = "時長未知",
+    trimRangeTooLarge = "裁剪範圍過大",
+    trimStartBeforeDuration = "起始秒必須早於檔案時長",
+    trimEndAfterStart = "結束秒必須大於起始秒",
+    trimEndWithinDuration = "結束秒不能超過檔案時長",
     gifFrameMode = "GIF 幀",
     password = "密碼",
     skip = "略過",

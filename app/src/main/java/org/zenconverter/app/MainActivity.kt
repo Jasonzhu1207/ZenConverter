@@ -37,6 +37,7 @@ import org.zenconverter.app.conversion.FileBasicInfo
 import org.zenconverter.app.conversion.FileBasicInfoReader
 import org.zenconverter.app.conversion.GifFrameExportMode
 import org.zenconverter.app.conversion.ImageExportOptions
+import org.zenconverter.app.conversion.MediaTrimRange
 import org.zenconverter.app.conversion.OutputDestination
 import org.zenconverter.app.conversion.PdfExportOptions
 import org.zenconverter.app.conversion.PdfSecurityMode
@@ -433,6 +434,11 @@ class MainActivity : ComponentActivity() {
             return
         }
 
+        firstQueuedTrimValidationMessage()?.let { message ->
+            ConversionTaskStore.showMessage(message)
+            return
+        }
+
         if (outputLocationMode.value == OutputLocationMode.Custom && outputDirectory.value == null) {
             ConversionTaskStore.showMessage("Choose output folder first")
             return
@@ -586,6 +592,38 @@ class MainActivity : ComponentActivity() {
             }
         }
         sanitizePdfMergeGroups()
+    }
+
+    private fun firstQueuedTrimValidationMessage(): String? {
+        return queuedFiles.firstNotNullOfOrNull { file ->
+            trimValidationMessageFor(file.trimRangeForCurrentTarget(), file.inputInfo?.durationMs)
+        }
+    }
+
+    private fun trimValidationMessageFor(
+        trimRange: MediaTrimRange,
+        durationMs: Long?
+    ): String? {
+        if (!trimRange.isEnabled) return null
+        val startSeconds = trimRange.startSeconds ?: 0L
+        val endSeconds = trimRange.endSeconds
+        if (startSeconds < 0L) return "Trim start must be zero or greater"
+        val startMs = trimSecondsToMs(startSeconds) ?: return "Trim range is too large"
+        if (endSeconds != null) {
+            val endMs = trimSecondsToMs(endSeconds) ?: return "Trim range is too large"
+            if (endMs <= startMs) return "Trim end must be greater than trim start"
+            if (durationMs != null && endMs > durationMs) {
+                return "Trim end must not exceed media duration"
+            }
+        }
+        if (durationMs != null && startMs >= durationMs) {
+            return "Trim start must be before media duration"
+        }
+        return null
+    }
+
+    private fun trimSecondsToMs(seconds: Long): Long? {
+        return runCatching { Math.multiplyExact(seconds, 1_000L) }.getOrNull()
     }
 
     private fun removeQueuedFile(fileId: String) {
@@ -1463,6 +1501,16 @@ private fun QueuedFile.toPendingSelection(): PendingSelection {
         targetFormat = targetFormatObject(),
         pdfSecurityOptions = pdfSecurityOptions
     )
+}
+
+private fun QueuedFile.trimRangeForCurrentTarget(): MediaTrimRange {
+    return when (category) {
+        FileCategory.Video -> videoOptions.trimRange
+        FileCategory.Audio -> audioOptions.trimRange
+        FileCategory.Image,
+        FileCategory.Pdf,
+        FileCategory.Document -> MediaTrimRange()
+    }
 }
 
 private fun QueuedFile.targetFormatObject(): TargetFormat {

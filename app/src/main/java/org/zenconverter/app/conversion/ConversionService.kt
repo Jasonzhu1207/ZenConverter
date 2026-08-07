@@ -2018,15 +2018,24 @@ class ConversionService : Service() {
             )
 
         try {
-            val durationMs = ffmpegProgressDurationMsFor(input, inputSource.path)
-            ffmpegMissingAdvancedMetadataMessageFor(input, durationMs)?.let { message ->
+            val sourceDurationMs = ffmpegSourceDurationMsFor(input, inputSource.path)
+            val trimWindow = ffmpegTrimWindowFor(input, sourceDurationMs)
+            if (trimWindow.errorMessage != null) {
+                return@withContext FfmpegRunResult(
+                    success = false,
+                    cancelled = false,
+                    message = trimWindow.errorMessage
+                )
+            }
+            val effectiveDurationMs = ffmpegProgressDurationMsFor(input, sourceDurationMs, trimWindow)
+            ffmpegMissingAdvancedMetadataMessageFor(input, effectiveDurationMs)?.let { message ->
                 return@withContext FfmpegRunResult(
                     success = false,
                     cancelled = false,
                     message = message
                 )
             }
-            ffmpegUnsupportedAdvancedSelectionMessageFor(input, durationMs)?.let { message ->
+            ffmpegUnsupportedAdvancedSelectionMessageFor(input, effectiveDurationMs)?.let { message ->
                 return@withContext FfmpegRunResult(
                     success = false,
                     cancelled = false,
@@ -2046,12 +2055,19 @@ class ConversionService : Service() {
                     input = input,
                     inputSource = inputSource,
                     tempFile = tempFile,
-                    durationMs = durationMs,
+                    durationMs = effectiveDurationMs,
+                    trimWindow = trimWindow,
                     logTail = logTail
                 )
             }
-            val arguments = ffmpegArgumentsFor(input, inputSource.path, tempFile, durationMs)
-            executeFfmpeg(input, arguments, durationMs, logTail, inputSource.label)
+            val arguments = ffmpegArgumentsFor(
+                input,
+                inputSource.path,
+                tempFile,
+                effectiveDurationMs,
+                trimWindow
+            )
+            executeFfmpeg(input, arguments, effectiveDurationMs, logTail, inputSource.label)
         } finally {
             inputSource.close()
         }
@@ -2085,6 +2101,7 @@ class ConversionService : Service() {
         inputSource: FfmpegInputSource,
         tempFile: File,
         durationMs: Long?,
+        trimWindow: FfmpegTrimWindow,
         logTail: MutableList<String>
     ): FfmpegRunResult {
         return executeFfmpeg(
@@ -2092,7 +2109,8 @@ class ConversionService : Service() {
             arguments = ffmpegVideoGifArgumentsFor(
                 input = input,
                 inputPath = inputSource.path,
-                outputFile = tempFile
+                outputFile = tempFile,
+                trimWindow = trimWindow
             ),
             durationMs = durationMs,
             logTail = logTail,
@@ -2301,16 +2319,24 @@ class ConversionService : Service() {
         input: ConversionTaskInput,
         inputPath: String,
         outputFile: File,
-        durationMs: Long?
+        durationMs: Long?,
+        trimWindow: FfmpegTrimWindow
     ): List<String> {
         return when (input.category) {
-            ConversionMediaCategory.Video -> ffmpegVideoArgumentsFor(input, inputPath, outputFile, durationMs)
+            ConversionMediaCategory.Video -> ffmpegVideoArgumentsFor(
+                input,
+                inputPath,
+                outputFile,
+                durationMs,
+                trimWindow
+            )
             ConversionMediaCategory.Audio -> buildList {
                 val audioProfile = ffmpegAudioProfileFor(input)
                     ?: error("Unsupported audio target ${input.targetFormat}")
                 add("-hide_banner")
                 add("-nostdin")
                 add("-y")
+                addFfmpegTrimInputOptions(trimWindow)
                 add("-i")
                 add(inputPath)
                 add("-map")
@@ -2339,7 +2365,8 @@ class ConversionService : Service() {
         input: ConversionTaskInput,
         inputPath: String,
         outputFile: File,
-        durationMs: Long?
+        durationMs: Long?,
+        trimWindow: FfmpegTrimWindow
     ): List<String> {
         val videoProfile = ffmpegVideoProfileFor(input)
             ?: error("Unsupported video target ${input.targetFormat}")
@@ -2352,6 +2379,7 @@ class ConversionService : Service() {
             add("-hide_banner")
             add("-nostdin")
             add("-y")
+            addFfmpegTrimInputOptions(trimWindow)
             add("-i")
             add(inputPath)
             add("-ignore_unknown")
@@ -2456,6 +2484,20 @@ class ConversionService : Service() {
         }
     }
 
+    private fun MutableList<String>.addFfmpegTrimInputOptions(
+        trimWindow: FfmpegTrimWindow,
+        durationLimitMs: Long? = trimWindow.durationLimitMs
+    ) {
+        if (trimWindow.startSeconds > 0L) {
+            add("-ss")
+            add(ffmpegSeconds(trimWindow.startSeconds.toDouble()))
+        }
+        durationLimitMs?.takeIf { it > 0L }?.let { durationMs ->
+            add("-t")
+            add(ffmpegSeconds(durationMs.toDouble() / 1000.0))
+        }
+    }
+
     private fun ffmpegAacAudioProfile(): FfmpegAudioProfile {
         return FfmpegAudioProfile(
             codec = FFMPEG_AAC_ENCODER,
@@ -2468,14 +2510,19 @@ class ConversionService : Service() {
     private fun ffmpegVideoGifArgumentsFor(
         input: ConversionTaskInput,
         inputPath: String,
-        outputFile: File
+        outputFile: File,
+        trimWindow: FfmpegTrimWindow
     ): List<String> {
         return buildList {
             add("-hide_banner")
             add("-nostdin")
             add("-y")
-            add("-t")
-            add(FFMPEG_VIDEO_GIF_MAX_DURATION_SECONDS)
+            addFfmpegTrimInputOptions(
+                trimWindow,
+                durationLimitMs = trimWindow.effectiveDurationMs
+                    ?.coerceAtMost(FFMPEG_VIDEO_GIF_MAX_DURATION_MS)
+                    ?: FFMPEG_VIDEO_GIF_MAX_DURATION_MS
+            )
             add("-i")
             add(inputPath)
             add("-an")
@@ -3508,16 +3555,77 @@ class ConversionService : Service() {
         }
     }
 
-    private fun ffmpegProgressDurationMsFor(
+    private fun ffmpegSourceDurationMsFor(
         input: ConversionTaskInput,
         inputPath: String
     ): Long? {
-        val durationMs = readDurationMs(input.inputUri) ?: readFfmpegDurationMs(inputPath)
+        return readDurationMs(input.inputUri) ?: readFfmpegDurationMs(inputPath)
+    }
+
+    private fun ffmpegProgressDurationMsFor(
+        input: ConversionTaskInput,
+        sourceDurationMs: Long?,
+        trimWindow: FfmpegTrimWindow
+    ): Long? {
+        val durationMs = trimWindow.effectiveDurationMs ?: sourceDurationMs
         return if (isVideoGifOutput(input)) {
             durationMs?.coerceAtMost(FFMPEG_VIDEO_GIF_MAX_DURATION_MS)
         } else {
             durationMs
         }
+    }
+
+    private fun ffmpegTrimWindowFor(
+        input: ConversionTaskInput,
+        sourceDurationMs: Long?
+    ): FfmpegTrimWindow {
+        val trimRange = ffmpegTrimRangeFor(input)
+        if (!trimRange.isEnabled) return FfmpegTrimWindow()
+
+        val sourceDuration = sourceDurationMs
+            ?: return FfmpegTrimWindow(errorMessage = "Compatibility engine needs duration metadata for trimming")
+        val startSeconds = trimRange.startSeconds ?: 0L
+        val endSeconds = trimRange.endSeconds
+        if (startSeconds < 0L) {
+            return FfmpegTrimWindow(errorMessage = "Trim start must be zero or greater")
+        }
+        val startMs = trimSecondsToMs(startSeconds)
+            ?: return FfmpegTrimWindow(errorMessage = "Trim range is too large")
+        if (startMs >= sourceDuration) {
+            return FfmpegTrimWindow(errorMessage = "Trim start must be before media duration")
+        }
+        val effectiveDurationMs = if (endSeconds != null) {
+            val endMs = trimSecondsToMs(endSeconds)
+                ?: return FfmpegTrimWindow(errorMessage = "Trim range is too large")
+            when {
+                endMs <= startMs ->
+                    return FfmpegTrimWindow(errorMessage = "Trim end must be greater than trim start")
+                endMs > sourceDuration ->
+                    return FfmpegTrimWindow(errorMessage = "Trim end must not exceed media duration")
+            }
+            endMs - startMs
+        } else {
+            sourceDuration - startMs
+        }
+        return FfmpegTrimWindow(
+            startSeconds = startSeconds,
+            durationLimitMs = endSeconds?.let { effectiveDurationMs },
+            effectiveDurationMs = effectiveDurationMs
+        )
+    }
+
+    private fun ffmpegTrimRangeFor(input: ConversionTaskInput): MediaTrimRange {
+        return when (input.category) {
+            ConversionMediaCategory.Video -> input.videoOptions.trimRange
+            ConversionMediaCategory.Audio -> input.audioOptions.trimRange
+            ConversionMediaCategory.Image,
+            ConversionMediaCategory.Pdf,
+            ConversionMediaCategory.Document -> MediaTrimRange()
+        }
+    }
+
+    private fun trimSecondsToMs(seconds: Long): Long? {
+        return runCatching { Math.multiplyExact(seconds, 1_000L) }.getOrNull()
     }
 
     private fun readFfmpegDurationMs(inputPath: String): Long? {
@@ -4385,6 +4493,13 @@ class ConversionService : Service() {
             descriptor?.close()
         }
     }
+
+    private data class FfmpegTrimWindow(
+        val startSeconds: Long = 0L,
+        val durationLimitMs: Long? = null,
+        val effectiveDurationMs: Long? = null,
+        val errorMessage: String? = null
+    )
 
     private data class GifFrameExtraction(
         val directory: File,
