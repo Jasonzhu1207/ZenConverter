@@ -141,6 +141,8 @@ Transitive dependencies required when consuming the local AAR through
   `e9129b3558f7d758922a5530766d19545ebaa28c`, crate version `0.6.1`,
   Apache License 2.0. The local Apache text is at
   `third_party/licenses/office2pdf/Apache-2.0.txt`.
+- Rebuild target for the next server run: `developer0hye/office2pdf`
+  `v0.6.5` commit `7de4b28aca59de69342fc89d7d2de73e9482af69`.
 - JNI binding dependency: `jni` version `0.21.1`, Apache-2.0 OR MIT.
 - JNI symbols consumed by the app:
   `Java_org_zenconverter_app_office_Office2PdfNative_convertBytesWithFontPaths`

@@ -68,29 +68,30 @@ the encoder. MP3 export has been verified on a physical device.
 ## Office2PDF Native Rebuild
 
 The limited Office compatibility renderer is reproducible from
-`native/office2pdf-jni`. It pins `developer0hye/office2pdf` at commit
-`e9129b3558f7d758922a5530766d19545ebaa28c` and exposes
+`native/office2pdf-jni`. It pins `developer0hye/office2pdf` at release commit
+`7de4b28aca59de69342fc89d7d2de73e9482af69` (`v0.6.5`) and exposes
 `convertBytesWithFontPaths`, which passes app-private CJK font directories
 through `ConvertOptions.font_paths`.
 
-This rebuild needs the Android Rust target, an installed Android NDK, and
-`cargo-ndk`. Run it manually from the native source directory only when the
-toolchain is ready:
+For the server workflow, copy `native/office2pdf-jni/` to
+`/root/zenconverter-office2pdf-build/office2pdf-jni/`, then run:
 
-```powershell
-cargo ndk -t arm64-v8a -o ../../app/src/main/jniLibs build --release
+```bash
+bash build-arm64-v8a.sh
 ```
 
-The command replaces
-`app/src/main/jniLibs/arm64-v8a/libzen_office2pdf.so`. The checked-in July 14,
-2026 rebuild is `72,348,456` bytes with SHA-256
-`46779f04fc231fb1b1104ba766636e372a1be7cd49b71909346953e512a8e09c`
-and exports `convertBytesWithFontPaths`. Do not validate the CJK fix with a
+The script writes the compiled shared library to
+`/root/zenconverter-office2pdf-build/built-jniLibs/arm64-v8a/libzen_office2pdf.so`.
+Copy that file over `app/src/main/jniLibs/arm64-v8a/libzen_office2pdf.so`.
+Set `ANDROID_NDK_HOME` to the NDK root if it is not installed in a common
+system path.
+The checked-in July 14, 2026 rebuild is `72,348,456` bytes with SHA-256
+`46779f04fc231fb1b1104ba766636e372a1be7cd49b71909346953e512a8e09c` and
+exports `convertBytesWithFontPaths`. Do not validate the CJK fix with a
 Kotlin-only build: an older shared library can still start through the legacy
 `convertBytes` fallback, but it cannot pass the bundled CJK font directory.
 Chinese text rendering has been manually verified on an arm64 physical device;
-layout fidelity remains limited. Codex does not run this build or install
-step.
+layout fidelity remains limited. Codex does not run this build or install step.
 
 `settings.gradle.kts` maps the `com.android.application` plugin id to
 `com.android.tools.build:gradle` through `pluginManagement.resolutionStrategy`.
