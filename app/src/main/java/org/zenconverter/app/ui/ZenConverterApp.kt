@@ -25,6 +25,8 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import org.zenconverter.app.ui.theme.ZenAnimations
 import org.zenconverter.app.ui.theme.bounceClick
@@ -830,9 +832,7 @@ private fun ZenConverterContent(
     onStartConversion: () -> Unit,
     onCancelConversion: () -> Unit
 ) {
-    var showSettings by remember { mutableStateOf(false) }
-    var showAbout by rememberSaveable { mutableStateOf(false) }
-    var showMetadataSecurity by remember { mutableStateOf(false) }
+    var activeHeaderPanel by rememberSaveable { mutableStateOf<HeaderPanel?>(null) }
     var showSupport by remember { mutableStateOf(false) }
     var showPrivacyPolicy by rememberSaveable { mutableStateOf(false) }
     var queueMessage by remember { mutableStateOf<String?>(null) }
@@ -840,15 +840,6 @@ private fun ZenConverterContent(
     var expandedFileId by remember { mutableStateOf<String?>(null) }
     var lastQueueIds by remember { mutableStateOf<List<String>>(emptyList()) }
     val homeListState = rememberLazyListState()
-
-    if (showPrivacyPolicy) {
-        PrivacyPolicyScreen(
-            policy = texts.privacyPolicy,
-            linkUnavailable = texts.linkUnavailable,
-            onBack = { showPrivacyPolicy = false }
-        )
-        return
-    }
 
     val taskProgressById = conversionTasks.associateBy { it.fileId }
     val queueIds = queuedFiles.map { it.id }
@@ -867,12 +858,6 @@ private fun ZenConverterContent(
 
     val statusMessage = conversionSummary ?: queueMessage
     var headerHeightPx by remember { mutableStateOf(0) }
-    val activeHeaderPanel = when {
-        showSettings -> HeaderPanel.Settings
-        showAbout -> HeaderPanel.About
-        showMetadataSecurity -> HeaderPanel.MetadataSecurity
-        else -> null
-    }
     var renderedHeaderPanel by remember { mutableStateOf<HeaderPanel?>(null) }
     val headerPanelVisibleState = remember { MutableTransitionState(false) }
 
@@ -883,11 +868,16 @@ private fun ZenConverterContent(
         headerPanelVisibleState.targetState = activeHeaderPanel != null
     }
 
-    NoOverscroll {
-        Scaffold(
-            containerColor = MaterialTheme.colorScheme.background,
-            contentWindowInsets = WindowInsets.safeDrawing
-        ) { contentPadding ->
+    BackHandler(enabled = showPrivacyPolicy) {
+        showPrivacyPolicy = false
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        NoOverscroll {
+            Scaffold(
+                containerColor = MaterialTheme.colorScheme.background,
+                contentWindowInsets = WindowInsets.safeDrawing
+            ) { contentPadding ->
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
@@ -902,14 +892,25 @@ private fun ZenConverterContent(
                 val keepPanelSlot = activeHeaderPanel != null ||
                     headerPanelVisibleState.currentState ||
                     headerPanelVisibleState.targetState
-                val emptyEntryHeight = run {
-                    if (!hasFiles && keepPanelSlot) {
-                        EmptyPanelEntryHeight
-                    } else {
-                        val available = maxHeight - listTopPadding - HomeBottomPadding
-                        if (available > 280.dp) available else 280.dp
-                    }
+                val availableEmptyEntryHeight = run {
+                    val available = maxHeight - listTopPadding - HomeBottomPadding
+                    if (available > 280.dp) available else 280.dp
                 }
+                val emptyEntryHeightTarget = if (!hasFiles && activeHeaderPanel != null) {
+                    EmptyPanelEntryHeight
+                } else {
+                    availableEmptyEntryHeight
+                }
+                val emptyLayoutSpring = if (activeHeaderPanel != null) {
+                    ZenAnimations.PanelEnterDpSpring
+                } else {
+                    ZenAnimations.PanelExitDpSpring
+                }
+                val emptyEntryHeight by animateDpAsState(
+                    targetValue = emptyEntryHeightTarget,
+                    animationSpec = emptyLayoutSpring,
+                    label = "emptyEntryHeight"
+                )
 
                 val morphProgress by animateFloatAsState(
                     targetValue = if (hasFiles) 1f else 0f,
@@ -917,6 +918,11 @@ private fun ZenConverterContent(
                     label = "heroMorphProgress"
                 )
                 val showEmptyStateItem = queuedFiles.isEmpty() || morphProgress < 1f
+                val emptyPanelGap by animateDpAsState(
+                    targetValue = if (activeHeaderPanel != null) HeaderContentGap else 0.dp,
+                    animationSpec = emptyLayoutSpring,
+                    label = "emptyPanelGap"
+                )
 
                 LazyColumn(
                     state = homeListState,
@@ -938,39 +944,79 @@ private fun ZenConverterContent(
                                     enter = ZenAnimations.PanelEnter,
                                     exit = ZenAnimations.PanelExit
                                 ) {
-                                    when (renderedHeaderPanel) {
-                                        HeaderPanel.Settings -> SettingsPanel(
-                                            texts = texts,
-                                            selectedAccent = accent,
-                                            selectedLanguage = languageOption,
-                                            outputLocationMode = outputLocationMode,
-                                            outputDirectory = outputDirectory,
-                                            onAccentSelected = onAccentSelected,
-                                            onLanguageSelected = onLanguageSelected,
-                                            onOutputLocationModeChange = onOutputLocationModeChange,
-                                            onPickOutputDirectory = onPickOutputDirectory
-                                        )
-                                        HeaderPanel.About -> AboutPanel(
-                                            texts = texts,
-                                            onShowPrivacyPolicy = { showPrivacyPolicy = true },
-                                            onShowSupport = { showSupport = true }
-                                        )
-                                        HeaderPanel.MetadataSecurity -> MetadataSecurityPanel(
-                                            texts = texts,
-                                            state = metadataToolState,
-                                            onPickImage = onPickMetadataImage,
-                                            onPickVideo = onPickMetadataVideo,
-                                            onClean = onCleanMetadata,
-                                            onRestore = onRestoreMetadata
-                                        )
-                                        null -> Unit
+                                    AnimatedContent(
+                                        targetState = renderedHeaderPanel,
+                                        transitionSpec = {
+                                            (
+                                                slideInVertically(
+                                                    animationSpec = tween(
+                                                        durationMillis = ZenAnimations.PanelSwitchDuration,
+                                                        easing = ZenAnimations.StrongEaseInOut
+                                                    ),
+                                                    initialOffsetY = { fullHeight -> fullHeight / 12 }
+                                                ) + fadeIn(
+                                                    animationSpec = tween(
+                                                        durationMillis = ZenAnimations.ContentFadeDuration,
+                                                        easing = ZenAnimations.StrongEaseOut
+                                                    )
+                                                )
+                                            ) togetherWith (
+                                                slideOutVertically(
+                                                    animationSpec = tween(
+                                                        durationMillis = ZenAnimations.PanelSwitchDuration,
+                                                        easing = ZenAnimations.StrongEaseInOut
+                                                    ),
+                                                    targetOffsetY = { fullHeight -> -fullHeight / 12 }
+                                                ) + fadeOut(
+                                                    animationSpec = tween(
+                                                        durationMillis = ZenAnimations.ContentFadeOutDuration,
+                                                        easing = ZenAnimations.StrongEaseOut
+                                                    )
+                                                )
+                                            ) using SizeTransform(
+                                                clip = false,
+                                                sizeAnimationSpec = { _, _ ->
+                                                    tween(
+                                                        durationMillis = ZenAnimations.PanelSwitchDuration,
+                                                        easing = ZenAnimations.StrongEaseInOut
+                                                    )
+                                                }
+                                            )
+                                        },
+                                        label = "HeaderPanelSwitch"
+                                    ) { panel ->
+                                        when (panel) {
+                                            HeaderPanel.Settings -> SettingsPanel(
+                                                texts = texts,
+                                                selectedAccent = accent,
+                                                selectedLanguage = languageOption,
+                                                outputLocationMode = outputLocationMode,
+                                                outputDirectory = outputDirectory,
+                                                onAccentSelected = onAccentSelected,
+                                                onLanguageSelected = onLanguageSelected,
+                                                onOutputLocationModeChange = onOutputLocationModeChange,
+                                                onPickOutputDirectory = onPickOutputDirectory
+                                            )
+                                            HeaderPanel.About -> AboutPanel(
+                                                texts = texts,
+                                                onShowPrivacyPolicy = { showPrivacyPolicy = true },
+                                                onShowSupport = { showSupport = true }
+                                            )
+                                            HeaderPanel.MetadataSecurity -> MetadataSecurityPanel(
+                                                texts = texts,
+                                                state = metadataToolState,
+                                                onPickImage = onPickMetadataImage,
+                                                onPickVideo = onPickMetadataVideo,
+                                                onClean = onCleanMetadata,
+                                                onRestore = onRestoreMetadata
+                                            )
+                                            null -> Unit
+                                        }
                                     }
                                 }
 
                                 if (showEmptyStateItem) {
-                                    if (keepPanelSlot) {
-                                        Spacer(modifier = Modifier.height(12.dp))
-                                    }
+                                    Spacer(modifier = Modifier.height(emptyPanelGap))
                                     EmptyAddState(
                                         texts = texts,
                                         height = emptyEntryHeight,
@@ -1094,27 +1140,11 @@ private fun ZenConverterContent(
                 ) {
                     Header(
                         texts = texts,
-                        showMetadataSecurity = showMetadataSecurity,
-                        showSettings = showSettings,
-                        showAbout = showAbout,
+                        activeHeaderPanel = activeHeaderPanel,
                         hasFiles = hasFiles,
-                        onToggleMetadataSecurity = {
+                        onTogglePanel = { panel ->
                             openMenuId = null
-                            showSettings = false
-                            showAbout = false
-                            showMetadataSecurity = !showMetadataSecurity
-                        },
-                        onToggleSettings = {
-                            openMenuId = null
-                            showAbout = false
-                            showMetadataSecurity = false
-                            showSettings = !showSettings
-                        },
-                        onToggleAbout = {
-                            openMenuId = null
-                            showSettings = false
-                            showMetadataSecurity = false
-                            showAbout = !showAbout
+                            activeHeaderPanel = if (activeHeaderPanel == panel) null else panel
                         },
                         modifier = Modifier.onSizeChanged { size ->
                             if (headerHeightPx != size.height) {
@@ -1162,9 +1192,45 @@ private fun ZenConverterContent(
         }
 
         if (showSupport) {
-            SupportDialog(
-                texts = texts,
-                onDismiss = { showSupport = false }
+                SupportDialog(
+                    texts = texts,
+                    onDismiss = { showSupport = false }
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = showPrivacyPolicy,
+            modifier = Modifier.fillMaxSize(),
+            enter = slideInVertically(
+                animationSpec = tween(
+                    durationMillis = ZenAnimations.PageEnterDuration,
+                    easing = ZenAnimations.StrongEaseOut
+                ),
+                initialOffsetY = { fullHeight -> fullHeight / 12 }
+            ) + fadeIn(
+                animationSpec = tween(
+                    durationMillis = ZenAnimations.PageEnterDuration,
+                    easing = ZenAnimations.StrongEaseOut
+                )
+            ),
+            exit = slideOutVertically(
+                animationSpec = tween(
+                    durationMillis = ZenAnimations.PageExitDuration,
+                    easing = ZenAnimations.StrongEaseOut
+                ),
+                targetOffsetY = { fullHeight -> fullHeight / 12 }
+            ) + fadeOut(
+                animationSpec = tween(
+                    durationMillis = ZenAnimations.PageExitDuration,
+                    easing = ZenAnimations.StrongEaseOut
+                )
+            )
+        ) {
+            PrivacyPolicyScreen(
+                policy = texts.privacyPolicy,
+                linkUnavailable = texts.linkUnavailable,
+                onBack = { showPrivacyPolicy = false }
             )
         }
     }
@@ -1455,33 +1521,32 @@ private fun ZenPromptActions(
 @Composable
 private fun Header(
     texts: UiText,
-    showMetadataSecurity: Boolean,
-    showSettings: Boolean,
-    showAbout: Boolean,
+    activeHeaderPanel: HeaderPanel?,
     hasFiles: Boolean,
-    onToggleMetadataSecurity: () -> Unit,
-    onToggleSettings: () -> Unit,
-    onToggleAbout: () -> Unit,
+    onTogglePanel: (HeaderPanel) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val showMetadataSecurity = activeHeaderPanel == HeaderPanel.MetadataSecurity
+    val showAbout = activeHeaderPanel == HeaderPanel.About
+    val showSettings = activeHeaderPanel == HeaderPanel.Settings
     val headerActions = listOf(
         HeaderAction(
             icon = if (showMetadataSecurity) Icons.Rounded.Close else Icons.Rounded.Security,
             label = if (showMetadataSecurity) texts.closeMetadataSecurity else texts.openMetadataSecurity,
             active = showMetadataSecurity,
-            onClick = onToggleMetadataSecurity
+            onClick = { onTogglePanel(HeaderPanel.MetadataSecurity) }
         ),
         HeaderAction(
             icon = if (showAbout) Icons.Rounded.Close else Icons.Rounded.ErrorOutline,
             label = if (showAbout) texts.closeAbout else texts.openAbout,
             active = showAbout,
-            onClick = onToggleAbout
+            onClick = { onTogglePanel(HeaderPanel.About) }
         ),
         HeaderAction(
             icon = if (showSettings) Icons.Rounded.Close else Icons.Rounded.Settings,
             label = if (showSettings) texts.closeSettings else texts.openSettings,
             active = showSettings,
-            onClick = onToggleSettings
+            onClick = { onTogglePanel(HeaderPanel.Settings) }
         )
     )
 
@@ -1947,8 +2012,6 @@ private fun PrivacyPolicyScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-
-    BackHandler(onBack = onBack)
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,

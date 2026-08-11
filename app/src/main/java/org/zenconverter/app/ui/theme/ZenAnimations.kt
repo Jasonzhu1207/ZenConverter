@@ -1,9 +1,8 @@
 package org.zenconverter.app.ui.theme
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -16,7 +15,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,16 +27,19 @@ import androidx.compose.ui.input.pointer.pointerInput
 object ZenAnimations {
     // ── Base spring specs ──────────────────────────────────────────────
     val DefaultSpring = spring<Float>(stiffness = 420f)
-    val SlowerSpring = spring<Float>(stiffness = Spring.StiffnessLow)
 
     // ── Panel expand / collapse (Settings, About, Metadata) ─────────
     /** Enter: slower spring for a gentle unfold */
-    const val PanelEnterStiffness = 420f
+    const val PanelEnterStiffness = 360f
     /** Exit: slightly stiffer so collapse feels snappy */
-    const val PanelExitStiffness = 520f
+    const val PanelExitStiffness = 460f
 
-    val PanelEnterSpring = spring<Int>(stiffness = PanelEnterStiffness)
-    val PanelExitSpring = spring<Int>(stiffness = PanelExitStiffness)
+    val PanelEnterDpSpring = spring<androidx.compose.ui.unit.Dp>(
+        stiffness = PanelEnterStiffness
+    )
+    val PanelExitDpSpring = spring<androidx.compose.ui.unit.Dp>(
+        stiffness = PanelExitStiffness
+    )
 
     // ── Dropdown / Advanced section ─────────────────────────────────
     const val DropdownEnterStiffness = 520f
@@ -47,6 +48,13 @@ object ZenAnimations {
     // ── Content crossfade (state machine switches, AnimatedContent) ─
     const val ContentFadeDuration = 220   // ms — quick crossfade
     const val ContentFadeOutDuration = 150 // ms — exit slightly faster
+
+    // Strong curves for vertical panel and page transitions.
+    val StrongEaseOut = CubicBezierEasing(0.23f, 1f, 0.32f, 1f)
+    val StrongEaseInOut = CubicBezierEasing(0.77f, 0f, 0.175f, 1f)
+    const val PanelSwitchDuration = 280
+    const val PageEnterDuration = 280
+    const val PageExitDuration = 240
 
     // ── Icon rotation (expand arrows, chevrons) ─────────────────────
     val IconRotationSpring = spring<Float>(
@@ -74,22 +82,18 @@ object ZenAnimations {
     const val HeroHeaderIconSize = 24f
     const val HeroCenterIconSize = 58f
 
-    // Legacy aliases (kept for compatibility)
-    val VisibilityEnterSpring = PanelEnterSpring
-    val VisibilityExitSpring = PanelExitSpring
-
     // ── Helpers ─────────────────────────────────────────────────────
 
     /** Standard enter transition for inline panels (Settings, About, Metadata). */
     val PanelEnter: EnterTransition = fadeIn(
-        animationSpec = tween(ContentFadeDuration)
+        animationSpec = tween(ContentFadeDuration, easing = StrongEaseOut)
     ) + expandVertically(
         animationSpec = spring(stiffness = PanelEnterStiffness)
     )
 
     /** Standard exit transition for inline panels. */
     val PanelExit: ExitTransition = fadeOut(
-        animationSpec = tween(ContentFadeOutDuration)
+        animationSpec = tween(ContentFadeOutDuration, easing = StrongEaseOut)
     ) + shrinkVertically(
         animationSpec = spring(stiffness = PanelExitStiffness)
     )
@@ -106,23 +110,6 @@ object ZenAnimations {
         animationSpec = spring(stiffness = DropdownExitStiffness)
     ) + shrinkVertically(
         animationSpec = spring(stiffness = DropdownExitStiffness)
-    )
-}
-
-/**
- * Standard animated-visibility wrapper for inline panels that expand below
- * the header (Settings, About, Metadata Security).
- */
-@Composable
-fun ZenPanelVisibility(
-    visible: Boolean,
-    content: @Composable AnimatedVisibilityScope.() -> Unit
-) {
-    AnimatedVisibility(
-        visible = visible,
-        enter = ZenAnimations.PanelEnter,
-        exit = ZenAnimations.PanelExit,
-        content = content
     )
 }
 
