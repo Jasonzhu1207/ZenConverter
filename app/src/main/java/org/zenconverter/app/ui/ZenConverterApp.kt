@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
@@ -57,14 +58,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image as BrandImage
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.Check
@@ -83,6 +87,7 @@ import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PictureAsPdf
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.PrivacyTip
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Share
@@ -116,6 +121,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -137,6 +143,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
@@ -824,13 +831,24 @@ private fun ZenConverterContent(
     onCancelConversion: () -> Unit
 ) {
     var showSettings by remember { mutableStateOf(false) }
-    var showAbout by remember { mutableStateOf(false) }
+    var showAbout by rememberSaveable { mutableStateOf(false) }
     var showMetadataSecurity by remember { mutableStateOf(false) }
     var showSupport by remember { mutableStateOf(false) }
+    var showPrivacyPolicy by rememberSaveable { mutableStateOf(false) }
     var queueMessage by remember { mutableStateOf<String?>(null) }
     var openMenuId by remember { mutableStateOf<String?>(null) }
     var expandedFileId by remember { mutableStateOf<String?>(null) }
     var lastQueueIds by remember { mutableStateOf<List<String>>(emptyList()) }
+    val homeListState = rememberLazyListState()
+
+    if (showPrivacyPolicy) {
+        PrivacyPolicyScreen(
+            policy = texts.privacyPolicy,
+            linkUnavailable = texts.linkUnavailable,
+            onBack = { showPrivacyPolicy = false }
+        )
+        return
+    }
 
     val taskProgressById = conversionTasks.associateBy { it.fileId }
     val queueIds = queuedFiles.map { it.id }
@@ -901,6 +919,7 @@ private fun ZenConverterContent(
                 val showEmptyStateItem = queuedFiles.isEmpty() || morphProgress < 1f
 
                 LazyColumn(
+                    state = homeListState,
                     modifier = Modifier
                         .fillMaxSize(),
                     contentPadding = PaddingValues(
@@ -933,6 +952,7 @@ private fun ZenConverterContent(
                                         )
                                         HeaderPanel.About -> AboutPanel(
                                             texts = texts,
+                                            onShowPrivacyPolicy = { showPrivacyPolicy = true },
                                             onShowSupport = { showSupport = true }
                                         )
                                         HeaderPanel.MetadataSecurity -> MetadataSecurityPanel(
@@ -1792,6 +1812,7 @@ private fun SettingsPanel(
 @Composable
 private fun AboutPanel(
     texts: UiText,
+    onShowPrivacyPolicy: () -> Unit,
     onShowSupport: () -> Unit
 ) {
     val context = LocalContext.current
@@ -1861,6 +1882,29 @@ private fun AboutPanel(
 
         Spacer(modifier = Modifier.height(10.dp))
 
+        OutlinedButton(
+            onClick = onShowPrivacyPolicy,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp),
+            shape = RoundedCornerShape(8.dp),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
+        ) {
+            AppIcon(
+                icon = Icons.Rounded.PrivacyTip,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = texts.privacyPolicy.title,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
         UpdatePanel(
             texts = texts,
             installedVersion = installedVersion
@@ -1893,6 +1937,230 @@ private fun AboutPanel(
                 overflow = TextOverflow.Ellipsis
             )
         }
+    }
+}
+
+@Composable
+private fun PrivacyPolicyScreen(
+    policy: PrivacyPolicyText,
+    linkUnavailable: String,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+
+    BackHandler(onBack = onBack)
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets.safeDrawing
+    ) { contentPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(contentPadding)
+                .consumeWindowInsets(contentPadding)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    AppIcon(
+                        icon = Icons.AutoMirrored.Rounded.ArrowBack,
+                        contentDescription = policy.back,
+                        tint = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(4.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "ZenConverter",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = policy.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.semantics { heading() }
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.7f))
+            )
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = 20.dp,
+                    top = 20.dp,
+                    end = 20.dp,
+                    bottom = 36.dp
+                ),
+                verticalArrangement = Arrangement.spacedBy(26.dp)
+            ) {
+                item(key = "privacy-introduction") {
+                    PrivacyPolicyContent {
+                        Text(
+                            text = policy.updated,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .background(
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .border(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(
+                                        color = MaterialTheme.colorScheme.primary,
+                                        shape = RoundedCornerShape(8.dp)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                AppIcon(
+                                    icon = Icons.Rounded.PrivacyTip,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Text(
+                                text = policy.intro,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+
+                items(
+                    items = policy.sections,
+                    key = { section -> section.title }
+                ) { section ->
+                    PrivacyPolicyContent {
+                        PrivacyPolicySectionContent(section)
+                    }
+                }
+
+                item(key = "privacy-project-page") {
+                    PrivacyPolicyContent {
+                        OutlinedButton(
+                            onClick = {
+                                openExternalLink(
+                                    context,
+                                    ZENCONVERTER_REPOSITORY_URL,
+                                    linkUnavailable
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
+                        ) {
+                            Text(
+                                text = policy.projectPage,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            AppIcon(
+                                icon = Icons.Rounded.OpenInNew,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PrivacyPolicyContent(
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 680.dp)
+                .fillMaxWidth(),
+            content = content
+        )
+    }
+}
+
+@Composable
+private fun PrivacyPolicySectionContent(section: PrivacyPolicySection) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(20.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.primary,
+                    shape = RoundedCornerShape(2.dp)
+                )
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            text = section.title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.semantics { heading() }
+        )
+    }
+    Spacer(modifier = Modifier.height(10.dp))
+    section.paragraphs.forEachIndexed { index, paragraph ->
+        if (index > 0) {
+            Spacer(modifier = Modifier.height(10.dp))
+        }
+        Text(
+            text = paragraph,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -5997,6 +6265,20 @@ private fun pdfRenderQualityToOption(value: String): PdfRenderQuality {
 
 private val AUDIO_LOSSLESS_OUTPUT_EXTENSIONS = setOf("wav", "flac")
 
+private data class PrivacyPolicySection(
+    val title: String,
+    val paragraphs: List<String>
+)
+
+private data class PrivacyPolicyText(
+    val title: String,
+    val back: String,
+    val updated: String,
+    val intro: String,
+    val sections: List<PrivacyPolicySection>,
+    val projectPage: String
+)
+
 private data class UiText(
     val tagline: String,
     val moreHeaderActions: String,
@@ -6011,6 +6293,7 @@ private data class UiText(
     val appLicense: String,
     val aboutDescription: String,
     val githubRepository: String,
+    val privacyPolicy: PrivacyPolicyText,
     val checkUpdates: String,
     val stableUpdateChannel: String,
     val previewUpdateChannel: String,
@@ -7621,6 +7904,180 @@ private data class UiText(
     }
 }
 
+private val englishPrivacyPolicy = PrivacyPolicyText(
+    title = "Privacy policy",
+    back = "Back",
+    updated = "Last updated: 2026-08-11",
+    intro = "ZenConverter processes files on your device. Files you select, their contents, and PDF passwords are not uploaded to servers controlled by the developer. The app has no account system, ads, usage analytics, or crash reporting.",
+    sections = listOf(
+        PrivacyPolicySection(
+            title = "File processing",
+            paragraphs = listOf(
+                "The app reads only files you provide through Android's file picker, Share, or Open with. If a file provider cannot be used directly, the app creates a temporary cached copy. Results go to the system default directory or a folder you choose.",
+                "The app attempts to remove temporary files when a task ends. A copy may remain in cache after an unexpected app or device interruption."
+            )
+        ),
+        PrivacyPolicySection(
+            title = "Metadata safety",
+            paragraphs = listOf(
+                "Metadata inspection applies only to files you select. Image inspection may show location, capture time, camera, software, description, and similar information already stored in a photo. Video inspection currently shows basic technical details only.",
+                "Cleaning a JPEG modifies the selected file in place. Removed metadata is kept in app-private storage together with the original file name, dimensions, a matching SHA-256 hash, and backup time so it can be restored. Restoring does not delete the backup, and the current version has no separate delete control."
+            )
+        ),
+        PrivacyPolicySection(
+            title = "PDF passwords",
+            paragraphs = listOf(
+                "A password is used only to open, encrypt, or decrypt a PDF you selected. It is not written to app settings or task history, and it is not sent over the network. It remains briefly in memory while needed and is then removed from task data."
+            )
+        ),
+        PrivacyPolicySection(
+            title = "Network access and external services",
+            paragraphs = listOf(
+                "The app does not check for updates in the background. Builds that include Check for updates connect to GitHub only after you tap it, and connect to GitHub's download service if you choose to download an update.",
+                "Like any website, GitHub receives connection data such as your IP address and User-Agent under its own privacy policy. GitHub does not receive your selected files, metadata, or PDF passwords. Repository, sponsorship, and download links open in your system browser; those sites and your browser apply their own privacy terms."
+            )
+        ),
+        PrivacyPolicySection(
+            title = "Permissions and other apps",
+            paragraphs = listOf(
+                "File access is used to read selected inputs, save results, or clean a JPEG in place. Older Android versions may also request storage permission. Notifications and the media-processing foreground service show progress for long-running work.",
+                "The GitHub-distributed build uses permission to request package installation only when you choose to install a downloaded update. The app does not request location, camera, microphone, contacts, or all-files access. When you choose to share or open a result, Android gives the selected app access to that file."
+            )
+        ),
+        PrivacyPolicySection(
+            title = "Retention, deletion, and Android backup",
+            paragraphs = listOf(
+                "Language, accent color, whether a custom output location is used, and the selected folder's URI and display name are stored in private app settings. You manage source files and converted results in the file system; clearing app data does not remove files in shared folders.",
+                "Clearing app data or uninstalling removes on-device settings, cache, and private metadata backups. Android system backup is currently enabled. Depending on your device, Android version, and account settings, a system backup may include app settings and private metadata backups. Manage any system copy through your device's backup settings.",
+                "The app has no online account and stores no converted files on a server controlled by the developer."
+            )
+        ),
+        PrivacyPolicySection(
+            title = "Contact",
+            paragraphs = listOf(
+                "For privacy questions, use the current contact method listed on the project or distribution page. Do not attach files, passwords, or sensitive metadata to a public report."
+            )
+        )
+    ),
+    projectPage = "Open project page"
+)
+
+private val simplifiedChinesePrivacyPolicy = PrivacyPolicyText(
+    title = "隐私政策",
+    back = "返回",
+    updated = "最后更新：2026-08-11",
+    intro = "ZenConverter 在设备上处理文件。你选择的文件、文件内容和 PDF 密码不会上传到开发者控制的服务器。应用没有账号、广告、使用行为分析或崩溃上报。",
+    sections = listOf(
+        PrivacyPolicySection(
+            title = "文件处理",
+            paragraphs = listOf(
+                "应用只读取你通过 Android 文件选择器、分享或“打开方式”交给它的文件。文件提供方无法直接处理时，应用会在缓存中创建临时副本。结果保存在系统默认目录或你选择的文件夹。",
+                "任务结束时，应用会尝试删除临时文件。如果应用或设备意外中断，缓存中可能暂时留下副本。"
+            )
+        ),
+        PrivacyPolicySection(
+            title = "元数据安全",
+            paragraphs = listOf(
+                "元数据检查只针对你选中的文件。图片检查可能显示照片中已有的位置、拍摄时间、相机、软件、说明等信息；视频检查目前只显示基础技术信息。",
+                "清理 JPEG 会直接修改所选文件。为了支持恢复，被移除的元数据会连同原文件名、尺寸、匹配用的 SHA-256 哈希和备份时间保存在应用私有目录。恢复后不会自动删除备份，当前版本也没有单独的删除按钮。"
+            )
+        ),
+        PrivacyPolicySection(
+            title = "PDF 密码",
+            paragraphs = listOf(
+                "密码只用于打开、加密或解密你选择的 PDF。应用不会把密码写入设置或任务历史，也不会发送到网络。任务执行期间，密码会短暂保存在内存中，随后从任务数据中清除。"
+            )
+        ),
+        PrivacyPolicySection(
+            title = "联网与外部服务",
+            paragraphs = listOf(
+                "应用不会在后台检查更新。带有“检查更新”功能的版本只会在你点击后连接 GitHub；如果你选择下载更新，还会连接 GitHub 的下载服务。",
+                "和普通网站一样，GitHub 会按其隐私政策收到 IP 地址、User-Agent 等连接信息，但不会收到你选择的文件、元数据或 PDF 密码。仓库、赞助和下载链接会交给系统浏览器打开，相关网站和浏览器各自的隐私规则适用。"
+            )
+        ),
+        PrivacyPolicySection(
+            title = "权限与其他应用",
+            paragraphs = listOf(
+                "文件权限只用于读取你选择的输入、保存结果或原地清理 JPEG；旧版 Android 可能额外请求存储权限。通知和媒体处理前台服务用于显示长任务进度。",
+                "GitHub 分发版只在你选择安装已下载的更新时使用请求安装应用权限。应用不申请位置、相机、麦克风、联系人或所有文件访问权限。你主动分享或打开结果时，Android 会把相应文件交给你选择的应用。"
+            )
+        ),
+        PrivacyPolicySection(
+            title = "保留、删除与 Android 备份",
+            paragraphs = listOf(
+                "语言、主题色、是否使用自定义输出位置，以及所选文件夹的 URI 和显示名称，会保存在应用私有设置中。源文件和转换结果由你在文件系统中管理；清除应用数据不会删除共享目录里的文件。",
+                "清除应用数据或卸载应用，会删除设备上的设置、缓存和应用私有元数据备份。当前应用允许 Android 系统备份；是否备份以及备份到哪里，由设备、Android 版本和账号设置决定，系统备份中可能包含应用设置和私有元数据备份。系统中的备份副本需在设备备份设置里管理。",
+                "应用没有在线账号，也没有保存在开发者服务器上的转换文件可供删除。"
+            )
+        ),
+        PrivacyPolicySection(
+            title = "联系",
+            paragraphs = listOf(
+                "如有隐私问题，请使用项目页或应用分发页列出的当前联系方式。不要在公开反馈中附上文件、密码或敏感元数据。"
+            )
+        )
+    ),
+    projectPage = "打开项目页面"
+)
+
+private val traditionalChinesePrivacyPolicy = PrivacyPolicyText(
+    title = "隱私政策",
+    back = "返回",
+    updated = "最後更新：2026-08-11",
+    intro = "ZenConverter 在裝置上處理檔案。你選取的檔案、檔案內容和 PDF 密碼不會傳送到開發者控制的伺服器。應用程式沒有帳戶、廣告、使用行為分析或當機回報。",
+    sections = listOf(
+        PrivacyPolicySection(
+            title = "檔案處理",
+            paragraphs = listOf(
+                "應用程式只會讀取你透過 Android 檔案選擇器、分享或「開啟方式」交給它的檔案。檔案提供者無法直接處理時，應用程式會在快取中建立暫存副本。結果會存到系統預設目錄或你選擇的資料夾。",
+                "工作結束時，應用程式會嘗試刪除暫存檔。如果應用程式或裝置意外中斷，快取中可能暫時留下副本。"
+            )
+        ),
+        PrivacyPolicySection(
+            title = "中繼資料安全",
+            paragraphs = listOf(
+                "中繼資料檢查只針對你選取的檔案。圖片檢查可能顯示照片原有的位置、拍攝時間、相機、軟體、說明等資料；影片檢查目前只顯示基本技術資料。",
+                "清理 JPEG 會直接修改所選檔案。為了支援復原，被移除的中繼資料會連同原檔名、尺寸、比對用的 SHA-256 雜湊和備份時間存到應用程式私有目錄。復原後不會自動刪除備份，目前版本也沒有個別刪除按鈕。"
+            )
+        ),
+        PrivacyPolicySection(
+            title = "PDF 密碼",
+            paragraphs = listOf(
+                "密碼只用來開啟、加密或解密你選擇的 PDF。應用程式不會把密碼寫入設定或工作記錄，也不會傳送到網路。工作執行期間，密碼會短暫留在記憶體中，之後從工作資料移除。"
+            )
+        ),
+        PrivacyPolicySection(
+            title = "網路連線與外部服務",
+            paragraphs = listOf(
+                "應用程式不會在背景檢查更新。提供「檢查更新」功能的版本只會在你點選後連線到 GitHub；如果你選擇下載更新，也會連線到 GitHub 的下載服務。",
+                "和一般網站一樣，GitHub 會依其隱私政策收到 IP 位址、User-Agent 等連線資料，但不會收到你選取的檔案、中繼資料或 PDF 密碼。程式碼倉庫、贊助和下載連結會交給系統瀏覽器開啟，相關網站和瀏覽器各自的隱私規則適用。"
+            )
+        ),
+        PrivacyPolicySection(
+            title = "權限與其他應用程式",
+            paragraphs = listOf(
+                "檔案權限只用於讀取你選取的輸入、儲存結果或直接清理 JPEG；舊版 Android 可能另外要求儲存空間權限。通知及媒體處理前景服務用來顯示長時間工作的進度。",
+                "GitHub 發行版只在你選擇安裝已下載的更新時使用要求安裝應用程式權限。應用程式不會要求位置、相機、麥克風、聯絡人或所有檔案存取權。當你主動分享或開啟結果時，Android 會把相應檔案交給你選擇的應用程式。"
+            )
+        ),
+        PrivacyPolicySection(
+            title = "保留、刪除與 Android 備份",
+            paragraphs = listOf(
+                "語言、主題色、是否使用自訂輸出位置，以及所選資料夾的 URI 和顯示名稱，會存放在應用程式私有設定中。來源檔案和轉換結果由你在檔案系統中管理；清除應用程式資料不會刪除共享目錄內的檔案。",
+                "清除應用程式資料或解除安裝，會刪除裝置上的設定、快取和應用程式私有中繼資料備份。目前應用程式允許 Android 系統備份；是否備份以及備份到哪裡，由裝置、Android 版本和帳戶設定決定，系統備份中可能包含應用程式設定和私有中繼資料備份。系統中的備份副本需在裝置備份設定內管理。",
+                "應用程式沒有線上帳戶，也沒有存放在開發者伺服器上的轉換檔案可供刪除。"
+            )
+        ),
+        PrivacyPolicySection(
+            title = "聯絡",
+            paragraphs = listOf(
+                "如有隱私問題，請使用專案頁面或應用程式發行頁面列出的目前聯絡方式。請勿在公開回報中附上檔案、密碼或敏感中繼資料。"
+            )
+        )
+    ),
+    projectPage = "開啟專案頁面"
+)
+
 private val englishText = UiText(
     moreHeaderActions = "More actions",
     tagline = "Files stay on this device",
@@ -7635,6 +8092,7 @@ private val englishText = UiText(
     appLicense = "AGPL-3.0-or-later",
     aboutDescription = "A local all-in-one format converter for Android. Works offline, with no ads or fees.",
     githubRepository = "GitHub repository",
+    privacyPolicy = englishPrivacyPolicy,
     checkUpdates = "Check for updates",
     stableUpdateChannel = "Stable",
     previewUpdateChannel = "Preview",
@@ -7752,6 +8210,7 @@ private val simplifiedChineseText = UiText(
     appLicense = "AGPL-3.0-or-later",
     aboutDescription = "面向 Android 的本地综合格式转换工具，不联网，无广告、不收费",
     githubRepository = "GitHub 仓库",
+    privacyPolicy = simplifiedChinesePrivacyPolicy,
     checkUpdates = "检查更新",
     stableUpdateChannel = "正式版",
     previewUpdateChannel = "预览版",
@@ -7869,6 +8328,7 @@ private val traditionalChineseText = UiText(
     appLicense = "AGPL-3.0-or-later",
     aboutDescription = "面向 Android 的本地綜合格式轉換工具，不聯網，無廣告、不收費",
     githubRepository = "GitHub 倉庫",
+    privacyPolicy = traditionalChinesePrivacyPolicy,
     checkUpdates = "檢查更新",
     stableUpdateChannel = "正式版",
     previewUpdateChannel = "預覽版",
