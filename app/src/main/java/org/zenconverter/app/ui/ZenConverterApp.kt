@@ -178,6 +178,7 @@ import org.zenconverter.app.conversion.VideoCompressionMode
 import org.zenconverter.app.conversion.VideoExportOptions
 import org.zenconverter.app.conversion.VideoMirrorMode
 import org.zenconverter.app.conversion.VideoRotationMode
+import org.zenconverter.app.BuildConfig
 import org.zenconverter.app.metadata.MetadataBackupInfo
 import org.zenconverter.app.metadata.MetadataInspection
 import org.zenconverter.app.metadata.MetadataMessageKey
@@ -1968,39 +1969,41 @@ private fun AboutPanel(
             )
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        if (BuildConfig.ENABLE_GITHUB_UPDATES) {
+            Spacer(modifier = Modifier.height(10.dp))
 
-        UpdatePanel(
-            texts = texts,
-            installedVersion = installedVersion
-        )
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        Button(
-            onClick = onShowSupport,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 52.dp),
-            shape = RoundedCornerShape(8.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF151515),
-                contentColor = Color.White
-            ),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
-        ) {
-            AppIcon(
-                icon = Icons.Rounded.Favorite,
-                contentDescription = null,
-                tint = Color(0xFFFFD6C2),
-                modifier = Modifier.size(19.dp)
+            UpdatePanel(
+                texts = texts,
+                installedVersion = installedVersion
             )
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = texts.supportDevelopment,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Button(
+                onClick = onShowSupport,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 52.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF151515),
+                    contentColor = Color.White
+                ),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+            ) {
+                AppIcon(
+                    icon = Icons.Rounded.Favorite,
+                    contentDescription = null,
+                    tint = Color(0xFFFFD6C2),
+                    modifier = Modifier.size(19.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = texts.supportDevelopment,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }

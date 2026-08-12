@@ -41,9 +41,10 @@ android {
     defaultConfig {
         applicationId = "org.zenconverter.app"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = appVersionCode.get()
         versionName = appVersionName.get()
+        buildConfigField("boolean", "ENABLE_GITHUB_UPDATES", "true")
 
         ndk {
             // Release APKs are arm64-only to match the native Office2PDF and
@@ -73,6 +74,17 @@ android {
             releaseKeyAlias != null &&
             releaseKeyPassword != null
 
+    val playStoreFile = localProperty("PLAY_STORE_FILE")
+        ?.let { rootProject.file(it) }
+    val playStorePassword = localProperty("PLAY_STORE_PASSWORD")
+    val playKeyAlias = localProperty("PLAY_KEY_ALIAS")
+    val playKeyPassword = localProperty("PLAY_KEY_PASSWORD")
+    val hasPlaySigning =
+        playStoreFile?.isFile == true &&
+            playStorePassword != null &&
+            playKeyAlias != null &&
+            playKeyPassword != null
+
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
@@ -80,6 +92,14 @@ android {
                 storePassword = releaseStorePassword
                 keyAlias = releaseKeyAlias
                 keyPassword = releaseKeyPassword
+            }
+        }
+        if (hasPlaySigning) {
+            create("play") {
+                storeFile = playStoreFile
+                storePassword = playStorePassword
+                keyAlias = playKeyAlias
+                keyPassword = playKeyPassword
             }
         }
     }
@@ -96,10 +116,20 @@ android {
                 signingConfig = signingConfigs.getByName("release")
             }
         }
+        create("play") {
+            initWith(getByName("release"))
+            // Never fall back to the GitHub release key when Play signing is absent.
+            signingConfig = null
+            buildConfigField("boolean", "ENABLE_GITHUB_UPDATES", "false")
+            if (hasPlaySigning) {
+                signingConfig = signingConfigs.getByName("play")
+            }
+        }
     }
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     compileOptions {
