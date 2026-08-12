@@ -34,6 +34,7 @@ ZenConverter.jks
 *.pem
 keystore.properties
 signing.properties
+/app/src/main/assets/adi-registration.properties
 
 # Generated packages and reports
 *.apk
