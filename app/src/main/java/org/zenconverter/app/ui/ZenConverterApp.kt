@@ -836,6 +836,7 @@ private fun ZenConverterContent(
     var activeHeaderPanel by rememberSaveable { mutableStateOf<HeaderPanel?>(null) }
     var showSupport by remember { mutableStateOf(false) }
     var showPrivacyPolicy by rememberSaveable { mutableStateOf(false) }
+    var showHelpScreen by rememberSaveable { mutableStateOf(false) }
     var queueMessage by remember { mutableStateOf<String?>(null) }
     var openMenuId by remember { mutableStateOf<String?>(null) }
     var expandedFileId by remember { mutableStateOf<String?>(null) }
@@ -869,8 +870,9 @@ private fun ZenConverterContent(
         headerPanelVisibleState.targetState = activeHeaderPanel != null
     }
 
-    BackHandler(enabled = showPrivacyPolicy) {
+    BackHandler(enabled = showPrivacyPolicy || showHelpScreen) {
         showPrivacyPolicy = false
+        showHelpScreen = false
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -1001,6 +1003,7 @@ private fun ZenConverterContent(
                                             HeaderPanel.About -> AboutPanel(
                                                 texts = texts,
                                                 onShowPrivacyPolicy = { showPrivacyPolicy = true },
+                                                onShowHelp = { showHelpScreen = true },
                                                 onShowSupport = { showSupport = true }
                                             )
                                             HeaderPanel.MetadataSecurity -> MetadataSecurityPanel(
@@ -1193,11 +1196,11 @@ private fun ZenConverterContent(
         }
 
         if (showSupport) {
-                SupportDialog(
-                    texts = texts,
-                    onDismiss = { showSupport = false }
-                )
-            }
+            SupportDialog(
+                texts = texts,
+                onDismiss = { showSupport = false }
+            )
+        }
         }
 
         AnimatedVisibility(
@@ -1232,6 +1235,20 @@ private fun ZenConverterContent(
                 policy = texts.privacyPolicy,
                 linkUnavailable = texts.linkUnavailable,
                 onBack = { showPrivacyPolicy = false }
+            )
+        }
+
+        AnimatedVisibility(
+            visible = showHelpScreen,
+            modifier = Modifier.fillMaxSize(),
+            enter = fadeIn(animationSpec = tween(ZenAnimations.PageEnterDuration)) +
+                slideInVertically(animationSpec = tween(ZenAnimations.PageEnterDuration), initialOffsetY = { it / 12 }),
+            exit = fadeOut(animationSpec = tween(ZenAnimations.PageExitDuration)) +
+                slideOutVertically(animationSpec = tween(ZenAnimations.PageExitDuration), targetOffsetY = { it / 12 })
+        ) {
+            HelpScreen(
+                copy = texts.helpGuide,
+                onBack = { showHelpScreen = false }
             )
         }
     }
@@ -1879,6 +1896,7 @@ private fun SettingsPanel(
 private fun AboutPanel(
     texts: UiText,
     onShowPrivacyPolicy: () -> Unit,
+    onShowHelp: () -> Unit,
     onShowSupport: () -> Unit
 ) {
     val context = LocalContext.current
@@ -1948,25 +1966,40 @@ private fun AboutPanel(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        OutlinedButton(
-            onClick = onShowPrivacyPolicy,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp),
-            shape = RoundedCornerShape(8.dp),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            AppIcon(
-                icon = Icons.Rounded.PrivacyTip,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = texts.privacyPolicy.title,
-                modifier = Modifier.weight(1f)
-            )
+            OutlinedButton(
+                onClick = onShowHelp,
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 12.dp)
+            ) {
+                AppIcon(
+                    icon = Icons.Rounded.ErrorOutline,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(text = texts.helpGuide.help, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            OutlinedButton(
+                onClick = onShowPrivacyPolicy,
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 12.dp)
+            ) {
+                AppIcon(
+                    icon = Icons.Rounded.PrivacyTip,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(text = texts.privacyPolicy.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
 
         if (BuildConfig.ENABLE_GITHUB_UPDATES) {
@@ -2004,6 +2037,125 @@ private fun AboutPanel(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+        }
+    }
+}
+
+@Composable
+private fun HelpScreen(
+    copy: HelpGuideCopy,
+    onBack: () -> Unit
+) {
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets.safeDrawing,
+        topBar = {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+                    AppIcon(
+                        icon = Icons.AutoMirrored.Rounded.ArrowBack,
+                        contentDescription = copy.back,
+                        tint = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Text(
+                    text = copy.help,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            }
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(start = 20.dp, top = 18.dp, end = 20.dp, bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            item {
+                Column(modifier = Modifier.widthIn(max = 680.dp).fillMaxWidth()) {
+                    Text(
+                        text = copy.title,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.semantics { heading() }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(copy.body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            item {
+                GuideFlow(copy)
+            }
+            items(
+                listOf(
+                    GuideCardData(Icons.Rounded.Videocam, copy.videoTitle, copy.videoBody, copy.videoFormats),
+                    GuideCardData(Icons.Rounded.AudioFile, copy.audioTitle, copy.audioBody, copy.audioFormats),
+                    GuideCardData(Icons.Rounded.Image, copy.imageTitle, copy.imageBody, copy.imageFormats),
+                    GuideCardData(Icons.Rounded.Description, copy.documentTitle, copy.documentBody, copy.documentFormats)
+                )
+            ) { card ->
+                GuideCard(card)
+            }
+        }
+    }
+}
+
+private data class GuideCardData(
+    val icon: ImageVector,
+    val title: String,
+    val body: String,
+    val formats: String
+)
+
+@Composable
+private fun GuideFlow(copy: HelpGuideCopy) {
+    Row(
+        modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primary.copy(alpha = 0.06f), RoundedCornerShape(12.dp)).border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.16f), RoundedCornerShape(12.dp)).padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        GuideFlowStep(Icons.Rounded.FolderOpen, copy.flowInput)
+        AppIcon(Icons.Rounded.PlayArrow, null, MaterialTheme.colorScheme.primary, Modifier.size(18.dp))
+        GuideFlowStep(Icons.Rounded.Settings, copy.flowProcess)
+        AppIcon(Icons.Rounded.PlayArrow, null, MaterialTheme.colorScheme.primary, Modifier.size(18.dp))
+        GuideFlowStep(Icons.Rounded.Check, copy.flowOutput)
+    }
+}
+
+@Composable
+private fun GuideFlowStep(icon: ImageVector, label: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.widthIn(min = 64.dp, max = 110.dp)) {
+        Box(modifier = Modifier.size(38.dp).background(MaterialTheme.colorScheme.primary, CircleShape), contentAlignment = Alignment.Center) {
+            AppIcon(icon, null, MaterialTheme.colorScheme.onPrimary, Modifier.size(20.dp))
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
+    }
+}
+
+@Composable
+private fun GuideCard(card: GuideCardData) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.7f))
+    ) {
+        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
+            Box(modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
+                AppIcon(card.icon, null, MaterialTheme.colorScheme.primary, Modifier.size(23.dp))
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text(card.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                Text(card.body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(card.formats, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            }
         }
     }
 }
@@ -2068,7 +2220,9 @@ private fun PrivacyPolicyScreen(
             )
 
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
                 contentPadding = PaddingValues(
                     start = 20.dp,
                     top = 20.dp,
@@ -2172,7 +2326,9 @@ private fun PrivacyPolicyScreen(
                         }
                     }
                 }
+
             }
+
         }
     }
 }
@@ -6350,6 +6506,28 @@ private data class PrivacyPolicyText(
     val projectPage: String
 )
 
+private data class HelpGuideCopy(
+    val title: String,
+    val body: String,
+    val back: String,
+    val videoTitle: String,
+    val videoBody: String,
+    val videoFormats: String,
+    val audioTitle: String,
+    val audioBody: String,
+    val audioFormats: String,
+    val imageTitle: String,
+    val imageBody: String,
+    val imageFormats: String,
+    val documentTitle: String,
+    val documentBody: String,
+    val documentFormats: String,
+    val flowInput: String,
+    val flowProcess: String,
+    val flowOutput: String,
+    val help: String
+)
+
 private data class UiText(
     val tagline: String,
     val moreHeaderActions: String,
@@ -6365,6 +6543,7 @@ private data class UiText(
     val aboutDescription: String,
     val githubRepository: String,
     val privacyPolicy: PrivacyPolicyText,
+    val helpGuide: HelpGuideCopy,
     val checkUpdates: String,
     val stableUpdateChannel: String,
     val previewUpdateChannel: String,
@@ -8150,6 +8329,72 @@ private val traditionalChinesePrivacyPolicy = PrivacyPolicyText(
     projectPage = "開啟專案頁面"
 )
 
+private val englishHelpGuide = HelpGuideCopy(
+    title = "What ZenConverter can do",
+    body = "Choose a file, pick a target, and let the conversion run locally.",
+    back = "Back",
+    videoTitle = "Video",
+    videoBody = "Convert common video formats and extract audio tracks.",
+    videoFormats = "MP4 · MKV · MOV · GIF  →  M4A · MP3 · WAV · FLAC · WMA",
+    audioTitle = "Audio",
+    audioBody = "Convert audio files between the formats used most often.",
+    audioFormats = "MP3 · M4A · WAV · FLAC · WMA",
+    imageTitle = "Images",
+    imageBody = "Convert images, make PDFs, and combine multiple images into one PDF.",
+    imageFormats = "JPG · PNG · JFIF · WEBP · ICO  →  PDF",
+    documentTitle = "Documents and PDF",
+    documentBody = "Turn Office files into readable documents, render PDFs, or protect them with a password.",
+    documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  PNG · JPG · WEBP · TXT · MD",
+    flowInput = "Choose",
+    flowProcess = "Convert",
+    flowOutput = "Use result",
+    help = "Help"
+)
+
+private val simplifiedChineseHelpGuide = HelpGuideCopy(
+    title = "ZenConverter 能做什么",
+    body = "选择文件、指定目标格式，转换过程默认在本机完成。",
+    back = "返回",
+    videoTitle = "视频",
+    videoBody = "转换常见视频格式，也可以提取视频中的音频。",
+    videoFormats = "MP4 · MKV · MOV · GIF  →  M4A · MP3 · WAV · FLAC · WMA",
+    audioTitle = "音频",
+    audioBody = "在常用音频格式之间互相转换。",
+    audioFormats = "MP3 · M4A · WAV · FLAC · WMA",
+    imageTitle = "图片",
+    imageBody = "转换图片、生成 PDF，也可以把多张图片合并成一个 PDF。",
+    imageFormats = "JPG · PNG · JFIF · WEBP · ICO  →  PDF",
+    documentTitle = "文档与 PDF",
+    documentBody = "Office 文档转为可读文件，PDF 转图片或文本，也支持密码保护。",
+    documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  PNG · JPG · WEBP · TXT · MD",
+    flowInput = "选择文件",
+    flowProcess = "本地处理",
+    flowOutput = "使用结果",
+    help = "帮助"
+)
+
+private val traditionalChineseHelpGuide = HelpGuideCopy(
+    title = "ZenConverter 可以做什麼",
+    body = "選擇檔案、指定目標格式，轉換過程預設在本機完成。",
+    back = "返回",
+    videoTitle = "影片",
+    videoBody = "轉換常見影片格式，也可以擷取影片中的音訊。",
+    videoFormats = "MP4 · MKV · MOV · GIF  →  M4A · MP3 · WAV · FLAC · WMA",
+    audioTitle = "音訊",
+    audioBody = "在常用音訊格式之間互相轉換。",
+    audioFormats = "MP3 · M4A · WAV · FLAC · WMA",
+    imageTitle = "圖片",
+    imageBody = "轉換圖片、建立 PDF，也可以把多張圖片合併成一個 PDF。",
+    imageFormats = "JPG · PNG · JFIF · WEBP · ICO  →  PDF",
+    documentTitle = "文件與 PDF",
+    documentBody = "Office 文件轉為可讀檔案，PDF 轉圖片或文字，也支援密碼保護。",
+    documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  PNG · JPG · WEBP · TXT · MD",
+    flowInput = "選擇檔案",
+    flowProcess = "本機處理",
+    flowOutput = "使用結果",
+    help = "說明"
+)
+
 private val englishText = UiText(
     moreHeaderActions = "More actions",
     tagline = "Files stay on this device",
@@ -8165,6 +8410,7 @@ private val englishText = UiText(
     aboutDescription = "A local all-in-one format converter for Android. Works offline, with no ads or fees.",
     githubRepository = "GitHub repository",
     privacyPolicy = englishPrivacyPolicy,
+    helpGuide = englishHelpGuide,
     checkUpdates = "Check for updates",
     stableUpdateChannel = "Stable",
     previewUpdateChannel = "Preview",
@@ -8284,6 +8530,7 @@ private val simplifiedChineseText = UiText(
     aboutDescription = "面向 Android 的本地综合格式转换工具，不联网，无广告、不收费",
     githubRepository = "GitHub 仓库",
     privacyPolicy = simplifiedChinesePrivacyPolicy,
+    helpGuide = simplifiedChineseHelpGuide,
     checkUpdates = "检查更新",
     stableUpdateChannel = "正式版",
     previewUpdateChannel = "预览版",
@@ -8403,6 +8650,7 @@ private val traditionalChineseText = UiText(
     aboutDescription = "面向 Android 的本地綜合格式轉換工具，不聯網，無廣告、不收費",
     githubRepository = "GitHub 倉庫",
     privacyPolicy = traditionalChinesePrivacyPolicy,
+    helpGuide = traditionalChineseHelpGuide,
     checkUpdates = "檢查更新",
     stableUpdateChannel = "正式版",
     previewUpdateChannel = "預覽版",
