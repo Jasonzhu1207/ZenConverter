@@ -866,6 +866,7 @@ private fun ZenConverterContent(
     LaunchedEffect(activeHeaderPanel) {
         if (activeHeaderPanel != null) {
             renderedHeaderPanel = activeHeaderPanel
+            homeListState.scrollToItem(0)
         }
         headerPanelVisibleState.targetState = activeHeaderPanel != null
     }
