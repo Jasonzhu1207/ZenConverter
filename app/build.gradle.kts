@@ -17,11 +17,20 @@ val pdfBoxAndroidLocalAar = file("libs/pdfbox-android-2.0.27.0.aar")
 val bouncyCastleProvLocalJar = file("libs/bcprov-jdk15to18-1.72.jar")
 val bouncyCastlePkixLocalJar = file("libs/bcpkix-jdk15to18-1.72.jar")
 val bouncyCastleUtilLocalJar = file("libs/bcutil-jdk15to18-1.72.jar")
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.inputStream().use { localProperties.load(it) }
+}
+
+fun localProperty(name: String): String? =
+    localProperties.getProperty(name)?.takeIf { it.isNotBlank() }
+
 val appVersionName = providers.gradleProperty("zenconverter.versionName")
-    .orElse("0.1.0")
+    .orElse(localProperty("ZENCONVERTER_VERSION_NAME") ?: "0.1.0")
 val appVersionCode = providers.gradleProperty("zenconverter.versionCode")
+    .orElse(localProperty("ZENCONVERTER_VERSION_CODE") ?: "1000001")
     .map { value -> value.toInt() }
-    .orElse(1_000_001)
 check(pdfBoxAndroidLocalAar.isFile) {
     "Missing PDFBox-Android AAR at ${pdfBoxAndroidLocalAar.path}. " +
         "Download com.tom-roush:pdfbox-android:2.0.27.0 before Gradle sync."
@@ -52,15 +61,6 @@ android {
             abiFilters += "arm64-v8a"
         }
     }
-
-    val localProperties = Properties()
-    val localPropertiesFile = rootProject.file("local.properties")
-    if (localPropertiesFile.exists()) {
-        localPropertiesFile.inputStream().use { localProperties.load(it) }
-    }
-
-    fun localProperty(name: String): String? =
-        localProperties.getProperty(name)?.takeIf { it.isNotBlank() }
 
     val releaseStoreFile = localProperty("RELEASE_STORE_FILE")
         ?.let { rootProject.file(it) }
