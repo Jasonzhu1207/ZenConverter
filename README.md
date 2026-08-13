@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/Jasonzhu1207/ZenConverter/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Jasonzhu1207/ZenConverter?display_name=tag&sort=semver&color=0A7E8C"></a>
+  <a href="https://play.google.com/store/apps/details?id=org.zenconverter.app"><img alt="Get it on Google Play" src="https://img.shields.io/badge/Google_Play-Download-414141?logo=google-play&logoColor=white"></a>
   <img alt="GitHub stars" src="https://img.shields.io/github/stars/Jasonzhu1207/ZenConverter?style=flat&logo=github&color=F59E0B">
   <img alt="Platform" src="https://img.shields.io/badge/platform-Android-3DDC84?logo=android&logoColor=white">
   <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?logo=kotlin&logoColor=white">
@@ -34,6 +35,12 @@ hidden.
 
 **Note:** very large media files still need adequate free storage, memory, and
 power. Keep the device available while a long foreground conversion is running.
+
+
+<p align="center">
+  <a href="https://play.google.com/store/apps/details?id=org.zenconverter.app"><img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="80"></a>
+  <a href="https://github.com/Jasonzhu1207/ZenConverter/releases/latest"><img src="docs/assets/get-it-on-github.png" alt="Get it on GitHub" height="80"></a>
+</p>
 
 ## Why Build It
 
