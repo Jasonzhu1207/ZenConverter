@@ -1976,34 +1976,34 @@ private fun AboutPanel(
                 texts = texts,
                 installedVersion = installedVersion
             )
+        }
 
-            Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-            Button(
-                onClick = onShowSupport,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 52.dp),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF151515),
-                    contentColor = Color.White
-                ),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
-            ) {
-                AppIcon(
-                    icon = Icons.Rounded.Favorite,
-                    contentDescription = null,
-                    tint = Color(0xFFFFD6C2),
-                    modifier = Modifier.size(19.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = texts.supportDevelopment,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+        Button(
+            onClick = onShowSupport,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp),
+            shape = RoundedCornerShape(8.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF151515),
+                contentColor = Color.White
+            ),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+        ) {
+            AppIcon(
+                icon = Icons.Rounded.Favorite,
+                contentDescription = null,
+                tint = Color(0xFFFFD6C2),
+                modifier = Modifier.size(19.dp)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                text = texts.supportDevelopment,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -3021,6 +3021,11 @@ private fun SupportDialog(
                 )
                 Text(
                     text = texts.sponsorIntro,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = texts.sponsorNoBenefits,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -6376,6 +6381,7 @@ private data class UiText(
     val supportDevelopment: String,
     val sponsorTitle: String,
     val sponsorIntro: String,
+    val sponsorNoBenefits: String,
     val openLink: String,
     val copy: String,
     val copied: String,
@@ -8175,6 +8181,7 @@ private val englishText = UiText(
     supportDevelopment = "Sponsor development",
     sponsorTitle = "Sponsor ZenConverter",
     sponsorIntro = "Sponsor to help ZenConverter stay maintained, open-source, free, and ad-free.",
+    sponsorNoBenefits = "Sponsorship does not unlock any additional services or features.",
     openLink = "Open link",
     copy = "Copy",
     copied = "Copied",
@@ -8293,6 +8300,7 @@ private val simplifiedChineseText = UiText(
     supportDevelopment = "赞助开发",
     sponsorTitle = "赞助 ZenConverter",
     sponsorIntro = "赞助以支持 ZenConverter 始终保持维护，坚持开源免费无广告",
+    sponsorNoBenefits = "赞助不会带来任何额外服务或功能。",
     openLink = "打开链接",
     copy = "复制",
     copied = "已复制",
@@ -8411,6 +8419,7 @@ private val traditionalChineseText = UiText(
     supportDevelopment = "贊助開發",
     sponsorTitle = "贊助 ZenConverter",
     sponsorIntro = "贊助以支持 ZenConverter 始終保持維護，堅持開源免費無廣告",
+    sponsorNoBenefits = "贊助不會帶來任何額外服務或功能。",
     openLink = "開啟連結",
     copy = "複製",
     copied = "已複製",
