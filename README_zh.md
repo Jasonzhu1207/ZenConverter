@@ -16,6 +16,11 @@
 </p>
 
 <p align="center">
+  <a href="https://play.google.com/store/apps/details?id=org.zenconverter.app"><img src="https://play.google.com/intl/en_us/badges/static/images/badges/zh-cn_badge_web_generic.png" alt="Get it on Google Play" height="80"></a>
+  <a href="https://github.com/Jasonzhu1207/ZenConverter/releases/latest"><img src="docs/assets/get-it-on-github.png" alt="Get it on GitHub" height="80"></a>
+</p>
+
+<p align="center">
   <img src="docs/assets/zenconverter-cover.png" alt="ZenConverter app icon" width="240">
 </p>
 
@@ -24,11 +29,6 @@ ZenConverter 是一个 Android 本地文件转换器。选择手机里的文件�
 项目使用原生 Kotlin 和 Jetpack Compose。文件访问走 Android Storage Access Framework，耗时任务在前台服务中运行。项目不会假装自己是万能转换器：已支持路线均已在 Android 真机验证，限制也会直接写清楚。
 
 **注意：** 超大媒体文件需要足够的可用存储、内存和电量。长时间前台转换期间请保持设备可用。如出现闪退等情况欢迎及时反馈。
-
-<p align="center">
-  <a href="https://play.google.com/store/apps/details?id=org.zenconverter.app"><img src="https://play.google.com/intl/en_us/badges/static/images/badges/zh-cn_badge_web_generic.png" alt="Get it on Google Play" height="80"></a>
-  <a href="https://github.com/Jasonzhu1207/ZenConverter/releases/latest"><img src="docs/assets/get-it-on-github.png" alt="Get it on GitHub" height="80"></a>
-</p>
 
 ## 为什么做它
 
@@ -99,7 +99,7 @@ ZenConverter 自有源码基于
 ## 鸣谢
 
 - [OhMyGPT](https://www.ohmygpt.com/) 提供 AI API 支持。
-- [**ForZTN**](https://sponsorship.forztn.com/github/Jasonzhu1207/ZenConverter) 提供内核编译服务器支持。
+- [ForZTN](https://sponsorship.forztn.com/github/Jasonzhu1207/ZenConverter) 提供内核编译服务器支持。
 
 ## Star History
 

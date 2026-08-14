@@ -21,6 +21,11 @@
 </p>
 
 <p align="center">
+  <a href="https://play.google.com/store/apps/details?id=org.zenconverter.app"><img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="80"></a>
+  <a href="https://github.com/Jasonzhu1207/ZenConverter/releases/latest"><img src="docs/assets/get-it-on-github.png" alt="Get it on GitHub" height="80"></a>
+</p>
+
+<p align="center">
   <img src="docs/assets/zenconverter-cover.png" alt="ZenConverter app icon" width="240">
 </p>
 
@@ -35,12 +40,6 @@ hidden.
 
 **Note:** very large media files still need adequate free storage, memory, and
 power. Keep the device available while a long foreground conversion is running.
-
-
-<p align="center">
-  <a href="https://play.google.com/store/apps/details?id=org.zenconverter.app"><img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="80"></a>
-  <a href="https://github.com/Jasonzhu1207/ZenConverter/releases/latest"><img src="docs/assets/get-it-on-github.png" alt="Get it on GitHub" height="80"></a>
-</p>
 
 ## Why Build It
 
@@ -116,7 +115,7 @@ licenses. Details are tracked in
 ## Acknowledgements
 
 - [OhMyGPT](https://www.ohmygpt.com/) provides AI API support.
-- [**ForZTN**](https://sponsorship.forztn.com/github/Jasonzhu1207/ZenConverter) provides the kernel compilation server.
+- [ForZTN](https://sponsorship.forztn.com/github/Jasonzhu1207/ZenConverter) provides the kernel compilation server.
 
 ## Star History
 
