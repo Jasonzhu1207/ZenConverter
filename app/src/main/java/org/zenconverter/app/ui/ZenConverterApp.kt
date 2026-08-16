@@ -840,7 +840,6 @@ private fun ZenConverterContent(
     var queueMessage by remember { mutableStateOf<String?>(null) }
     var openMenuId by remember { mutableStateOf<String?>(null) }
     var expandedFileId by remember { mutableStateOf<String?>(null) }
-    var lastQueueIds by remember { mutableStateOf<List<String>>(emptyList()) }
     val homeListState = rememberLazyListState()
 
     val taskProgressById = conversionTasks.associateBy { it.fileId }
@@ -848,14 +847,12 @@ private fun ZenConverterContent(
     val groupedFileIds = pdfMergeGroups.flatMap { it.memberFileIds }.toSet()
 
     LaunchedEffect(queueIds) {
-        val wasEmpty = lastQueueIds.isEmpty()
-        expandedFileId = when {
-            queueIds.isEmpty() -> null
-            queueIds.size == 1 && wasEmpty -> queueIds.first()
-            expandedFileId != null && expandedFileId in queueIds -> expandedFileId
-            else -> null
+        // 默认收起；只清理已不存在的展开项，不在添加文件时自动展开。
+        if (queueIds.isEmpty()) {
+            expandedFileId = null
+        } else if (expandedFileId != null && expandedFileId !in queueIds) {
+            expandedFileId = null
         }
-        lastQueueIds = queueIds
     }
 
     val statusMessage = conversionSummary ?: queueMessage
@@ -5127,7 +5124,6 @@ private fun FileRow(
                         selected = target == selectedTarget,
                         onSelected = {
                             onOpenMenuChange(null)
-                            onOptionsExpandedChange(false)
                             onUpdateFile(fileWithTarget(file, target, supportedVideoMimeTypes))
                         }
                     )
