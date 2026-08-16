@@ -2488,9 +2488,9 @@ class ConversionService : Service() {
         trimWindow: FfmpegTrimWindow,
         durationLimitMs: Long? = trimWindow.durationLimitMs
     ) {
-        if (trimWindow.startSeconds > 0L) {
+        if (trimWindow.startSeconds > 0.0) {
             add("-ss")
-            add(ffmpegSeconds(trimWindow.startSeconds.toDouble()))
+            add(ffmpegSeconds(trimWindow.startSeconds))
         }
         durationLimitMs?.takeIf { it > 0L }?.let { durationMs ->
             add("-t")
@@ -3584,9 +3584,9 @@ class ConversionService : Service() {
 
         val sourceDuration = sourceDurationMs
             ?: return FfmpegTrimWindow(errorMessage = "Compatibility engine needs duration metadata for trimming")
-        val startSeconds = trimRange.startSeconds ?: 0L
+        val startSeconds = trimRange.startSeconds ?: 0.0
         val endSeconds = trimRange.endSeconds
-        if (startSeconds < 0L) {
+        if (startSeconds < 0.0) {
             return FfmpegTrimWindow(errorMessage = "Trim start must be zero or greater")
         }
         val startMs = trimSecondsToMs(startSeconds)
@@ -3624,8 +3624,9 @@ class ConversionService : Service() {
         }
     }
 
-    private fun trimSecondsToMs(seconds: Long): Long? {
-        return runCatching { Math.multiplyExact(seconds, 1_000L) }.getOrNull()
+    private fun trimSecondsToMs(seconds: Double): Long? {
+        if (!seconds.isFinite() || seconds < 0.0) return null
+        return runCatching { Math.round(seconds * 1_000.0) }.getOrNull()
     }
 
     private fun readFfmpegDurationMs(inputPath: String): Long? {
@@ -4495,7 +4496,7 @@ class ConversionService : Service() {
     }
 
     private data class FfmpegTrimWindow(
-        val startSeconds: Long = 0L,
+        val startSeconds: Double = 0.0,
         val durationLimitMs: Long? = null,
         val effectiveDurationMs: Long? = null,
         val errorMessage: String? = null

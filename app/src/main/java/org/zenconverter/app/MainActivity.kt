@@ -605,9 +605,9 @@ class MainActivity : ComponentActivity() {
         durationMs: Long?
     ): String? {
         if (!trimRange.isEnabled) return null
-        val startSeconds = trimRange.startSeconds ?: 0L
+        val startSeconds = trimRange.startSeconds ?: 0.0
         val endSeconds = trimRange.endSeconds
-        if (startSeconds < 0L) return "Trim start must be zero or greater"
+        if (startSeconds < 0.0) return "Trim start must be zero or greater"
         val startMs = trimSecondsToMs(startSeconds) ?: return "Trim range is too large"
         if (endSeconds != null) {
             val endMs = trimSecondsToMs(endSeconds) ?: return "Trim range is too large"
@@ -622,8 +622,9 @@ class MainActivity : ComponentActivity() {
         return null
     }
 
-    private fun trimSecondsToMs(seconds: Long): Long? {
-        return runCatching { Math.multiplyExact(seconds, 1_000L) }.getOrNull()
+    private fun trimSecondsToMs(seconds: Double): Long? {
+        if (!seconds.isFinite() || seconds < 0.0) return null
+        return runCatching { Math.round(seconds * 1_000.0) }.getOrNull()
     }
 
     private fun removeQueuedFile(fileId: String) {

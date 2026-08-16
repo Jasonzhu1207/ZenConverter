@@ -101,6 +101,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -108,7 +109,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.RangeSlider
+import androidx.compose.material3.RangeSliderState
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SliderColors
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -129,9 +134,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -4110,10 +4117,13 @@ private fun VideoOptions(
     videoAdvanced: VideoAdvancedUiState,
     audioAdvanced: AudioAdvancedUiState,
     targetFormat: TargetFormat,
+    trimInputMode: TrimInputMode,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
-    onTrimStartSecondsChange: (Long?) -> Unit,
-    onTrimEndSecondsChange: (Long?) -> Unit,
+    onTrimInputModeChange: (TrimInputMode) -> Unit,
+    onTrimStartSecondsChange: (Double?) -> Unit,
+    onTrimEndSecondsChange: (Double?) -> Unit,
+    onTrimRangeChange: (MediaTrimRange) -> Unit,
     onResolutionChange: (String) -> Unit,
     onCompressionModeChange: (String) -> Unit,
     onBitrateChange: (String) -> Unit,
@@ -4145,8 +4155,11 @@ private fun VideoOptions(
             texts = texts,
             trimRange = trimRange,
             sourceDurationMs = sourceDurationMs,
+            inputMode = trimInputMode,
+            onInputModeChange = onTrimInputModeChange,
             onStartSecondsChange = onTrimStartSecondsChange,
-            onEndSecondsChange = onTrimEndSecondsChange
+            onEndSecondsChange = onTrimEndSecondsChange,
+            onTrimRangeChange = onTrimRangeChange
         )
         if (!isGifTarget) {
             OptionDropdown(
@@ -4290,10 +4303,13 @@ private fun AudioOptions(
     channels: String,
     advanced: AudioAdvancedUiState,
     targetFormat: TargetFormat,
+    trimInputMode: TrimInputMode,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
-    onTrimStartSecondsChange: (Long?) -> Unit,
-    onTrimEndSecondsChange: (Long?) -> Unit,
+    onTrimInputModeChange: (TrimInputMode) -> Unit,
+    onTrimStartSecondsChange: (Double?) -> Unit,
+    onTrimEndSecondsChange: (Double?) -> Unit,
+    onTrimRangeChange: (MediaTrimRange) -> Unit,
     onBitrateChange: (String) -> Unit,
     onSampleRateChange: (String) -> Unit,
     onChannelsChange: (String) -> Unit,
@@ -4310,8 +4326,11 @@ private fun AudioOptions(
             texts = texts,
             trimRange = trimRange,
             sourceDurationMs = sourceDurationMs,
+            inputMode = trimInputMode,
+            onInputModeChange = onTrimInputModeChange,
             onStartSecondsChange = onTrimStartSecondsChange,
-            onEndSecondsChange = onTrimEndSecondsChange
+            onEndSecondsChange = onTrimEndSecondsChange,
+            onTrimRangeChange = onTrimRangeChange
         )
         if (audioSupportsBitrateOption(targetFormat)) {
             OptionDropdown(
@@ -4368,13 +4387,21 @@ private fun AudioOptions(
     }
 }
 
+private enum class TrimInputMode {
+    Quick,
+    Precise
+}
+
 @Composable
 private fun MediaTrimOptions(
     texts: UiText,
     trimRange: MediaTrimRange,
     sourceDurationMs: Long?,
-    onStartSecondsChange: (Long?) -> Unit,
-    onEndSecondsChange: (Long?) -> Unit
+    inputMode: TrimInputMode,
+    onInputModeChange: (TrimInputMode) -> Unit,
+    onStartSecondsChange: (Double?) -> Unit,
+    onEndSecondsChange: (Double?) -> Unit,
+    onTrimRangeChange: (MediaTrimRange) -> Unit
 ) {
     val errorText = mediaTrimErrorText(trimRange, sourceDurationMs, texts)
     Column(
@@ -4412,24 +4439,38 @@ private fun MediaTrimOptions(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            TrimSecondsField(
-                value = trimRange.startSeconds,
-                label = texts.trimStartSeconds,
-                isError = errorText != null,
-                onValueChange = onStartSecondsChange,
-                modifier = Modifier.weight(1f)
+        TrimModeToggle(
+            texts = texts,
+            selected = inputMode,
+            onSelected = onInputModeChange
+        )
+        if (inputMode == TrimInputMode.Quick) {
+            TrimRangeSlider(
+                trimRange = trimRange,
+                sourceDurationMs = sourceDurationMs,
+                texts = texts,
+                onRangeChange = onTrimRangeChange
             )
-            TrimSecondsField(
-                value = trimRange.endSeconds,
-                label = texts.trimEndSeconds,
-                isError = errorText != null,
-                onValueChange = onEndSecondsChange,
-                modifier = Modifier.weight(1f)
-            )
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TrimSecondsField(
+                    value = trimRange.startSeconds,
+                    label = texts.trimStartSeconds,
+                    isError = errorText != null,
+                    onValueChange = onStartSecondsChange,
+                    modifier = Modifier.weight(1f)
+                )
+                TrimSecondsField(
+                    value = trimRange.endSeconds,
+                    label = texts.trimEndSeconds,
+                    isError = errorText != null,
+                    onValueChange = onEndSecondsChange,
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
         errorText?.let { message ->
             Text(
@@ -4442,23 +4483,208 @@ private fun MediaTrimOptions(
 }
 
 @Composable
-private fun TrimSecondsField(
-    value: Long?,
-    label: String,
-    isError: Boolean,
-    onValueChange: (Long?) -> Unit,
+private fun TrimModeToggle(
+    texts: UiText,
+    selected: TrimInputMode,
+    onSelected: (TrimInputMode) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFFF1F1F1), RoundedCornerShape(100.dp))
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        TrimModeChip(
+            text = texts.trimQuick,
+            selected = selected == TrimInputMode.Quick,
+            onClick = { onSelected(TrimInputMode.Quick) },
+            modifier = Modifier.weight(1f)
+        )
+        TrimModeChip(
+            text = texts.trimPrecise,
+            selected = selected == TrimInputMode.Precise,
+            onClick = { onSelected(TrimInputMode.Precise) },
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun TrimModeChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(100.dp))
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary else Color.Transparent
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TrimRangeSlider(
+    trimRange: MediaTrimRange,
+    sourceDurationMs: Long?,
+    texts: UiText,
+    onRangeChange: (MediaTrimRange) -> Unit
+) {
+    val durationSeconds = sourceDurationMs
+        ?.takeIf { it > 0L }
+        ?.let { it.toDouble() / 1_000.0 }
+    val start = (trimRange.startSeconds ?: 0.0).toFloat()
+    val fallbackEnd = maxOf(if (durationSeconds == null) 1f else 0f, start)
+    val end = (trimRange.endSeconds ?: durationSeconds?.toFloat() ?: fallbackEnd).toFloat()
+    val sliderMax = maxOf(
+        durationSeconds?.toFloat() ?: 0f,
+        start,
+        end,
+        if (durationSeconds == null) 1f else 0f
+    ).coerceAtLeast(0.1f)
+    val valueRange = 0f..sliderMax
+    val currentStart = if (start <= end) start.coerceIn(valueRange) else end.coerceIn(valueRange)
+    val currentEnd = if (start <= end) end.coerceIn(valueRange) else start.coerceIn(valueRange)
+    val currentRange = currentStart..currentEnd
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        val sliderColors = SliderDefaults.colors(
+            thumbColor = MaterialTheme.colorScheme.primary,
+            activeTrackColor = MaterialTheme.colorScheme.primary,
+            inactiveTrackColor = Color(0xFFE1E1E1)
+        )
+        RangeSlider(
+            value = currentRange,
+            onValueChange = { range ->
+                onRangeChange(
+                    MediaTrimRange(
+                        startSeconds = range.start.toDouble(),
+                        endSeconds = range.endInclusive.toDouble()
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth(),
+            valueRange = valueRange,
+            colors = sliderColors,
+            startThumb = { SmallTrimThumb() },
+            endThumb = { SmallTrimThumb() },
+            track = { state ->
+                TrimRangeTrack(state = state, colors = sliderColors)
+            }
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = texts.trimStartSeconds + " " + formatTrimSeconds(currentStart.toDouble(), texts),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = texts.trimEndSeconds + " " + formatTrimSeconds(currentEnd.toDouble(), texts),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+
+@Composable
+private fun SmallTrimThumb() {
+    Box(
+        modifier = Modifier
+            .size(16.dp)
+            .background(MaterialTheme.colorScheme.primary, CircleShape)
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TrimRangeTrack(state: RangeSliderState, colors: SliderColors) {
+    val trackHeight = 4.dp
+    Canvas(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(trackHeight)
+    ) {
+        val strokeWidth = trackHeight.toPx()
+        val y = center.y
+        val trackStart = Offset(0f, y)
+        val trackEnd = Offset(size.width, y)
+        drawLine(
+            color = colors.inactiveTrackColor,
+            start = trackStart,
+            end = trackEnd,
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
+        )
+        val range = state.valueRange
+        val span = range.endInclusive - range.start
+        if (span > 0f) {
+            val activeStart = (state.activeRangeStart - range.start) / span * size.width
+            val activeEnd = (state.activeRangeEnd - range.start) / span * size.width
+            drawLine(
+                color = colors.activeTrackColor,
+                start = Offset(activeStart, y),
+                end = Offset(activeEnd, y),
+                strokeWidth = strokeWidth,
+                cap = StrokeCap.Round
+            )
+        }
+    }
+}
+
+@Composable
+private fun TrimSecondsField(
+    value: Double?,
+    label: String,
+    isError: Boolean,
+    onValueChange: (Double?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var text by remember {
+        mutableStateOf(value?.let { formatTrimSecondsInput(it) }.orEmpty())
+    }
+    var focused by remember { mutableStateOf(false) }
+    LaunchedEffect(value) {
+        if (!focused) {
+            text = value?.let { formatTrimSecondsInput(it) }.orEmpty()
+        }
+    }
     OutlinedTextField(
-        value = value?.toString().orEmpty(),
+        value = text,
         onValueChange = { rawValue ->
-            val digits = rawValue.filter { it.isDigit() }.take(7)
-            onValueChange(digits.toLongOrNull())
+            val cleaned = sanitizeTrimSecondsInput(rawValue)
+            text = cleaned
+            onValueChange(cleaned.toDoubleOrNull())
         },
         singleLine = true,
         label = { Text(label) },
         isError = isError,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = MaterialTheme.colorScheme.primary,
             unfocusedBorderColor = MaterialTheme.colorScheme.outline,
@@ -4472,8 +4698,45 @@ private fun TrimSecondsField(
             errorCursorColor = MaterialTheme.colorScheme.error,
             errorContainerColor = Color.White
         ),
-        modifier = modifier.defaultMinSize(minWidth = 0.dp)
+        modifier = modifier
+            .defaultMinSize(minWidth = 0.dp)
+            .onFocusChanged { focusState ->
+                if (focused && !focusState.isFocused) {
+                    text = value?.let { formatTrimSecondsInput(it) }.orEmpty()
+                }
+                focused = focusState.isFocused
+            }
     )
+}
+
+private fun sanitizeTrimSecondsInput(rawValue: String): String {
+    val firstDot = rawValue.indexOf('.')
+    return if (firstDot < 0) {
+        rawValue.filter { it.isDigit() }.take(7)
+    } else {
+        rawValue.substring(0, firstDot).filter { it.isDigit() }.take(7) +
+            "." +
+            rawValue.substring(firstDot + 1).filter { it.isDigit() }.take(3)
+    }
+}
+
+private fun formatTrimSecondsInput(seconds: Double): String {
+    if (!seconds.isFinite()) return ""
+    val millis = Math.round(seconds * 1_000.0)
+    val normalized = millis.toDouble() / 1_000.0
+    return if (normalized % 1.0 == 0.0) {
+        normalized.toLong().toString()
+    } else {
+        String.format(java.util.Locale.US, "%.3f", normalized)
+            .trimEnd('0')
+            .trimEnd('.')
+    }
+}
+
+private fun formatTrimSeconds(seconds: Double, texts: UiText): String {
+    if (!seconds.isFinite() || seconds < 0.0) return "—"
+    val millis = Math.round(seconds * 1_000.0)
+    return formatDurationMs(millis, texts)
 }
 
 private fun mediaTrimErrorText(
@@ -4482,7 +4745,7 @@ private fun mediaTrimErrorText(
     texts: UiText
 ): String? {
     if (!trimRange.isEnabled) return null
-    val startSeconds = trimRange.startSeconds ?: 0L
+    val startSeconds = trimRange.startSeconds ?: 0.0
     val endSeconds = trimRange.endSeconds
     val startMs = trimSecondsToMs(startSeconds) ?: return texts.trimRangeTooLarge
     if (endSeconds != null) {
@@ -4494,8 +4757,9 @@ private fun mediaTrimErrorText(
     return null
 }
 
-private fun trimSecondsToMs(seconds: Long): Long? {
-    return runCatching { Math.multiplyExact(seconds, 1_000L) }.getOrNull()
+private fun trimSecondsToMs(seconds: Double): Long? {
+    if (!seconds.isFinite() || seconds < 0.0) return null
+    return runCatching { Math.round(seconds * 1_000.0) }.getOrNull()
 }
 
 @Composable
@@ -5024,6 +5288,7 @@ private fun FileRow(
     val selectedTarget = selectedTargetFor(file)
     var videoAdvancedExpanded by remember(file.id) { mutableStateOf(false) }
     var audioAdvancedExpanded by remember(file.id) { mutableStateOf(false) }
+    var trimInputMode by remember(file.id) { mutableStateOf(TrimInputMode.Quick) }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -5141,8 +5406,10 @@ private fun FileRow(
                     supportedVideoMimeTypes = supportedVideoMimeTypes,
                     videoAdvancedExpanded = videoAdvancedExpanded,
                     audioAdvancedExpanded = audioAdvancedExpanded,
+                    trimInputMode = trimInputMode,
                     openMenuId = openMenuId,
                     onOpenMenuChange = onOpenMenuChange,
+                    onTrimInputModeChange = { trimInputMode = it },
                     onVideoAdvancedExpandedChange = { videoAdvancedExpanded = it },
                     onAudioAdvancedExpandedChange = { audioAdvancedExpanded = it },
                     onUpdateFile = onUpdateFile
@@ -5225,8 +5492,10 @@ private fun QueuedFileOptionsPanel(
     supportedVideoMimeTypes: Set<String>,
     videoAdvancedExpanded: Boolean,
     audioAdvancedExpanded: Boolean,
+    trimInputMode: TrimInputMode,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
+    onTrimInputModeChange: (TrimInputMode) -> Unit,
     onVideoAdvancedExpandedChange: (Boolean) -> Unit,
     onAudioAdvancedExpandedChange: (Boolean) -> Unit,
     onUpdateFile: (QueuedFile) -> Unit
@@ -5259,8 +5528,10 @@ private fun QueuedFileOptionsPanel(
                 videoAdvanced = videoAdvancedUiStateFor(file.videoOptions.advanced, videoAdvancedExpanded),
                 audioAdvanced = audioAdvancedUiStateFor(file.audioOptions.advanced, audioAdvancedExpanded),
                 targetFormat = selectedTarget.targetFormat,
+                trimInputMode = trimInputMode,
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
+                onTrimInputModeChange = onTrimInputModeChange,
                 onTrimStartSecondsChange = { value ->
                     onUpdateFile(
                         file.copy(
@@ -5276,6 +5547,13 @@ private fun QueuedFileOptionsPanel(
                             videoOptions = file.videoOptions.copy(
                                 trimRange = file.videoOptions.trimRange.copy(endSeconds = value)
                             )
+                        )
+                    )
+                },
+                onTrimRangeChange = { range ->
+                    onUpdateFile(
+                        file.copy(
+                            videoOptions = file.videoOptions.copy(trimRange = range)
                         )
                     )
                 },
@@ -5380,8 +5658,10 @@ private fun QueuedFileOptionsPanel(
                 channels = audioChannelsLabelFor(file.audioOptions.channelCount),
                 advanced = audioAdvancedUiStateFor(file.audioOptions.advanced, audioAdvancedExpanded),
                 targetFormat = selectedTarget.targetFormat,
+                trimInputMode = trimInputMode,
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
+                onTrimInputModeChange = onTrimInputModeChange,
                 onTrimStartSecondsChange = { value ->
                     onUpdateFile(
                         file.copy(
@@ -5397,6 +5677,13 @@ private fun QueuedFileOptionsPanel(
                             audioOptions = file.audioOptions.copy(
                                 trimRange = file.audioOptions.trimRange.copy(endSeconds = value)
                             )
+                        )
+                    )
+                },
+                onTrimRangeChange = { range ->
+                    onUpdateFile(
+                        file.copy(
+                            audioOptions = file.audioOptions.copy(trimRange = range)
                         )
                     )
                 },
@@ -6630,6 +6917,8 @@ private data class UiText(
     val sampleRate: String,
     val channels: String,
     val trimRange: String,
+    val trimQuick: String,
+    val trimPrecise: String,
     val trimStartSeconds: String,
     val trimEndSeconds: String,
     val trimDurationUnknown: String,
@@ -8497,6 +8786,8 @@ private val englishText = UiText(
     sampleRate = "Sample rate",
     channels = "Channels",
     trimRange = "Trim",
+    trimQuick = "Quick",
+    trimPrecise = "Precise",
     trimStartSeconds = "Start (s)",
     trimEndSeconds = "End (s)",
     trimDurationUnknown = "Duration unknown",
@@ -8617,6 +8908,8 @@ private val simplifiedChineseText = UiText(
     sampleRate = "采样率",
     channels = "声道",
     trimRange = "裁剪",
+    trimQuick = "快速",
+    trimPrecise = "精准",
     trimStartSeconds = "起始秒",
     trimEndSeconds = "结束秒",
     trimDurationUnknown = "时长未知",
@@ -8737,6 +9030,8 @@ private val traditionalChineseText = UiText(
     sampleRate = "取樣率",
     channels = "聲道",
     trimRange = "裁剪",
+    trimQuick = "快速",
+    trimPrecise = "精準",
     trimStartSeconds = "起始秒",
     trimEndSeconds = "結束秒",
     trimDurationUnknown = "時長未知",

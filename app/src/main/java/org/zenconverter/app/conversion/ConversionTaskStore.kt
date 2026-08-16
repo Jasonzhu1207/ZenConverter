@@ -67,8 +67,8 @@ data class AudioExportOptions(
 )
 
 data class MediaTrimRange(
-    val startSeconds: Long? = null,
-    val endSeconds: Long? = null
+    val startSeconds: Double? = null,
+    val endSeconds: Double? = null
 ) {
     val isEnabled: Boolean
         get() = startSeconds != null || endSeconds != null
