@@ -7,12 +7,13 @@
 
 <p align="center">
   <a href="https://github.com/Jasonzhu1207/ZenConverter/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/Jasonzhu1207/ZenConverter?display_name=tag&sort=semver&color=0A7E8C"></a>
-  <a href="https://play.google.com/store/apps/details?id=org.zenconverter.app"><img alt="在 Google Play 上获取" src="https://img.shields.io/badge/Google_Play-下载-414141?logo=google-play&logoColor=white"></a>
-  <img alt="Platform" src="https://img.shields.io/badge/platform-Android-3DDC84?logo=android&logoColor=white">
+  <img alt="GitHub stars" src="https://img.shields.io/github/stars/Jasonzhu1207/ZenConverter?style=flat&logo=github&color=F59E0B">
+  <img alt="GitHub downloads" src="https://img.shields.io/github/downloads/Jasonzhu1207/ZenConverter/total?style=flat&logo=github">
+  <img alt="最后提交" src="https://img.shields.io/github/last-commit/Jasonzhu1207/ZenConverter?style=flat&logo=github">
   <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?logo=kotlin&logoColor=white">
   <img alt="Jetpack Compose" src="https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4">
   <img alt="No ads" src="https://img.shields.io/badge/ads-none-16A34A">
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-2563EB"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/Jasonzhu1207/ZenConverter?style=flat"></a>
 </p>
 
 <p align="center">
