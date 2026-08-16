@@ -15,6 +15,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateDpAsState
@@ -1201,6 +1202,7 @@ private fun ZenConverterContent(
                     HeroAddButton(
                         morphProgress = morphProgress,
                         texts = texts,
+                        enabled = !isConversionRunning,
                         onPickFiles = {
                             openMenuId = null
                             queueMessage = null
@@ -3506,25 +3508,49 @@ private fun HeroAddButton(
     morphProgress: Float,
     onPickFiles: () -> Unit,
     texts: UiText,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
 ) {
     val size = ZenAnimations.HeroCenterSize + (ZenAnimations.HeroHeaderSize - ZenAnimations.HeroCenterSize) * morphProgress
     val iconSize = ZenAnimations.HeroCenterIconSize + (ZenAnimations.HeroHeaderIconSize - ZenAnimations.HeroCenterIconSize) * morphProgress
-    
+
+    val containerColor by animateColorAsState(
+        targetValue = if (enabled) MaterialTheme.colorScheme.primary
+                      else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f),
+        animationSpec = tween(ZenAnimations.ContentFadeDuration),
+        label = "heroAddContainer"
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (enabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                      else Color(0xFFE7E7E7),
+        animationSpec = tween(ZenAnimations.ContentFadeDuration),
+        label = "heroAddBorder"
+    )
+    val iconTint by animateColorAsState(
+        targetValue = if (enabled) MaterialTheme.colorScheme.onPrimary
+                      else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.32f),
+        animationSpec = tween(ZenAnimations.ContentFadeDuration),
+        label = "heroAddIcon"
+    )
+
     Box(
         modifier = modifier
             .size(size.dp)
             .clip(CircleShape)
             .background(
-                color = MaterialTheme.colorScheme.primary,
+                color = containerColor,
                 shape = CircleShape
             )
             .border(
                 1.dp,
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                borderColor,
                 CircleShape
             )
-            .bounceClick(onClick = onPickFiles, scaleDown = if (morphProgress < 0.5f) 0.94f else 0.90f)
+            .bounceClick(
+                onClick = onPickFiles,
+                enabled = enabled,
+                scaleDown = if (morphProgress < 0.5f) 0.94f else 0.90f
+            )
             .semantics {
                 contentDescription = texts.addFiles
                 role = Role.Button
@@ -3534,7 +3560,7 @@ private fun HeroAddButton(
         AppIcon(
             icon = Icons.Rounded.Add,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onPrimary,
+            tint = iconTint,
             modifier = Modifier.size(iconSize.dp)
         )
     }
