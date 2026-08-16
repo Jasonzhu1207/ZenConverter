@@ -106,6 +106,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -699,6 +700,9 @@ fun ZenConverterApp(
     metadataToolState: MetadataToolState,
     onOutputLocationModeChange: (OutputLocationMode) -> Unit,
     onPickFiles: () -> Unit,
+    onPickAlbumImages: () -> Unit,
+    onPickAlbumVideos: () -> Unit,
+    onPickFolder: () -> Unit,
     onUpdateQueuedFile: (QueuedFile) -> Unit,
     onUpdateQueuedFiles: (List<QueuedFile>) -> Unit,
     onCreatePdfMergeGroup: (PdfMergeType) -> Unit,
@@ -768,6 +772,9 @@ fun ZenConverterApp(
                 },
                 onOutputLocationModeChange = onOutputLocationModeChange,
                 onPickFiles = onPickFiles,
+                onPickAlbumImages = onPickAlbumImages,
+                onPickAlbumVideos = onPickAlbumVideos,
+                onPickFolder = onPickFolder,
                 onUpdateQueuedFile = onUpdateQueuedFile,
                 onUpdateQueuedFiles = onUpdateQueuedFiles,
                 onCreatePdfMergeGroup = onCreatePdfMergeGroup,
@@ -823,6 +830,9 @@ private fun ZenConverterContent(
     onLanguageSelected: (LanguageOption) -> Unit,
     onOutputLocationModeChange: (OutputLocationMode) -> Unit,
     onPickFiles: () -> Unit,
+    onPickAlbumImages: () -> Unit,
+    onPickAlbumVideos: () -> Unit,
+    onPickFolder: () -> Unit,
     onUpdateQueuedFile: (QueuedFile) -> Unit,
     onUpdateQueuedFiles: (List<QueuedFile>) -> Unit,
     onCreatePdfMergeGroup: (PdfMergeType) -> Unit,
@@ -844,6 +854,8 @@ private fun ZenConverterContent(
     var showSupport by remember { mutableStateOf(false) }
     var showPrivacyPolicy by rememberSaveable { mutableStateOf(false) }
     var showHelpScreen by rememberSaveable { mutableStateOf(false) }
+    var showImportSourceSheet by rememberSaveable { mutableStateOf(false) }
+    var showAlbumSourceDialog by rememberSaveable { mutableStateOf(false) }
     var queueMessage by remember { mutableStateOf<String?>(null) }
     var openMenuId by remember { mutableStateOf<String?>(null) }
     var expandedFileId by remember { mutableStateOf<String?>(null) }
@@ -1033,7 +1045,7 @@ private fun ZenConverterContent(
                                         onPickFiles = {
                                             openMenuId = null
                                             queueMessage = null
-                                            onPickFiles()
+                                            showImportSourceSheet = true
                                         },
                                         modifier = Modifier.graphicsLayer {
                                             alpha = 1f - morphProgress
@@ -1192,7 +1204,7 @@ private fun ZenConverterContent(
                         onPickFiles = {
                             openMenuId = null
                             queueMessage = null
-                            onPickFiles()
+                            showImportSourceSheet = true
                         },
                         modifier = Modifier.offset(x = heroX, y = heroY)
                     )
@@ -1204,6 +1216,40 @@ private fun ZenConverterContent(
             SupportDialog(
                 texts = texts,
                 onDismiss = { showSupport = false }
+            )
+        }
+
+        if (showImportSourceSheet) {
+            ImportSourceSheet(
+                texts = texts,
+                onDismiss = { showImportSourceSheet = false },
+                onPickAlbum = {
+                    showImportSourceSheet = false
+                    showAlbumSourceDialog = true
+                },
+                onPickFolder = {
+                    showImportSourceSheet = false
+                    onPickFolder()
+                },
+                onPickFiles = {
+                    showImportSourceSheet = false
+                    onPickFiles()
+                }
+            )
+        }
+
+        if (showAlbumSourceDialog) {
+            AlbumSourceDialog(
+                texts = texts,
+                onDismiss = { showAlbumSourceDialog = false },
+                onPickImages = {
+                    showAlbumSourceDialog = false
+                    onPickAlbumImages()
+                },
+                onPickVideos = {
+                    showAlbumSourceDialog = false
+                    onPickAlbumVideos()
+                }
             )
         }
         }
@@ -3491,6 +3537,170 @@ private fun HeroAddButton(
             tint = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier.size(iconSize.dp)
         )
+    }
+}
+
+@Composable
+private fun AlbumSourceDialog(
+    texts: UiText,
+    onDismiss: () -> Unit,
+    onPickImages: () -> Unit,
+    onPickVideos: () -> Unit
+) {
+    ZenPromptFrame(onDismissRequest = onDismiss) {
+        SectionTitle(
+            icon = Icons.Rounded.Image,
+            title = texts.importAlbumTitle
+        )
+        Text(
+            text = texts.importAlbumDialogNote,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            OutlinedButton(
+                onClick = onPickImages,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = Color.White,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 9.dp)
+            ) {
+                Text(texts.importAlbumImagesTitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Button(
+                onClick = onPickVideos,
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 9.dp)
+            ) {
+                Text(texts.importAlbumVideosTitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ImportSourceSheet(
+    texts: UiText,
+    onDismiss: () -> Unit,
+    onPickAlbum: () -> Unit,
+    onPickFolder: () -> Unit,
+    onPickFiles: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 12.dp, bottom = 4.dp)
+                    .size(width = 36.dp, height = 4.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFD9D9D9))
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 20.dp, bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = texts.importSourceTitle,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            ImportSourceRow(
+                icon = Icons.Rounded.Image,
+                title = texts.importAlbumTitle,
+                note = texts.importAlbumNote,
+                onClick = onPickAlbum
+            )
+            ImportSourceRow(
+                icon = Icons.Rounded.FolderOpen,
+                title = texts.importFolderTitle,
+                note = texts.importFolderNote,
+                onClick = onPickFolder
+            )
+            ImportSourceRow(
+                icon = Icons.Rounded.Description,
+                title = texts.importFilesTitle,
+                note = texts.importFilesNote,
+                onClick = onPickFiles
+            )
+        }
+    }
+}
+
+@Composable
+private fun ImportSourceRow(
+    icon: ImageVector,
+    title: String,
+    note: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
+            .border(1.dp, Color(0xFFE7E7E7), RoundedCornerShape(12.dp))
+            .bounceClick(onClick = onClick, scaleDown = 0.97f)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)),
+            contentAlignment = Alignment.Center
+        ) {
+            AppIcon(
+                icon = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = note,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -6865,6 +7075,16 @@ private data class UiText(
     val addFilesTitle: String,
     val addFilesNote: String,
     val addFiles: String,
+    val importSourceTitle: String,
+    val importAlbumTitle: String,
+    val importAlbumNote: String,
+    val importAlbumDialogNote: String,
+    val importAlbumImagesTitle: String,
+    val importAlbumVideosTitle: String,
+    val importFolderTitle: String,
+    val importFolderNote: String,
+    val importFilesTitle: String,
+    val importFilesNote: String,
     val batchSettings: String,
     val batchSettingsNote: String,
     val batchMixedTarget: String,
@@ -7604,6 +7824,16 @@ private data class UiText(
                 else -> "無法讀取這個 PDF"
             }
             "Default output needs storage permission on this Android version" -> storagePermissionRequired
+            "Gallery import needs storage permission" -> when (this) {
+                englishText -> "Gallery import needs storage permission"
+                simplifiedChineseText -> "从相册导入需要存储权限"
+                else -> "從相簿匯入需要儲存權限"
+            }
+            "No gallery app found" -> when (this) {
+                englishText -> "No gallery app found"
+                simplifiedChineseText -> "没有找到图库应用"
+                else -> "沒有找到圖庫應用程式"
+            }
             "Input file could not be opened" -> when (this) {
                 englishText -> "Input file could not be opened"
                 simplifiedChineseText -> "无法打开输入文件"
@@ -8734,6 +8964,16 @@ private val englishText = UiText(
     addFilesTitle = "Add files",
     addFilesNote = "Choose files first, then set targets and options in the task list.",
     addFiles = "Add files",
+    importSourceTitle = "Import",
+    importAlbumTitle = "From album",
+    importAlbumNote = "Open the gallery app to choose photos or videos",
+    importAlbumDialogNote = "Choose a media type to import",
+    importAlbumImagesTitle = "Images",
+    importAlbumVideosTitle = "Videos",
+    importFolderTitle = "Import folder",
+    importFolderNote = "Add supported files inside a folder",
+    importFilesTitle = "From files",
+    importFilesNote = "Browse the system file picker",
     batchSettings = "Batch settings",
     batchSettingsNote = "Tap a target to apply it to files with the same source type.",
     batchMixedTarget = "This group has mixed targets. Choose one target to unify it.",
@@ -8856,6 +9096,16 @@ private val simplifiedChineseText = UiText(
     addFilesTitle = "添加文件",
     addFilesNote = "先选择文件，再在任务列表里设置目标格式和选项。",
     addFiles = "添加文件",
+    importSourceTitle = "导入文件",
+    importAlbumTitle = "从相册导入",
+    importAlbumNote = "打开图库选择图片或视频",
+    importAlbumDialogNote = "选择要导入的媒体类型",
+    importAlbumImagesTitle = "图片",
+    importAlbumVideosTitle = "视频",
+    importFolderTitle = "导入文件夹",
+    importFolderNote = "添加文件夹内支持的格式",
+    importFilesTitle = "从文件导入",
+    importFilesNote = "通过系统文件选择器浏览",
     batchSettings = "批量设置",
     batchSettingsNote = "点一个目标，就会立即应用到同一来源类型的文件。",
     batchMixedTarget = "这一组目标不一致。选择一个目标即可统一。",
@@ -8978,6 +9228,16 @@ private val traditionalChineseText = UiText(
     addFilesTitle = "新增檔案",
     addFilesNote = "先選擇檔案，再在任務列表裡設定目標格式和選項。",
     addFiles = "新增檔案",
+    importSourceTitle = "匯入檔案",
+    importAlbumTitle = "從相簿匯入",
+    importAlbumNote = "開啟圖庫選擇圖片或影片",
+    importAlbumDialogNote = "選擇要匯入的媒體類型",
+    importAlbumImagesTitle = "圖片",
+    importAlbumVideosTitle = "影片",
+    importFolderTitle = "匯入資料夾",
+    importFolderNote = "加入資料夾內支援的格式",
+    importFilesTitle = "從檔案匯入",
+    importFilesNote = "透過系統檔案選擇器瀏覽",
     batchSettings = "批次設定",
     batchSettingsNote = "點一個目標，就會立即套用到同一來源類型的檔案。",
     batchMixedTarget = "這一組目標不一致。選擇一個目標即可統一。",

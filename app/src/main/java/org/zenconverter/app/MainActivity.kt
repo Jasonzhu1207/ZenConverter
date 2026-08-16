@@ -2,6 +2,7 @@ package org.zenconverter.app
 
 import android.Manifest
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.pdf.LoadParams
@@ -10,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.ext.SdkExtensions
+import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.util.Log
@@ -86,6 +88,7 @@ class MainActivity : ComponentActivity() {
     private var pendingMetadataTargetKind: MetadataTargetKind? = null
     private var pendingMetadataMediaWriteGrant: PendingMetadataMediaWriteGrant? = null
     private var pendingMetadataReadPermissionRetry: PendingMetadataMediaWriteGrant? = null
+    private var pendingAlbumPickKind: AlbumPickKind? = null
     private var activeQueuedPdfPasswordSelection: PendingQueuedPdfSelection? = null
     private var pdfProbeRunning = false
     private var pdfBoxReady = false
@@ -115,26 +118,50 @@ class MainActivity : ComponentActivity() {
     private val openDocuments = registerForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
-        val documents = uris.map { uri ->
-            persistInputFilePermission(uri)
-            val metadata = queryOpenableMetadata(uri)
-            val mimeType = contentResolver.getType(uri)
-            SelectedDocument(
-                uri = uri,
-                displayName = metadata.displayName,
-                sizeBytes = metadata.sizeBytes,
-                mimeType = mimeType,
-                inputInfo = FileBasicInfoReader.read(
-                    context = this,
-                    uri = uri,
-                    displayName = metadata.displayName,
-                    mimeType = mimeType,
-                    fallbackSizeBytes = metadata.sizeBytes
-                )
-            )
-        }
+        enqueueUnifiedDocuments(selectedDocumentsFromUris(uris))
+    }
 
-        enqueueUnifiedDocuments(documents)
+    private val openImportAlbum = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
+        val uris = galleryUrisFromIntent(result.data)
+        if (uris.isEmpty()) return@registerForActivityResult
+        enqueueUnifiedDocuments(selectedDocumentsFromUris(uris))
+    }
+
+    private val requestAlbumMediaReadPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val kind = pendingAlbumPickKind ?: return@registerForActivityResult
+        pendingAlbumPickKind = null
+        if (granted) {
+            openGalleryPicker(kind)
+        } else {
+            ConversionTaskStore.showMessage("Gallery import needs storage permission")
+        }
+    }
+
+    private val openImportFolder = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri == null) return@registerForActivityResult
+
+        persistInputFilePermission(uri)
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { listFolderDocuments(uri) }
+            }
+            val documents = result.getOrElse { throwable ->
+                Log.w(TAG, "Could not read import folder $uri", throwable)
+                emptyList()
+            }
+            if (documents.isEmpty()) {
+                ConversionTaskStore.showMessage("No supported files were added")
+            } else {
+                enqueueUnifiedDocuments(documents)
+            }
+        }
     }
 
     private val openOutputDirectory = registerForActivityResult(
@@ -256,6 +283,15 @@ class MainActivity : ComponentActivity() {
                 },
                 onPickFiles = {
                     openDocuments.launch(arrayOf(MIME_TYPE_ANY))
+                },
+                onPickAlbumImages = {
+                    requestAlbumPermissionThenPick(AlbumPickKind.Images)
+                },
+                onPickAlbumVideos = {
+                    requestAlbumPermissionThenPick(AlbumPickKind.Videos)
+                },
+                onPickFolder = {
+                    openImportFolder.launch(null)
                 },
                 onUpdateQueuedFile = { nextFile ->
                     updateQueuedFile(nextFile)
@@ -765,6 +801,83 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun requestAlbumPermissionThenPick(kind: AlbumPickKind) {
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            when (kind) {
+                AlbumPickKind.Images -> Manifest.permission.READ_MEDIA_IMAGES
+                AlbumPickKind.Videos -> Manifest.permission.READ_MEDIA_VIDEO
+            }
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        if (checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) {
+            openGalleryPicker(kind)
+        } else {
+            pendingAlbumPickKind = kind
+            requestAlbumMediaReadPermission.launch(permission)
+        }
+    }
+
+    private fun openGalleryPicker(kind: AlbumPickKind) {
+        val mediaUri = when (kind) {
+            AlbumPickKind.Images -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            AlbumPickKind.Videos -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        }
+        val mediaType = when (kind) {
+            AlbumPickKind.Images -> "image/*"
+            AlbumPickKind.Videos -> "video/*"
+        }
+        val intent = Intent(Intent.ACTION_PICK, mediaUri).apply {
+            type = mediaType
+            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try {
+            openImportAlbum.launch(intent)
+        } catch (_: ActivityNotFoundException) {
+            ConversionTaskStore.showMessage("No gallery app found")
+        }
+    }
+
+    private fun galleryUrisFromIntent(intent: Intent?): List<Uri> {
+        val results = linkedMapOf<String, Uri>()
+
+        fun addUri(uri: Uri?) {
+            if (uri != null) {
+                results.putIfAbsent(uri.toString(), uri)
+            }
+        }
+
+        addUri(intent?.data)
+        intent?.clipData?.let { clipData ->
+            for (index in 0 until clipData.itemCount) {
+                addUri(clipData.getItemAt(index).uri)
+            }
+        }
+        return results.values.toList()
+    }
+
+    private fun selectedDocumentsFromUris(uris: List<Uri>): List<SelectedDocument> {
+        return uris.map { uri ->
+            persistInputFilePermission(uri)
+            val metadata = queryOpenableMetadata(uri)
+            val mimeType = contentResolver.getType(uri)
+            SelectedDocument(
+                uri = uri,
+                displayName = metadata.displayName,
+                sizeBytes = metadata.sizeBytes,
+                mimeType = mimeType,
+                inputInfo = FileBasicInfoReader.read(
+                    context = this,
+                    uri = uri,
+                    displayName = metadata.displayName,
+                    mimeType = mimeType,
+                    fallbackSizeBytes = metadata.sizeBytes
+                )
+            )
+        }
+    }
+
     private fun enqueueUnifiedDocuments(documents: List<SelectedDocument>) {
         if (documents.isEmpty()) return
         val prepared = documents.map { document ->
@@ -1235,6 +1348,139 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    private fun listFolderDocuments(treeUri: Uri): List<SelectedDocument> {
+        val documents = mutableListOf<SelectedDocument>()
+        val rootDocumentId = DocumentsContract.getTreeDocumentId(treeUri)
+
+        fun collectChildren(parentDocumentId: String, depth: Int) {
+            if (depth > MAX_IMPORT_FOLDER_DEPTH) return
+            if (documents.size >= MAX_IMPORT_FOLDER_DOCUMENTS) return
+
+            val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
+                treeUri,
+                parentDocumentId
+            )
+            val children = mutableListOf<FolderChildDocument>()
+            runCatching {
+                contentResolver.query(
+                    childrenUri,
+                    arrayOf(
+                        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                        DocumentsContract.Document.COLUMN_MIME_TYPE,
+                        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                        DocumentsContract.Document.COLUMN_SIZE
+                    ),
+                    null,
+                    null,
+                    null
+                )?.use { cursor ->
+                    val idIndex = cursor.getColumnIndex(
+                        DocumentsContract.Document.COLUMN_DOCUMENT_ID
+                    )
+                    val mimeIndex = cursor.getColumnIndex(
+                        DocumentsContract.Document.COLUMN_MIME_TYPE
+                    )
+                    val nameIndex = cursor.getColumnIndex(
+                        DocumentsContract.Document.COLUMN_DISPLAY_NAME
+                    )
+                    val sizeIndex = cursor.getColumnIndex(
+                        DocumentsContract.Document.COLUMN_SIZE
+                    )
+                    while (cursor.moveToNext()) {
+                        val documentId = if (idIndex >= 0 && !cursor.isNull(idIndex)) {
+                            cursor.getString(idIndex)
+                        } else {
+                            null
+                        }
+                        val mimeType = if (mimeIndex >= 0 && !cursor.isNull(mimeIndex)) {
+                            cursor.getString(mimeIndex)
+                        } else {
+                            null
+                        }
+                        val displayName = if (nameIndex >= 0 && !cursor.isNull(nameIndex)) {
+                            cursor.getString(nameIndex)
+                        } else {
+                            null
+                        }
+                        val sizeBytes = if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) {
+                            cursor.getLong(sizeIndex)
+                        } else {
+                            null
+                        }
+                        if (documentId != null) {
+                            children.add(
+                                FolderChildDocument(
+                                    documentId = documentId,
+                                    mimeType = mimeType,
+                                    displayName = displayName,
+                                    sizeBytes = sizeBytes
+                                )
+                            )
+                        }
+                    }
+                }
+            }.onFailure { throwable ->
+                Log.w(TAG, "Could not list folder children of $parentDocumentId", throwable)
+            }
+
+            val childDirectories = mutableListOf<String>()
+            children.forEach { child ->
+                if (documents.size >= MAX_IMPORT_FOLDER_DOCUMENTS) return@forEach
+                if (child.mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
+                    childDirectories.add(child.documentId)
+                    return@forEach
+                }
+
+                val documentUri = DocumentsContract.buildDocumentUriUsingTree(
+                    treeUri,
+                    child.documentId
+                )
+                val childDisplayName = child.displayName
+                val childSizeBytes = child.sizeBytes
+                val openableMetadata = if (
+                    childSizeBytes == null ||
+                    childDisplayName == null ||
+                    childDisplayName.isBlank()
+                ) {
+                    queryOpenableMetadata(documentUri)
+                } else {
+                    OpenableMetadata(childDisplayName, childSizeBytes)
+                }
+                val displayName = childDisplayName
+                    ?.takeIf { it.isNotBlank() }
+                    ?: openableMetadata.displayName
+                val sizeBytes = childSizeBytes ?: openableMetadata.sizeBytes
+                val mimeType = child.mimeType
+                    ?.takeIf { it.isNotBlank() && it != MIME_TYPE_ANY }
+                    ?: runCatching { contentResolver.getType(documentUri) }.getOrNull()
+                documents.add(
+                    SelectedDocument(
+                        uri = documentUri,
+                        displayName = displayName,
+                        sizeBytes = sizeBytes,
+                        mimeType = mimeType,
+                        inputInfo = FileBasicInfoReader.read(
+                            context = this@MainActivity,
+                            uri = documentUri,
+                            displayName = displayName,
+                            mimeType = mimeType,
+                            fallbackSizeBytes = sizeBytes
+                        )
+                    )
+                )
+            }
+
+            childDirectories.forEach { childDirectoryId ->
+                if (documents.size < MAX_IMPORT_FOLDER_DOCUMENTS) {
+                    collectChildren(childDirectoryId, depth + 1)
+                }
+            }
+        }
+
+        collectChildren(rootDocumentId, 0)
+        return documents
+    }
+
     private fun persistOutputDirectoryPermission(uri: Uri): Boolean {
         val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
             Intent.FLAG_GRANT_WRITE_URI_PERMISSION
@@ -1392,6 +1638,8 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val TAG = "MainActivity"
         private const val PDF_PASSWORD_EXTENSION = 13
+        private const val MAX_IMPORT_FOLDER_DEPTH = 6
+        private const val MAX_IMPORT_FOLDER_DOCUMENTS = 200
     }
 }
 
@@ -1425,6 +1673,11 @@ private enum class MetadataWriteOperation {
     Restore
 }
 
+private enum class AlbumPickKind {
+    Images,
+    Videos
+}
+
 private data class PendingMetadataMediaWriteGrant(
     val uri: Uri,
     val operation: MetadataWriteOperation,
@@ -1444,6 +1697,13 @@ private data class PendingQueuedPdfSelection(
 
 private data class OpenableMetadata(
     val displayName: String,
+    val sizeBytes: Long?
+)
+
+private data class FolderChildDocument(
+    val documentId: String,
+    val mimeType: String?,
+    val displayName: String?,
     val sizeBytes: Long?
 )
 
