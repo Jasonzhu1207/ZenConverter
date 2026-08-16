@@ -3730,6 +3730,7 @@ private fun BatchSettingsPanel(
 
     val activeFiles = groups[activeCategory].orEmpty()
     val commonTarget = commonSelectedTargetFor(activeFiles)
+    var batchOptionsExpanded by rememberSaveable { mutableStateOf(false) }
 
     QuietPanel(
         borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
@@ -3815,15 +3816,24 @@ private fun BatchSettingsPanel(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            BatchTargetOptions(
-                texts = texts,
-                files = activeFiles,
-                category = activeCategory,
-                target = commonTarget,
-                openMenuId = openMenuId,
-                onOpenMenuChange = onOpenMenuChange,
-                onUpdateFiles = onUpdateFiles
-            )
+            Spacer(modifier = Modifier.height(10.dp))
+            AdvancedOptionsPanel(
+                title = texts.batchOptions,
+                note = texts.batchOptionsNote,
+                expanded = batchOptionsExpanded,
+                onExpandedChange = { batchOptionsExpanded = it }
+            ) {
+                BatchTargetOptions(
+                    texts = texts,
+                    files = activeFiles,
+                    category = activeCategory,
+                    target = commonTarget,
+                    supportedVideoMimeTypes = supportedVideoMimeTypes,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    onUpdateFiles = onUpdateFiles
+                )
+            }
         }
     }
 }
@@ -3865,76 +3875,332 @@ private fun BatchTargetOptions(
     files: List<QueuedFile>,
     category: FileCategory,
     target: ExternalImportTarget,
+    supportedVideoMimeTypes: Set<String>,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onUpdateFiles: (List<QueuedFile>) -> Unit
 ) {
-    if (category != FileCategory.Image) return
-    val commonImageQuality = files
-        .map { imageQualityLabelFor(it.imageOptions, target.targetFormat) }
-        .distinct()
-        .singleOrNull()
-        ?: BATCH_MIXED_OPTION
-    val commonPdfPageMode = files
-        .map { pdfPageModeLabelFor(it.pdfOptions.imagePageMode) }
-        .distinct()
-        .singleOrNull()
-        ?: BATCH_MIXED_OPTION
-    Spacer(modifier = Modifier.height(10.dp))
     AnimatedContent(
-        targetState = target.targetFormat.label,
+        targetState = "${category.name}-${target.targetFormat.label}",
         transitionSpec = {
             fadeIn(animationSpec = tween(ZenAnimations.ContentFadeDuration)) togetherWith
-                fadeOut(animationSpec = tween(ZenAnimations.ContentFadeOutDuration))
+                fadeOut(animationSpec = tween(ZenAnimations.ContentFadeOutDuration)) using
+                SizeTransform(clip = false)
         },
         label = "BatchTargetOptions"
     ) {
-        if (target.targetFormat.extension.equals("pdf", ignoreCase = true)) {
-            OptionGrid {
-                OptionDropdown(
-                    "batch-image-pdf-page-mode",
-                    texts.pageSize,
-                    commonPdfPageMode,
-                    PDF_PAGE_MODE_OPTIONS,
-                    texts,
-                    openMenuId,
-                    onOpenMenuChange
-                ) { value ->
-                    onOpenMenuChange(null)
-                    onUpdateFiles(
-                        files.map { file ->
-                            file.copy(
-                                pdfOptions = file.pdfOptions.copy(
-                                    imagePageMode = pdfPageModeToOption(value)
-                                )
-                            )
-                        }
-                    )
-                }
+        when (category) {
+            FileCategory.Video -> BatchVideoTargetOptions(
+                texts = texts,
+                files = files,
+                target = target.targetFormat,
+                supportedVideoMimeTypes = supportedVideoMimeTypes,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                onUpdateFiles = onUpdateFiles
+            )
+            FileCategory.Audio -> BatchAudioTargetOptions(
+                texts = texts,
+                files = files,
+                target = target.targetFormat,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                onUpdateFiles = onUpdateFiles
+            )
+            FileCategory.Image -> BatchImageTargetOptions(
+                texts = texts,
+                files = files,
+                target = target.targetFormat,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                onUpdateFiles = onUpdateFiles
+            )
+            FileCategory.Pdf -> BatchPdfTargetOptions(
+                texts = texts,
+                files = files,
+                target = target.targetFormat,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                onUpdateFiles = onUpdateFiles
+            )
+            FileCategory.Document -> Text(
+                text = texts.optionValue(target.targetFormat.modeHint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+private fun <T> commonBatchLabel(
+    files: List<T>,
+    label: (T) -> String
+): String {
+    return files.map(label).distinct().singleOrNull() ?: BATCH_MIXED_OPTION
+}
+
+private fun QueuedFile.withBatchVideoCompressionMode(
+    value: String,
+    supportedVideoMimeTypes: Set<String>
+): QueuedFile {
+    val mode = videoCompressionModeFor(value)
+    val presetActive = mode != VideoCompressionMode.Standard
+    return copy(
+        videoOptions = videoOptions.copy(
+            compressionMode = mode,
+            videoBitrate = if (presetActive) null else videoOptions.videoBitrate,
+            videoMimeType = if (
+                presetActive &&
+                VideoExportOptions.VIDEO_MIME_TYPE_H265 in supportedVideoMimeTypes
+            ) {
+                VideoExportOptions.VIDEO_MIME_TYPE_H265
+            } else {
+                videoOptions.videoMimeType
+            },
+            maxShortSidePixels = videoCompressionShortSideFor(mode)
+                ?: videoOptions.maxShortSidePixels,
+            maxFrameRate = videoCompressionFrameRateCapFor(mode)
+                ?: videoOptions.maxFrameRate,
+            advanced = if (presetActive) VideoAdvancedOptions() else videoOptions.advanced
+        )
+    )
+}
+
+@Composable
+private fun BatchVideoTargetOptions(
+    texts: UiText,
+    files: List<QueuedFile>,
+    target: TargetFormat,
+    supportedVideoMimeTypes: Set<String>,
+    openMenuId: String?,
+    onOpenMenuChange: (String?) -> Unit,
+    onUpdateFiles: (List<QueuedFile>) -> Unit
+) {
+    val isGifTarget = target.extension.equals("gif", ignoreCase = true)
+    val commonCompression = commonBatchLabel(files) {
+        videoCompressionLabelFor(it.videoOptions.compressionMode)
+    }
+    val standardCompressionActive =
+        videoCompressionModeFor(commonCompression) == VideoCompressionMode.Standard
+    val mixedCompression = commonCompression == BATCH_MIXED_OPTION
+    val presetCompressionActive = !isGifTarget && !standardCompressionActive && !mixedCompression
+
+    OptionGrid {
+        if (!isGifTarget) {
+            OptionDropdown(
+                "batch-video-compression-mode",
+                texts.videoCompressionMode,
+                commonCompression,
+                VIDEO_COMPRESSION_OPTIONS,
+                texts,
+                openMenuId,
+                onOpenMenuChange
+            ) { value ->
+                onOpenMenuChange(null)
+                onUpdateFiles(
+                    files.map { it.withBatchVideoCompressionMode(value, supportedVideoMimeTypes) }
+                )
             }
-        } else if (
-            !target.targetFormat.extension.equals("png", ignoreCase = true) &&
-            !target.targetFormat.extension.equals("ico", ignoreCase = true)
-        ) {
-            OptionGrid {
-                OptionDropdown(
-                    "batch-image-quality",
-                    texts.quality,
-                    commonImageQuality,
-                    imageQualityOptionsFor(target.targetFormat),
-                    texts,
-                    openMenuId,
-                    onOpenMenuChange
-                ) { value ->
-                    onOpenMenuChange(null)
-                    onUpdateFiles(
-                        files.map { file ->
-                            file.copy(
-                                imageOptions = imageOptionsForQuality(value, target.targetFormat)
+        }
+
+        if (isGifTarget || standardCompressionActive || mixedCompression) {
+            OptionDropdown(
+                "batch-video-size",
+                texts.resolution,
+                commonBatchLabel(files) { videoResolutionLabelFor(it.videoOptions) },
+                if (isGifTarget) VIDEO_GIF_RESOLUTION_OPTIONS else VIDEO_RESOLUTION_OPTIONS,
+                texts,
+                openMenuId,
+                onOpenMenuChange
+            ) { value ->
+                onOpenMenuChange(null)
+                onUpdateFiles(
+                    files.map { file ->
+                        file.copy(
+                            videoOptions = file.videoOptions.copy(
+                                maxShortSidePixels = videoResolutionToShortSide(value)
                             )
-                        }
+                        )
+                    }
+                )
+            }
+        }
+
+        if (presetCompressionActive) {
+            Text(
+                text = texts.compressionPresetSummary(commonCompression),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
+                        RoundedCornerShape(8.dp)
                     )
-                }
+                    .border(
+                        1.dp,
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                        RoundedCornerShape(8.dp)
+                    )
+                    .padding(horizontal = 10.dp, vertical = 7.dp)
+            )
+        }
+        if (!isGifTarget && (standardCompressionActive || mixedCompression)) {
+            OptionDropdown(
+                "batch-video-bitrate",
+                texts.bitrate,
+                commonBatchLabel(files) { videoBitrateLabelFor(it.videoOptions.videoBitrate) },
+                VIDEO_BITRATE_OPTIONS,
+                texts,
+                openMenuId,
+                onOpenMenuChange
+            ) { value ->
+                onOpenMenuChange(null)
+                onUpdateFiles(
+                    files.map { file ->
+                        file.copy(
+                            videoOptions = file.videoOptions.copy(
+                                videoBitrate = videoBitrateToBits(value)
+                            )
+                        )
+                    }
+                )
+            }
+            OptionDropdown(
+                "batch-video-codec",
+                texts.codec,
+                commonBatchLabel(files) { videoCodecLabelFor(it.videoOptions.videoMimeType) },
+                videoCodecOptionsFor(supportedVideoMimeTypes),
+                texts,
+                openMenuId,
+                onOpenMenuChange
+            ) { value ->
+                onOpenMenuChange(null)
+                onUpdateFiles(
+                    files.map { file ->
+                        file.copy(
+                            videoOptions = file.videoOptions.copy(
+                                videoMimeType = videoCodecToMimeType(value)
+                            )
+                        )
+                    }
+                )
+            }
+            OptionDropdown(
+                "batch-video-frame-rate",
+                texts.frameRate,
+                commonBatchLabel(files) { videoFrameRateLabelFor(it.videoOptions.maxFrameRate) },
+                VIDEO_FRAME_RATE_OPTIONS,
+                texts,
+                openMenuId,
+                onOpenMenuChange
+            ) { value ->
+                onOpenMenuChange(null)
+                onUpdateFiles(
+                    files.map { file ->
+                        file.copy(
+                            videoOptions = file.videoOptions.copy(
+                                maxFrameRate = videoFrameRateToCap(value)
+                            )
+                        )
+                    }
+                )
+            }
+            OptionDropdown(
+                "batch-video-audio-bitrate",
+                texts.audioBitrateLabel(),
+                commonBatchLabel(files) { audioBitrateLabelFor(it.audioOptions.audioBitrate) },
+                AUDIO_BITRATE_OPTIONS,
+                texts,
+                openMenuId,
+                onOpenMenuChange
+            ) { value ->
+                onOpenMenuChange(null)
+                onUpdateFiles(
+                    files.map { file ->
+                        file.copy(
+                            audioOptions = file.audioOptions.copy(
+                                audioBitrate = audioBitrateToBits(value)
+                            )
+                        )
+                    }
+                )
+            }
+            OptionDropdown(
+                "batch-video-audio-sample-rate",
+                texts.sampleRate,
+                commonBatchLabel(files) { audioSampleRateLabelFor(it.audioOptions.sampleRateHz) },
+                AUDIO_SAMPLE_RATE_OPTIONS,
+                texts,
+                openMenuId,
+                onOpenMenuChange
+            ) { value ->
+                onOpenMenuChange(null)
+                onUpdateFiles(
+                    files.map { file ->
+                        file.copy(
+                            audioOptions = file.audioOptions.copy(
+                                sampleRateHz = audioSampleRateToHz(value)
+                            )
+                        )
+                    }
+                )
+            }
+            OptionDropdown(
+                "batch-video-audio-channels",
+                texts.channels,
+                commonBatchLabel(files) { audioChannelsLabelFor(it.audioOptions.channelCount) },
+                AUDIO_CHANNEL_OPTIONS,
+                texts,
+                openMenuId,
+                onOpenMenuChange
+            ) { value ->
+                onOpenMenuChange(null)
+                onUpdateFiles(
+                    files.map { file ->
+                        file.copy(
+                            audioOptions = file.audioOptions.copy(
+                                channelCount = audioChannelsToCount(value)
+                            )
+                        )
+                    }
+                )
+            }
+        }
+    }
+}
+@Composable
+private fun BatchAudioTargetOptions(
+    texts: UiText,
+    files: List<QueuedFile>,
+    target: TargetFormat,
+    openMenuId: String?,
+    onOpenMenuChange: (String?) -> Unit,
+    onUpdateFiles: (List<QueuedFile>) -> Unit
+) {
+    OptionGrid {
+        if (audioSupportsBitrateOption(target)) {
+            OptionDropdown(
+                "batch-audio-bitrate",
+                texts.bitrate,
+                commonBatchLabel(files) { audioBitrateLabelFor(it.audioOptions.audioBitrate) },
+                AUDIO_BITRATE_OPTIONS,
+                texts,
+                openMenuId,
+                onOpenMenuChange
+            ) { value ->
+                onOpenMenuChange(null)
+                onUpdateFiles(
+                    files.map { file ->
+                        file.copy(
+                            audioOptions = file.audioOptions.copy(
+                                audioBitrate = audioBitrateToBits(value)
+                            )
+                        )
+                    }
+                )
             }
         } else {
             Text(
@@ -3943,7 +4209,117 @@ private fun BatchTargetOptions(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        OptionDropdown(
+            "batch-audio-sample-rate",
+            texts.sampleRate,
+            commonBatchLabel(files) { audioSampleRateLabelFor(it.audioOptions.sampleRateHz) },
+            AUDIO_SAMPLE_RATE_OPTIONS,
+            texts,
+            openMenuId,
+            onOpenMenuChange
+        ) { value ->
+            onOpenMenuChange(null)
+            onUpdateFiles(
+                files.map { file ->
+                    file.copy(
+                        audioOptions = file.audioOptions.copy(
+                            sampleRateHz = audioSampleRateToHz(value)
+                        )
+                    )
+                }
+            )
+        }
+        OptionDropdown(
+            "batch-audio-channels",
+            texts.channels,
+            commonBatchLabel(files) { audioChannelsLabelFor(it.audioOptions.channelCount) },
+            AUDIO_CHANNEL_OPTIONS,
+            texts,
+            openMenuId,
+            onOpenMenuChange
+        ) { value ->
+            onOpenMenuChange(null)
+            onUpdateFiles(
+                files.map { file ->
+                    file.copy(
+                        audioOptions = file.audioOptions.copy(
+                            channelCount = audioChannelsToCount(value)
+                        )
+                    )
+                }
+            )
+        }
     }
+}
+@Composable
+private fun BatchImageTargetOptions(
+    texts: UiText,
+    files: List<QueuedFile>,
+    target: TargetFormat,
+    openMenuId: String?,
+    onOpenMenuChange: (String?) -> Unit,
+    onUpdateFiles: (List<QueuedFile>) -> Unit
+) {
+    ImageOptions(
+        texts = texts,
+        menuPrefix = "batch-image-",
+        targetFormat = target,
+        quality = commonBatchLabel(files) { imageQualityLabelFor(it.imageOptions, target) },
+        pdfPageMode = commonBatchLabel(files) { pdfPageModeLabelFor(it.pdfOptions.imagePageMode) },
+        openMenuId = openMenuId,
+        onOpenMenuChange = onOpenMenuChange,
+        onQualityChange = { value ->
+            onOpenMenuChange(null)
+            onUpdateFiles(
+                files.map { file ->
+                    file.copy(imageOptions = imageOptionsForQuality(value, target))
+                }
+            )
+        },
+        onPdfPageModeChange = { value ->
+            onOpenMenuChange(null)
+            onUpdateFiles(
+                files.map { file ->
+                    file.copy(
+                        pdfOptions = file.pdfOptions.copy(
+                            imagePageMode = pdfPageModeToOption(value)
+                        )
+                    )
+                }
+            )
+        }
+    )
+}
+
+@Composable
+private fun BatchPdfTargetOptions(
+    texts: UiText,
+    files: List<QueuedFile>,
+    target: TargetFormat,
+    openMenuId: String?,
+    onOpenMenuChange: (String?) -> Unit,
+    onUpdateFiles: (List<QueuedFile>) -> Unit
+) {
+    PdfOptions(
+        texts = texts,
+        menuPrefix = "batch-pdf-",
+        targetFormat = target,
+        renderQuality = commonBatchLabel(files) { pdfRenderQualityLabelFor(it.pdfOptions.renderQuality) },
+        openMenuId = openMenuId,
+        onOpenMenuChange = onOpenMenuChange,
+        onRenderQualityChange = { value ->
+            onOpenMenuChange(null)
+            onUpdateFiles(
+                files.map { file ->
+                    file.copy(
+                        pdfOptions = file.pdfOptions.copy(
+                            renderQuality = pdfRenderQualityToOption(value)
+                        )
+                    )
+                }
+            )
+        }
+    )
 }
 
 @Composable
@@ -7087,6 +7463,8 @@ private data class UiText(
     val importFilesNote: String,
     val batchSettings: String,
     val batchSettingsNote: String,
+    val batchOptions: String,
+    val batchOptionsNote: String,
     val batchMixedTarget: String,
     val adjustOptions: String,
     val pdfMergeTitle: String,
@@ -8976,6 +9354,8 @@ private val englishText = UiText(
     importFilesNote = "Browse the system file picker",
     batchSettings = "Batch settings",
     batchSettingsNote = "Tap a target to apply it to files with the same source type.",
+    batchOptions = "Batch options",
+    batchOptionsNote = "Changing an option applies only that option to all files of this type.",
     batchMixedTarget = "This group has mixed targets. Choose one target to unify it.",
     adjustOptions = "Options",
     pdfMergeTitle = "PDF merge",
@@ -9108,6 +9488,8 @@ private val simplifiedChineseText = UiText(
     importFilesNote = "通过系统文件选择器浏览",
     batchSettings = "批量设置",
     batchSettingsNote = "点一个目标，就会立即应用到同一来源类型的文件。",
+    batchOptions = "批量选项",
+    batchOptionsNote = "改动哪个选项，就只把该选项应用到全部同类文件。",
     batchMixedTarget = "这一组目标不一致。选择一个目标即可统一。",
     adjustOptions = "选项",
     pdfMergeTitle = "PDF 合并",
@@ -9240,6 +9622,8 @@ private val traditionalChineseText = UiText(
     importFilesNote = "透過系統檔案選擇器瀏覽",
     batchSettings = "批次設定",
     batchSettingsNote = "點一個目標，就會立即套用到同一來源類型的檔案。",
+    batchOptions = "批次選項",
+    batchOptionsNote = "變更哪個選項，就只把該選項套用到全部同類檔案。",
     batchMixedTarget = "這一組目標不一致。選擇一個目標即可統一。",
     adjustOptions = "選項",
     pdfMergeTitle = "PDF 合併",

@@ -1350,11 +1350,11 @@ class MainActivity : ComponentActivity() {
 
     private fun listFolderDocuments(treeUri: Uri): List<SelectedDocument> {
         val documents = mutableListOf<SelectedDocument>()
+        val visitedDirectories = mutableSetOf<String>()
         val rootDocumentId = DocumentsContract.getTreeDocumentId(treeUri)
 
-        fun collectChildren(parentDocumentId: String, depth: Int) {
-            if (depth > MAX_IMPORT_FOLDER_DEPTH) return
-            if (documents.size >= MAX_IMPORT_FOLDER_DOCUMENTS) return
+        fun collectChildren(parentDocumentId: String) {
+            if (!visitedDirectories.add(parentDocumentId)) return
 
             val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
                 treeUri,
@@ -1425,7 +1425,6 @@ class MainActivity : ComponentActivity() {
 
             val childDirectories = mutableListOf<String>()
             children.forEach { child ->
-                if (documents.size >= MAX_IMPORT_FOLDER_DOCUMENTS) return@forEach
                 if (child.mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
                     childDirectories.add(child.documentId)
                     return@forEach
@@ -1471,13 +1470,11 @@ class MainActivity : ComponentActivity() {
             }
 
             childDirectories.forEach { childDirectoryId ->
-                if (documents.size < MAX_IMPORT_FOLDER_DOCUMENTS) {
-                    collectChildren(childDirectoryId, depth + 1)
-                }
+                collectChildren(childDirectoryId)
             }
         }
 
-        collectChildren(rootDocumentId, 0)
+        collectChildren(rootDocumentId)
         return documents
     }
 
@@ -1638,8 +1635,6 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val TAG = "MainActivity"
         private const val PDF_PASSWORD_EXTENSION = 13
-        private const val MAX_IMPORT_FOLDER_DEPTH = 6
-        private const val MAX_IMPORT_FOLDER_DOCUMENTS = 200
     }
 }
 
