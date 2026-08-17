@@ -105,7 +105,15 @@ class ConversionService : Service() {
                     return START_NOT_STICKY
                 }
                 handler.removeCallbacksAndMessages(null)
-                startForeground(NOTIFICATION_ID, buildNotification("Preparing", 0))
+                if (Build.VERSION.SDK_INT >= 34) {
+                    startForeground(
+                        NOTIFICATION_ID,
+                        buildNotification("Preparing", 0),
+                        android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
+                    )
+                } else {
+                    startForeground(NOTIFICATION_ID, buildNotification("Preparing", 0))
+                }
                 taskIndex = 0
                 processNextTask()
             }
