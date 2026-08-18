@@ -21,12 +21,13 @@ runs, and Android Studio use the same SDK and cache locations.
 
 Current project toolchain:
 
-- Android Gradle Plugin: `9.2.1`
+- Android Gradle Plugin: `9.2.1` (built-in Kotlin; no separate Kotlin Android plugin)
 - Gradle wrapper: `9.4.1`
 - Gradle runtime JDK: Android Studio bundled JBR 21 on `E:\AndroidDev`
+- Compose compiler plugin: `2.2.20`
 - App source/target compatibility: Java 17
 - Compile SDK: Android API 36 with extension 20
-- Target SDK: 35 for now
+- Target SDK: 36
 
 Repository order matters. `settings.gradle.kts` keeps official `google()` and
 `mavenCentral()` before the Aliyun mirrors, limits `google()` to Android/Google
@@ -93,10 +94,12 @@ Kotlin-only build: an older shared library can still start through the legacy
 Chinese text rendering has been manually verified on an arm64 physical device;
 layout fidelity remains limited. Codex does not run this build or install step.
 
-`settings.gradle.kts` maps the `com.android.application` plugin id to
-`com.android.tools.build:gradle` through `pluginManagement.resolutionStrategy`.
-Keep that mapping while using AGP 9.x, because the plugin marker may not resolve
-cleanly in this local setup.
+`settings.gradle.kts` resolves the `com.android.application` plugin id through
+its normal `pluginManagement` repositories (official `google()` first, then
+Maven Central and the Aliyun mirrors). If the AGP 9.x plugin marker ever fails
+to resolve in this local setup, map it explicitly through
+`pluginManagement.resolutionStrategy` to `com.android.tools.build:gradle:<version>`
+and keep the official `google()` repository ahead of the mirrors.
 
 ## Common Commands
 
