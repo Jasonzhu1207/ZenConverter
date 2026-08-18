@@ -1018,6 +1018,8 @@ class MainActivity : ComponentActivity() {
                 extension == "pdf" -> FileCategory.Pdf
             normalizedMimeType in OFFICE_MIME_TYPES ||
                 extension in OFFICE_INPUT_EXTENSIONS -> FileCategory.Document
+            normalizedMimeType in FONT_MIME_TYPES ||
+                extension in FONT_INPUT_EXTENSIONS -> FileCategory.Font
             normalizedMimeType in IMAGE_MIME_TYPES ||
                 extension in IMAGE_INPUT_EXTENSIONS -> FileCategory.Image
             else -> null
@@ -1046,6 +1048,9 @@ class MainActivity : ComponentActivity() {
             FileCategory.Document -> FileCategory.Document.formats.map {
                 ExternalImportTarget(FileCategory.Document, it)
             }
+            FileCategory.Font -> FileCategory.Font.formats.map {
+                ExternalImportTarget(FileCategory.Font, it)
+            }
             null -> emptyList()
         }
     }
@@ -1061,6 +1066,7 @@ class MainActivity : ComponentActivity() {
             FileCategory.Image -> if (extension in JPEG_INPUT_EXTENSIONS) "PNG" else "JPG"
             FileCategory.Pdf -> "PNG"
             FileCategory.Document -> "PDF"
+            FileCategory.Font -> if (extension == "woff" || extension == "woff2") "TTF/OTF" else "WOFF2"
             null -> null
         }
         return targets.firstOrNull { target ->
@@ -1765,7 +1771,8 @@ private fun QueuedFile.trimRangeForCurrentTarget(): MediaTrimRange {
         FileCategory.Audio -> audioOptions.trimRange
         FileCategory.Image,
         FileCategory.Pdf,
-        FileCategory.Document -> MediaTrimRange()
+        FileCategory.Document,
+        FileCategory.Font -> MediaTrimRange()
     }
 }
 
@@ -1948,6 +1955,9 @@ private fun QueuedFile.hasConnectedNativeTarget(): Boolean {
         FileCategory.Document -> targetFormat.equals("PDF", ignoreCase = true) ||
             targetFormat.equals("TXT", ignoreCase = true) ||
             targetFormat.equals("MD", ignoreCase = true)
+        FileCategory.Font -> targetFormat.equals("WOFF2", ignoreCase = true) ||
+            targetFormat.equals("WOFF", ignoreCase = true) ||
+            targetFormat.equals("TTF/OTF", ignoreCase = true)
     }
 }
 
@@ -2022,6 +2032,7 @@ private fun FileCategory.toConversionCategory(): ConversionMediaCategory {
         FileCategory.Image -> ConversionMediaCategory.Image
         FileCategory.Pdf -> ConversionMediaCategory.Pdf
         FileCategory.Document -> ConversionMediaCategory.Document
+        FileCategory.Font -> ConversionMediaCategory.Font
     }
 }
 
@@ -2105,6 +2116,19 @@ private val OFFICE_MIME_TYPES = setOf(
     MIME_TYPE_DOCX,
     MIME_TYPE_PPTX,
     MIME_TYPE_XLSX
+)
+private val FONT_INPUT_EXTENSIONS = setOf("ttf", "otf", "woff", "woff2")
+private val FONT_MIME_TYPES = setOf(
+    "font/ttf",
+    "font/otf",
+    "font/woff",
+    "font/woff2",
+    "application/x-font-ttf",
+    "application/x-font-opentype",
+    "application/font-sfnt",
+    "application/font-woff",
+    "application/font-woff2",
+    "application/x-font-woff"
 )
 private const val MIME_TYPE_ANY = "*/*"
 private const val MIME_TYPE_PDF = "application/pdf"

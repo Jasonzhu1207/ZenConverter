@@ -35,6 +35,26 @@ as supported until it has a tested path, sample files, and failure behavior.
 | PDF | TXT / MD | Stable | PDFBox-Android | Extracts selectable text with page separators. Markdown output is lightweight: a document title plus per-page headings and extracted text. This is not OCR; scanned PDFs without a text layer fail clearly. |
 | PDF | Encrypt PDF / Decrypt PDF | Stable | PDFBox-Android | Encrypt applies one open password to the output PDF. Decrypt removes security only after the source PDF opens normally or with the user-provided password. This is not password cracking; passwords are kept in memory only and are not logged or persisted. |
 | DOCX / PPTX / XLSX | PDF / TXT / MD | Beta | office2pdf native / PDFBox-Android | Converts OOXML Office files to PDF through the bundled `arm64-v8a` `libzen_office2pdf.so`. TXT/MD outputs reuse that intermediate PDF and extract its selectable text with PDFBox-Android. The current rebuilt library receives bundled Noto Sans and Noto Serif CJK directories through the explicit font-path JNI entry, and Simplified Chinese text rendering has been verified on an arm64 physical device. This path reads each whole input into memory, caps source files at 64 MiB, and does not promise Microsoft Office layout fidelity; overlapping text, shifted shapes, and degraded slide/spreadsheet layout remain expected on complex files. |
+| TTF / OTF | WOFF2 | Beta | woff2 native | Compresses a TrueType (glyf) or OpenType CFF font to WOFF2 through the bundled `arm64-v8a` `libzen_woff2.so` (Google woff2). Whole-file byte-level container conversion with no options; font metadata is not re-written. arm64-v8a only. |
+| TTF / OTF | WOFF | Beta | Pure Kotlin zlib | Compresses a TrueType or OpenType CFF font to WOFF 1.0 using `java.util.zip` in pure Kotlin, with no native dependency. Whole-file byte-level container conversion; WOFF metadata and private blocks are not preserved. |
+| WOFF2 | TTF / OTF | Beta | woff2 native | Decompresses WOFF2 back to its original SFNT flavor through `libzen_woff2.so`. The output extension (`.ttf` vs `.otf`) is chosen from the font flavor. arm64-v8a only. |
+| WOFF | TTF / OTF | Beta | Pure Kotlin zlib | Decompresses WOFF 1.0 back to SFNT in pure Kotlin. The output extension (`.ttf` vs `.otf`) is chosen from the font flavor. |
+
+## Current Font Limits
+
+- Font conversion is whole-file byte-level container conversion with no options.
+  It does not subset, re-hint, re-encode outlines, edit variable-font axes,
+  split TrueType Collections, or generate CSS.
+- TTF/OTF to WOFF2 and WOFF2 to TTF/OTF use the bundled `arm64-v8a`
+  `libzen_woff2.so` (Google woff2). These directions require an arm64-v8a device
+  and fail with a clear message on other ABIs.
+- TTF/OTF to WOFF and WOFF to TTF/OTF are pure-Kotlin zlib and would work on any
+  ABI, but the release APK remains arm64-v8a only.
+- WOFF 1.0 metadata and private blocks are not preserved. WOFF2 metadata is
+  carried through the codec, but the app does not add or rewrite it.
+- For WOFF2/WOFF inputs the output extension is `.ttf` for TrueType (glyf)
+  outlines and `.otf` for CFF/PostScript outlines, chosen from the font flavor.
+- Fonts are read whole into memory with a 32 MiB input cap.
 
 ## Current Native Media Limits
 

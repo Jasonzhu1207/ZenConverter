@@ -61,6 +61,13 @@ import org.zenconverter.app.R
 import org.zenconverter.app.office.Office2PdfNative
 import org.zenconverter.app.office.Office2PdfUnavailableException
 import org.zenconverter.app.office.Office2PdfUnsupportedAbiException
+import org.zenconverter.app.font.FontFlavor
+import org.zenconverter.app.font.FontFormat
+import org.zenconverter.app.font.FontFormatDetector
+import org.zenconverter.app.font.Woff2Native
+import org.zenconverter.app.font.Woff2UnavailableException
+import org.zenconverter.app.font.Woff2UnsupportedAbiException
+import org.zenconverter.app.font.WoffCodec
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -151,7 +158,7 @@ class ConversionService : Service() {
 
         val outputProfile = outputProfileFor(input)
         if (outputProfile == null) {
-            failCurrentTask("Only connected video, audio, image, PDF, and document targets can run")
+            failCurrentTask("Only connected video, audio, image, PDF, document, and font targets can run")
             return
         }
 
@@ -166,6 +173,7 @@ class ConversionService : Service() {
                         input.category == ConversionMediaCategory.Image -> "NativeBitmap"
                         input.category == ConversionMediaCategory.Pdf -> "NativePdf"
                         input.category == ConversionMediaCategory.Document -> "Office2Pdf"
+                        input.category == ConversionMediaCategory.Font -> "Font"
                         useCompatibilityEngine -> "Compatibility"
                         else -> "Unrouted"
                     }
@@ -200,6 +208,11 @@ class ConversionService : Service() {
             return
         }
 
+        if (input.category == ConversionMediaCategory.Font) {
+            startFontExport(input, tempFile, outputProfile)
+            return
+        }
+
         if (useCompatibilityEngine) {
             startCompatibilityExport(input, tempFile)
             return
@@ -207,7 +220,7 @@ class ConversionService : Service() {
 
         tempFile.delete()
         activeTempFile = null
-        failCurrentTask("Only connected video, audio, image, PDF, and document targets can run")
+        failCurrentTask("Only connected video, audio, image, PDF, document, and font targets can run")
     }
 
     private fun startImageExport(
@@ -399,6 +412,236 @@ class ConversionService : Service() {
         throwIfConversionCancelled()
         updateImageProgress(0.55f)
         return pdfBytes
+    }
+
+    private fun startFontExport(
+        input: ConversionTaskInput,
+        tempFile: File,
+        outputProfile: OutputProfile
+    ) {
+        serviceScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    writeFontExport(input, tempFile, outputProfile)
+                }
+            }.onSuccess { result ->
+                if (ConversionTaskStore.isCancelled()) {
+                    tempFile.delete()
+                    cancelRun()
+                    return@onSuccess
+                }
+                ConversionTaskStore.updateProgress(taskIndex, PROGRESS_BEFORE_SAVE)
+                saveCompletedFontExport(input, tempFile, result)
+            }.onFailure { exception ->
+                tempFile.delete()
+                if (exception is CancellationException) {
+                    return@onFailure
+                }
+                Log.w(TAG, "Could not run font export", exception)
+                failCurrentTask(fontFailureMessageFor(exception))
+            }
+        }
+    }
+
+    private data class FontExportResult(
+        val extension: String,
+        val mimeType: String
+    )
+
+    private fun writeFontExport(
+        input: ConversionTaskInput,
+        outputFile: File,
+        outputProfile: OutputProfile
+    ): FontExportResult {
+        throwIfConversionCancelled()
+        val inputBytes = readFontInputBytes(input)
+        updateImageProgress(0.25f)
+
+        throwIfConversionCancelled()
+        val sourceFormat = FontFormatDetector.detect(inputBytes)
+            ?: error("Unsupported font file")
+
+        val targetExtension = outputProfile.extension.lowercase(Locale.US)
+        val outputBytes = when (targetExtension) {
+            "woff2" -> {
+                if (sourceFormat != FontFormat.Sfnt) {
+                    error("WOFF2 output requires a TTF or OTF input")
+                }
+                Woff2Native.compressSfnt(inputBytes)
+            }
+            "woff" -> {
+                if (sourceFormat != FontFormat.Sfnt) {
+                    error("WOFF output requires a TTF or OTF input")
+                }
+                WoffCodec.encode(inputBytes)
+            }
+            "ttf" -> when (sourceFormat) {
+                FontFormat.Woff2 -> Woff2Native.decompressToSfnt(inputBytes)
+                FontFormat.Woff -> WoffCodec.decode(inputBytes)
+                FontFormat.Sfnt -> error("Input is already an uncompressed font")
+            }
+            else -> error("Unsupported font output format")
+        }
+
+        throwIfConversionCancelled()
+        val resolvedExtension = if (targetExtension == "ttf") {
+            FontFlavor.extensionForSfnt(outputBytes)
+        } else {
+            targetExtension
+        }
+
+        outputFile.outputStream().use { output ->
+            output.write(outputBytes)
+            output.flush()
+        }
+        throwIfConversionCancelled()
+        updateImageProgress(0.95f)
+        return FontExportResult(
+            extension = resolvedExtension,
+            mimeType = fontMimeTypeFor(resolvedExtension)
+        )
+    }
+
+    private fun readFontInputBytes(input: ConversionTaskInput): ByteArray {
+        val sourceSize = queryOpenableSize(input.inputUri)
+        sourceSize?.let { sizeBytes ->
+            if (sizeBytes > FONT_MAX_INPUT_BYTES) {
+                error("Font file is too large")
+            }
+        }
+
+        val initialCapacity = sourceSize
+            ?.coerceAtMost(FONT_MAX_INPUT_BYTES)
+            ?.toInt()
+            ?: COPY_BUFFER_SIZE
+        val output = ByteArrayOutputStream(initialCapacity.coerceAtLeast(0))
+
+        contentResolver.openInputStream(input.inputUri)?.use { inputStream ->
+            val buffer = ByteArray(COPY_BUFFER_SIZE)
+            var totalBytes = 0L
+            while (true) {
+                throwIfConversionCancelled()
+                val read = inputStream.read(buffer)
+                if (read == -1) break
+                totalBytes += read.toLong()
+                if (totalBytes > FONT_MAX_INPUT_BYTES) {
+                    error("Font file is too large")
+                }
+                output.write(buffer, 0, read)
+            }
+        } ?: error("Input file could not be opened")
+
+        if (output.size() == 0) error("Input file is empty")
+        return output.toByteArray()
+    }
+
+    private fun fontMimeTypeFor(extension: String): String {
+        return when (extension.lowercase(Locale.US)) {
+            "ttf" -> MIME_TYPE_TTF
+            "otf" -> MIME_TYPE_OTF
+            "woff" -> MIME_TYPE_WOFF
+            "woff2" -> MIME_TYPE_WOFF2
+            else -> "application/octet-stream"
+        }
+    }
+
+    private fun fontFailureMessageFor(exception: Throwable): String {
+        val message = exception.message.orEmpty()
+        return when {
+            exception is Woff2UnsupportedAbiException ->
+                "Font converter is only available on arm64-v8a devices"
+            exception is Woff2UnavailableException ->
+                "Font converter could not start on this device"
+            exception is UnsatisfiedLinkError ->
+                "Font converter could not start on this device"
+            message == "Unsupported font file" -> "Unsupported font file"
+            message == "Input file is empty" -> "Input file is empty"
+            message == "Input file could not be opened" -> "Input file could not be opened"
+            message == "Font file is too large" -> "Font file is too large"
+            message == "WOFF2 output requires a TTF or OTF input" ->
+                "WOFF2 output requires a TTF or OTF input"
+            message == "WOFF output requires a TTF or OTF input" ->
+                "WOFF output requires a TTF or OTF input"
+            message == "Input is already an uncompressed font" ->
+                "Input is already an uncompressed font (TTF/OTF)"
+            message == "Input is not a WOFF font" -> "Input is not a WOFF font"
+            message == "WOFF table is corrupt" -> "WOFF font data is corrupt"
+            message in setOf(
+                "Font input is too small",
+                "Font directory is truncated",
+                "Font table data is truncated",
+                "WOFF input is too small",
+                "WOFF directory is truncated",
+                "WOFF table data is truncated"
+            ) -> "Font file is corrupt or truncated"
+            message.startsWith("Font", ignoreCase = true) -> message
+            else -> "Font conversion failed"
+        }
+    }
+
+    private fun saveCompletedFontExport(
+        input: ConversionTaskInput,
+        tempFile: File,
+        result: FontExportResult
+    ) {
+        ConversionTaskStore.markSaving(taskIndex)
+        updateNotification("Saving", (ConversionTaskStore.aggregateProgress() * 100).toInt())
+
+        copyThread = Thread {
+            var outputUri: Uri? = null
+            try {
+                val outputProfile = OutputProfile(
+                    extension = result.extension,
+                    mimeType = result.mimeType,
+                    kind = OutputMediaKind.Font
+                )
+                val outputDisplayName = outputNameFor(input, result.extension)
+                val tempFileSizeBytes = tempFile.length().takeIf { it >= 0L }
+                val createdOutputUri = createOutput(input, outputDisplayName, outputProfile)
+                outputUri = createdOutputUri
+                copyFileToOutput(tempFile, createdOutputUri)
+                finalizeOutput(input, createdOutputUri, outputProfile.mimeType)
+                val outputInfo = FileBasicInfoReader.read(
+                    context = this,
+                    uri = createdOutputUri,
+                    displayName = outputDisplayName,
+                    mimeType = outputProfile.mimeType,
+                    fallbackSizeBytes = tempFileSizeBytes,
+                    formatOverride = outputProfile.extension.uppercase(Locale.US)
+                )
+                tempFile.delete()
+                handler.post {
+                    if (ConversionTaskStore.isCancelled()) {
+                        deleteOutputQuietly(createdOutputUri)
+                        cancelRun()
+                        return@post
+                    }
+                    activeTempFile = null
+                    ConversionTaskStore.markCompleted(
+                        index = taskIndex,
+                        outputUri = createdOutputUri,
+                        outputUris = listOf(createdOutputUri),
+                        outputDirectoryUri = outputDirectoryUriFor(input, outputProfile),
+                        outputMimeType = outputProfile.mimeType,
+                        outputInfo = outputInfo
+                    )
+                    taskIndex += 1
+                    processNextTask()
+                }
+            } catch (exception: InterruptedException) {
+                deleteOutputQuietly(outputUri)
+                tempFile.delete()
+                handler.post { cancelRun() }
+            } catch (exception: Throwable) {
+                Log.w(TAG, "Could not save font export", exception)
+                deleteOutputQuietly(outputUri)
+                tempFile.delete()
+                handler.post {
+                    activeTempFile = null
+                    failCurrentTask("Could not save output file")
+                }
+            }
+        }.also { it.start() }
     }
 
     private fun writePdfDocumentExport(
@@ -2366,6 +2609,7 @@ class ConversionService : Service() {
             ConversionMediaCategory.Image -> error("Compatibility engine is not connected for images")
             ConversionMediaCategory.Pdf -> error("Compatibility engine is not connected for PDFs")
             ConversionMediaCategory.Document -> error("Compatibility engine is not connected for documents")
+            ConversionMediaCategory.Font -> error("Compatibility engine is not connected for fonts")
         }
     }
 
@@ -3065,7 +3309,8 @@ class ConversionService : Service() {
                 audioAdvanced.fadeOutSeconds != null
             ConversionMediaCategory.Image,
             ConversionMediaCategory.Pdf,
-            ConversionMediaCategory.Document -> false
+            ConversionMediaCategory.Document,
+            ConversionMediaCategory.Font -> false
         }
         return when {
             videoReverseApplies ->
@@ -3237,7 +3482,8 @@ class ConversionService : Service() {
                         audioAdvanced.volume != AudioVolumeMode.Mute
                 ConversionMediaCategory.Image,
                 ConversionMediaCategory.Pdf,
-                ConversionMediaCategory.Document -> false
+                ConversionMediaCategory.Document,
+                ConversionMediaCategory.Font -> false
             }
             if (audioFiltersApply) {
                 if (
@@ -3296,7 +3542,8 @@ class ConversionService : Service() {
             }
             ConversionMediaCategory.Image,
             ConversionMediaCategory.Pdf,
-            ConversionMediaCategory.Document -> return null
+            ConversionMediaCategory.Document,
+            ConversionMediaCategory.Font -> return null
         }
         val missingEncoder = requiredEncoders.firstOrNull { encoder ->
             ffmpegEncoderAvailable(encoder) == false
@@ -3505,6 +3752,8 @@ class ConversionService : Service() {
                 "Compatibility engine is not connected for PDFs"
             ConversionMediaCategory.Document ->
                 "Compatibility engine is not connected for documents"
+            ConversionMediaCategory.Font ->
+                "Compatibility engine is not connected for fonts"
         }
     }
 
@@ -3628,7 +3877,8 @@ class ConversionService : Service() {
             ConversionMediaCategory.Audio -> input.audioOptions.trimRange
             ConversionMediaCategory.Image,
             ConversionMediaCategory.Pdf,
-            ConversionMediaCategory.Document -> MediaTrimRange()
+            ConversionMediaCategory.Document,
+            ConversionMediaCategory.Font -> MediaTrimRange()
         }
     }
 
@@ -3666,6 +3916,7 @@ class ConversionService : Service() {
             ConversionMediaCategory.Image -> false
             ConversionMediaCategory.Pdf -> false
             ConversionMediaCategory.Document -> false
+            ConversionMediaCategory.Font -> false
         }
     }
 
@@ -4194,6 +4445,7 @@ class ConversionService : Service() {
             OutputMediaKind.Image -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
             OutputMediaKind.Video -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
             OutputMediaKind.Document -> MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            OutputMediaKind.Font -> MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         }
     }
 
@@ -4201,6 +4453,7 @@ class ConversionService : Service() {
         return when (outputProfile.kind) {
             OutputMediaKind.Audio -> Environment.DIRECTORY_MUSIC
             OutputMediaKind.Document -> Environment.DIRECTORY_DOCUMENTS
+            OutputMediaKind.Font -> Environment.DIRECTORY_DOCUMENTS
             OutputMediaKind.Image -> Environment.DIRECTORY_PICTURES
             OutputMediaKind.Video -> Environment.DIRECTORY_MOVIES
         }
@@ -4399,6 +4652,17 @@ class ConversionService : Service() {
                     else -> null
                 }
             }
+            ConversionMediaCategory.Font -> {
+                when {
+                    input.targetFormat.equals("WOFF2", ignoreCase = true) ->
+                        OutputProfile(extension = "woff2", mimeType = MIME_TYPE_WOFF2, kind = OutputMediaKind.Font)
+                    input.targetFormat.equals("WOFF", ignoreCase = true) ->
+                        OutputProfile(extension = "woff", mimeType = MIME_TYPE_WOFF, kind = OutputMediaKind.Font)
+                    input.targetFormat.equals("TTF/OTF", ignoreCase = true) ->
+                        OutputProfile(extension = "ttf", mimeType = MIME_TYPE_TTF, kind = OutputMediaKind.Font)
+                    else -> null
+                }
+            }
         }
     }
 
@@ -4457,6 +4721,7 @@ class ConversionService : Service() {
     private enum class OutputMediaKind {
         Audio,
         Document,
+        Font,
         Image,
         Video
     }
@@ -4721,6 +4986,7 @@ class ConversionService : Service() {
         private const val PDF_CACHE_HEADROOM_BYTES = 16L * 1024L * 1024L
         private const val PDF_UNKNOWN_CACHE_MIN_FREE_BYTES = 256L * 1024L * 1024L
         private const val OFFICE_MAX_INPUT_BYTES = 64L * 1024L * 1024L
+        private const val FONT_MAX_INPUT_BYTES = 32L * 1024L * 1024L
         private const val FFMPEG_MAX_PROGRESS_BEFORE_SAVE = 0.98f
         private const val FFMPEG_LOG_DRAIN_TIMEOUT_MS = 1_000
         private const val FFMPEG_ENCODER_PROBE_TIMEOUT_MS = 2_000
@@ -4770,6 +5036,10 @@ class ConversionService : Service() {
         private const val MIME_TYPE_PDF = "application/pdf"
         private const val MIME_TYPE_TEXT = "text/plain"
         private const val MIME_TYPE_MARKDOWN = "text/markdown"
+        private const val MIME_TYPE_TTF = "font/ttf"
+        private const val MIME_TYPE_OTF = "font/otf"
+        private const val MIME_TYPE_WOFF = "font/woff"
+        private const val MIME_TYPE_WOFF2 = "font/woff2"
         private const val PDF_ENCRYPTION_KEY_LENGTH_BITS = 128
         private const val MIME_TYPE_DOCX =
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"

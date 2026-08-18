@@ -82,6 +82,7 @@ import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FontDownload
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Language
@@ -292,6 +293,25 @@ enum class FileCategory(
             TargetFormat("PDF", "pdf", "Office to PDF"),
             TargetFormat("TXT", "txt", "Text layer"),
             TargetFormat("MD", "md", "Markdown")
+        )
+    ),
+    Font(
+        mimeTypes = listOf(
+            "font/ttf",
+            "font/otf",
+            "font/woff",
+            "font/woff2",
+            "application/x-font-ttf",
+            "application/x-font-opentype",
+            "application/font-sfnt",
+            "application/font-woff",
+            "application/font-woff2",
+            "application/x-font-woff"
+        ),
+        formats = listOf(
+            TargetFormat("WOFF2", "woff2", "Web font"),
+            TargetFormat("WOFF", "woff", "Web font"),
+            TargetFormat("TTF/OTF", "ttf", "Uncompressed")
         )
     )
 }
@@ -3954,6 +3974,11 @@ private fun BatchTargetOptions(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            FileCategory.Font -> Text(
+                text = texts.optionValue(target.targetFormat.modeHint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -6371,6 +6396,11 @@ private fun QueuedFileOptionsPanel(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            FileCategory.Font -> Text(
+                text = texts.optionValue(selectedTarget.targetFormat.modeHint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -6668,6 +6698,7 @@ private fun FileCategory.icon(): ImageVector {
         FileCategory.Image -> Icons.Rounded.Image
         FileCategory.Pdf -> Icons.Rounded.PictureAsPdf
         FileCategory.Document -> Icons.Rounded.Description
+        FileCategory.Font -> Icons.Rounded.FontDownload
     }
 }
 
@@ -6746,6 +6777,9 @@ private fun targetsForSourceCategory(category: FileCategory?): List<ExternalImpo
         }
         FileCategory.Document -> FileCategory.Document.formats.map {
             ExternalImportTarget(FileCategory.Document, it)
+        }
+        FileCategory.Font -> FileCategory.Font.formats.map {
+            ExternalImportTarget(FileCategory.Font, it)
         }
         null -> emptyList()
     }
@@ -8467,6 +8501,7 @@ private data class UiText(
             FileCategory.Image -> optionValue("Image")
             FileCategory.Pdf -> optionValue("PDF")
             FileCategory.Document -> optionValue("Document")
+            FileCategory.Font -> optionValue("Font")
         }
     }
 
@@ -9069,6 +9104,21 @@ private data class UiText(
                 englishText -> "Deep Purple"
                 simplifiedChineseText -> "深紫"
                 else -> "深紫"
+            }
+            "Font" -> when (this) {
+                englishText -> "Font"
+                simplifiedChineseText -> "字体"
+                else -> "字型"
+            }
+            "Web font" -> when (this) {
+                englishText -> "Web font"
+                simplifiedChineseText -> "网页字体"
+                else -> "網頁字型"
+            }
+            "Uncompressed" -> when (this) {
+                englishText -> "Uncompressed"
+                simplifiedChineseText -> "未压缩"
+                else -> "未壓縮"
             }
             else -> value
         }

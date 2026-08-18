@@ -33,7 +33,8 @@ enum class ConversionMediaCategory {
     Audio,
     Image,
     Pdf,
-    Document
+    Document,
+    Font
 }
 
 data class VideoExportOptions(

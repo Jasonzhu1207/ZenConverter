@@ -407,6 +407,28 @@ groups:
         engine: office2pdf-native/pdfbox-android
         status: beta
         note: "Converts XLSX to an intermediate PDF, then writes lightweight Markdown with a title and per-page headings. Inherits the Office path's 64 MiB input cap and PDF text-layer limits; no high-fidelity spreadsheet structure reconstruction."
+  font:
+    verified:
+      - from: ttf/otf
+        to: woff2
+        engine: woff2-native
+        status: beta
+        note: "Compresses a TrueType (glyf) or OpenType CFF font to WOFF2 through the bundled arm64-v8a libzen_woff2.so (google/woff2). Whole-file byte-level container conversion with no options; font metadata is not re-written."
+      - from: ttf/otf
+        to: woff
+        engine: woff-pure-kotlin
+        status: beta
+        note: "Compresses a TrueType or OpenType CFF font to WOFF 1.0 with zlib in pure Kotlin. Whole-file byte-level container conversion with no options; WOFF metadata and private blocks are not preserved."
+      - from: woff2
+        to: ttf/otf
+        engine: woff2-native
+        status: beta
+        note: "Decompresses WOFF2 back to its original SFNT flavor through libzen_woff2.so. The output extension (.ttf vs .otf) is chosen from the font flavor. No options."
+      - from: woff
+        to: ttf/otf
+        engine: woff-pure-kotlin
+        status: beta
+        note: "Decompresses WOFF 1.0 back to SFNT in pure Kotlin. The output extension (.ttf vs .otf) is chosen from the font flavor. No options."
   metadata:
     verified:
       - from: jpg/jpeg/jfif/jpe

@@ -8,3 +8,6 @@
 
 # JNI symbol names in libzen_office2pdf.so reference this exact class/method.
 -keep class org.zenconverter.app.office.Office2PdfNative { *; }
+
+# JNI symbol names in libzen_woff2.so reference this exact class/method.
+-keep class org.zenconverter.app.font.Woff2Native { *; }
