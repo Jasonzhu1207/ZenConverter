@@ -200,14 +200,17 @@ Transitive dependencies required when consuming the local AAR through
 - JNI symbols consumed by the app:
   `Java_org_zenconverter_app_font_Woff2Native_compress` and
   `Java_org_zenconverter_app_font_Woff2Native_decompress`, both `byte[] -> byte[]`.
-- Current binary: `5,156,376` bytes with SHA-256
-  `7a439af226f70e3c004b5f11ae772752c79e5919c20c5edd938d332f251ff199`.
+- Current binary: `1,147,520` bytes with SHA-256
+  `dcc4ed659a792c70fa78f0daac13c8ff1102bc8dcf423c89d861b80843d205af`.
 - Reason platform APIs are not enough: Android has no SFNT to WOFF2 codec, and
   WOFF2 needs Brotli plus a glyf/loca/hmtx transform that is not practical to
   reimplement in app code.
 - Scope: TTF/OTF <-> WOFF2 byte-level container conversion with no options.
   WOFF 1.0 is handled by a separate pure-Kotlin zlib codec and adds no
   third-party code.
+- 16 KB page-size alignment (required): link with `-Wl,-z,max-page-size=16384
+  -Wl,-z,common-page-size=16384`. The checked-in binary is 16 KB-aligned; verify
+  any future rebuild with `native/woff2-jni/check-16kb-alignment.py`.
 - Release guardrail: record the exact upstream commit and NDK/CMake build command
   before promoting this Beta path to Stable.
 
