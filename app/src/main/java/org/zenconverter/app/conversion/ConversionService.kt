@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -112,14 +113,21 @@ class ConversionService : Service() {
                     return START_NOT_STICKY
                 }
                 handler.removeCallbacksAndMessages(null)
-                if (Build.VERSION.SDK_INT >= 34) {
-                    startForeground(
+                // mediaProcessing only exists on Android 15 (API 35)+. On Android 14
+                // (API 34) it is unrecognized and would crash with
+                // "Starting FGS with type unknown", so fall back to dataSync there.
+                when {
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM -> startForeground(
                         NOTIFICATION_ID,
                         buildNotification("Preparing", 0),
-                        android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
                     )
-                } else {
-                    startForeground(NOTIFICATION_ID, buildNotification("Preparing", 0))
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> startForeground(
+                        NOTIFICATION_ID,
+                        buildNotification("Preparing", 0),
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                    )
+                    else -> startForeground(NOTIFICATION_ID, buildNotification("Preparing", 0))
                 }
                 taskIndex = 0
                 processNextTask()
