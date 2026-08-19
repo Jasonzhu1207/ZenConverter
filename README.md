@@ -41,6 +41,10 @@ hidden.
 **Note:** very large media files still need adequate free storage, memory, and
 power. Keep the device available while a long foreground conversion is running.
 
+<div align="center">
+  <img src="docs/assets/ZenConverter-poster.png" alt="ZenConverter Poster" style="border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); max-width: 100%; margin-bottom: 16px;" />
+</div>
+
 ## Why Build It
 
 Desktop users already have plenty of good open-source converters. Android feels

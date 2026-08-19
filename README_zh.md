@@ -31,6 +31,10 @@ ZenConverter 是一个 Android 本地文件转换器。选择手机里的文件�
 
 **注意：** 超大媒体文件需要足够的可用存储、内存和电量。长时间前台转换期间请保持设备可用。如出现闪退等情况欢迎及时反馈。
 
+<div align="center">
+  <img src="docs/assets/ZenConverter-poster.png" alt="ZenConverter 宣传海报" style="border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); max-width: 100%; margin-bottom: 16px;" />
+</div>
+
 ## 为什么做它
 
 桌面端已经有很多优秀的开源转换工具，但 Android 端体验仍然粗糙。很多转换类 App 广告多、收费混乱、界面臃肿，或者默认要求把文件上传到云端。
