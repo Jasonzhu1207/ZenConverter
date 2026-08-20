@@ -229,6 +229,14 @@ Transitive dependencies required when consuming the local AAR through
   executable code (no ClassLoader, no System.load, no reflection-based dynamic
   loading). ONNX Runtime's own `libonnxruntime.so` ships inside the APK as a
   normal library dependency.
+- Telemetry disabled: the AAR ships `ai.onnxruntime.TelemetryInitializer`, a
+  ContentProvider that eagerly calls `System.loadLibrary("onnxruntime")` at app
+  startup to set up Microsoft 1DS telemetry. The app removes this provider with
+  `tools:node="remove"` (see `app/src/main/AndroidManifest.xml`) so the native
+  library is only loaded lazily when the upscaler runs. This fixes a startup
+  SIGSEGV on Android 16/17 (ONNX Runtime's CPU feature detection reads the
+  now-restricted `ro.hardware.chipname` property and dereferences null) and keeps
+  the app offline-first by never initializing the telemetry transport.
 
 ## Real-ESRGAN Model (Runtime Download)
 
