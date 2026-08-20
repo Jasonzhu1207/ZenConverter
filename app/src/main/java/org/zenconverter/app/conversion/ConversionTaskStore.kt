@@ -153,9 +153,17 @@ enum class AudioNoiseReductionMode {
     Standard
 }
 
+enum class ImageSuperResolutionMode(val scale: Int) {
+    Off(1),
+    X2(2),
+    X3(3),
+    X4(4)
+}
+
 data class ImageExportOptions(
     val quality: Int = 90,
-    val webpLossless: Boolean = false
+    val webpLossless: Boolean = false,
+    val superResolution: ImageSuperResolutionMode = ImageSuperResolutionMode.Off
 )
 
 data class PdfExportOptions(

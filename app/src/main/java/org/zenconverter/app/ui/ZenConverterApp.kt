@@ -177,6 +177,7 @@ import org.zenconverter.app.conversion.AudioVolumeMode
 import org.zenconverter.app.conversion.FileBasicInfo
 import org.zenconverter.app.conversion.GifFrameExportMode
 import org.zenconverter.app.conversion.ImageExportOptions
+import org.zenconverter.app.conversion.ImageSuperResolutionMode
 import org.zenconverter.app.conversion.MediaTrimRange
 import org.zenconverter.app.conversion.PdfExportOptions
 import org.zenconverter.app.conversion.PdfImagePageMode
@@ -676,6 +677,16 @@ private val IMAGE_QUALITY_OPTIONS = listOf(
     IMAGE_QUALITY_HIGH,
     IMAGE_QUALITY_BALANCED,
     IMAGE_QUALITY_SMALL
+)
+private const val IMAGE_SUPER_RESOLUTION_OFF = "Super resolution off"
+private const val IMAGE_SUPER_RESOLUTION_2X = "2×"
+private const val IMAGE_SUPER_RESOLUTION_3X = "3×"
+private const val IMAGE_SUPER_RESOLUTION_4X = "4×"
+private val IMAGE_SUPER_RESOLUTION_OPTIONS = listOf(
+    IMAGE_SUPER_RESOLUTION_OFF,
+    IMAGE_SUPER_RESOLUTION_2X,
+    IMAGE_SUPER_RESOLUTION_3X,
+    IMAGE_SUPER_RESOLUTION_4X
 )
 
 private const val PDF_PAGE_MODE_A4_FIT = "A4 fit"
@@ -4318,6 +4329,9 @@ private fun BatchImageTargetOptions(
         targetFormat = target,
         quality = commonBatchLabel(files) { imageQualityLabelFor(it.imageOptions, target) },
         pdfPageMode = commonBatchLabel(files) { pdfPageModeLabelFor(it.pdfOptions.imagePageMode) },
+        superResolution = commonBatchLabel(files) {
+            superResolutionLabelFor(it.imageOptions.superResolution)
+        },
         openMenuId = openMenuId,
         onOpenMenuChange = onOpenMenuChange,
         onQualityChange = { value ->
@@ -4336,6 +4350,25 @@ private fun BatchImageTargetOptions(
                         pdfOptions = file.pdfOptions.copy(
                             imagePageMode = pdfPageModeToOption(value)
                         )
+                    )
+                }
+            )
+        },
+        onSuperResolutionChange = { value ->
+            onOpenMenuChange(null)
+            val mode = superResolutionModeFor(value)
+            onUpdateFiles(
+                files.map { file ->
+                    file.copy(
+                        imageOptions = file.imageOptions.copy(superResolution = mode),
+                        gifFrameMode = if (
+                            mode != ImageSuperResolutionMode.Off &&
+                            file.isGifQueuedImage()
+                        ) {
+                            GifFrameExportMode.FirstFrame
+                        } else {
+                            file.gifFrameMode
+                        }
                     )
                 }
             )
@@ -5680,10 +5713,12 @@ private fun ImageOptions(
     targetFormat: TargetFormat,
     quality: String,
     pdfPageMode: String,
+    superResolution: String,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onQualityChange: (String) -> Unit,
-    onPdfPageModeChange: (String) -> Unit
+    onPdfPageModeChange: (String) -> Unit,
+    onSuperResolutionChange: (String) -> Unit
 ) {
     if (targetFormat.extension.equals("pdf", ignoreCase = true)) {
         OptionGrid {
@@ -5701,10 +5736,7 @@ private fun ImageOptions(
         return
     }
 
-    if (
-        targetFormat.extension.equals("png", ignoreCase = true) ||
-        targetFormat.extension.equals("ico", ignoreCase = true)
-    ) {
+    if (targetFormat.extension.equals("ico", ignoreCase = true)) {
         Text(
             text = texts.optionValue("Lossless output"),
             style = MaterialTheme.typography.bodySmall,
@@ -5713,19 +5745,50 @@ private fun ImageOptions(
         return
     }
 
+    val isPng = targetFormat.extension.equals("png", ignoreCase = true)
+    val superResolutionActive = superResolution != IMAGE_SUPER_RESOLUTION_OFF &&
+        superResolution != BATCH_MIXED_OPTION
+
     OptionGrid {
-        val qualityOptions = imageQualityOptionsFor(targetFormat)
-        val selectedQuality = if (quality in qualityOptions) quality else IMAGE_QUALITY_BALANCED
         OptionDropdown(
-            "${menuPrefix}image-quality",
-            texts.quality,
-            selectedQuality,
-            qualityOptions,
+            "${menuPrefix}image-super-resolution",
+            texts.superResolution,
+            superResolution,
+            IMAGE_SUPER_RESOLUTION_OPTIONS,
             texts,
             openMenuId,
             onOpenMenuChange,
-            onQualityChange
+            onSuperResolutionChange
         )
+
+        if (superResolutionActive) {
+            Text(
+                text = texts.superResolutionSummary(texts.optionValue(superResolution)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        } else if (isPng) {
+            Text(
+                text = texts.optionValue("Lossless output"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            val qualityOptions = imageQualityOptionsFor(targetFormat)
+            val selectedQuality = if (quality in qualityOptions) quality else IMAGE_QUALITY_BALANCED
+            OptionDropdown(
+                "${menuPrefix}image-quality",
+                texts.quality,
+                selectedQuality,
+                qualityOptions,
+                texts,
+                openMenuId,
+                onOpenMenuChange,
+                onQualityChange
+            )
+        }
     }
 }
 
@@ -6361,6 +6424,7 @@ private fun QueuedFileOptionsPanel(
                     targetFormat = selectedTarget.targetFormat,
                     quality = imageQualityLabelFor(file.imageOptions, selectedTarget.targetFormat),
                     pdfPageMode = pdfPageModeLabelFor(file.pdfOptions.imagePageMode),
+                    superResolution = superResolutionLabelFor(file.imageOptions.superResolution),
                     openMenuId = openMenuId,
                     onOpenMenuChange = onOpenMenuChange,
                     onQualityChange = { value ->
@@ -6368,9 +6432,28 @@ private fun QueuedFileOptionsPanel(
                     },
                     onPdfPageModeChange = { value ->
                         onUpdateFile(file.copy(pdfOptions = file.pdfOptions.copy(imagePageMode = pdfPageModeToOption(value))))
+                    },
+                    onSuperResolutionChange = { value ->
+                        val mode = superResolutionModeFor(value)
+                        onUpdateFile(
+                            file.copy(
+                                imageOptions = file.imageOptions.copy(superResolution = mode),
+                                gifFrameMode = if (
+                                    mode != ImageSuperResolutionMode.Off &&
+                                    file.isGifQueuedImage()
+                                ) {
+                                    GifFrameExportMode.FirstFrame
+                                } else {
+                                    file.gifFrameMode
+                                }
+                            )
+                        )
                     }
                 )
-                if (file.isGifQueuedImage()) {
+                if (
+                    file.isGifQueuedImage() &&
+                    file.imageOptions.superResolution == ImageSuperResolutionMode.Off
+                ) {
                     GifImageOptions(
                         texts = texts,
                         file = file,
@@ -6919,10 +7002,19 @@ private fun imageOptionsForTarget(
     current: ImageExportOptions,
     targetFormat: TargetFormat
 ): ImageExportOptions {
+    val superResolutionReset = targetFormat.extension.equals("pdf", ignoreCase = true) ||
+        targetFormat.extension.equals("ico", ignoreCase = true)
     return if (supportsWebpLosslessQuality(targetFormat)) {
-        current
+        if (superResolutionReset) {
+            current.copy(superResolution = ImageSuperResolutionMode.Off)
+        } else {
+            current
+        }
     } else {
-        current.copy(webpLossless = false)
+        current.copy(
+            webpLossless = false,
+            superResolution = if (superResolutionReset) ImageSuperResolutionMode.Off else current.superResolution
+        )
     }
 }
 
@@ -7119,6 +7211,24 @@ private fun imageOptionsForQuality(
         webpLossless = supportsWebpLosslessQuality(targetFormat) &&
             value == IMAGE_QUALITY_LOSSLESS
     )
+}
+
+private fun superResolutionLabelFor(mode: ImageSuperResolutionMode): String {
+    return when (mode) {
+        ImageSuperResolutionMode.Off -> IMAGE_SUPER_RESOLUTION_OFF
+        ImageSuperResolutionMode.X2 -> IMAGE_SUPER_RESOLUTION_2X
+        ImageSuperResolutionMode.X3 -> IMAGE_SUPER_RESOLUTION_3X
+        ImageSuperResolutionMode.X4 -> IMAGE_SUPER_RESOLUTION_4X
+    }
+}
+
+private fun superResolutionModeFor(value: String): ImageSuperResolutionMode {
+    return when (value) {
+        IMAGE_SUPER_RESOLUTION_2X -> ImageSuperResolutionMode.X2
+        IMAGE_SUPER_RESOLUTION_3X -> ImageSuperResolutionMode.X3
+        IMAGE_SUPER_RESOLUTION_4X -> ImageSuperResolutionMode.X4
+        else -> ImageSuperResolutionMode.Off
+    }
 }
 
 private fun pdfPageModeLabelFor(value: PdfImagePageMode): String {
@@ -7572,6 +7682,7 @@ private data class UiText(
     val pageSize: String,
     val renderQuality: String,
     val resolution: String,
+    val superResolution: String,
     val videoCompressionMode: String,
     val bitrate: String,
     val codec: String,
@@ -7674,6 +7785,14 @@ private data class UiText(
                 else -> "優先 H.265 · 短邊 720p · 最高 30fps · AAC 128 kbps"
             }
             else -> ""
+        }
+    }
+
+    fun superResolutionSummary(scaleLabel: String): String {
+        return when (this) {
+            englishText -> "Bilinear upscale $scaleLabel · Original quality"
+            simplifiedChineseText -> "双线性放大 $scaleLabel · 原图质量"
+            else -> "雙線性放大 $scaleLabel · 原圖品質"
         }
     }
 
@@ -8481,6 +8600,16 @@ private data class UiText(
                 simplifiedChineseText -> "无法写出这个图片格式"
                 else -> "無法寫出這個圖片格式"
             }
+            "Image engine could not super-resolve this image (output too large)" -> when (this) {
+                englishText -> "Image is too large to super-resolve at this scale; try a smaller scale"
+                simplifiedChineseText -> "图片尺寸过大，无法按此倍数超分，请尝试更小的倍数"
+                else -> "圖片尺寸過大，無法按此倍數超分，請嘗試更小的倍數"
+            }
+            "Image engine could not allocate memory for super-resolution" -> when (this) {
+                englishText -> "Not enough memory to super-resolve this image"
+                simplifiedChineseText -> "内存不足，无法超分这张图片"
+                else -> "記憶體不足，無法超分這張圖片"
+            }
             "Cancelled" -> cancelled
             "Queued" -> waiting
             else -> value
@@ -8882,6 +9011,11 @@ private data class UiText(
                 englishText -> "Small file"
                 simplifiedChineseText -> "小体积"
                 else -> "小體積"
+            }
+            IMAGE_SUPER_RESOLUTION_OFF -> when (this) {
+                englishText -> "Off"
+                simplifiedChineseText -> "关闭"
+                else -> "關閉"
             }
             "Auto bitrate" -> when (this) {
                 englishText -> "Auto (recommended)"
@@ -9488,6 +9622,7 @@ private val englishText = UiText(
     pageSize = "Page size",
     renderQuality = "Render quality",
     resolution = "Resolution",
+    superResolution = "Super resolution",
     videoCompressionMode = "Compression preset",
     bitrate = "Bitrate",
     codec = "Codec",
@@ -9622,6 +9757,7 @@ private val simplifiedChineseText = UiText(
     pageSize = "页面尺寸",
     renderQuality = "渲染质量",
     resolution = "分辨率",
+    superResolution = "超分",
     videoCompressionMode = "压缩预设",
     bitrate = "码率",
     codec = "编码",
@@ -9756,6 +9892,7 @@ private val traditionalChineseText = UiText(
     pageSize = "頁面尺寸",
     renderQuality = "渲染品質",
     resolution = "解析度",
+    superResolution = "超高解析度",
     videoCompressionMode = "壓縮預設",
     bitrate = "位元率",
     codec = "編碼",

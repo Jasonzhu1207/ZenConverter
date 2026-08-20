@@ -1244,28 +1244,44 @@ class ConversionService : Service() {
         throwIfConversionCancelled()
         updateImageProgress(0.55f)
 
+        val workingBitmap = applySuperResolutionIfNeeded(
+            decodedBitmap,
+            input.imageOptions.superResolution
+        )
+        throwIfConversionCancelled()
+
         if (outputProfile.extension.equals("ico", ignoreCase = true)) {
             try {
-                writeIcoImageFile(decodedBitmap, outputFile)
+                writeIcoImageFile(workingBitmap, outputFile)
                 throwIfConversionCancelled()
                 updateImageProgress(0.95f)
             } finally {
+                if (workingBitmap !== decodedBitmap) {
+                    workingBitmap.recycle()
+                }
                 decodedBitmap.recycle()
             }
             return
         }
 
         val bitmapForOutput = bitmapForImageOutput(
-            decodedBitmap,
+            workingBitmap,
             outputProfile.extension,
             flattenTransparency = false
         )
         val useWebpLossless = shouldUseWebpLossless(outputProfile, input.imageOptions)
         val compressFormat = imageCompressFormatFor(outputProfile.extension, useWebpLossless)
             ?: error("Image engine could not write this output")
+        val requestedQuality = if (
+            input.imageOptions.superResolution == ImageSuperResolutionMode.Off
+        ) {
+            input.imageOptions.quality
+        } else {
+            100
+        }
         val quality = imageQualityFor(
             outputProfile.extension,
-            input.imageOptions.quality,
+            requestedQuality,
             useWebpLossless
         )
 
@@ -1280,8 +1296,11 @@ class ConversionService : Service() {
             throwIfConversionCancelled()
             updateImageProgress(0.95f)
         } finally {
-            if (bitmapForOutput !== decodedBitmap) {
+            if (bitmapForOutput !== workingBitmap) {
                 bitmapForOutput.recycle()
+            }
+            if (workingBitmap !== decodedBitmap) {
+                workingBitmap.recycle()
             }
             decodedBitmap.recycle()
         }
@@ -1958,6 +1977,30 @@ class ConversionService : Service() {
         val scaled = Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)
         bitmap.recycle()
         return scaled
+    }
+
+    private fun applySuperResolutionIfNeeded(
+        bitmap: Bitmap,
+        mode: ImageSuperResolutionMode
+    ): Bitmap {
+        if (mode == ImageSuperResolutionMode.Off) return bitmap
+
+        val targetWidth = bitmap.width.toLong() * mode.scale
+        val targetHeight = bitmap.height.toLong() * mode.scale
+        if (
+            targetWidth > Int.MAX_VALUE ||
+            targetHeight > Int.MAX_VALUE ||
+            targetWidth * targetHeight > SUPER_RESOLUTION_MAX_PIXELS
+        ) {
+            error("Image engine could not super-resolve this image (output too large)")
+        }
+
+        throwIfConversionCancelled()
+        return try {
+            Bitmap.createScaledBitmap(bitmap, targetWidth.toInt(), targetHeight.toInt(), true)
+        } catch (oom: OutOfMemoryError) {
+            error("Image engine could not allocate memory for super-resolution")
+        }
     }
 
     private fun applyImageOrientationIfNeeded(
@@ -4985,6 +5028,7 @@ class ConversionService : Service() {
         private const val COPY_BUFFER_SIZE = 1024 * 1024
         private const val PROGRESS_BEFORE_SAVE = 0.98f
         private const val MAX_IMAGE_DECODE_PIXELS = 64_000_000L
+        private const val SUPER_RESOLUTION_MAX_PIXELS = 64_000_000L
         private const val PDF_IMAGE_MAX_LONG_SIDE_PIXELS = 4096
         private const val PDF_IMAGE_MAX_PIXELS = 16_000_000L
         private const val PDF_A4_SHORT_EDGE_PT = 595

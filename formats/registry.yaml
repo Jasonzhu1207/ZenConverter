@@ -227,12 +227,17 @@ groups:
         status: stable
         note: "Extracts the first audio track and encodes WMA v2 through FFmpeg compatibility mode. Advanced audio filters apply where selected."
   image:
+    # Raster image outputs (jpg/jfif/png/webp) also expose an optional bilinear
+    # super-resolution option (2x/3x/4x) through Android createScaledBitmap. It is
+    # an algorithmic upscale, not AI or lossless enhancement; while active it
+    # forces original quality, hides GIF frame splitting, and is capped to a
+    # 64 MP output budget. PDF and ICO targets do not expose it.
     verified:
       - from: jpg/jpeg/jfif/jpe
         to: jpg/jfif
         engine: native-bitmap
         status: stable
-        note: "JPEG-family static image decode/encode through Android Bitmap APIs. JFIF output is JPEG-encoded pixels with a .jfif extension; metadata is not preserved."
+        note: "JPEG-family static image decode/encode through Android Bitmap APIs. JFIF output is JPEG-encoded pixels with a .jfif extension; metadata is not preserved. Optional bilinear super-resolution (2x/3x/4x) upscales before encoding."
       - from: jpg/jpeg/jfif/jpe
         to: png
         engine: native-bitmap
