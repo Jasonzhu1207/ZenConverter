@@ -70,6 +70,10 @@ import org.zenconverter.app.font.Woff2Native
 import org.zenconverter.app.font.Woff2UnavailableException
 import org.zenconverter.app.font.Woff2UnsupportedAbiException
 import org.zenconverter.app.font.WoffCodec
+import org.zenconverter.app.subtitle.LrcCodec
+import org.zenconverter.app.subtitle.SrtCodec
+import org.zenconverter.app.subtitle.SubtitleFormat
+import org.zenconverter.app.subtitle.SubtitleTextDecoder
 import org.zenconverter.app.model.EsrganModelManager
 import org.zenconverter.app.model.RealEsrganUpscaler
 import java.io.ByteArrayInputStream
@@ -98,6 +102,7 @@ class ConversionService : Service() {
     private var pdfBoxReady = false
     private val ffmpegEncoderAvailability = mutableMapOf<String, Boolean>()
     private val ffmpegFilterAvailability = mutableMapOf<String, Boolean>()
+    private var ffmpegSubtitleFeatureLists: Map<String, Set<String>>? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -185,6 +190,7 @@ class ConversionService : Service() {
                         input.category == ConversionMediaCategory.Pdf -> "NativePdf"
                         input.category == ConversionMediaCategory.Document -> "Office2Pdf"
                         input.category == ConversionMediaCategory.Font -> "Font"
+                        input.category == ConversionMediaCategory.Subtitle -> "Subtitle"
                         useCompatibilityEngine -> "Compatibility"
                         else -> "Unrouted"
                     }
@@ -224,6 +230,11 @@ class ConversionService : Service() {
             return
         }
 
+        if (input.category == ConversionMediaCategory.Subtitle) {
+            startSubtitleExport(input, tempFile)
+            return
+        }
+
         if (useCompatibilityEngine) {
             startCompatibilityExport(input, tempFile)
             return
@@ -231,7 +242,7 @@ class ConversionService : Service() {
 
         tempFile.delete()
         activeTempFile = null
-        failCurrentTask("Only connected video, audio, image, PDF, document, and font targets can run")
+        failCurrentTask("Only connected video, audio, image, PDF, document, font, and subtitle targets can run")
     }
 
     private fun startImageExport(
@@ -2315,6 +2326,367 @@ class ConversionService : Service() {
             PDF_HEADER.indices.all { index -> bytes[index] == PDF_HEADER[index] }
     }
 
+    private fun startSubtitleExport(
+        input: ConversionTaskInput,
+        tempFile: File
+    ) {
+        serviceScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    runSubtitleExport(input, tempFile)
+                }
+            }.onSuccess {
+                if (ConversionTaskStore.isCancelled()) {
+                    tempFile.delete()
+                    cancelRun()
+                    return@onSuccess
+                }
+                ConversionTaskStore.updateProgress(taskIndex, PROGRESS_BEFORE_SAVE)
+                saveCompletedExport(input, tempFile)
+            }.onFailure { exception ->
+                tempFile.delete()
+                if (exception is CancellationException) {
+                    return@onFailure
+                }
+                Log.w(TAG, "Could not run subtitle export", exception)
+                failCurrentTask(subtitleFailureMessageFor(exception))
+            }
+        }
+    }
+
+    private suspend fun runSubtitleExport(
+        input: ConversionTaskInput,
+        tempFile: File
+    ) {
+        val sourceFormat = SubtitleFormat.fromExtension(input.extension)
+            ?: error("Unsupported subtitle format")
+        val targetFormat = subtitleTargetFormatFor(input.targetFormat)
+            ?: error("Unsupported subtitle format")
+        if (sourceFormat == targetFormat) error("Unsupported subtitle format")
+
+        throwIfConversionCancelled()
+        updateImageProgress(0.05f)
+
+        val lrcInputBridge = sourceFormat == SubtitleFormat.LRC
+        val lrcOutputBridge = targetFormat == SubtitleFormat.LRC
+
+        if (lrcInputBridge) {
+            val srtText = parseLrcInputToSrt(input)
+            updateImageProgress(0.5f)
+            throwIfConversionCancelled()
+            if (targetFormat == SubtitleFormat.SRT) {
+                writeUtf8File(tempFile, srtText)
+                updateImageProgress(0.95f)
+                return
+            }
+            val srtTemp = createSubtitleInterchangeFile(input, SubtitleFormat.SRT)
+            try {
+                writeUtf8File(srtTemp, srtText)
+                runSubtitleFfmpeg(
+                    input = input,
+                    inputPath = srtTemp.absolutePath,
+                    sourceFormat = SubtitleFormat.SRT,
+                    targetFormat = targetFormat,
+                    outputFile = tempFile
+                )
+            } finally {
+                srtTemp.delete()
+            }
+            updateImageProgress(0.95f)
+            return
+        }
+
+        if (lrcOutputBridge) {
+            val srtText = if (sourceFormat == SubtitleFormat.SRT) {
+                readSubtitleInputText(input)
+            } else {
+                val srtTemp = createSubtitleInterchangeFile(input, SubtitleFormat.SRT)
+                try {
+                    val inputSource = openFfmpegInputSource(input.inputUri)
+                        ?: error("Compatibility engine could not open SAF input")
+                    runSubtitleFfmpeg(
+                        input = input,
+                        inputPath = inputSource.path,
+                        sourceFormat = sourceFormat,
+                        targetFormat = SubtitleFormat.SRT,
+                        outputFile = srtTemp,
+                        inputSource = inputSource
+                    )
+                    srtTemp.readText(Charsets.UTF_8)
+                } finally {
+                    srtTemp.delete()
+                }
+            }
+            updateImageProgress(0.6f)
+            throwIfConversionCancelled()
+            val document = SrtCodec.parse(srtText)
+            writeUtf8File(tempFile, LrcCodec.write(document))
+            updateImageProgress(0.95f)
+            return
+        }
+
+        val inputSource = openFfmpegInputSource(input.inputUri)
+            ?: error("Compatibility engine could not open SAF input")
+        runSubtitleFfmpeg(
+            input = input,
+            inputPath = inputSource.path,
+            sourceFormat = sourceFormat,
+            targetFormat = targetFormat,
+            outputFile = tempFile,
+            inputSource = inputSource
+        )
+        updateImageProgress(0.95f)
+    }
+
+    private suspend fun runSubtitleFfmpeg(
+        input: ConversionTaskInput,
+        inputPath: String,
+        sourceFormat: SubtitleFormat,
+        targetFormat: SubtitleFormat,
+        outputFile: File,
+        inputSource: FfmpegInputSource? = null
+    ): FfmpegRunResult {
+        try {
+            val loadFailure = ensureFfmpegKitReady()
+            if (loadFailure != null) {
+                error(compatibilityStartupFailureMessageFor(loadFailure))
+            }
+            subtitleMissingFfmpegSupportMessage(sourceFormat, targetFormat)?.let { message ->
+                error(message)
+            }
+            val arguments = subtitleFfmpegArgumentsFor(
+                sourceFormat = sourceFormat,
+                targetFormat = targetFormat,
+                inputPath = inputPath,
+                outputFile = outputFile
+            )
+            val logTail = mutableListOf<String>()
+            val result = executeFfmpeg(
+                input = input,
+                arguments = arguments,
+                durationMs = null,
+                logTail = logTail,
+                inputSourceLabel = inputSource?.label ?: "file"
+            )
+            if (result.cancelled) throw CancellationException()
+            if (!result.success) {
+                error(result.message ?: subtitleFailureMessageFor(IllegalStateException()))
+            }
+            return result
+        } finally {
+            inputSource?.close()
+        }
+    }
+
+    private fun subtitleTargetFormatFor(targetFormat: String): SubtitleFormat? {
+        return when (targetFormat.uppercase(Locale.US)) {
+            "SRT" -> SubtitleFormat.SRT
+            "VTT" -> SubtitleFormat.VTT
+            "ASS" -> SubtitleFormat.ASS
+            "LRC" -> SubtitleFormat.LRC
+            else -> null
+        }
+    }
+
+    private fun parseLrcInputToSrt(input: ConversionTaskInput): String {
+        val text = readSubtitleInputText(input)
+        throwIfConversionCancelled()
+        val document = LrcCodec.parse(text)
+        throwIfConversionCancelled()
+        return SrtCodec.write(document)
+    }
+
+    private fun readSubtitleInputText(input: ConversionTaskInput): String {
+        val bytes = readSubtitleInputBytes(input)
+        throwIfConversionCancelled()
+        return SubtitleTextDecoder.decode(bytes)
+    }
+
+    private fun readSubtitleInputBytes(input: ConversionTaskInput): ByteArray {
+        val sourceSize = queryOpenableSize(input.inputUri)
+        sourceSize?.let { sizeBytes ->
+            if (sizeBytes > SUBTITLE_MAX_INPUT_BYTES) {
+                error("Subtitle file is too large")
+            }
+        }
+
+        val initialCapacity = sourceSize
+            ?.coerceAtMost(SUBTITLE_MAX_INPUT_BYTES)
+            ?.toInt()
+            ?: COPY_BUFFER_SIZE
+        val output = ByteArrayOutputStream(initialCapacity.coerceAtLeast(0))
+
+        contentResolver.openInputStream(input.inputUri)?.use { inputStream ->
+            val buffer = ByteArray(COPY_BUFFER_SIZE)
+            var totalBytes = 0L
+            while (true) {
+                throwIfConversionCancelled()
+                val read = inputStream.read(buffer)
+                if (read == -1) break
+                totalBytes += read.toLong()
+                if (totalBytes > SUBTITLE_MAX_INPUT_BYTES) {
+                    error("Subtitle file is too large")
+                }
+                output.write(buffer, 0, read)
+            }
+        } ?: error("Input file could not be opened")
+
+        if (output.size() == 0) error("Subtitle file is empty")
+        return output.toByteArray()
+    }
+
+    private fun writeUtf8File(file: File, text: String) {
+        file.outputStream().bufferedWriter(Charsets.UTF_8).use { writer ->
+            writer.write(text)
+            writer.flush()
+        }
+    }
+
+    private fun createSubtitleInterchangeFile(
+        input: ConversionTaskInput,
+        format: SubtitleFormat
+    ): File {
+        val cacheRoot = externalCacheDir ?: cacheDir
+        val tempDirectory = File(cacheRoot, SUBTITLE_INTERCHANGE_DIRECTORY).apply { mkdirs() }
+        return File(tempDirectory, "${input.fileId}_${System.nanoTime()}.${format.extension}").apply {
+            if (exists()) delete()
+        }
+    }
+
+    private fun subtitleFfmpegArgumentsFor(
+        sourceFormat: SubtitleFormat,
+        targetFormat: SubtitleFormat,
+        inputPath: String,
+        outputFile: File
+    ): List<String> {
+        return listOf(
+            "-hide_banner",
+            "-nostdin",
+            "-y",
+            "-f",
+            subtitleDemuxerFor(sourceFormat),
+            "-i",
+            inputPath,
+            "-map",
+            "0:s:0",
+            "-c:s",
+            subtitleCodecFor(targetFormat),
+            "-f",
+            subtitleMuxerFor(targetFormat),
+            outputFile.absolutePath
+        )
+    }
+
+    private fun subtitleDemuxerFor(format: SubtitleFormat): String {
+        return when (format) {
+            SubtitleFormat.SRT -> "srt"
+            SubtitleFormat.VTT -> "webvtt"
+            SubtitleFormat.ASS -> "ass"
+            SubtitleFormat.LRC -> error("Unsupported subtitle format")
+        }
+    }
+
+    private fun subtitleMuxerFor(format: SubtitleFormat): String {
+        return when (format) {
+            SubtitleFormat.SRT -> "srt"
+            SubtitleFormat.VTT -> "webvtt"
+            SubtitleFormat.ASS -> "ass"
+            SubtitleFormat.LRC -> error("Unsupported subtitle format")
+        }
+    }
+
+    private fun subtitleCodecFor(format: SubtitleFormat): String {
+        return when (format) {
+            SubtitleFormat.SRT -> "subrip"
+            SubtitleFormat.VTT -> "webvtt"
+            SubtitleFormat.ASS -> "ass"
+            SubtitleFormat.LRC -> error("Unsupported subtitle format")
+        }
+    }
+
+    private fun subtitleMissingFfmpegSupportMessage(
+        sourceFormat: SubtitleFormat,
+        targetFormat: SubtitleFormat
+    ): String? {
+        val missing = listOf(
+            subtitleDemuxerFor(sourceFormat),
+            subtitleMuxerFor(targetFormat),
+            subtitleCodecFor(targetFormat)
+        ).distinct().firstOrNull { token ->
+            ffmpegSubtitleFeatureAvailable(token) == false
+        } ?: return null
+
+        Log.e(
+            TAG,
+            "FFmpeg compatibility package is missing subtitle feature=$missing " +
+                "target=${targetFormat.extension}"
+        )
+        return "Compatibility engine needs subtitle support"
+    }
+
+    private fun ffmpegSubtitleFeatureAvailable(token: String): Boolean? {
+        val lists = ffmpegSubtitleFeatureLists ?: loadFfmpegSubtitleFeatureLists()
+        if (lists == null) return null
+        return lists.values.any { set -> token in set }
+    }
+
+    private fun loadFfmpegSubtitleFeatureLists(): Map<String, Set<String>>? {
+        val demuxers = probeFfmpegFeatureList("-demuxers")
+        val muxers = probeFfmpegFeatureList("-muxers")
+        val codecs = probeFfmpegFeatureList("-codecs")
+        if (demuxers == null || muxers == null || codecs == null) return null
+
+        val lists = mapOf(
+            "demuxer" to demuxers,
+            "muxer" to muxers,
+            "codec" to codecs
+        )
+        ffmpegSubtitleFeatureLists = lists
+        return lists
+    }
+
+    private fun probeFfmpegFeatureList(flag: String): Set<String>? {
+        val output = runCatching {
+            val session = FFmpegKit.executeWithArguments(
+                arrayOf("-hide_banner", flag)
+            )
+            if (ReturnCode.isSuccess(session.getReturnCode())) {
+                session.getAllLogsAsString(FFMPEG_ENCODER_PROBE_TIMEOUT_MS).orEmpty()
+            } else {
+                ""
+            }
+        }.onFailure { exception ->
+            Log.w(TAG, "Could not probe FFmpeg feature list $flag", exception)
+        }.getOrNull() ?: return null
+        if (output.isBlank()) return null
+
+        return output.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .mapNotNull { line ->
+                line.split(WHITESPACE_REGEX).getOrNull(1)
+            }
+            .toSet()
+    }
+
+    private fun subtitleFailureMessageFor(exception: Throwable): String {
+        val message = exception.message.orEmpty()
+        return when {
+            message == "Unsupported subtitle format" -> "Unsupported subtitle format"
+            message == "Subtitle file is empty" -> "Subtitle file is empty"
+            message == "Subtitle file is too large" -> "Subtitle file is too large"
+            message == "Input file could not be opened" -> "Input file could not be opened"
+            message == "Could not parse subtitle file (SRT)" -> "Could not parse subtitle file (SRT)"
+            message == "Could not parse lyrics file (LRC)" -> "Could not parse lyrics file (LRC)"
+            message == "Compatibility engine needs subtitle support" ->
+                "Compatibility engine needs subtitle support"
+            message == "Compatibility engine could not convert this subtitle" ->
+                "Compatibility engine could not convert this subtitle"
+            message.startsWith("Compatibility engine", ignoreCase = true) -> message
+            else -> "Subtitle conversion failed"
+        }
+    }
+
     private fun startCompatibilityExport(
         input: ConversionTaskInput,
         tempFile: File
@@ -2723,6 +3095,7 @@ class ConversionService : Service() {
             ConversionMediaCategory.Pdf -> error("Compatibility engine is not connected for PDFs")
             ConversionMediaCategory.Document -> error("Compatibility engine is not connected for documents")
             ConversionMediaCategory.Font -> error("Compatibility engine is not connected for fonts")
+            ConversionMediaCategory.Subtitle -> error("Compatibility engine is not connected for subtitles")
         }
     }
 
@@ -3423,7 +3796,8 @@ class ConversionService : Service() {
             ConversionMediaCategory.Image,
             ConversionMediaCategory.Pdf,
             ConversionMediaCategory.Document,
-            ConversionMediaCategory.Font -> false
+            ConversionMediaCategory.Font,
+            ConversionMediaCategory.Subtitle -> false
         }
         return when {
             videoReverseApplies ->
@@ -3596,7 +3970,8 @@ class ConversionService : Service() {
                 ConversionMediaCategory.Image,
                 ConversionMediaCategory.Pdf,
                 ConversionMediaCategory.Document,
-                ConversionMediaCategory.Font -> false
+                ConversionMediaCategory.Font,
+                ConversionMediaCategory.Subtitle -> false
             }
             if (audioFiltersApply) {
                 if (
@@ -3656,7 +4031,8 @@ class ConversionService : Service() {
             ConversionMediaCategory.Image,
             ConversionMediaCategory.Pdf,
             ConversionMediaCategory.Document,
-            ConversionMediaCategory.Font -> return null
+            ConversionMediaCategory.Font,
+            ConversionMediaCategory.Subtitle -> return null
         }
         val missingEncoder = requiredEncoders.firstOrNull { encoder ->
             ffmpegEncoderAvailable(encoder) == false
@@ -3867,6 +4243,8 @@ class ConversionService : Service() {
                 "Compatibility engine is not connected for documents"
             ConversionMediaCategory.Font ->
                 "Compatibility engine is not connected for fonts"
+            ConversionMediaCategory.Subtitle ->
+                "Compatibility engine could not convert this subtitle"
         }
     }
 
@@ -3991,7 +4369,8 @@ class ConversionService : Service() {
             ConversionMediaCategory.Image,
             ConversionMediaCategory.Pdf,
             ConversionMediaCategory.Document,
-            ConversionMediaCategory.Font -> MediaTrimRange()
+            ConversionMediaCategory.Font,
+            ConversionMediaCategory.Subtitle -> MediaTrimRange()
         }
     }
 
@@ -4030,6 +4409,7 @@ class ConversionService : Service() {
             ConversionMediaCategory.Pdf -> false
             ConversionMediaCategory.Document -> false
             ConversionMediaCategory.Font -> false
+            ConversionMediaCategory.Subtitle -> false
         }
     }
 
@@ -4559,6 +4939,7 @@ class ConversionService : Service() {
             OutputMediaKind.Video -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
             OutputMediaKind.Document -> MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
             OutputMediaKind.Font -> MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            OutputMediaKind.Subtitle -> MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         }
     }
 
@@ -4567,6 +4948,7 @@ class ConversionService : Service() {
             OutputMediaKind.Audio -> Environment.DIRECTORY_MUSIC
             OutputMediaKind.Document -> Environment.DIRECTORY_DOCUMENTS
             OutputMediaKind.Font -> Environment.DIRECTORY_DOCUMENTS
+            OutputMediaKind.Subtitle -> Environment.DIRECTORY_DOCUMENTS
             OutputMediaKind.Image -> Environment.DIRECTORY_PICTURES
             OutputMediaKind.Video -> Environment.DIRECTORY_MOVIES
         }
@@ -4776,6 +5158,15 @@ class ConversionService : Service() {
                     else -> null
                 }
             }
+            ConversionMediaCategory.Subtitle -> {
+                when (input.targetFormat.uppercase(Locale.US)) {
+                    "SRT" -> OutputProfile(extension = "srt", mimeType = MIME_TYPE_SRT, kind = OutputMediaKind.Subtitle)
+                    "VTT" -> OutputProfile(extension = "vtt", mimeType = MIME_TYPE_VTT, kind = OutputMediaKind.Subtitle)
+                    "ASS" -> OutputProfile(extension = "ass", mimeType = MIME_TYPE_ASS, kind = OutputMediaKind.Subtitle)
+                    "LRC" -> OutputProfile(extension = "lrc", mimeType = MIME_TYPE_LRC, kind = OutputMediaKind.Subtitle)
+                    else -> null
+                }
+            }
         }
     }
 
@@ -4836,6 +5227,7 @@ class ConversionService : Service() {
         Document,
         Font,
         Image,
+        Subtitle,
         Video
     }
 
@@ -5103,6 +5495,8 @@ class ConversionService : Service() {
         private const val PDF_UNKNOWN_CACHE_MIN_FREE_BYTES = 256L * 1024L * 1024L
         private const val OFFICE_MAX_INPUT_BYTES = 64L * 1024L * 1024L
         private const val FONT_MAX_INPUT_BYTES = 32L * 1024L * 1024L
+        private const val SUBTITLE_MAX_INPUT_BYTES = 8L * 1024L * 1024L
+        private const val SUBTITLE_INTERCHANGE_DIRECTORY = "subtitle-interchange"
         private const val FFMPEG_MAX_PROGRESS_BEFORE_SAVE = 0.98f
         private const val FFMPEG_LOG_DRAIN_TIMEOUT_MS = 1_000
         private const val FFMPEG_ENCODER_PROBE_TIMEOUT_MS = 2_000
@@ -5156,6 +5550,10 @@ class ConversionService : Service() {
         private const val MIME_TYPE_OTF = "font/otf"
         private const val MIME_TYPE_WOFF = "font/woff"
         private const val MIME_TYPE_WOFF2 = "font/woff2"
+        private const val MIME_TYPE_SRT = "application/x-subrip"
+        private const val MIME_TYPE_VTT = "text/vtt"
+        private const val MIME_TYPE_ASS = "text/x-ssa"
+        private const val MIME_TYPE_LRC = "text/plain"
         private const val PDF_ENCRYPTION_KEY_LENGTH_BITS = 128
         private const val MIME_TYPE_DOCX =
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"

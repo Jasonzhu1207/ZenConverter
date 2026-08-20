@@ -98,6 +98,7 @@ import androidx.compose.material.icons.rounded.PrivacyTip
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -319,6 +320,20 @@ enum class FileCategory(
             TargetFormat("WOFF2", "woff2", "Web font"),
             TargetFormat("WOFF", "woff", "Web font"),
             TargetFormat("TTF/OTF", "ttf", "Uncompressed")
+        )
+    ),
+    Subtitle(
+        mimeTypes = listOf(
+            "application/x-subrip",
+            "text/vtt",
+            "text/x-ssa",
+            "text/x-ass"
+        ),
+        formats = listOf(
+            TargetFormat("SRT", "srt", "Subtitle"),
+            TargetFormat("VTT", "vtt", "Subtitle"),
+            TargetFormat("LRC", "lrc", "Lyrics"),
+            TargetFormat("ASS", "ass", "Styled subtitle")
         )
     )
 }
@@ -4196,6 +4211,11 @@ private fun BatchTargetOptions(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            FileCategory.Subtitle -> Text(
+                text = texts.optionValue(target.targetFormat.modeHint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -6715,6 +6735,11 @@ private fun QueuedFileOptionsPanel(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            FileCategory.Subtitle -> Text(
+                text = texts.optionValue(selectedTarget.targetFormat.modeHint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -7048,6 +7073,7 @@ private fun FileCategory.icon(): ImageVector {
         FileCategory.Pdf -> Icons.Rounded.PictureAsPdf
         FileCategory.Document -> Icons.Rounded.Description
         FileCategory.Font -> Icons.Rounded.FontDownload
+        FileCategory.Subtitle -> Icons.Rounded.Subtitles
     }
 }
 
@@ -7129,6 +7155,9 @@ private fun targetsForSourceCategory(category: FileCategory?): List<ExternalImpo
         }
         FileCategory.Font -> FileCategory.Font.formats.map {
             ExternalImportTarget(FileCategory.Font, it)
+        }
+        FileCategory.Subtitle -> FileCategory.Subtitle.formats.map {
+            ExternalImportTarget(FileCategory.Subtitle, it)
         }
         null -> emptyList()
     }
@@ -8863,6 +8892,47 @@ private data class UiText(
                 else -> "相容引擎無法寫出這個影片容器"
             }
             "Compatibility engine is not connected for images" -> failed
+            "Compatibility engine is not connected for subtitles" -> failed
+            "Compatibility engine needs subtitle support" -> when (this) {
+                englishText -> "Compatibility engine needs subtitle support"
+                simplifiedChineseText -> "当前兼容包不包含字幕组件"
+                else -> "目前相容包不包含字幕組件"
+            }
+            "Compatibility engine could not convert this subtitle" -> when (this) {
+                englishText -> "Compatibility engine could not convert this subtitle"
+                simplifiedChineseText -> "兼容引擎无法转换这个字幕"
+                else -> "相容引擎無法轉換這個字幕"
+            }
+            "Subtitle conversion failed" -> when (this) {
+                englishText -> "Subtitle conversion failed"
+                simplifiedChineseText -> "字幕转换失败"
+                else -> "字幕轉換失敗"
+            }
+            "Unsupported subtitle format" -> when (this) {
+                englishText -> "Unsupported subtitle format"
+                simplifiedChineseText -> "不支持这个字幕格式"
+                else -> "不支援這個字幕格式"
+            }
+            "Subtitle file is empty" -> when (this) {
+                englishText -> "Subtitle file is empty"
+                simplifiedChineseText -> "字幕文件为空"
+                else -> "字幕檔案為空"
+            }
+            "Subtitle file is too large" -> when (this) {
+                englishText -> "Subtitle file is too large"
+                simplifiedChineseText -> "字幕文件过大"
+                else -> "字幕檔案過大"
+            }
+            "Could not parse subtitle file (SRT)" -> when (this) {
+                englishText -> "Could not parse subtitle file (SRT)"
+                simplifiedChineseText -> "无法解析 SRT 字幕文件"
+                else -> "無法解析 SRT 字幕檔案"
+            }
+            "Could not parse lyrics file (LRC)" -> when (this) {
+                englishText -> "Could not parse lyrics file (LRC)"
+                simplifiedChineseText -> "无法解析 LRC 歌词文件"
+                else -> "無法解析 LRC 歌詞檔案"
+            }
             "Image conversion failed" -> when (this) {
                 englishText -> "Image conversion failed"
                 simplifiedChineseText -> "图片转换失败"
@@ -8928,6 +8998,7 @@ private data class UiText(
             FileCategory.Pdf -> optionValue("PDF")
             FileCategory.Document -> optionValue("Document")
             FileCategory.Font -> optionValue("Font")
+            FileCategory.Subtitle -> optionValue("Subtitle")
         }
     }
 
@@ -9575,6 +9646,25 @@ private data class UiText(
                 englishText -> "Uncompressed"
                 simplifiedChineseText -> "未压缩"
                 else -> "未壓縮"
+            }
+            "Subtitle" -> when (this) {
+                englishText -> "Subtitle"
+                simplifiedChineseText -> "字幕/歌词"
+                else -> "字幕/歌詞"
+            }
+            "SRT" -> "SRT"
+            "VTT" -> "VTT"
+            "LRC" -> "LRC"
+            "ASS" -> "ASS"
+            "Lyrics" -> when (this) {
+                englishText -> "Lyrics"
+                simplifiedChineseText -> "歌词"
+                else -> "歌詞"
+            }
+            "Styled subtitle" -> when (this) {
+                englishText -> "Styled subtitle"
+                simplifiedChineseText -> "带样式字幕"
+                else -> "帶樣式字幕"
             }
             else -> value
         }

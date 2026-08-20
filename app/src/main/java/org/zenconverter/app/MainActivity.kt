@@ -946,7 +946,7 @@ class MainActivity : ComponentActivity() {
         val pdfCount = prepared.count { it.detectedCategory == FileCategory.Pdf }
         val nextFiles = prepared.mapNotNull { candidate ->
             val category = candidate.detectedCategory ?: return@mapNotNull null
-            val targets = externalTargetsFor(category, pdfCount)
+            val targets = externalTargetsFor(category, pdfCount, candidate.extension)
             if (targets.isEmpty()) return@mapNotNull null
             val defaultTarget = defaultExternalTargetFor(
                 category = category,
@@ -1071,6 +1071,8 @@ class MainActivity : ComponentActivity() {
                 extension in OFFICE_INPUT_EXTENSIONS -> FileCategory.Document
             normalizedMimeType in FONT_MIME_TYPES ||
                 extension in FONT_INPUT_EXTENSIONS -> FileCategory.Font
+            normalizedMimeType in SUBTITLE_MIME_TYPES ||
+                extension in SUBTITLE_INPUT_EXTENSIONS -> FileCategory.Subtitle
             normalizedMimeType in IMAGE_MIME_TYPES ||
                 extension in IMAGE_INPUT_EXTENSIONS -> FileCategory.Image
             else -> null
@@ -1079,7 +1081,8 @@ class MainActivity : ComponentActivity() {
 
     private fun externalTargetsFor(
         category: FileCategory?,
-        pdfCount: Int
+        pdfCount: Int,
+        extension: String = ""
     ): List<ExternalImportTarget> {
         return when (category) {
             FileCategory.Video -> FileCategory.Video.formats.map {
@@ -1102,6 +1105,9 @@ class MainActivity : ComponentActivity() {
             FileCategory.Font -> FileCategory.Font.formats.map {
                 ExternalImportTarget(FileCategory.Font, it)
             }
+            FileCategory.Subtitle -> FileCategory.Subtitle.formats
+                .filter { !it.extension.equals(extension, ignoreCase = true) }
+                .map { ExternalImportTarget(FileCategory.Subtitle, it) }
             null -> emptyList()
         }
     }
@@ -1118,6 +1124,7 @@ class MainActivity : ComponentActivity() {
             FileCategory.Pdf -> "PNG"
             FileCategory.Document -> "PDF"
             FileCategory.Font -> if (extension == "woff" || extension == "woff2") "TTF/OTF" else "WOFF2"
+            FileCategory.Subtitle -> "SRT"
             null -> null
         }
         return targets.firstOrNull { target ->
@@ -1823,7 +1830,8 @@ private fun QueuedFile.trimRangeForCurrentTarget(): MediaTrimRange {
         FileCategory.Image,
         FileCategory.Pdf,
         FileCategory.Document,
-        FileCategory.Font -> MediaTrimRange()
+        FileCategory.Font,
+        FileCategory.Subtitle -> MediaTrimRange()
     }
 }
 
@@ -2009,6 +2017,10 @@ private fun QueuedFile.hasConnectedNativeTarget(): Boolean {
         FileCategory.Font -> targetFormat.equals("WOFF2", ignoreCase = true) ||
             targetFormat.equals("WOFF", ignoreCase = true) ||
             targetFormat.equals("TTF/OTF", ignoreCase = true)
+        FileCategory.Subtitle -> targetFormat.equals("SRT", ignoreCase = true) ||
+            targetFormat.equals("VTT", ignoreCase = true) ||
+            targetFormat.equals("ASS", ignoreCase = true) ||
+            targetFormat.equals("LRC", ignoreCase = true)
     }
 }
 
@@ -2084,6 +2096,7 @@ private fun FileCategory.toConversionCategory(): ConversionMediaCategory {
         FileCategory.Pdf -> ConversionMediaCategory.Pdf
         FileCategory.Document -> ConversionMediaCategory.Document
         FileCategory.Font -> ConversionMediaCategory.Font
+        FileCategory.Subtitle -> ConversionMediaCategory.Subtitle
     }
 }
 
@@ -2180,6 +2193,13 @@ private val FONT_MIME_TYPES = setOf(
     "application/font-woff",
     "application/font-woff2",
     "application/x-font-woff"
+)
+private val SUBTITLE_INPUT_EXTENSIONS = setOf("srt", "vtt", "lrc", "ass")
+private val SUBTITLE_MIME_TYPES = setOf(
+    "application/x-subrip",
+    "text/vtt",
+    "text/x-ssa",
+    "text/x-ass"
 )
 private const val MIME_TYPE_ANY = "*/*"
 private const val MIME_TYPE_PDF = "application/pdf"

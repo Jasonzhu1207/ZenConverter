@@ -39,6 +39,34 @@ as supported until it has a tested path, sample files, and failure behavior.
 | TTF / OTF | WOFF | Beta | Pure Kotlin zlib | Compresses a TrueType or OpenType CFF font to WOFF 1.0 using `java.util.zip` in pure Kotlin, with no native dependency. Whole-file byte-level container conversion; WOFF metadata and private blocks are not preserved. |
 | WOFF2 | TTF / OTF | Beta | woff2 native | Decompresses WOFF2 back to its original SFNT flavor through `libzen_woff2.so`. The output extension (`.ttf` vs `.otf`) is chosen from the font flavor. arm64-v8a only. |
 | WOFF | TTF / OTF | Beta | Pure Kotlin zlib | Decompresses WOFF 1.0 back to SFNT in pure Kotlin. The output extension (`.ttf` vs `.otf`) is chosen from the font flavor. |
+| SRT | VTT / ASS | Beta | FFmpeg compatible | Text subtitle conversion through FFmpeg's `subrip`, `webvtt`, and `ass` demuxers/muxers. Timing is preserved best-effort. SRT carries no styling, so VTT/ASS outputs use FFmpeg defaults. Same-format conversion is not offered. |
+| SRT | LRC | Beta | Pure Kotlin | SRT cues are parsed in pure Kotlin and written as LRC timestamp lines. Multi-line SRT text is collapsed to one line; end times are discarded. Same-format conversion is not offered. |
+| VTT | SRT / ASS / LRC | Beta | FFmpeg compatible / Pure Kotlin | SRT/ASS use FFmpeg directly; LRC converts through a temporary SRT file in pure Kotlin. WebVTT cue settings and inline markup are dropped. Same-format conversion is not offered. |
+| LRC | SRT / VTT / ASS | Beta | Pure Kotlin / FFmpeg compatible | LRC is parsed in pure Kotlin (multi-timestamp lines and `[offset:]` supported) and written as SRT, then VTT/ASS go through FFmpeg. Same-format conversion is not offered. |
+| ASS | SRT / VTT / LRC | Beta | FFmpeg compatible / Pure Kotlin | SRT/VTT use FFmpeg directly; LRC converts through a temporary SRT file in pure Kotlin. ASS styling, positioning, and formatting are dropped. Same-format conversion is not offered. |
+
+## Subtitle / Lyrics Limits
+
+- The subtitle lane supports exactly four formats: SRT, VTT, LRC, and ASS.
+  TXT is intentionally not an input or an output. Same-format conversion is not
+  offered.
+- SRT/VTT/ASS directions use the FFmpeg compatibility path. The checked-in
+  FFmpegKitNext build is probed at runtime for the `srt`, `webvtt`, and `ass`
+  demuxers/muxers and `subrip`/`webvtt`/`ass` codecs; a missing feature fails
+  with a clear message.
+- LRC is not supported by FFmpeg, so it is parsed and written in pure Kotlin,
+  with SRT as the interchange format. Parsing supports `[mm:ss.xx]`,
+  `[mm:ss.xxx]`, and `[mm:ss]` timestamps, multiple timestamps per line, the
+  `[ti:] [ar:] [al:] [by:]` metadata tags (title is kept), and applies a signed
+  `[offset:...]` to all timestamps. Timestamp-less lines are ignored.
+- Subtitle/lyrics files are read whole into memory with an 8 MiB input cap.
+  Text is decoded as UTF-8 (with BOM stripped) and falls back to GB18030 when
+  invalid UTF-8 is detected, covering common GBK-encoded Chinese lyrics.
+- Styling and formatting are best-effort across formats: ASS styles/positioning,
+  WebVTT cue settings/inline markup, and any rich formatting are dropped when
+  converting to SRT or LRC. Timing precision is limited to what each format
+  expresses (LRC has no end time; SRT output synthesizes end times from the next
+  cue start or a 2-second default for the final cue).
 
 ## Current Font Limits
 
