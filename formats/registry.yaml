@@ -227,18 +227,21 @@ groups:
         status: stable
         note: "Extracts the first audio track and encodes WMA v2 through FFmpeg compatibility mode. Advanced audio filters apply where selected."
   image:
-    # Raster image outputs (jpg/jfif/png/webp) also expose an optional bilinear
-    # super-resolution option (2x/3x/4x) through Android createScaledBitmap. It is
-    # an algorithmic upscale, not AI or lossless enhancement; while active it
-    # forces original quality and hides GIF frame splitting. Its output pixel
-    # budget scales with device RAM (32 MP per GiB, 64 MP minimum, 512 MP
-    # maximum). PDF and ICO targets do not expose it.
+    # Raster image outputs (jpg/jfif/png/webp) also expose an optional
+    # super-resolution option: bilinear 2x/3x/4x through Android
+    # createScaledBitmap, and Real-ESRGAN 4x (AI) through ONNX Runtime. The AI
+    # model is downloaded at runtime from an R2 direct link and SHA-256
+    # verified; it is not bundled. While a scale is active it forces original
+    # quality and hides GIF frame splitting. Output pixel budget scales with
+    # device RAM (32 MP per GiB, 64 MP minimum, 512 MP maximum); AI inference
+    # is tiled and slower, and does not preserve transparency. PDF and ICO
+    # targets do not expose it.
     verified:
       - from: jpg/jpeg/jfif/jpe
         to: jpg/jfif
         engine: native-bitmap
         status: stable
-        note: "JPEG-family static image decode/encode through Android Bitmap APIs. JFIF output is JPEG-encoded pixels with a .jfif extension; metadata is not preserved. Optional bilinear super-resolution (2x/3x/4x) upscales before encoding."
+        note: "JPEG-family static image decode/encode through Android Bitmap APIs. JFIF output is JPEG-encoded pixels with a .jfif extension; metadata is not preserved. Optional super-resolution (bilinear 2x/3x/4x or Real-ESRGAN 4x AI) upscales before encoding."
       - from: jpg/jpeg/jfif/jpe
         to: png
         engine: native-bitmap

@@ -52,6 +52,8 @@ import org.zenconverter.app.metadata.MetadataPrivacyManager
 import org.zenconverter.app.metadata.MetadataStatusMessage
 import org.zenconverter.app.metadata.MetadataTargetKind
 import org.zenconverter.app.metadata.MetadataToolState
+import org.zenconverter.app.model.EsrganModelManager
+import org.zenconverter.app.model.EsrganModelUiState
 import org.zenconverter.app.settings.AppPreferences
 import org.zenconverter.app.settings.SavedOutputDirectory
 import org.zenconverter.app.ui.ExternalImportTarget
@@ -68,6 +70,7 @@ import org.zenconverter.app.ui.TaskProgress
 import org.zenconverter.app.ui.TaskProgressStatus
 import org.zenconverter.app.ui.TargetFormat
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.IOException
@@ -83,6 +86,8 @@ class MainActivity : ComponentActivity() {
     private val pdfPasswordPrompt = mutableStateOf<PdfPasswordPrompt?>(null)
     private val pdfOutputPasswordPrompt = mutableStateOf<PdfOutputPasswordPrompt?>(null)
     private val metadataToolState = mutableStateOf<MetadataToolState>(MetadataToolState.Empty)
+    private val esrganModelState = mutableStateOf<EsrganModelUiState>(EsrganModelUiState.NotDownloaded)
+    private var esrganDownloadJob: Job? = null
     private val pendingQueuedPdfSelections = ArrayDeque<PendingQueuedPdfSelection>()
     private var pendingPdfOutputPasswordQueuedFileIds: List<String> = emptyList()
     private var pendingMetadataTargetKind: MetadataTargetKind? = null
@@ -267,6 +272,7 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         restoreOutputLocationPreference()
+        refreshEsrganModelState()
         setContent {
             ZenConverterApp(
                 queuedFiles = queuedFiles,
@@ -336,6 +342,7 @@ class MainActivity : ComponentActivity() {
                 conversionSummary = ConversionTaskStore.summaryMessage.value,
                 isConversionRunning = ConversionTaskStore.isRunning.value,
                 metadataToolState = metadataToolState.value,
+                esrganModelState = esrganModelState.value,
                 pdfPasswordPrompt = pdfPasswordPrompt.value,
                 pdfOutputPasswordPrompt = pdfOutputPasswordPrompt.value,
                 onPickMetadataImage = {
@@ -349,6 +356,12 @@ class MainActivity : ComponentActivity() {
                 },
                 onRestoreMetadata = { backupId ->
                     restoreSelectedMetadata(backupId)
+                },
+                onDownloadEsrganModel = {
+                    downloadEsrganModel()
+                },
+                onCancelEsrganModelDownload = {
+                    esrganDownloadJob?.cancel()
                 },
                 onSubmitPdfPassword = { password ->
                     val queuedPrompt = activeQueuedPdfPasswordSelection
@@ -419,6 +432,34 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleExternalIntent(intent)
+    }
+
+    private fun refreshEsrganModelState() {
+        esrganModelState.value = if (EsrganModelManager.isDownloaded(this)) {
+            EsrganModelUiState.Downloaded
+        } else {
+            EsrganModelUiState.NotDownloaded
+        }
+    }
+
+    private fun downloadEsrganModel() {
+        esrganDownloadJob?.cancel()
+        esrganDownloadJob = lifecycleScope.launch {
+            esrganModelState.value = EsrganModelUiState.Downloading(0f)
+            try {
+                EsrganModelManager.download(this@MainActivity) { progress ->
+                    esrganModelState.value = EsrganModelUiState.Downloading(progress)
+                }
+                esrganModelState.value = EsrganModelUiState.Downloaded
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                refreshEsrganModelState()
+                throw cancelled
+            } catch (throwable: Throwable) {
+                esrganModelState.value = EsrganModelUiState.Failed(
+                    throwable.message ?: "Model download failed"
+                )
+            }
+        }
     }
 
     private fun requestNotificationPermissionThenStart() {

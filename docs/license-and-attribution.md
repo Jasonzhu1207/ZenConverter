@@ -214,6 +214,37 @@ Transitive dependencies required when consuming the local AAR through
 - Release guardrail: record the exact upstream commit and NDK/CMake build command
   before promoting this Beta path to Stable.
 
+## Current ONNX Runtime Dependency
+
+- Dependency: `com.microsoft.onnxruntime:onnxruntime-android:1.29.0`, consumed
+  from Maven Central.
+- Package type: Android AAR, MIT License.
+- Upstream source: `https://github.com/microsoft/onnxruntime`.
+- Reason platform APIs are not enough: Android has no platform API for
+  deep-learning image super-resolution. ONNX Runtime runs the Real-ESRGAN model
+  locally on CPU without sending pixels off-device.
+- Android ABIs packaged in the app: `arm64-v8a` only, via Gradle `abiFilters`.
+- Play compliance: the `.onnx` model is loaded through the normal
+  `OrtEnvironment`/`OrtSession` API as a data file. The app never loads it as
+  executable code (no ClassLoader, no System.load, no reflection-based dynamic
+  loading). ONNX Runtime's own `libonnxruntime.so` ships inside the APK as a
+  normal library dependency.
+
+## Real-ESRGAN Model (Runtime Download)
+
+- Model: `RealESRGAN_x4plus` (RRDBNet, fp32 ONNX, 4× upscale).
+- Source: `https://github.com/xinntao/Real-ESRGAN`, BSD-3-Clause.
+- Export script: `scripts/onnx_export/export_realesrgan.py` (opset 14, dynamic
+  H/W, input `input`, output `output`, NCHW RGB in `[0,1]`).
+- Distribution: the model is not bundled in the repository or APK. It is
+  downloaded at runtime from the project's R2 direct link and verified against a
+  hardcoded SHA-256 before use.
+- Download URL: `https://assets.xlab.my/models/RealESRGAN_x4plus.onnx`
+- Size: `67,051,973` bytes (displayed as `63.9 MB`).
+- SHA-256: `39d5218cfcef542d667821a0d2072cfa51bfd857ab0e4ae7dc067c399a88d323`.
+- The model list is hardcoded in the app; adding or changing a model is a code
+  change that ships with an app update, not a remote hot-updated config.
+
 ## License Guardrail
 
 ZenConverter's own source is AGPL-licensed. Do not introduce dependencies or

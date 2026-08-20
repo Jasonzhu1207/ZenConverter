@@ -170,6 +170,7 @@ dependencies {
         )
     )
     implementation(files(ffmpegKitLocalAar))
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.29.0")
     if (smartExceptionCommonLocalJar.isFile && smartExceptionJavaLocalJar.isFile) {
         implementation(files(smartExceptionCommonLocalJar, smartExceptionJavaLocalJar))
     } else {

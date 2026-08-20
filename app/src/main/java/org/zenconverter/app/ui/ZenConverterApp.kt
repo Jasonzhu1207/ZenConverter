@@ -75,10 +75,12 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Favorite
@@ -86,6 +88,7 @@ import androidx.compose.material.icons.rounded.FontDownload
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Palette
@@ -196,6 +199,8 @@ import org.zenconverter.app.metadata.MetadataMessageKey
 import org.zenconverter.app.metadata.MetadataStatusMessage
 import org.zenconverter.app.metadata.MetadataTargetKind
 import org.zenconverter.app.metadata.MetadataToolState
+import org.zenconverter.app.model.EsrganModelManager
+import org.zenconverter.app.model.EsrganModelUiState
 import org.zenconverter.app.settings.AppPreferences
 import org.zenconverter.app.updates.ApkInstaller
 import org.zenconverter.app.updates.ApkOpenResult
@@ -679,14 +684,16 @@ private val IMAGE_QUALITY_OPTIONS = listOf(
     IMAGE_QUALITY_SMALL
 )
 private const val IMAGE_SUPER_RESOLUTION_OFF = "Super resolution off"
-private const val IMAGE_SUPER_RESOLUTION_2X = "2×"
-private const val IMAGE_SUPER_RESOLUTION_3X = "3×"
-private const val IMAGE_SUPER_RESOLUTION_4X = "4×"
+private const val IMAGE_SUPER_RESOLUTION_2X = "Bilinear 2×"
+private const val IMAGE_SUPER_RESOLUTION_3X = "Bilinear 3×"
+private const val IMAGE_SUPER_RESOLUTION_4X = "Bilinear 4×"
+private const val IMAGE_SUPER_RESOLUTION_AI = "Real-ESRGAN 4× (AI)"
 private val IMAGE_SUPER_RESOLUTION_OPTIONS = listOf(
     IMAGE_SUPER_RESOLUTION_OFF,
     IMAGE_SUPER_RESOLUTION_2X,
     IMAGE_SUPER_RESOLUTION_3X,
-    IMAGE_SUPER_RESOLUTION_4X
+    IMAGE_SUPER_RESOLUTION_4X,
+    IMAGE_SUPER_RESOLUTION_AI
 )
 
 private const val PDF_PAGE_MODE_A4_FIT = "A4 fit"
@@ -730,6 +737,7 @@ fun ZenConverterApp(
     conversionSummary: String?,
     isConversionRunning: Boolean,
     metadataToolState: MetadataToolState,
+    esrganModelState: EsrganModelUiState,
     onOutputLocationModeChange: (OutputLocationMode) -> Unit,
     onPickFiles: () -> Unit,
     onPickAlbumImages: () -> Unit,
@@ -749,6 +757,8 @@ fun ZenConverterApp(
     onPickMetadataVideo: () -> Unit,
     onCleanMetadata: () -> Unit,
     onRestoreMetadata: (String) -> Unit,
+    onDownloadEsrganModel: () -> Unit,
+    onCancelEsrganModelDownload: () -> Unit,
     pdfPasswordPrompt: PdfPasswordPrompt?,
     pdfOutputPasswordPrompt: PdfOutputPasswordPrompt?,
     onSubmitPdfPassword: (String) -> Unit,
@@ -794,6 +804,7 @@ fun ZenConverterApp(
                 conversionSummary = conversionSummary,
                 isConversionRunning = isConversionRunning,
                 metadataToolState = metadataToolState,
+                esrganModelState = esrganModelState,
                 onAccentSelected = {
                     accent = it
                     AppPreferences.setAccentColor(context, it.name)
@@ -821,6 +832,8 @@ fun ZenConverterApp(
                 onPickMetadataVideo = onPickMetadataVideo,
                 onCleanMetadata = onCleanMetadata,
                 onRestoreMetadata = onRestoreMetadata,
+                onDownloadEsrganModel = onDownloadEsrganModel,
+                onCancelEsrganModelDownload = onCancelEsrganModelDownload,
                 onStartConversion = onStartConversion,
                 onCancelConversion = onCancelConversion
             )
@@ -858,6 +871,7 @@ private fun ZenConverterContent(
     conversionSummary: String?,
     isConversionRunning: Boolean,
     metadataToolState: MetadataToolState,
+    esrganModelState: EsrganModelUiState,
     onAccentSelected: (AccentColorOption) -> Unit,
     onLanguageSelected: (LanguageOption) -> Unit,
     onOutputLocationModeChange: (OutputLocationMode) -> Unit,
@@ -879,6 +893,8 @@ private fun ZenConverterContent(
     onPickMetadataVideo: () -> Unit,
     onCleanMetadata: () -> Unit,
     onRestoreMetadata: (String) -> Unit,
+    onDownloadEsrganModel: () -> Unit,
+    onCancelEsrganModelDownload: () -> Unit,
     onStartConversion: () -> Unit,
     onCancelConversion: () -> Unit
 ) {
@@ -896,6 +912,7 @@ private fun ZenConverterContent(
     val taskProgressById = conversionTasks.associateBy { it.fileId }
     val queueIds = queuedFiles.map { it.id }
     val groupedFileIds = pdfMergeGroups.flatMap { it.memberFileIds }.toSet()
+    val esrganModelAvailable = esrganModelState is EsrganModelUiState.Downloaded
 
     LaunchedEffect(queueIds) {
         // 默认收起；只清理已不存在的展开项，不在添加文件时自动展开。
@@ -1044,10 +1061,13 @@ private fun ZenConverterContent(
                                                 selectedLanguage = languageOption,
                                                 outputLocationMode = outputLocationMode,
                                                 outputDirectory = outputDirectory,
+                                                esrganModelState = esrganModelState,
                                                 onAccentSelected = onAccentSelected,
                                                 onLanguageSelected = onLanguageSelected,
                                                 onOutputLocationModeChange = onOutputLocationModeChange,
-                                                onPickOutputDirectory = onPickOutputDirectory
+                                                onPickOutputDirectory = onPickOutputDirectory,
+                                                onDownloadEsrganModel = onDownloadEsrganModel,
+                                                onCancelEsrganModelDownload = onCancelEsrganModelDownload
                                             )
                                             HeaderPanel.About -> AboutPanel(
                                                 texts = texts,
@@ -1094,6 +1114,7 @@ private fun ZenConverterContent(
                                 texts = texts,
                                 files = queuedFiles,
                                 supportedVideoMimeTypes = supportedVideoMimeTypes,
+                                esrganModelAvailable = esrganModelAvailable,
                                 openMenuId = openMenuId,
                                 onOpenMenuChange = { openMenuId = it },
                                 onUpdateFiles = onUpdateQueuedFiles
@@ -1164,6 +1185,7 @@ private fun ZenConverterContent(
                                 progress = taskProgressById[file.id],
                                 canEdit = !isConversionRunning,
                                 supportedVideoMimeTypes = supportedVideoMimeTypes,
+                                esrganModelAvailable = esrganModelAvailable,
                                 openMenuId = openMenuId,
                                 optionsExpanded = expandedFileId == file.id,
                                 groupedInPdfMerge = file.id in groupedFileIds,
@@ -1905,10 +1927,13 @@ private fun SettingsPanel(
     selectedLanguage: LanguageOption,
     outputLocationMode: OutputLocationMode,
     outputDirectory: OutputDirectory?,
+    esrganModelState: EsrganModelUiState,
     onAccentSelected: (AccentColorOption) -> Unit,
     onLanguageSelected: (LanguageOption) -> Unit,
     onOutputLocationModeChange: (OutputLocationMode) -> Unit,
-    onPickOutputDirectory: () -> Unit
+    onPickOutputDirectory: () -> Unit,
+    onDownloadEsrganModel: () -> Unit,
+    onCancelEsrganModelDownload: () -> Unit
 ) {
     QuietPanel {
         SectionTitle(
@@ -1969,6 +1994,160 @@ private fun SettingsPanel(
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                     ) {
                         Text(texts.languageLabel(option))
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+        SectionTitle(
+            icon = Icons.Rounded.Download,
+            title = texts.modelDownload
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        EsrganModelDownloadSection(
+            texts = texts,
+            state = esrganModelState,
+            onDownload = onDownloadEsrganModel,
+            onCancel = onCancelEsrganModelDownload
+        )
+    }
+}
+
+@Composable
+private fun EsrganModelDownloadSection(
+    texts: UiText,
+    state: EsrganModelUiState,
+    onDownload: () -> Unit,
+    onCancel: () -> Unit
+) {
+    val context = LocalContext.current
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = Color(0xFFFAFAFA),
+        border = BorderStroke(1.dp, Color(0xFFE8E8E8))
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = EsrganModelManager.MODEL_NAME,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = texts.modelPurpose,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = EsrganModelManager.MODEL_SIZE_DISPLAY,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "${texts.modelSource} Real-ESRGAN",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = texts.openLink,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable {
+                        openExternalLink(context, EsrganModelManager.MODEL_SOURCE_URL, texts.linkUnavailable)
+                    }
+                )
+            }
+
+            when (state) {
+                EsrganModelUiState.NotDownloaded -> {
+                    Button(
+                        onClick = onDownload,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(texts.modelDownloadAction)
+                    }
+                }
+                is EsrganModelUiState.Downloading -> {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        LinearProgressIndicator(
+                            progress = state.progress,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${(state.progress * 100).toInt()}%",
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                            TextButton(onClick = onCancel) {
+                                Text(texts.cancelDownload)
+                            }
+                        }
+                        Text(
+                            text = texts.modelDownloadNote,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                EsrganModelUiState.Downloaded -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            AppIcon(
+                                icon = Icons.Rounded.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = texts.modelDownloaded,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        TextButton(onClick = onDownload) {
+                            Text(texts.modelRedownload)
+                        }
+                    }
+                }
+                is EsrganModelUiState.Failed -> {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = state.message?.let { "${texts.downloadFailed}: $it" }
+                                ?: texts.downloadFailed,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Button(
+                            onClick = onDownload,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(texts.modelDownloadAction)
+                        }
                     }
                 }
             }
@@ -3767,6 +3946,7 @@ private fun BatchSettingsPanel(
     texts: UiText,
     files: List<QueuedFile>,
     supportedVideoMimeTypes: Set<String>,
+    esrganModelAvailable: Boolean,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onUpdateFiles: (List<QueuedFile>) -> Unit
@@ -3887,6 +4067,7 @@ private fun BatchSettingsPanel(
                     category = activeCategory,
                     target = commonTarget,
                     supportedVideoMimeTypes = supportedVideoMimeTypes,
+                    esrganModelAvailable = esrganModelAvailable,
                     openMenuId = openMenuId,
                     onOpenMenuChange = onOpenMenuChange,
                     onUpdateFiles = onUpdateFiles
@@ -3934,6 +4115,7 @@ private fun BatchTargetOptions(
     category: FileCategory,
     target: ExternalImportTarget,
     supportedVideoMimeTypes: Set<String>,
+    esrganModelAvailable: Boolean,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onUpdateFiles: (List<QueuedFile>) -> Unit
@@ -3969,6 +4151,7 @@ private fun BatchTargetOptions(
                 texts = texts,
                 files = files,
                 target = target.targetFormat,
+                esrganModelAvailable = esrganModelAvailable,
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
                 onUpdateFiles = onUpdateFiles
@@ -4319,6 +4502,7 @@ private fun BatchImageTargetOptions(
     texts: UiText,
     files: List<QueuedFile>,
     target: TargetFormat,
+    esrganModelAvailable: Boolean,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onUpdateFiles: (List<QueuedFile>) -> Unit
@@ -4332,6 +4516,7 @@ private fun BatchImageTargetOptions(
         superResolution = commonBatchLabel(files) {
             superResolutionLabelFor(it.imageOptions.superResolution)
         },
+        esrganModelAvailable = esrganModelAvailable,
         openMenuId = openMenuId,
         onOpenMenuChange = onOpenMenuChange,
         onQualityChange = { value ->
@@ -5714,6 +5899,7 @@ private fun ImageOptions(
     quality: String,
     pdfPageMode: String,
     superResolution: String,
+    esrganModelAvailable: Boolean,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onQualityChange: (String) -> Unit,
@@ -5751,19 +5937,34 @@ private fun ImageOptions(
 
     OptionGrid {
         OptionDropdown(
-            "${menuPrefix}image-super-resolution",
-            texts.superResolution,
-            superResolution,
-            IMAGE_SUPER_RESOLUTION_OPTIONS,
-            texts,
-            openMenuId,
-            onOpenMenuChange,
-            onSuperResolutionChange
+            menuId = "${menuPrefix}image-super-resolution",
+            label = texts.superResolution,
+            selected = superResolution,
+            options = IMAGE_SUPER_RESOLUTION_OPTIONS,
+            texts = texts,
+            openMenuId = openMenuId,
+            onOpenMenuChange = onOpenMenuChange,
+            disabledOptions = if (esrganModelAvailable) emptySet() else setOf(IMAGE_SUPER_RESOLUTION_AI),
+            onSelected = onSuperResolutionChange
         )
+
+        if (!esrganModelAvailable) {
+            Text(
+                text = texts.aiUpscaleHint(),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
 
         if (superResolutionActive) {
             Text(
-                text = texts.superResolutionSummary(texts.optionValue(superResolution)),
+                text = if (superResolution == IMAGE_SUPER_RESOLUTION_AI) {
+                    texts.aiSuperResolutionSummary()
+                } else {
+                    texts.superResolutionSummary()
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary,
                 maxLines = 2,
@@ -5974,6 +6175,7 @@ private fun FileRow(
     progress: TaskProgress?,
     canEdit: Boolean,
     supportedVideoMimeTypes: Set<String>,
+    esrganModelAvailable: Boolean,
     openMenuId: String?,
     optionsExpanded: Boolean,
     groupedInPdfMerge: Boolean,
@@ -6105,6 +6307,7 @@ private fun FileRow(
                     file = file,
                     selectedTarget = selectedTarget,
                     supportedVideoMimeTypes = supportedVideoMimeTypes,
+                    esrganModelAvailable = esrganModelAvailable,
                     videoAdvancedExpanded = videoAdvancedExpanded,
                     audioAdvancedExpanded = audioAdvancedExpanded,
                     trimInputMode = trimInputMode,
@@ -6191,6 +6394,7 @@ private fun QueuedFileOptionsPanel(
     file: QueuedFile,
     selectedTarget: ExternalImportTarget,
     supportedVideoMimeTypes: Set<String>,
+    esrganModelAvailable: Boolean,
     videoAdvancedExpanded: Boolean,
     audioAdvancedExpanded: Boolean,
     trimInputMode: TrimInputMode,
@@ -6425,6 +6629,7 @@ private fun QueuedFileOptionsPanel(
                     quality = imageQualityLabelFor(file.imageOptions, selectedTarget.targetFormat),
                     pdfPageMode = pdfPageModeLabelFor(file.pdfOptions.imagePageMode),
                     superResolution = superResolutionLabelFor(file.imageOptions.superResolution),
+                    esrganModelAvailable = esrganModelAvailable,
                     openMenuId = openMenuId,
                     onOpenMenuChange = onOpenMenuChange,
                     onQualityChange = { value ->
@@ -6527,6 +6732,31 @@ private fun OptionDropdown(
     onOpenMenuChange: (String?) -> Unit,
     onSelected: (String) -> Unit
 ) {
+    OptionDropdown(
+        menuId = menuId,
+        label = label,
+        selected = selected,
+        options = options,
+        texts = texts,
+        openMenuId = openMenuId,
+        onOpenMenuChange = onOpenMenuChange,
+        disabledOptions = emptySet(),
+        onSelected = onSelected
+    )
+}
+
+@Composable
+private fun OptionDropdown(
+    menuId: String,
+    label: String,
+    selected: String,
+    options: List<String>,
+    texts: UiText,
+    openMenuId: String?,
+    onOpenMenuChange: (String?) -> Unit,
+    disabledOptions: Set<String>,
+    onSelected: (String) -> Unit
+) {
     val expanded = openMenuId == menuId
 
     Column(horizontalAlignment = Alignment.End) {
@@ -6542,6 +6772,7 @@ private fun OptionDropdown(
                 DropdownOption(
                     text = texts.optionValue(option),
                     selected = option == selected,
+                    enabled = option !in disabledOptions,
                     onClick = {
                         onOpenMenuChange(null)
                         onSelected(option)
@@ -6653,7 +6884,8 @@ private fun InlineDropdownPanel(
 private fun DropdownOption(
     text: String,
     selected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    enabled: Boolean = true
 ) {
     Row(
         modifier = Modifier
@@ -6666,7 +6898,7 @@ private fun DropdownOption(
                     Color.Transparent
                 }
             )
-            .clickable { onClick() }
+            .clickable(enabled = enabled) { onClick() }
             .padding(horizontal = 12.dp, vertical = 11.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -6676,6 +6908,7 @@ private fun DropdownOption(
             style = MaterialTheme.typography.bodyMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            color = if (enabled) Color.Unspecified else Color(0xFFB5B5B5),
             modifier = Modifier.weight(1f)
         )
         if (selected) {
@@ -6684,6 +6917,13 @@ private fun DropdownOption(
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(17.dp)
+            )
+        } else if (!enabled) {
+            AppIcon(
+                icon = Icons.Rounded.Lock,
+                contentDescription = null,
+                tint = Color(0xFFB5B5B5),
+                modifier = Modifier.size(15.dp)
             )
         }
     }
@@ -7219,6 +7459,7 @@ private fun superResolutionLabelFor(mode: ImageSuperResolutionMode): String {
         ImageSuperResolutionMode.X2 -> IMAGE_SUPER_RESOLUTION_2X
         ImageSuperResolutionMode.X3 -> IMAGE_SUPER_RESOLUTION_3X
         ImageSuperResolutionMode.X4 -> IMAGE_SUPER_RESOLUTION_4X
+        ImageSuperResolutionMode.RealEsrgan4x -> IMAGE_SUPER_RESOLUTION_AI
     }
 }
 
@@ -7227,6 +7468,7 @@ private fun superResolutionModeFor(value: String): ImageSuperResolutionMode {
         IMAGE_SUPER_RESOLUTION_2X -> ImageSuperResolutionMode.X2
         IMAGE_SUPER_RESOLUTION_3X -> ImageSuperResolutionMode.X3
         IMAGE_SUPER_RESOLUTION_4X -> ImageSuperResolutionMode.X4
+        IMAGE_SUPER_RESOLUTION_AI -> ImageSuperResolutionMode.RealEsrgan4x
         else -> ImageSuperResolutionMode.Off
     }
 }
@@ -7609,6 +7851,13 @@ private data class UiText(
     val copy: String,
     val copied: String,
     val linkUnavailable: String,
+    val modelDownload: String,
+    val modelDownloadNote: String,
+    val modelPurpose: String,
+    val modelSource: String,
+    val modelDownloadAction: String,
+    val modelDownloaded: String,
+    val modelRedownload: String,
     val metadataSecurityTitle: String,
     val metadataSecurityNote: String,
     val metadataBackupNote: String,
@@ -7788,11 +8037,27 @@ private data class UiText(
         }
     }
 
-    fun superResolutionSummary(scaleLabel: String): String {
+    fun superResolutionSummary(): String {
         return when (this) {
-            englishText -> "Bilinear upscale $scaleLabel · Original quality"
-            simplifiedChineseText -> "双线性放大 $scaleLabel · 原图质量"
-            else -> "雙線性放大 $scaleLabel · 原圖品質"
+            englishText -> "Bilinear upscale · Original quality"
+            simplifiedChineseText -> "双线性放大 · 原图质量"
+            else -> "雙線性放大 · 原圖品質"
+        }
+    }
+
+    fun aiSuperResolutionSummary(): String {
+        return when (this) {
+            englishText -> "AI upscale 4× · Real-ESRGAN · Slower · Transparency not kept"
+            simplifiedChineseText -> "AI 放大 4× · Real-ESRGAN · 较慢 · 不保留透明"
+            else -> "AI 放大 4× · Real-ESRGAN · 較慢 · 不保留透明"
+        }
+    }
+
+    fun aiUpscaleHint(): String {
+        return when (this) {
+            englishText -> "Download the Real-ESRGAN model in Settings to use AI upscale"
+            simplifiedChineseText -> "请在设置中下载 Real-ESRGAN 模型后再使用"
+            else -> "請在設定中下載 Real-ESRGAN 模型後再使用"
         }
     }
 
@@ -9017,6 +9282,26 @@ private data class UiText(
                 simplifiedChineseText -> "关闭"
                 else -> "關閉"
             }
+            IMAGE_SUPER_RESOLUTION_2X -> when (this) {
+                englishText -> "2× Bilinear"
+                simplifiedChineseText -> "2× 双线性"
+                else -> "2× 雙線性"
+            }
+            IMAGE_SUPER_RESOLUTION_3X -> when (this) {
+                englishText -> "3× Bilinear"
+                simplifiedChineseText -> "3× 双线性"
+                else -> "3× 雙線性"
+            }
+            IMAGE_SUPER_RESOLUTION_4X -> when (this) {
+                englishText -> "4× Bilinear"
+                simplifiedChineseText -> "4× 双线性"
+                else -> "4× 雙線性"
+            }
+            IMAGE_SUPER_RESOLUTION_AI -> when (this) {
+                englishText -> "Real-ESRGAN 4× (AI)"
+                simplifiedChineseText -> "Real-ESRGAN 4×（AI）"
+                else -> "Real-ESRGAN 4×（AI）"
+            }
             "Auto bitrate" -> when (this) {
                 englishText -> "Auto (recommended)"
                 simplifiedChineseText -> "自动（推荐）"
@@ -9549,6 +9834,13 @@ private val englishText = UiText(
     copy = "Copy",
     copied = "Copied",
     linkUnavailable = "No app can open this link",
+    modelDownload = "Model download",
+    modelDownloadNote = "Keep the app in the foreground while downloading — avoid switching screens.",
+    modelPurpose = "Deep-learning image upscaler (4×)",
+    modelSource = "Source:",
+    modelDownloadAction = "Download",
+    modelDownloaded = "Downloaded",
+    modelRedownload = "Re-download",
     metadataSecurityTitle = "Metadata safety",
     metadataSecurityNote = "Inspect metadata locally. JPG/JPEG/JFIF can be cleaned in place without re-encoding.",
     metadataBackupNote = "Metadata backups stay in app data. Clearing app data or uninstalling may remove them.",
@@ -9684,6 +9976,13 @@ private val simplifiedChineseText = UiText(
     copy = "复制",
     copied = "已复制",
     linkUnavailable = "没有可打开此链接的应用",
+    modelDownload = "模型下载",
+    modelDownloadNote = "下载期间请保持应用在前台，不要切换页面。",
+    modelPurpose = "深度学习图片放大（4×）",
+    modelSource = "来源：",
+    modelDownloadAction = "下载",
+    modelDownloaded = "已下载",
+    modelRedownload = "重新下载",
     metadataSecurityTitle = "元数据安全",
     metadataSecurityNote = "本地查看元数据。JPG/JPEG/JFIF 可不重编码原地清理。",
     metadataBackupNote = "元数据备份保存在应用数据目录，清理应用数据或卸载后可能丢失。",
@@ -9819,6 +10118,13 @@ private val traditionalChineseText = UiText(
     copy = "複製",
     copied = "已複製",
     linkUnavailable = "沒有可開啟此連結的應用",
+    modelDownload = "模型下載",
+    modelDownloadNote = "下載期間請保持應用在前台，不要切換頁面。",
+    modelPurpose = "深度學習圖片放大（4×）",
+    modelSource = "來源：",
+    modelDownloadAction = "下載",
+    modelDownloaded = "已下載",
+    modelRedownload = "重新下載",
     metadataSecurityTitle = "元資料安全",
     metadataSecurityNote = "本地查看元資料。JPG/JPEG/JFIF 可不重新編碼原地清理。",
     metadataBackupNote = "元資料備份保存在應用資料目錄，清理應用資料或卸載後可能遺失。",

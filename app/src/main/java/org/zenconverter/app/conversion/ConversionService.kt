@@ -70,6 +70,8 @@ import org.zenconverter.app.font.Woff2Native
 import org.zenconverter.app.font.Woff2UnavailableException
 import org.zenconverter.app.font.Woff2UnsupportedAbiException
 import org.zenconverter.app.font.WoffCodec
+import org.zenconverter.app.model.EsrganModelManager
+import org.zenconverter.app.model.RealEsrganUpscaler
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -1997,10 +1999,46 @@ class ConversionService : Service() {
         }
 
         throwIfConversionCancelled()
+
+        if (mode == ImageSuperResolutionMode.RealEsrgan4x) {
+            return applyRealEsrganSuperResolution(bitmap)
+        }
+
         return try {
             Bitmap.createScaledBitmap(bitmap, targetWidth.toInt(), targetHeight.toInt(), true)
         } catch (oom: OutOfMemoryError) {
             error("Image engine could not allocate memory for super-resolution")
+        }
+    }
+
+    private fun applyRealEsrganSuperResolution(bitmap: Bitmap): Bitmap {
+        if (!EsrganModelManager.isDownloaded(this)) {
+            error("Image engine could not load the Real-ESRGAN model — download it in Settings")
+        }
+
+        val inferenceBitmap = if (bitmap.config == Bitmap.Config.ARGB_8888) {
+            bitmap
+        } else {
+            bitmap.copy(Bitmap.Config.ARGB_8888, false)
+        }
+
+        return try {
+            RealEsrganUpscaler.upscale(
+                source = inferenceBitmap,
+                modelPath = EsrganModelManager.modelFile(this).absolutePath,
+                onTileProgress = { progress ->
+                    updateImageProgress(0.55f + 0.35f * progress)
+                },
+                isCancelled = {
+                    ConversionTaskStore.isCancelled() || Thread.currentThread().isInterrupted
+                }
+            )
+        } catch (oom: OutOfMemoryError) {
+            error("Image engine could not allocate memory for super-resolution")
+        } finally {
+            if (inferenceBitmap !== bitmap) {
+                inferenceBitmap.recycle()
+            }
         }
     }
 

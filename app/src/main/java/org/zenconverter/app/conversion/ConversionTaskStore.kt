@@ -157,7 +157,8 @@ enum class ImageSuperResolutionMode(val scale: Int) {
     Off(1),
     X2(2),
     X3(3),
-    X4(4)
+    X4(4),
+    RealEsrgan4x(4)
 }
 
 data class ImageExportOptions(
