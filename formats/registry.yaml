@@ -230,8 +230,9 @@ groups:
     # Raster image outputs (jpg/jfif/png/webp) also expose an optional bilinear
     # super-resolution option (2x/3x/4x) through Android createScaledBitmap. It is
     # an algorithmic upscale, not AI or lossless enhancement; while active it
-    # forces original quality, hides GIF frame splitting, and is capped to a
-    # 64 MP output budget. PDF and ICO targets do not expose it.
+    # forces original quality and hides GIF frame splitting. Its output pixel
+    # budget scales with device RAM (32 MP per GiB, 64 MP minimum, 512 MP
+    # maximum). PDF and ICO targets do not expose it.
     verified:
       - from: jpg/jpeg/jfif/jpe
         to: jpg/jfif

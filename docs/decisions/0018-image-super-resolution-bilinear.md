@@ -32,10 +32,12 @@ Add an algorithmic super-resolution option to the image export path:
 - In the conversion service, upscale the decoded bitmap with
   `Bitmap.createScaledBitmap(bitmap, width * scale, height * scale, true)`
   immediately after decode and before the existing ICO/compress/PDF writers.
-- Guard memory safety: reject outputs whose pixel count exceeds
-  `SUPER_RESOLUTION_MAX_PIXELS` (64,000,000, matching the existing decode
-  budget) and translate `OutOfMemoryError` into a clear failure. Cancellation is
-  checked before the upscale.
+- Guard memory safety: reject outputs whose pixel count exceeds a per-device
+  budget derived from total RAM (`ActivityManager.MemoryInfo.totalMem`), scaled
+  at 32 MP per GiB, floored at 64 MP and capped at 512 MP. This is deliberately
+  looser than a fixed 64 MP budget so large photos can super-resolve on
+  6-16 GiB devices; `OutOfMemoryError` is still translated into a clear failure
+  as the final backstop. Cancellation is checked before the upscale.
 
 This is a bilinear algorithmic upscale, not a learning-based or lossless
 enhancement. It does not add new output formats or a new dependency.
@@ -46,9 +48,9 @@ enhancement. It does not add new output formats or a new dependency.
   learning model can replace `createScaledBitmap` inside it, and new
   `ImageSuperResolutionMode` values can express model-based modes without
   restructuring the UI or data model.
-- Upscaling large sources is bounded by the pixel cap, and sources larger than
-  the decode budget are first downsampled to at most 64 MP and then upscaled, so
-  very large inputs do not get a true full-resolution upscale.
+- Upscaling large sources is bounded by the per-device pixel cap, and sources
+  larger than the decode budget are first downsampled to at most 64 MP and then
+  upscaled, so very large inputs do not get a true full-resolution upscale.
 - The UI labels it "bilinear upscale" and "original quality", not "AI" or
   "lossless", to keep the honest-support promise.
 - No new dependency, license, or attribution changes are required.

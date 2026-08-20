@@ -1,5 +1,6 @@
 package org.zenconverter.app.conversion
 
+import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -1990,7 +1991,7 @@ class ConversionService : Service() {
         if (
             targetWidth > Int.MAX_VALUE ||
             targetHeight > Int.MAX_VALUE ||
-            targetWidth * targetHeight > SUPER_RESOLUTION_MAX_PIXELS
+            targetWidth * targetHeight > superResolutionMaxPixels()
         ) {
             error("Image engine could not super-resolve this image (output too large)")
         }
@@ -2001,6 +2002,19 @@ class ConversionService : Service() {
         } catch (oom: OutOfMemoryError) {
             error("Image engine could not allocate memory for super-resolution")
         }
+    }
+
+    private fun superResolutionMaxPixels(): Long {
+        val totalRamBytes = runCatching {
+            val activityManager = getSystemService(ActivityManager::class.java)
+            val memoryInfo = ActivityManager.MemoryInfo()
+            activityManager.getMemoryInfo(memoryInfo)
+            memoryInfo.totalMem
+        }.getOrDefault(0L)
+
+        val ramGiB = totalRamBytes / (1024L * 1024L * 1024L)
+        val budgetPixels = ramGiB * SUPER_RESOLUTION_PIXELS_PER_GIB
+        return budgetPixels.coerceIn(SUPER_RESOLUTION_MIN_PIXELS, SUPER_RESOLUTION_MAX_PIXELS)
     }
 
     private fun applyImageOrientationIfNeeded(
@@ -5028,7 +5042,9 @@ class ConversionService : Service() {
         private const val COPY_BUFFER_SIZE = 1024 * 1024
         private const val PROGRESS_BEFORE_SAVE = 0.98f
         private const val MAX_IMAGE_DECODE_PIXELS = 64_000_000L
-        private const val SUPER_RESOLUTION_MAX_PIXELS = 64_000_000L
+        private const val SUPER_RESOLUTION_MIN_PIXELS = 64_000_000L
+        private const val SUPER_RESOLUTION_MAX_PIXELS = 512_000_000L
+        private const val SUPER_RESOLUTION_PIXELS_PER_GIB = 32_000_000L
         private const val PDF_IMAGE_MAX_LONG_SIDE_PIXELS = 4096
         private const val PDF_IMAGE_MAX_PIXELS = 16_000_000L
         private const val PDF_A4_SHORT_EDGE_PT = 595
