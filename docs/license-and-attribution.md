@@ -237,6 +237,12 @@ Transitive dependencies required when consuming the local AAR through
   SIGSEGV on Android 16/17 (ONNX Runtime's CPU feature detection reads the
   now-restricted `ro.hardware.chipname` property and dereferences null) and keeps
   the app offline-first by never initializing the telemetry transport.
+- R8 keep rule (release builds): `libonnxruntime4j_jni.so` resolves
+  `ai.onnxruntime.*` classes and members by name at runtime. Release builds run
+  R8 full mode (shrink + obfuscate), which renames/removes them and aborts with
+  `JNI DETECTED ERROR ... java_class == null in call to GetMethodID`. The app
+  keeps the package with `-keep class ai.onnxruntime.** { *; }` in
+  `app/proguard-rules.pro` (see microsoft/onnxruntime#17847).
 
 ## Real-ESRGAN Model (Runtime Download)
 
