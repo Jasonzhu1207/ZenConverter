@@ -2170,7 +2170,8 @@ private fun HelpScreen(
                     GuideCardData(Icons.Rounded.Videocam, copy.videoTitle, copy.videoBody, copy.videoFormats),
                     GuideCardData(Icons.Rounded.AudioFile, copy.audioTitle, copy.audioBody, copy.audioFormats),
                     GuideCardData(Icons.Rounded.Image, copy.imageTitle, copy.imageBody, copy.imageFormats),
-                    GuideCardData(Icons.Rounded.Description, copy.documentTitle, copy.documentBody, copy.documentFormats)
+                    GuideCardData(Icons.Rounded.Description, copy.documentTitle, copy.documentBody, copy.documentFormats),
+                    GuideCardData(Icons.Rounded.FontDownload, copy.fontTitle, copy.fontBody, copy.fontFormats)
                 )
             ) { card ->
                 GuideCard(card)
@@ -7452,6 +7453,9 @@ private data class HelpGuideCopy(
     val documentTitle: String,
     val documentBody: String,
     val documentFormats: String,
+    val fontTitle: String,
+    val fontBody: String,
+    val fontFormats: String,
     val flowInput: String,
     val flowProcess: String,
     val flowOutput: String,
@@ -9315,6 +9319,9 @@ private val englishHelpGuide = HelpGuideCopy(
     documentTitle = "Documents and PDF",
     documentBody = "Turn Office files into readable documents, render PDFs, or protect them with a password.",
     documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  PNG · JPG · WEBP · TXT · MD",
+    fontTitle = "Fonts",
+    fontBody = "Convert fonts between desktop and web formats.",
+    fontFormats = "TTF · OTF  →  WOFF2 · WOFF  |  WOFF2 · WOFF  →  TTF · OTF",
     flowInput = "Choose",
     flowProcess = "Convert",
     flowOutput = "Use result",
@@ -9337,6 +9344,9 @@ private val simplifiedChineseHelpGuide = HelpGuideCopy(
     documentTitle = "文档与 PDF",
     documentBody = "Office 文档转为可读文件，PDF 转图片或文本，也支持密码保护。",
     documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  PNG · JPG · WEBP · TXT · MD",
+    fontTitle = "字体",
+    fontBody = "在桌面字体与网页字体之间互相转换。",
+    fontFormats = "TTF · OTF  →  WOFF2 · WOFF  |  WOFF2 · WOFF  →  TTF · OTF",
     flowInput = "选择文件",
     flowProcess = "本地处理",
     flowOutput = "使用结果",
@@ -9359,6 +9369,9 @@ private val traditionalChineseHelpGuide = HelpGuideCopy(
     documentTitle = "文件與 PDF",
     documentBody = "Office 文件轉為可讀檔案，PDF 轉圖片或文字，也支援密碼保護。",
     documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  PNG · JPG · WEBP · TXT · MD",
+    fontTitle = "字型",
+    fontBody = "在桌面字型與網頁字型之間互相轉換。",
+    fontFormats = "TTF · OTF  →  WOFF2 · WOFF  |  WOFF2 · WOFF  →  TTF · OTF",
     flowInput = "選擇檔案",
     flowProcess = "本機處理",
     flowOutput = "使用結果",
