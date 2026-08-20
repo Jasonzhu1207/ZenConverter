@@ -53,8 +53,10 @@ import org.zenconverter.app.metadata.MetadataStatusMessage
 import org.zenconverter.app.metadata.MetadataTargetKind
 import org.zenconverter.app.metadata.MetadataToolState
 import org.zenconverter.app.model.EsrganModelManager
+import org.zenconverter.app.model.EsrganModelSpec
 import org.zenconverter.app.model.EsrganModelUiState
 import org.zenconverter.app.settings.AppPreferences
+import androidx.compose.runtime.mutableStateMapOf
 import org.zenconverter.app.settings.SavedOutputDirectory
 import org.zenconverter.app.ui.ExternalImportTarget
 import org.zenconverter.app.ui.FileCategory
@@ -86,8 +88,8 @@ class MainActivity : ComponentActivity() {
     private val pdfPasswordPrompt = mutableStateOf<PdfPasswordPrompt?>(null)
     private val pdfOutputPasswordPrompt = mutableStateOf<PdfOutputPasswordPrompt?>(null)
     private val metadataToolState = mutableStateOf<MetadataToolState>(MetadataToolState.Empty)
-    private val esrganModelState = mutableStateOf<EsrganModelUiState>(EsrganModelUiState.NotDownloaded)
-    private var esrganDownloadJob: Job? = null
+    private val esrganModelStates = mutableStateMapOf<String, EsrganModelUiState>()
+    private val esrganDownloadJobs = mutableMapOf<String, Job>()
     private val pendingQueuedPdfSelections = ArrayDeque<PendingQueuedPdfSelection>()
     private var pendingPdfOutputPasswordQueuedFileIds: List<String> = emptyList()
     private var pendingMetadataTargetKind: MetadataTargetKind? = null
@@ -342,7 +344,7 @@ class MainActivity : ComponentActivity() {
                 conversionSummary = ConversionTaskStore.summaryMessage.value,
                 isConversionRunning = ConversionTaskStore.isRunning.value,
                 metadataToolState = metadataToolState.value,
-                esrganModelState = esrganModelState.value,
+                esrganModelStates = esrganModelStates,
                 pdfPasswordPrompt = pdfPasswordPrompt.value,
                 pdfOutputPasswordPrompt = pdfOutputPasswordPrompt.value,
                 onPickMetadataImage = {
@@ -357,11 +359,11 @@ class MainActivity : ComponentActivity() {
                 onRestoreMetadata = { backupId ->
                     restoreSelectedMetadata(backupId)
                 },
-                onDownloadEsrganModel = {
-                    downloadEsrganModel()
+                onDownloadEsrganModel = { spec ->
+                    downloadEsrganModel(spec)
                 },
-                onCancelEsrganModelDownload = {
-                    esrganDownloadJob?.cancel()
+                onCancelEsrganModelDownload = { spec ->
+                    cancelEsrganModelDownload(spec)
                 },
                 onSubmitPdfPassword = { password ->
                     val queuedPrompt = activeQueuedPdfPasswordSelection
@@ -435,31 +437,39 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun refreshEsrganModelState() {
-        esrganModelState.value = if (EsrganModelManager.isDownloaded(this)) {
-            EsrganModelUiState.Downloaded
-        } else {
-            EsrganModelUiState.NotDownloaded
+        for (spec in EsrganModelManager.ALL_MODELS) {
+            esrganModelStates[spec.id] = if (EsrganModelManager.isDownloaded(this, spec)) {
+                EsrganModelUiState.Downloaded
+            } else {
+                EsrganModelUiState.NotDownloaded
+            }
         }
     }
 
-    private fun downloadEsrganModel() {
-        esrganDownloadJob?.cancel()
-        esrganDownloadJob = lifecycleScope.launch {
-            esrganModelState.value = EsrganModelUiState.Downloading(0f)
+    private fun downloadEsrganModel(spec: EsrganModelSpec = EsrganModelManager.MODEL_X4PLUS) {
+        esrganDownloadJobs[spec.id]?.cancel()
+        esrganDownloadJobs[spec.id] = lifecycleScope.launch {
+            esrganModelStates[spec.id] = EsrganModelUiState.Downloading(0f)
             try {
-                EsrganModelManager.download(this@MainActivity) { progress ->
-                    esrganModelState.value = EsrganModelUiState.Downloading(progress)
+                EsrganModelManager.download(this@MainActivity, spec) { progress ->
+                    esrganModelStates[spec.id] = EsrganModelUiState.Downloading(progress)
                 }
-                esrganModelState.value = EsrganModelUiState.Downloaded
+                esrganModelStates[spec.id] = EsrganModelUiState.Downloaded
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 refreshEsrganModelState()
                 throw cancelled
             } catch (throwable: Throwable) {
-                esrganModelState.value = EsrganModelUiState.Failed(
+                esrganModelStates[spec.id] = EsrganModelUiState.Failed(
                     throwable.message ?: "Model download failed"
                 )
             }
         }
+    }
+
+    private fun cancelEsrganModelDownload(spec: EsrganModelSpec = EsrganModelManager.MODEL_X4PLUS) {
+        esrganDownloadJobs[spec.id]?.cancel()
+        esrganDownloadJobs.remove(spec.id)
+        refreshEsrganModelState()
     }
 
     private fun requestNotificationPermissionThenStart() {

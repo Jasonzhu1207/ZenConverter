@@ -34,3 +34,17 @@ the app at runtime from `https://assets.xlab.my/models/RealESRGAN_x4plus.onnx`.
 Its SHA-256 (`39d5218cfcef542d667821a0d2072cfa51bfd857ab0e4ae7dc067c399a88d323`)
 and size (`67,051,973` bytes) are recorded in `docs/license-and-attribution.md`;
 update both if the export changes.
+
+## Real-ESRGAN Compact v3 (`realesr-general-x4v3`) ONNX Export
+
+The `export_realesr_general_x4v3.py` script downloads the official PyTorch `.pth` checkpoint of `realesr-general-x4v3` (`SRVGGNetCompact`, 32 convs, 64 features, PReLU) from the `xinntao/Real-ESRGAN` repository (release v0.2.5.0) and converts it to a standard `.onnx` file with dynamic axes.
+
+### How to run
+
+```bash
+python export_realesr_general_x4v3.py
+```
+
+- PyTorch checkpoint: `realesr-general-x4v3.pth` (`4,885,111` bytes, SHA-256: `8dc7edb9ac80ccdc30c3a5dca6616509367f05fbc184ad95b731f05bece96292`)
+- ONNX output: `realesr-general-x4v3.onnx` (`4,873,412` bytes, SHA-256: `04c4cfea5759f94e5b5ab98b5d1ef176b904bbcd670a3b661e99e623374fc370`)
+

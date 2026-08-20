@@ -2004,8 +2004,11 @@ class ConversionService : Service() {
 
         throwIfConversionCancelled()
 
+        if (mode == ImageSuperResolutionMode.RealEsrGeneral4xV3) {
+            return applyRealEsrganSuperResolution(bitmap, EsrganModelManager.MODEL_GENERAL_V3)
+        }
         if (mode == ImageSuperResolutionMode.RealEsrgan4x) {
-            return applyRealEsrganSuperResolution(bitmap)
+            return applyRealEsrganSuperResolution(bitmap, EsrganModelManager.MODEL_X4PLUS)
         }
 
         return try {
@@ -2015,9 +2018,12 @@ class ConversionService : Service() {
         }
     }
 
-    private fun applyRealEsrganSuperResolution(bitmap: Bitmap): Bitmap {
-        if (!EsrganModelManager.isDownloaded(this)) {
-            error("Image engine could not load the Real-ESRGAN model — download it in Settings")
+    private fun applyRealEsrganSuperResolution(
+        bitmap: Bitmap,
+        spec: org.zenconverter.app.model.EsrganModelSpec
+    ): Bitmap {
+        if (!EsrganModelManager.isDownloaded(this, spec)) {
+            error("Image engine could not load the ${spec.displayName} model — download it in Settings")
         }
 
         val inferenceBitmap = if (bitmap.config == Bitmap.Config.ARGB_8888) {
@@ -2029,7 +2035,7 @@ class ConversionService : Service() {
         return try {
             RealEsrganUpscaler.upscale(
                 source = inferenceBitmap,
-                modelPath = EsrganModelManager.modelFile(this).absolutePath,
+                modelPath = EsrganModelManager.modelFile(this, spec).absolutePath,
                 onTileProgress = { progress ->
                     updateImageProgress(0.05f + 0.90f * progress)
                 },

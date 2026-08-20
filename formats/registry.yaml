@@ -229,12 +229,13 @@ groups:
   image:
     # Raster image outputs (jpg/jfif/png/webp) also expose an optional
     # super-resolution option: bilinear 2x/3x/4x through Android
-    # createScaledBitmap, and Real-ESRGAN 4x (AI) through ONNX Runtime. The AI
-    # model is downloaded at runtime from an R2 direct link and SHA-256
-    # verified; it is not bundled. While a scale is active it forces original
+    # createScaledBitmap, and Real-ESRGAN 4x AI models (realesr-general-x4v3 4.65MB compact
+    # and RealESRGAN_x4plus 63.9MB high-quality) through ONNX Runtime. The AI
+    # models are downloaded at runtime from an R2 direct link and SHA-256
+    # verified; they are not bundled. While a scale is active it forces original
     # quality and hides GIF frame splitting. Output pixel budget scales with
     # device RAM (32 MP per GiB, 64 MP minimum, 512 MP maximum); AI inference
-    # is tiled and slower, and does not preserve transparency. PDF and ICO
+    # is tiled (tile=192) and slower, and does not preserve transparency. PDF and ICO
     # targets do not expose it.
     verified:
       - from: jpg/jpeg/jfif/jpe

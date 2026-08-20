@@ -158,6 +158,7 @@ enum class ImageSuperResolutionMode(val scale: Int) {
     X2(2),
     X3(3),
     X4(4),
+    RealEsrGeneral4xV3(4),
     RealEsrgan4x(4)
 }
 

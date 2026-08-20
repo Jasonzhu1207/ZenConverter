@@ -33,7 +33,8 @@ Add a Real-ESRGAN 4× deep-learning super-resolution path alongside bilinear:
 
 - New dependency: `com.microsoft.onnxruntime:onnxruntime-android:1.29.0`
   (MIT), packaged `arm64-v8a` only through the existing `abiFilters`.
-- New `ImageSuperResolutionMode.RealEsrgan4x(4)` enum value carried on
+- New `ImageSuperResolutionMode.RealEsrGeneral4xV3(4)` and
+  `ImageSuperResolutionMode.RealEsrgan4x(4)` enum values carried on
   `ImageExportOptions`; no other data-model change.
 - `RealEsrganUpscaler` loads the model via `OrtEnvironment.getEnvironment()` +
   `createSession(modelPath, options)` and runs tiled inference (tile=192,
@@ -43,19 +44,21 @@ Add a Real-ESRGAN 4× deep-learning super-resolution path alongside bilinear:
   is closed with `.use {}` / `finally`; the shared `OrtEnvironment` singleton is
   not closed per call. Semi-transparent pixels are composited onto white because
   the model emits opaque RGB only.
-- `EsrganModelManager` downloads `RealESRGAN_x4plus.onnx` from
-  `https://assets.xlab.my/models/RealESRGAN_x4plus.onnx` (63.9 MB,
-  `67,051,973` bytes) into app-private storage, streaming to a `.part` file,
-  and rejects the result unless the SHA-256 equals
-  `39d5218cfcef542d667821a0d2072cfa51bfd857ab0e4ae7dc067c399a88d323`.
+- `EsrganModelManager` supports two hardcoded model choices:
+  1. `realesr-general-x4v3` (4.65 MB, `4,873,412` bytes, SHA-256 `04c4cfea5759f94e5b5ab98b5d1ef176b904bbcd670a3b661e99e623374fc370`)
+     from `https://assets.xlab.my/models/realesr-general-x4v3.onnx`
+  2. `RealESRGAN_x4plus` (63.9 MB, `67,051,973` bytes, SHA-256 `39d5218cfcef542d667821a0d2072cfa51bfd857ab0e4ae7dc067c399a88d323`)
+     from `https://assets.xlab.my/models/RealESRGAN_x4plus.onnx`
+  Each model downloads into app-private storage, streaming to a `.part` file,
+  and rejects the result unless size and SHA-256 match.
 - The model list is hardcoded; there is no remote hot-updated config. Adding or
   changing a model is a code change that ships with an app update.
 - UI: the super-resolution dropdown lists `2× Bilinear`, `3× Bilinear`,
-  `4× Bilinear`, and `Real-ESRGAN 4× (AI)`. The AI option renders grayed out
-  with a lock icon and is non-clickable until the model is downloaded; a hint
-  under the control points to Settings. Settings gains a "Model download"
-  section showing the model name, purpose, source, size, download progress, and
-  a foreground-only download note.
+  `4× Bilinear`, `realesr-general-x4v3 4× (AI)`, and `Real-ESRGAN 4× (AI)`. AI
+  options render disabled until their respective model is downloaded; a hint
+  under the control points to Settings if none are downloaded. Settings provides
+  a "Model download" section displaying all available models with download buttons,
+  progress bars, size displays, and source links.
 
 ## Consequences
 
