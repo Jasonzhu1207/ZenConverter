@@ -36,7 +36,7 @@ Add a Real-ESRGAN 4× deep-learning super-resolution path alongside bilinear:
 - New `ImageSuperResolutionMode.RealEsrgan4x(4)` enum value carried on
   `ImageExportOptions`; no other data-model change.
 - `RealEsrganUpscaler` loads the model via `OrtEnvironment.getEnvironment()` +
-  `createSession(modelPath, options)` and runs tiled inference (tile=512,
+  `createSession(modelPath, options)` and runs tiled inference (tile=192,
   tilePad=16, constant and tunable) so model memory is bounded to one tile
   instead of the whole image. Input/output are NCHW RGB in `[0,1]`. Every ONNX
   `AutoCloseable` object (input `OnnxTensor`, `OrtSession.Result`, `OrtSession`)

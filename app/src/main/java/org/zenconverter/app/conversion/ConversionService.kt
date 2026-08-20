@@ -1245,7 +1245,11 @@ class ConversionService : Service() {
             maxLongSidePixels = null
         ) ?: error("Image engine could not decode this input")
         throwIfConversionCancelled()
-        updateImageProgress(0.55f)
+        if (input.imageOptions.superResolution == ImageSuperResolutionMode.Off) {
+            updateImageProgress(0.55f)
+        } else {
+            updateImageProgress(0.05f)
+        }
 
         val workingBitmap = applySuperResolutionIfNeeded(
             decodedBitmap,
@@ -2027,7 +2031,7 @@ class ConversionService : Service() {
                 source = inferenceBitmap,
                 modelPath = EsrganModelManager.modelFile(this).absolutePath,
                 onTileProgress = { progress ->
-                    updateImageProgress(0.55f + 0.35f * progress)
+                    updateImageProgress(0.05f + 0.90f * progress)
                 },
                 isCancelled = {
                     ConversionTaskStore.isCancelled() || Thread.currentThread().isInterrupted
