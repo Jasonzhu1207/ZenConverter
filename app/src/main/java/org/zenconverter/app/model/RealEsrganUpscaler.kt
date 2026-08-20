@@ -2,6 +2,7 @@ package org.zenconverter.app.model
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.os.Build
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtException
@@ -38,6 +39,12 @@ object RealEsrganUpscaler {
         onTileProgress: (Float) -> Unit = {},
         isCancelled: () -> Boolean = { false }
     ): Bitmap {
+        if (!isOnnxRuntimeSupported()) {
+            throw IllegalStateException(
+                "Image engine could not run AI super-resolution on this device"
+            )
+        }
+
         val inputW = source.width
         val inputH = source.height
         val outputW = inputW * SCALE
@@ -206,5 +213,44 @@ object RealEsrganUpscaler {
 
     private fun clampToByte(value: Float): Int {
         return (value.coerceIn(0f, 1f) * 255f).roundToInt().coerceIn(0, 255)
+    }
+
+    /**
+     * Returns false on environments where ONNX Runtime's arm64 native library
+     * is known to crash during load, so [upscale] refuses to touch it there and
+     * the conversion fails with a clear message instead of a native segfault.
+     *
+     * ONNX Runtime 1.29.0 performs CPU topology detection inside its ELF
+     * constructors (it reads `/sys/devices/system/cpu/.../cache/index[*]/shared_cpu_list`).
+     * When this arm64-only build runs on an x86 emulator through the ARM-to-x86
+     * translation bridge, that detection reads the host's mismatched CPU tree
+     * and dereferences a null pointer before any Java exception can be thrown.
+     * A SIGSEGV in `dlopen` constructors cannot be caught from Kotlin, so the
+     * only safe behavior is to not load the library on those devices.
+     */
+    private fun isOnnxRuntimeSupported(): Boolean = !isEmulator()
+
+    private fun isEmulator(): Boolean {
+        val fingerprint = Build.FINGERPRINT.orEmpty()
+        val model = Build.MODEL.orEmpty()
+        val hardware = Build.HARDWARE.orEmpty()
+        val product = Build.PRODUCT.orEmpty()
+        val manufacturer = Build.MANUFACTURER.orEmpty()
+        val brand = Build.BRAND.orEmpty()
+        val device = Build.DEVICE.orEmpty()
+        return when {
+            fingerprint.startsWith("generic", ignoreCase = true) -> true
+            fingerprint.contains("emulator", ignoreCase = true) -> true
+            model.contains("emulator", ignoreCase = true) -> true
+            model.contains("android sdk", ignoreCase = true) -> true
+            hardware.contains("goldfish", ignoreCase = true) -> true
+            hardware.contains("ranchu", ignoreCase = true) -> true
+            manufacturer.contains("genymotion", ignoreCase = true) -> true
+            product.contains("sdk", ignoreCase = true) ||
+                product.contains("emulator", ignoreCase = true) -> true
+            brand.startsWith("generic", ignoreCase = true) &&
+                device.startsWith("generic", ignoreCase = true) -> true
+            else -> false
+        }
     }
 }

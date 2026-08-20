@@ -75,3 +75,10 @@ Add a Real-ESRGAN 4× deep-learning super-resolution path alongside bilinear:
   with a native OOM.
 - The model download adds a network call, gated behind an explicit user action
   in Settings (consistent with the update-check policy) and verified by hash.
+- Emulator limitation: ONNX Runtime 1.29.0 segfaults inside its ELF constructors
+  (CPU topology detection reads `/sys/devices/system/cpu/.../shared_cpu_list`)
+  when the arm64 library runs on an x86 emulator through the ARM-to-x86
+  translation bridge. `RealEsrganUpscaler` detects emulators and refuses to load
+  the library there, failing the conversion with a clear message instead of
+  crashing. AI upscaling is therefore unavailable on emulators; it remains
+  available on arm64 physical devices.
