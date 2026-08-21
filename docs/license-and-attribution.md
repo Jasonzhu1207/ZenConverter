@@ -161,33 +161,27 @@ Transitive dependencies required when consuming the local AAR through
 - Release guardrail: generate and record a full transitive Cargo dependency
   license inventory before promoting this Beta compatibility path to Stable.
 
-## Bundled Office CJK Font
+## Office CJK Fonts (System & On-Demand)
 
 - Dependencies: Noto Sans CJK Regular and Noto Serif CJK Regular.
-- Package paths: `app/src/main/assets/fonts/NotoSansCJK-Regular.ttc` and
-  `app/src/main/assets/fonts/NotoSerifCJK-Regular.ttc`.
-- Package type: TrueType Collection fonts copied at runtime to app-private
-  storage and passed directly to the native font search API.
-- Source snapshots: Android Studio layoutlib fonts at
-  `E:\AndroidDev\android-studio\plugins\design-tools\resources\layoutlib\data\fonts\NotoSansCJK-Regular.ttc` and
-  `E:\AndroidDev\android-studio\plugins\design-tools\resources\layoutlib\data\fonts\NotoSerifCJK-Regular.ttc`.
+- Delivery model: System font discovery (`/system/fonts`, `/apex/...`) is used by
+  default (0 MB download, 100% offline). High-fidelity Noto CJK font packages are
+  hosted on Cloudflare R2 and downloadable on-demand into app-private storage.
+- Download endpoints:
+  - `https://assets.xlab.my/models/NotoSansCJK-Regular.ttc`
+  - `https://assets.xlab.my/models/NotoSerifCJK-Regular.ttc`
 - Upstream project: Noto CJK / notofonts.
 - Maintenance status: active upstream font family.
 - License: SIL Open Font License 1.1; local copy at
   `third_party/licenses/noto-cjk/OFL-1.1.txt`.
-- Local files:
+- Managed files:
   - `NotoSansCJK-Regular.ttc`: `32,355,424` bytes, SHA-256
     `3e7e5afaac2c6d872592d76abedac03a51c6f0fc42d11e311ff2816a6c368afe`.
   - `NotoSerifCJK-Regular.ttc`: `26,273,008` bytes, SHA-256
     `5dec6bbce13a3bbf1487a022392c23e571abd0696a102f3715697420dd94b47a`.
-- Reason platform APIs are not enough: Android devices expose CJK-capable system
-  fonts under vendor-specific family names. `office2pdf` maps Microsoft YaHei
-  to Noto Sans CJK SC and SimSun to Noto Serif CJK SC, so bundling both fonts
-  provides a predictable local fallback for those common Chinese Office fonts.
-- Manual verification note: Simplified Chinese text rendered visibly after the
-  July 14, 2026 arm64 physical-device rebuild. Layout fidelity remains limited;
-  overlapping text and shifted Office shapes are still expected for complex
-  DOCX/PPTX/XLSX files.
+- Manual verification note: Chinese text renders using Android system fonts without
+  downloading extra fonts; downloading the optional packages provides enhanced
+  Noto Sans/Serif CJK fallbacks for Microsoft YaHei and SimSun typography.
 
 ## Current Font Native Binary
 

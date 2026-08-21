@@ -203,6 +203,9 @@ import org.zenconverter.app.metadata.MetadataToolState
 import org.zenconverter.app.model.EsrganModelManager
 import org.zenconverter.app.model.EsrganModelSpec
 import org.zenconverter.app.model.EsrganModelUiState
+import org.zenconverter.app.office.OfficeFontManager
+import org.zenconverter.app.office.OfficeFontSpec
+import org.zenconverter.app.office.OfficeFontUiState
 import org.zenconverter.app.settings.AppPreferences
 import org.zenconverter.app.updates.ApkInstaller
 import org.zenconverter.app.updates.ApkOpenResult
@@ -778,6 +781,10 @@ fun ZenConverterApp(
     onRestoreMetadata: (String) -> Unit,
     onDownloadEsrganModel: (EsrganModelSpec) -> Unit,
     onCancelEsrganModelDownload: (EsrganModelSpec) -> Unit,
+    officeFontStates: Map<String, OfficeFontUiState> = emptyMap(),
+    onDownloadOfficeFont: (OfficeFontSpec) -> Unit = {},
+    onCancelOfficeFontDownload: (OfficeFontSpec) -> Unit = {},
+    onDeleteOfficeFont: (OfficeFontSpec) -> Unit = {},
     pdfPasswordPrompt: PdfPasswordPrompt?,
     pdfOutputPasswordPrompt: PdfOutputPasswordPrompt?,
     onSubmitPdfPassword: (String) -> Unit,
@@ -824,6 +831,7 @@ fun ZenConverterApp(
                 isConversionRunning = isConversionRunning,
                 metadataToolState = metadataToolState,
                 esrganModelStates = esrganModelStates,
+                officeFontStates = officeFontStates,
                 onAccentSelected = {
                     accent = it
                     AppPreferences.setAccentColor(context, it.name)
@@ -853,6 +861,9 @@ fun ZenConverterApp(
                 onRestoreMetadata = onRestoreMetadata,
                 onDownloadEsrganModel = onDownloadEsrganModel,
                 onCancelEsrganModelDownload = onCancelEsrganModelDownload,
+                onDownloadOfficeFont = onDownloadOfficeFont,
+                onCancelOfficeFontDownload = onCancelOfficeFontDownload,
+                onDeleteOfficeFont = onDeleteOfficeFont,
                 onStartConversion = onStartConversion,
                 onCancelConversion = onCancelConversion
             )
@@ -891,6 +902,7 @@ private fun ZenConverterContent(
     isConversionRunning: Boolean,
     metadataToolState: MetadataToolState,
     esrganModelStates: Map<String, EsrganModelUiState>,
+    officeFontStates: Map<String, OfficeFontUiState>,
     onAccentSelected: (AccentColorOption) -> Unit,
     onLanguageSelected: (LanguageOption) -> Unit,
     onOutputLocationModeChange: (OutputLocationMode) -> Unit,
@@ -914,6 +926,9 @@ private fun ZenConverterContent(
     onRestoreMetadata: (String) -> Unit,
     onDownloadEsrganModel: (EsrganModelSpec) -> Unit,
     onCancelEsrganModelDownload: (EsrganModelSpec) -> Unit,
+    onDownloadOfficeFont: (OfficeFontSpec) -> Unit,
+    onCancelOfficeFontDownload: (OfficeFontSpec) -> Unit,
+    onDeleteOfficeFont: (OfficeFontSpec) -> Unit,
     onStartConversion: () -> Unit,
     onCancelConversion: () -> Unit
 ) {
@@ -1088,12 +1103,16 @@ private fun ZenConverterContent(
                                                 outputLocationMode = outputLocationMode,
                                                 outputDirectory = outputDirectory,
                                                 esrganModelStates = esrganModelStates,
+                                                officeFontStates = officeFontStates,
                                                 onAccentSelected = onAccentSelected,
                                                 onLanguageSelected = onLanguageSelected,
                                                 onOutputLocationModeChange = onOutputLocationModeChange,
                                                 onPickOutputDirectory = onPickOutputDirectory,
                                                 onDownloadEsrganModel = onDownloadEsrganModel,
-                                                onCancelEsrganModelDownload = onCancelEsrganModelDownload
+                                                onCancelEsrganModelDownload = onCancelEsrganModelDownload,
+                                                onDownloadOfficeFont = onDownloadOfficeFont,
+                                                onCancelOfficeFontDownload = onCancelOfficeFontDownload,
+                                                onDeleteOfficeFont = onDeleteOfficeFont
                                             )
                                             HeaderPanel.About -> AboutPanel(
                                                 texts = texts,
@@ -1954,12 +1973,16 @@ private fun SettingsPanel(
     outputLocationMode: OutputLocationMode,
     outputDirectory: OutputDirectory?,
     esrganModelStates: Map<String, EsrganModelUiState>,
+    officeFontStates: Map<String, OfficeFontUiState>,
     onAccentSelected: (AccentColorOption) -> Unit,
     onLanguageSelected: (LanguageOption) -> Unit,
     onOutputLocationModeChange: (OutputLocationMode) -> Unit,
     onPickOutputDirectory: () -> Unit,
     onDownloadEsrganModel: (EsrganModelSpec) -> Unit,
-    onCancelEsrganModelDownload: (EsrganModelSpec) -> Unit
+    onCancelEsrganModelDownload: (EsrganModelSpec) -> Unit,
+    onDownloadOfficeFont: (OfficeFontSpec) -> Unit,
+    onCancelOfficeFontDownload: (OfficeFontSpec) -> Unit,
+    onDeleteOfficeFont: (OfficeFontSpec) -> Unit
 ) {
     QuietPanel {
         SectionTitle(
@@ -2039,6 +2062,64 @@ private fun SettingsPanel(
                     state = esrganModelStates[spec.id] ?: EsrganModelUiState.NotDownloaded,
                     onDownload = { onDownloadEsrganModel(spec) },
                     onCancel = { onCancelEsrganModelDownload(spec) }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+        SectionTitle(
+            icon = Icons.Rounded.FontDownload,
+            title = texts.officeFontTitle
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            color = Color(0xFFF0FDF4),
+            border = BorderStroke(1.dp, Color(0xFFDCFCE7))
+        ) {
+            Row(
+                modifier = Modifier.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AppIcon(
+                    icon = Icons.Rounded.CheckCircle,
+                    contentDescription = null,
+                    tint = Color(0xFF16A34A),
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = texts.officeFontSystemReady,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF15803D)
+                    )
+                    Text(
+                        text = texts.officeFontSystemNote,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF166534)
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = texts.officeFontEnhancementNote,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            OfficeFontManager.ALL_FONTS.forEach { spec ->
+                OfficeFontDownloadSection(
+                    texts = texts,
+                    spec = spec,
+                    state = officeFontStates[spec.id] ?: OfficeFontUiState.NotDownloaded,
+                    onDownload = { onDownloadOfficeFont(spec) },
+                    onCancel = { onCancelOfficeFontDownload(spec) },
+                    onDelete = { onDeleteOfficeFont(spec) }
                 )
             }
         }
@@ -2173,6 +2254,143 @@ private fun EsrganModelDownloadSection(
                     }
                 }
                 is EsrganModelUiState.Failed -> {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = state.message?.let { "${texts.downloadFailed}: $it" }
+                                ?: texts.downloadFailed,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Button(
+                            onClick = onDownload,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(texts.modelDownloadAction)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OfficeFontDownloadSection(
+    texts: UiText,
+    spec: OfficeFontSpec,
+    state: OfficeFontUiState,
+    onDownload: () -> Unit,
+    onCancel: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = Color(0xFFFAFAFA),
+        border = BorderStroke(1.dp, Color(0xFFE8E8E8))
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = spec.displayName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    if (spec.description.isNotEmpty()) {
+                        Text(
+                            text = spec.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = spec.sizeDisplay,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "${texts.officeFontSource} Google Noto CJK (SIL OFL 1.1)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            when (state) {
+                OfficeFontUiState.NotDownloaded -> {
+                    Button(
+                        onClick = onDownload,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(texts.modelDownloadAction)
+                    }
+                }
+                is OfficeFontUiState.Downloading -> {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        LinearProgressIndicator(
+                            progress = state.progress,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${(state.progress * 100).toInt()}%",
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                            TextButton(onClick = onCancel) {
+                                Text(texts.cancelDownload)
+                            }
+                        }
+                        Text(
+                            text = texts.modelDownloadNote,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                OfficeFontUiState.Downloaded -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            AppIcon(
+                                icon = Icons.Rounded.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = texts.modelDownloaded,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Row {
+                            TextButton(onClick = onDownload) {
+                                Text(texts.modelRedownload)
+                            }
+                        }
+                    }
+                }
+                is OfficeFontUiState.Failed -> {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
                             text = state.message?.let { "${texts.downloadFailed}: $it" }
@@ -7916,6 +8134,11 @@ private data class UiText(
     val modelDownloadAction: String,
     val modelDownloaded: String,
     val modelRedownload: String,
+    val officeFontTitle: String,
+    val officeFontSystemReady: String,
+    val officeFontSystemNote: String,
+    val officeFontEnhancementNote: String,
+    val officeFontSource: String,
     val metadataSecurityTitle: String,
     val metadataSecurityNote: String,
     val metadataBackupNote: String,
@@ -9971,6 +10194,11 @@ private val englishText = UiText(
     modelDownloadAction = "Download",
     modelDownloaded = "Downloaded",
     modelRedownload = "Re-download",
+    officeFontTitle = "Office CJK fonts",
+    officeFontSystemReady = "Device system fonts active",
+    officeFontSystemNote = "Document text rendering uses built-in system fonts by default (0 MB download, 100% offline).",
+    officeFontEnhancementNote = "Download high-fidelity Noto CJK fonts for enhanced Songti / Serif and Microsoft YaHei fallback typography.",
+    officeFontSource = "Source:",
     metadataSecurityTitle = "Metadata safety",
     metadataSecurityNote = "Inspect metadata locally. JPG/JPEG/JFIF can be cleaned in place without re-encoding.",
     metadataBackupNote = "Metadata backups stay in app data. Clearing app data or uninstalling may remove them.",
@@ -10114,6 +10342,11 @@ private val simplifiedChineseText = UiText(
     modelDownloadAction = "下载",
     modelDownloaded = "已下载",
     modelRedownload = "重新下载",
+    officeFontTitle = "Office 排版字库",
+    officeFontSystemReady = "系统字库已就绪",
+    officeFontSystemNote = "默认使用设备系统内置中文字库，基础文档转换 100% 离线可用（0 MB 下载）。",
+    officeFontEnhancementNote = "可自选下载高保真 Noto CJK 字体包，增强宋体、仿宋等衬线排版与微软雅黑回退效果。",
+    officeFontSource = "来源：",
     metadataSecurityTitle = "元数据安全",
     metadataSecurityNote = "本地查看元数据。JPG/JPEG/JFIF 可不重编码原地清理。",
     metadataBackupNote = "元数据备份保存在应用数据目录，清理应用数据或卸载后可能丢失。",
@@ -10257,6 +10490,11 @@ private val traditionalChineseText = UiText(
     modelDownloadAction = "下載",
     modelDownloaded = "已下載",
     modelRedownload = "重新下載",
+    officeFontTitle = "Office 排版字庫",
+    officeFontSystemReady = "系統字庫已就緒",
+    officeFontSystemNote = "預設使用裝置系統內建中文字庫，基礎文件轉換 100% 離線可用（0 MB 下載）。",
+    officeFontEnhancementNote = "可自選下載高保真 Noto CJK 字體包，增強宋體、仿宋等襯線排版與微軟雅黑回退效果。",
+    officeFontSource = "來源：",
     metadataSecurityTitle = "元資料安全",
     metadataSecurityNote = "本地查看元資料。JPG/JPEG/JFIF 可不重新編碼原地清理。",
     metadataBackupNote = "元資料備份保存在應用資料目錄，清理應用資料或卸載後可能遺失。",

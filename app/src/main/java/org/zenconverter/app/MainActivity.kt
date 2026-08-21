@@ -55,6 +55,9 @@ import org.zenconverter.app.metadata.MetadataToolState
 import org.zenconverter.app.model.EsrganModelManager
 import org.zenconverter.app.model.EsrganModelSpec
 import org.zenconverter.app.model.EsrganModelUiState
+import org.zenconverter.app.office.OfficeFontManager
+import org.zenconverter.app.office.OfficeFontSpec
+import org.zenconverter.app.office.OfficeFontUiState
 import org.zenconverter.app.settings.AppPreferences
 import androidx.compose.runtime.mutableStateMapOf
 import org.zenconverter.app.settings.SavedOutputDirectory
@@ -90,6 +93,8 @@ class MainActivity : ComponentActivity() {
     private val metadataToolState = mutableStateOf<MetadataToolState>(MetadataToolState.Empty)
     private val esrganModelStates = mutableStateMapOf<String, EsrganModelUiState>()
     private val esrganDownloadJobs = mutableMapOf<String, Job>()
+    private val officeFontStates = mutableStateMapOf<String, OfficeFontUiState>()
+    private val officeFontDownloadJobs = mutableMapOf<String, Job>()
     private val pendingQueuedPdfSelections = ArrayDeque<PendingQueuedPdfSelection>()
     private var pendingPdfOutputPasswordQueuedFileIds: List<String> = emptyList()
     private var pendingMetadataTargetKind: MetadataTargetKind? = null
@@ -275,6 +280,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         restoreOutputLocationPreference()
         refreshEsrganModelState()
+        refreshOfficeFontState()
         setContent {
             ZenConverterApp(
                 queuedFiles = queuedFiles,
@@ -301,17 +307,17 @@ class MainActivity : ComponentActivity() {
                 onPickFolder = {
                     openImportFolder.launch(null)
                 },
-                onUpdateQueuedFile = { nextFile ->
-                    updateQueuedFile(nextFile)
+                onUpdateQueuedFile = { updatedFile ->
+                    updateQueuedFile(updatedFile)
                 },
-                onUpdateQueuedFiles = { nextFiles ->
-                    updateQueuedFiles(nextFiles)
+                onUpdateQueuedFiles = { updatedFiles ->
+                    updateQueuedFiles(updatedFiles)
                 },
-                onCreatePdfMergeGroup = { type ->
-                    createPdfMergeGroup(type)
+                onCreatePdfMergeGroup = { mergeType ->
+                    createPdfMergeGroup(mergeType)
                 },
-                onUpdatePdfMergeGroup = { group ->
-                    updatePdfMergeGroup(group)
+                onUpdatePdfMergeGroup = { updatedGroup ->
+                    updatePdfMergeGroup(updatedGroup)
                 },
                 onRemovePdfMergeGroup = { groupId ->
                     pdfMergeGroups.removeAll { it.id == groupId }
@@ -345,6 +351,7 @@ class MainActivity : ComponentActivity() {
                 isConversionRunning = ConversionTaskStore.isRunning.value,
                 metadataToolState = metadataToolState.value,
                 esrganModelStates = esrganModelStates,
+                officeFontStates = officeFontStates,
                 pdfPasswordPrompt = pdfPasswordPrompt.value,
                 pdfOutputPasswordPrompt = pdfOutputPasswordPrompt.value,
                 onPickMetadataImage = {
@@ -364,6 +371,15 @@ class MainActivity : ComponentActivity() {
                 },
                 onCancelEsrganModelDownload = { spec ->
                     cancelEsrganModelDownload(spec)
+                },
+                onDownloadOfficeFont = { spec ->
+                    downloadOfficeFont(spec)
+                },
+                onCancelOfficeFontDownload = { spec ->
+                    cancelOfficeFontDownload(spec)
+                },
+                onDeleteOfficeFont = { spec ->
+                    deleteOfficeFont(spec)
                 },
                 onSubmitPdfPassword = { password ->
                     val queuedPrompt = activeQueuedPdfPasswordSelection
@@ -470,6 +486,49 @@ class MainActivity : ComponentActivity() {
         esrganDownloadJobs[spec.id]?.cancel()
         esrganDownloadJobs.remove(spec.id)
         refreshEsrganModelState()
+    }
+
+    private fun refreshOfficeFontState() {
+        for (spec in OfficeFontManager.ALL_FONTS) {
+            officeFontStates[spec.id] = if (OfficeFontManager.isDownloaded(this, spec)) {
+                OfficeFontUiState.Downloaded
+            } else {
+                OfficeFontUiState.NotDownloaded
+            }
+        }
+    }
+
+    private fun downloadOfficeFont(spec: OfficeFontSpec) {
+        officeFontDownloadJobs[spec.id]?.cancel()
+        officeFontDownloadJobs[spec.id] = lifecycleScope.launch {
+            officeFontStates[spec.id] = OfficeFontUiState.Downloading(0f)
+            try {
+                OfficeFontManager.download(this@MainActivity, spec) { progress ->
+                    officeFontStates[spec.id] = OfficeFontUiState.Downloading(progress)
+                }
+                officeFontStates[spec.id] = OfficeFontUiState.Downloaded
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                refreshOfficeFontState()
+                throw cancelled
+            } catch (throwable: Throwable) {
+                officeFontStates[spec.id] = OfficeFontUiState.Failed(
+                    throwable.message ?: "Font download failed"
+                )
+            }
+        }
+    }
+
+    private fun cancelOfficeFontDownload(spec: OfficeFontSpec) {
+        officeFontDownloadJobs[spec.id]?.cancel()
+        officeFontDownloadJobs.remove(spec.id)
+        refreshOfficeFontState()
+    }
+
+    private fun deleteOfficeFont(spec: OfficeFontSpec) {
+        officeFontDownloadJobs[spec.id]?.cancel()
+        officeFontDownloadJobs.remove(spec.id)
+        OfficeFontManager.deleteFont(this, spec)
+        refreshOfficeFontState()
     }
 
     private fun requestNotificationPermissionThenStart() {

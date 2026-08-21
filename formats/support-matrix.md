@@ -292,17 +292,18 @@ unencrypted PDF decryption-as-copy.
   the whole OOXML source into memory, rejects files larger than 64 MiB, and then
   writes the returned PDF bytes to the normal output flow or extracts text from
   that intermediate PDF for TXT/MD.
-- Before conversion, the Kotlin wrapper copies bundled Noto Sans CJK and Noto
-  Serif CJK into app-private storage and passes that directory to the JNI v2
-  `ConvertOptions.font_paths` API when the native library exports it. This
-  avoids relying on Android vendor font names or a CLI-only `TYPST_FONT_PATHS`
-  environment convention; the legacy JNI fallback cannot use this directory.
+- Before conversion, the Kotlin wrapper discovers available Android system
+  font directories (`/system/fonts`, `/apex/...`) and merges any user-downloaded
+  high-fidelity Noto CJK fonts from app storage, passing them to the JNI
+  `ConvertOptions.font_paths` API. This gives 0-MB download, 100% offline CJK
+  text rendering by default while keeping optional high-fidelity Noto Sans and
+  Noto Serif CJK typography available on-demand.
 - Layout fidelity, fonts, charts, comments, slide effects, spreadsheet print
-  areas, and advanced Office features remain Beta compatibility areas. Manual testing showed
-  that Chinese text renders after the CJK rebuild, but complex pages can still
-  show overlapping text, shifted Office shapes, and degraded slide layout. Treat
-  this as a local first-pass renderer, not a replacement for Microsoft Office
-  export.
+  areas, and advanced Office features remain Beta compatibility areas. Testing
+  showed that Chinese text renders properly using system fonts, but complex pages
+  can still show overlapping text, shifted Office shapes, and degraded slide
+  layout. Treat this as a local first-pass renderer, not a replacement for
+  Microsoft Office export.
 - Office TXT/MD output inherits the Office-to-PDF rendering limits and then
   extracts only selectable text from the intermediate PDF. It does not do OCR or
   reconstruct rich document structure.

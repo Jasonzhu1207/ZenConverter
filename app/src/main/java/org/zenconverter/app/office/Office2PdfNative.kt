@@ -11,27 +11,6 @@ object Office2PdfNative {
     private const val TAG = "Office2PdfNative"
     private const val LIBRARY_NAME = "zen_office2pdf"
     private const val REQUIRED_ABI = "arm64-v8a"
-    private const val FONT_COPY_BUFFER_BYTES = 64 * 1024
-
-    private data class BundledFont(
-        val assetPath: String,
-        val fileName: String,
-        val byteCount: Long
-    )
-
-    private val bundledCjkFonts = listOf(
-        BundledFont(
-            assetPath = "fonts/NotoSansCJK-Regular.ttc",
-            fileName = "NotoSansCJK-Regular.ttc",
-            byteCount = 32_355_424L
-        ),
-        BundledFont(
-            assetPath = "fonts/NotoSerifCJK-Regular.ttc",
-            fileName = "NotoSerifCJK-Regular.ttc",
-            byteCount = 26_273_008L
-        )
-    )
-
     @Volatile
     private var loadAttempted = false
 
@@ -46,15 +25,15 @@ object Office2PdfNative {
 
     fun convert(context: Context, input: ByteArray, extension: String): ByteArray {
         loadNativeLibrary()?.let { throw it }
-        val fontDirectory = ensureBundledCjkFonts(context.applicationContext)
+        val fontDirectories = OfficeFontManager.availableFontDirectories(context.applicationContext)
         val normalizedExtension = extension.lowercase(Locale.US)
 
-        if (nativeFontPathsAvailable != false) {
+        if (nativeFontPathsAvailable != false && fontDirectories.isNotEmpty()) {
             try {
                 return convertBytesWithFontPaths(
                     input = input,
                     extension = normalizedExtension,
-                    fontDirectories = arrayOf(fontDirectory.absolutePath)
+                    fontDirectories = fontDirectories.map { it.absolutePath }.toTypedArray()
                 ).also {
                     nativeFontPathsAvailable = true
                 }
@@ -100,36 +79,6 @@ object Office2PdfNative {
 
     private fun supportedAbis(): List<String> {
         return Build.SUPPORTED_ABIS?.toList().orEmpty()
-    }
-
-    private fun ensureBundledCjkFonts(context: Context): File {
-        val fontDirectory = File(context.noBackupFilesDir, "office2pdf-fonts").apply {
-            if (!isDirectory && !mkdirs()) {
-                throw IOException("Could not create Office font directory")
-            }
-        }
-
-        var copiedFont = false
-        bundledCjkFonts.forEach { font ->
-            val fontFile = File(fontDirectory, font.fileName)
-            if (!fontFile.isFile || fontFile.length() != font.byteCount) {
-                context.assets.open(font.assetPath).use { input ->
-                    fontFile.outputStream().use { output ->
-                        input.copyTo(output, FONT_COPY_BUFFER_BYTES)
-                        output.flush()
-                    }
-                }
-                copiedFont = true
-            }
-
-            if (!fontFile.isFile || fontFile.length() != font.byteCount) {
-                throw IOException("Bundled Office CJK font was not prepared: ${font.fileName}")
-            }
-        }
-        if (copiedFont) {
-            Log.i(TAG, "Prepared bundled Office CJK fonts at ${fontDirectory.absolutePath}")
-        }
-        return fontDirectory
     }
 }
 

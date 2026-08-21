@@ -1,14 +1,11 @@
-# Bundled Office conversion fonts
+# Office Conversion CJK Fonts
 
-`NotoSansCJK-Regular.ttc` and `NotoSerifCJK-Regular.ttc` are bundled so the
-experimental Office-to-PDF native renderer can resolve the Noto Sans and Noto
-Serif Simplified Chinese fallbacks used for common Microsoft YaHei and SimSun
-documents.
+ZenConverter prioritizes device system fonts (`/system/fonts`, `/apex/...`) for 0-MB, 100% offline Office document CJK rendering.
 
-Source for this snapshot:
-`E:\AndroidDev\android-studio\plugins\design-tools\resources\layoutlib\data\fonts\NotoSansCJK-Regular.ttc`
+High-fidelity Noto Sans CJK and Noto Serif CJK font packages can be downloaded on-demand from the app's settings screen:
 
-`E:\AndroidDev\android-studio\plugins\design-tools\resources\layoutlib\data\fonts\NotoSerifCJK-Regular.ttc`
+- `https://assets.xlab.my/models/NotoSansCJK-Regular.ttc`
+- `https://assets.xlab.my/models/NotoSerifCJK-Regular.ttc`
 
 | File | Size | SHA-256 |
 | --- | ---: | --- |
