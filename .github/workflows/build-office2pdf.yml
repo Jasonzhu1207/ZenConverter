@@ -1,0 +1,240 @@
+name: Build and Update Office2PDF Native SO
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Upstream office2pdf version (e.g. "latest", "v0.6.7", or "current")'
+        required: true
+        default: 'latest'
+        type: string
+      auto_commit:
+        description: 'Automatically commit and push the new .so and updated docs back to main'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-office2pdf-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-update:
+    name: Build Office2PDF .so (arm64-v8a)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve upstream version and update Cargo.toml
+        id: resolve-version
+        run: |
+          set -euo pipefail
+          INPUT_VERSION="${{ github.event.inputs.version }}"
+          echo "Input version: $INPUT_VERSION"
+
+          if [ "$INPUT_VERSION" = "latest" ]; then
+            RELEASE_JSON=$(curl -sL "https://api.github.com/repos/developer0hye/office2pdf/releases/latest")
+            TAG_NAME=$(echo "$RELEASE_JSON" | jq -r '.tag_name')
+            COMMIT_SHA=$(echo "$RELEASE_JSON" | jq -r '.target_commitish')
+            # If target_commitish is branch or short, get full sha
+            if [ ${#COMMIT_SHA} -ne 40 ]; then
+              COMMIT_SHA=$(curl -sL "https://api.github.com/repos/developer0hye/office2pdf/commits/$TAG_NAME" | jq -r '.sha')
+            fi
+          elif [ "$INPUT_VERSION" = "current" ]; then
+            TAG_NAME="current"
+            COMMIT_SHA=$(grep -oE 'rev = "[a-f0-9]+"' native/office2pdf-jni/Cargo.toml | cut -d'"' -f2)
+          else
+            TAG_NAME="$INPUT_VERSION"
+            RELEASE_JSON=$(curl -sL "https://api.github.com/repos/developer0hye/office2pdf/releases/tags/$TAG_NAME")
+            COMMIT_SHA=$(echo "$RELEASE_JSON" | jq -r '.target_commitish')
+            if [ -z "$COMMIT_SHA" ] || [ "$COMMIT_SHA" = "null" ] || [ ${#COMMIT_SHA} -ne 40 ]; then
+              COMMIT_SHA=$(curl -sL "https://api.github.com/repos/developer0hye/office2pdf/commits/$TAG_NAME" | jq -r '.sha')
+            fi
+          fi
+
+          echo "Target tag: $TAG_NAME"
+          echo "Target commit: $COMMIT_SHA"
+
+          # Update Cargo.toml if not current
+          if [ "$INPUT_VERSION" != "current" ]; then
+            sed -i -E "s|office2pdf = \{ git = \"https://github.com/developer0hye/office2pdf.git\", rev = \"[^\"]+\" \}|office2pdf = { git = \"https://github.com/developer0hye/office2pdf.git\", rev = \"$COMMIT_SHA\" }|" native/office2pdf-jni/Cargo.toml
+          fi
+
+          echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=$COMMIT_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Install cargo-ndk
+        uses: taiki-e/install-action@cargo-ndk
+
+      - name: Set up Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r27c
+
+      - name: Build Native Library
+        run: |
+          set -euo pipefail
+          cd native/office2pdf-jni
+          bash build-arm64-v8a.sh
+
+      - name: Verify Exported JNI Symbols
+        run: |
+          set -euo pipefail
+          SO_FILE="native/built-jniLibs/arm64-v8a/libzen_office2pdf.so"
+          if ! readelf -Ws "$SO_FILE" | grep -q "convertBytesWithFontPaths"; then
+            echo "::error::Missing required JNI symbol convertBytesWithFontPaths"
+            exit 1
+          fi
+          echo "JNI symbols verified successfully."
+
+      - name: Copy .so and Update Metadata
+        id: metadata
+        run: |
+          set -euo pipefail
+          SRC_SO="native/built-jniLibs/arm64-v8a/libzen_office2pdf.so"
+          DEST_SO="app/src/main/jniLibs/arm64-v8a/libzen_office2pdf.so"
+
+          mkdir -p "$(dirname "$DEST_SO")"
+          cp "$SRC_SO" "$DEST_SO"
+
+          NEW_SHA256="$(sha256sum "$DEST_SO" | awk '{ print $1 }')"
+          NEW_SIZE="$(stat -c '%s' "$DEST_SO")"
+          FORMATTED_SIZE="$(printf "%'d" "$NEW_SIZE" 2>/dev/null || echo "$NEW_SIZE")"
+          BUILD_DATE="$(date -u +'%B %d, %Y')"
+          TAG_NAME="${{ steps.resolve-version.outputs.tag_name }}"
+          COMMIT_SHA="${{ steps.resolve-version.outputs.commit_sha }}"
+
+          echo "New SHA256: $NEW_SHA256"
+          echo "New Size: $NEW_SIZE bytes ($FORMATTED_SIZE)"
+          echo "Build Date: $BUILD_DATE"
+
+          # Python helper to update documentation cleanly
+          python3 - <<EOF
+          import re
+
+          sha = "$NEW_SHA256"
+          size = "$NEW_SIZE"
+          formatted_size = f"{int(size):,}"
+          date_str = "$BUILD_DATE"
+          tag = "$TAG_NAME"
+          commit = "$COMMIT_SHA"
+
+          # 1. Update docs/development-setup.md
+          dev_file = "docs/development-setup.md"
+          with open(dev_file, "r", encoding="utf-8") as f:
+              content = f.read()
+          content = re.sub(
+              r"The checked-in [A-Za-z]+ \d{1,2}, \d{4} rebuild is `[^`]+` bytes with SHA-256\n`[a-f0-9]{64}`",
+              f"The checked-in {date_str} rebuild is `{formatted_size}` bytes with SHA-256\n`{sha}`",
+              content
+          )
+          if tag != "current":
+              content = re.sub(
+                  r"release commit\n`[a-f0-9]{40}` \(`[^`]+`\)",
+                  f"release commit\n`{commit}` (`{tag}`)",
+                  content
+              )
+          with open(dev_file, "w", encoding="utf-8") as f:
+              f.write(content)
+
+          # 2. Update native/office2pdf-jni/README.md
+          readme_file = "native/office2pdf-jni/README.md"
+          with open(readme_file, "r", encoding="utf-8") as f:
+              content = f.read()
+          content = re.sub(
+              r"checked-in [A-Za-z]+ \d{1,2}, \d{4} arm64\nbuild is `[^`]+` bytes with SHA-256\n`[a-f0-9]{64}`",
+              f"checked-in {date_str} arm64\nbuild is `{formatted_size}` bytes with SHA-256\n`{sha}`",
+              content
+          )
+          if tag != "current":
+              content = re.sub(
+                  r"release `[^`]+` at commit\n`[a-f0-9]{40}`",
+                  f"release `{tag}` at commit\n`{commit}`",
+                  content
+              )
+          with open(readme_file, "w", encoding="utf-8") as f:
+              f.write(content)
+
+          # 3. Update third_party/THANKS.md
+          thanks_file = "third_party/THANKS.md"
+          with open(thanks_file, "r", encoding="utf-8") as f:
+              content = f.read()
+          content = re.sub(
+              r"Rebuilt on [A-Za-z]+ \d{1,2}, \d{4} from `native/office2pdf-jni`; size `[^`]+` bytes, SHA-256 `[a-f0-9]{64}`",
+              f"Rebuilt on {date_str} from `native/office2pdf-jni`; size `{formatted_size}` bytes, SHA-256 `{sha}`",
+              content
+          )
+          if tag != "current":
+              content = re.sub(
+                  r"at `developer0hye/office2pdf` commit `[a-f0-9]{40}`, released as `[^`]+`",
+                  f"at `developer0hye/office2pdf` commit `{commit}`, released as `{tag}`",
+                  content
+              )
+          with open(thanks_file, "w", encoding="utf-8") as f:
+              f.write(content)
+
+          # 4. Update docs/license-and-attribution.md
+          lic_file = "docs/license-and-attribution.md"
+          with open(lic_file, "r", encoding="utf-8") as f:
+              content = f.read()
+          content = re.sub(
+              r"Current binary: rebuilt on [A-Za-z]+ \d{1,2}, \d{4}, `[^`]+` bytes with SHA-256\n  `[a-f0-9]{64}`",
+              f"Current binary: rebuilt on {date_str}, `{formatted_size}` bytes with SHA-256\n  `{sha}`",
+              content
+          )
+          if tag != "current":
+              content = re.sub(
+                  r"Upstream source dependency: `developer0hye/office2pdf` commit\n  `[a-f0-9]{40}`, release `[^`]+`",
+                  f"Upstream source dependency: `developer0hye/office2pdf` commit\n  `{commit}`, release `{tag}`",
+                  content
+              )
+          with open(lic_file, "w", encoding="utf-8") as f:
+              f.write(content)
+          EOF
+
+          echo "sha256=$NEW_SHA256" >> "$GITHUB_OUTPUT"
+          echo "size=$NEW_SIZE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload SO Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libzen_office2pdf-arm64-v8a
+          path: app/src/main/jniLibs/arm64-v8a/libzen_office2pdf.so
+          retention-days: 14
+
+      - name: Commit and Push Changes
+        if: ${{ github.event.inputs.auto_commit == 'true' }}
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          TAG="${{ steps.resolve-version.outputs.tag_name }}"
+          SHA_SHORT=$(echo "${{ steps.metadata.outputs.sha256 }}" | cut -c1-8)
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add app/src/main/jniLibs/arm64-v8a/libzen_office2pdf.so \
+                  native/office2pdf-jni/Cargo.toml \
+                  native/office2pdf-jni/README.md \
+                  docs/development-setup.md \
+                  docs/license-and-attribution.md \
+                  third_party/THANKS.md
+
+          git commit -m "build(office): update libzen_office2pdf.so ($TAG, $SHA_SHORT)"
+          git push origin main
