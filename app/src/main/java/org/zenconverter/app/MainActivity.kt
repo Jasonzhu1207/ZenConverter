@@ -2059,6 +2059,7 @@ private fun audioTargetExtensionFor(targetFormat: String): String? {
         normalized.contains("wav") -> "wav"
         normalized.contains("flac") -> "flac"
         normalized.contains("wma") -> "wma"
+        normalized.contains("opus") -> "opus"
         else -> null
     }
 }
@@ -2120,7 +2121,7 @@ private fun ConversionTaskState.toUiProgress(): TaskProgress {
     )
 }
 
-private val CONNECTED_AUDIO_TARGETS = setOf("mp3", "m4a", "wav", "flac", "wma")
+private val CONNECTED_AUDIO_TARGETS = setOf("mp3", "m4a", "wav", "flac", "wma", "opus")
 private val EXTERNAL_IMPORT_ACTIONS = setOf(
     Intent.ACTION_VIEW,
     Intent.ACTION_SEND,
@@ -2151,7 +2152,8 @@ private val AUDIO_INPUT_EXTENSIONS = setOf(
     "wav",
     "flac",
     "wma",
-    "ogg"
+    "ogg",
+    "opus"
 )
 private val JPEG_INPUT_EXTENSIONS = setOf("jpg", "jpeg", "jfif", "jpe")
 private val IMAGE_INPUT_EXTENSIONS = JPEG_INPUT_EXTENSIONS + setOf(

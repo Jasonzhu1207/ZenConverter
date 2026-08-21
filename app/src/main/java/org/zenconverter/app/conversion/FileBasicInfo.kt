@@ -212,7 +212,8 @@ object FileBasicInfoReader {
         "wav",
         "flac",
         "wma",
-        "ogg"
+        "ogg",
+        "opus"
     )
     private val IMAGE_EXTENSIONS = setOf(
         "jpg",

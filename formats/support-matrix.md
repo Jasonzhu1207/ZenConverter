@@ -16,13 +16,13 @@ as supported until it has a tested path, sample files, and failure behavior.
 | Input | Output | Status | Engine | Notes |
 | --- | --- | --- | --- | --- |
 | Any | Any | Planned | None | Do not imply universal support. |
-| MP4 / MKV / MOV / WEBM / AVI / 3GP / 3GPP / TS / MTS video audio tracks | MP3 / M4A / WAV / FLAC / WMA | Stable | FFmpeg compatible | Extracts the first audio stream and encodes the selected audio target. M4A is AAC re-encode, not stream copy. Start/end-second trimming can limit the exported range. The app probes encoders before export where possible. Bitrate, sample-rate, and channel options are passed when the target supports them; video, subtitle, attachment, and extra audio tracks are not copied. |
+| MP4 / MKV / MOV / WEBM / AVI / 3GP / 3GPP / TS / MTS video audio tracks | MP3 / M4A / WAV / FLAC / WMA / OPUS | Stable | FFmpeg compatible | Extracts the first audio stream and encodes the selected audio target. M4A is AAC re-encode, not stream copy. Start/end-second trimming can limit the exported range. The app probes encoders before export where possible. Bitrate, sample-rate, and channel options are passed when the target supports them; video, subtitle, attachment, and extra audio tracks are not copied. |
 | MP4 | MP4 | Stable | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in MP4. Manual mode exposes codec, bitrate, short-side resolution cap, max frame-rate, audio options, trim range, and advanced filters. Fixed compression presets own the video codec/CRF/preset/resolution/frame-rate strategy and AAC audio bitrate, while trim range still applies. Subtitles, attachments, and extra tracks are not copied. |
 | MP4 | MKV | Stable | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in Matroska. Manual mode exposes codec, bitrate, short-side resolution cap, max frame-rate, audio options, and advanced filters. Fixed compression presets own the video codec/CRF/preset/resolution/frame-rate strategy and AAC audio bitrate. Subtitles, attachments, and extra tracks are not copied. |
 | MP4 / MKV / MOV / WEBM / AVI / 3GP / 3GPP / TS / MTS | MOV | Stable | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in QuickTime MOV. Manual mode exposes codec, bitrate, short-side resolution cap, max frame-rate, audio options, and advanced filters. Fixed compression presets own the video codec/CRF/preset/resolution/frame-rate strategy and AAC audio bitrate. Subtitles, attachments, and extra tracks are not copied. |
 | MP4 / MKV / MOV / WEBM / AVI / 3GP / 3GPP / TS / MTS | GIF | Stable | FFmpeg compatible | Creates an animated GIF from the first video track with palettegen/paletteuse. Start/end-second trimming can choose the source range; output is still limited to that range's first 30 seconds, 30 fps, and 900 frames. The default short-side cap is 480 px, with 720 px and Original options. Audio, subtitles, data streams, timing metadata, and container metadata are not copied. |
 | MKV / MOV / WEBM / AVI / 3GP / 3GPP / TS / MTS | MP4 | Stable | FFmpeg compatible | Re-encodes the first video track to H.264 or H.265 and audio to AAC in MP4. Manual mode exposes codec, bitrate, short-side resolution cap, max frame-rate, audio options, and advanced filters. Fixed compression presets own the video codec/CRF/preset/resolution/frame-rate strategy and AAC audio bitrate. Subtitles, attachments, and extra tracks are not copied. |
-| MP3 / M4A / AAC / FLAC / WAV / WMA / OGG | MP3 / M4A / WAV / FLAC / WMA | Stable | FFmpeg compatible | Common audio conversion path. MP3 uses `libmp3lame`; M4A uses AAC; WAV uses PCM; FLAC uses FLAC; WMA uses WMA v2 in ASF/WMA. Start/end-second trimming can limit the exported range. Bitrate is applied for MP3/M4A/WMA when selected. Sample-rate, channel, reverse, fade, volume/mute, echo, and audio noise-reduction controls are applied when selected. WAV/FLAC ignore bitrate. |
+| MP3 / M4A / AAC / FLAC / WAV / WMA / OGG / OPUS | MP3 / M4A / WAV / FLAC / WMA / OPUS | Stable | FFmpeg compatible | Common audio conversion path. MP3 uses `libmp3lame`; M4A uses AAC; WAV uses PCM; FLAC uses FLAC; WMA uses WMA v2 in ASF/WMA; OPUS uses `libopus` in Ogg. Start/end-second trimming can limit the exported range. Bitrate is applied for MP3/M4A/WMA/OPUS when selected. Sample-rate, channel, reverse, fade, volume/mute, echo, and audio noise-reduction controls are applied when selected. WAV/FLAC ignore bitrate. |
 | JPG / JPEG / JFIF / JPE / PNG / WEBP | JPG / JFIF / PNG / WEBP / ICO | Stable | Native Bitmap / ONNX Runtime | Static image conversion through Android platform bitmap APIs. JFIF output is JPEG-encoded pixels with a `.jfif` extension. JPG/JFIF/WEBP quality presets are Original 100, High 95, Balanced 85, Small 60; WEBP also offers Android 11+ lossless output. ICO output is a multi-size PNG-in-ICO file. PNG is written as lossless output. Transparency is preserved for PNG/WEBP/ICO and flattened to white for JPG/JFIF. Metadata is not copied, though JPEG EXIF orientation is applied best-effort; animated WEBP is not preserved as animation. Optional super-resolution upscales raster outputs (JPG/JFIF/PNG/WEBP) before encoding: bilinear 2×/3×/4× (`createScaledBitmap`) and Real-ESRGAN 4× AI models (`realesr-general-x4v3` 4.65 MB compact and `RealESRGAN_x4plus` 63.9 MB high-quality) through ONNX Runtime. The AI models are downloaded at runtime from an R2 direct link and SHA-256 verified; they are slower and do not preserve transparency. While a scale is active it forces original quality and hides GIF frame splitting. Output pixel budget scales with device RAM (32 MP per GiB, 64 MP minimum, 512 MP maximum). |
 | JPG / JPEG / JFIF / JPE | Inspect / clean / restore metadata | Stable | Native JPEG segment tool | Separate privacy tool, not a conversion task. It inspects common EXIF values and removable JPEG metadata segments, then can remove EXIF/XMP, IPTC/Photoshop, and comment segments in place without re-encoding pixels. JFIF, ICC, and Adobe display-related segments are preserved. Removed metadata is backed up in app-private data and can be restored only when the selected image's metadata-stripped core SHA-256 and dimensions match. |
 | Video files | Inspect metadata | Stable | MediaMetadataRetriever | Separate privacy tool can display basic duration, size, resolution, frame-rate, and container bitrate metadata where Android exposes it. Video metadata cleanup is intentionally not connected in this milestone. |
@@ -89,7 +89,7 @@ as supported until it has a tested path, sample files, and failure behavior.
 - Video targets are intentionally limited to MP4, MKV, MOV, and GIF. GIF is
   output-only for video sources in this milestone, not a normal image output
   target.
-- Audio targets are connected for MP3, M4A, WAV, FLAC, and WMA. Audio category
+- Audio targets are connected for MP3, M4A, WAV, FLAC, WMA, and OPUS. Audio category
   tasks always use the FFmpeg compatibility path and true audio re-encoding.
   M4A output is AAC encoding, not audio-track copy.
 - Video files selected in the Audio lane map only the first audio stream and
@@ -162,9 +162,9 @@ as supported until it has a tested path, sample files, and failure behavior.
   video mute removes audio entirely.
 - Subtitles, attachments, extra audio tracks, and unknown streams are not copied
   in this first path.
-- MP3, M4A, WAV, FLAC, and WMA audio targets use FFmpeg compatibility arguments:
-  `libmp3lame`, `aac`, `pcm_s16le`, `flac`, and `wmav2` respectively.
-  MP3/M4A/WMA pass selected bitrate, sample-rate, channel options, and advanced
+- MP3, M4A, WAV, FLAC, WMA, and OPUS audio targets use FFmpeg compatibility arguments:
+  `libmp3lame`, `aac`, `pcm_s16le`, `flac`, `wmav2`, and `libopus` respectively.
+  MP3/M4A/WMA/OPUS pass selected bitrate, sample-rate, channel options, and advanced
   audio filters. WAV/FLAC pass sample-rate, channel options, and advanced audio
   filters, but intentionally do not pass bitrate.
 - Physical-device logs on July 11, 2026 confirmed that the earlier local Free
@@ -178,7 +178,7 @@ as supported until it has a tested path, sample files, and failure behavior.
   with `/proc/self/fd/{fd}` retained as a fallback. Cache fallback for
   non-seekable providers is still future `SafeCache` work.
 - No automated audio sample suite exists yet. Physical-device verification has
-  covered MP3, M4A, WAV, FLAC, WMA, and video audio extraction; an automated
+  covered MP3, M4A, WAV, FLAC, WMA, OPUS, and video audio extraction; an automated
   sample suite remains a future quality improvement.
 
 ## Current Native Image Limits

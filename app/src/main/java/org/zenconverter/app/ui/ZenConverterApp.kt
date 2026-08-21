@@ -254,7 +254,8 @@ enum class FileCategory(
             TargetFormat("MP3", "mp3", "Re-encode"),
             TargetFormat("WAV", "wav", "Re-encode"),
             TargetFormat("FLAC", "flac", "Re-encode"),
-            TargetFormat("WMA", "wma", "Re-encode")
+            TargetFormat("WMA", "wma", "Re-encode"),
+            TargetFormat("OPUS", "opus", "Re-encode")
         )
     ),
     Image(
@@ -8812,6 +8813,11 @@ private data class UiText(
                 simplifiedChineseText -> "当前兼容包不包含 WMA 编码器"
                 else -> "目前相容包不包含 WMA 編碼器"
             }
+            "Compatibility engine needs an Opus-capable FFmpeg package" -> when (this) {
+                englishText -> "Compatibility engine needs an Opus-capable FFmpeg package"
+                simplifiedChineseText -> "当前兼容包不包含 Opus 编码器"
+                else -> "目前相容包不包含 Opus 編碼器"
+            }
             "Compatibility engine needs a GIF-capable FFmpeg package" -> when (this) {
                 englishText -> "Compatibility engine needs a GIF-capable FFmpeg package"
                 simplifiedChineseText -> "当前兼容包不包含 GIF 编码器"
@@ -9851,10 +9857,10 @@ private val englishHelpGuide = HelpGuideCopy(
     back = "Back",
     videoTitle = "Video",
     videoBody = "Convert common video formats and extract audio tracks.",
-    videoFormats = "MP4 · MKV · MOV · GIF  →  M4A · MP3 · WAV · FLAC · WMA",
+    videoFormats = "MP4 · MKV · MOV · GIF  →  M4A · MP3 · WAV · FLAC · WMA · OPUS",
     audioTitle = "Audio",
     audioBody = "Convert audio files between the formats used most often.",
-    audioFormats = "MP3 · M4A · WAV · FLAC · WMA",
+    audioFormats = "MP3 · M4A · WAV · FLAC · WMA · OPUS",
     imageTitle = "Images",
     imageBody = "Convert images, make PDFs, and combine multiple images into one PDF.",
     imageFormats = "JPG · PNG · JFIF · WEBP · ICO  →  PDF",
@@ -9876,10 +9882,10 @@ private val simplifiedChineseHelpGuide = HelpGuideCopy(
     back = "返回",
     videoTitle = "视频",
     videoBody = "转换常见视频格式，也可以提取视频中的音频。",
-    videoFormats = "MP4 · MKV · MOV · GIF  →  M4A · MP3 · WAV · FLAC · WMA",
+    videoFormats = "MP4 · MKV · MOV · GIF  →  M4A · MP3 · WAV · FLAC · WMA · OPUS",
     audioTitle = "音频",
     audioBody = "在常用音频格式之间互相转换。",
-    audioFormats = "MP3 · M4A · WAV · FLAC · WMA",
+    audioFormats = "MP3 · M4A · WAV · FLAC · WMA · OPUS",
     imageTitle = "图片",
     imageBody = "转换图片、生成 PDF，也可以把多张图片合并成一个 PDF。",
     imageFormats = "JPG · PNG · JFIF · WEBP · ICO  →  PDF",
@@ -9901,10 +9907,10 @@ private val traditionalChineseHelpGuide = HelpGuideCopy(
     back = "返回",
     videoTitle = "影片",
     videoBody = "轉換常見影片格式，也可以擷取影片中的音訊。",
-    videoFormats = "MP4 · MKV · MOV · GIF  →  M4A · MP3 · WAV · FLAC · WMA",
+    videoFormats = "MP4 · MKV · MOV · GIF  →  M4A · MP3 · WAV · FLAC · WMA · OPUS",
     audioTitle = "音訊",
     audioBody = "在常用音訊格式之間互相轉換。",
-    audioFormats = "MP3 · M4A · WAV · FLAC · WMA",
+    audioFormats = "MP3 · M4A · WAV · FLAC · WMA · OPUS",
     imageTitle = "圖片",
     imageBody = "轉換圖片、建立 PDF，也可以把多張圖片合併成一個 PDF。",
     imageFormats = "JPG · PNG · JFIF · WEBP · ICO  →  PDF",

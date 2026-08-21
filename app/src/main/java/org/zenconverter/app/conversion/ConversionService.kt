@@ -3575,6 +3575,11 @@ class ConversionService : Service() {
                 format = "asf",
                 requiredEncoder = FFMPEG_WMA_ENCODER
             )
+            "opus" -> FfmpegAudioProfile(
+                codec = FFMPEG_OPUS_ENCODER,
+                format = "opus",
+                requiredEncoder = FFMPEG_OPUS_ENCODER
+            )
             else -> null
         }
     }
@@ -4141,6 +4146,8 @@ class ConversionService : Service() {
                 "Compatibility engine needs a FLAC-capable FFmpeg package"
             encoder == FFMPEG_WMA_ENCODER ->
                 "Compatibility engine needs a WMA-capable FFmpeg package"
+            encoder == FFMPEG_OPUS_ENCODER ->
+                "Compatibility engine needs an Opus-capable FFmpeg package"
             encoder == FFMPEG_GIF_ENCODER &&
                 isVideoGifOutput(input) ->
                 "Compatibility engine needs a GIF-capable FFmpeg package"
@@ -5094,6 +5101,7 @@ class ConversionService : Service() {
                     "wav" -> OutputProfile(extension = "wav", mimeType = MIME_TYPE_WAV, kind = OutputMediaKind.Audio)
                     "flac" -> OutputProfile(extension = "flac", mimeType = MIME_TYPE_FLAC, kind = OutputMediaKind.Audio)
                     "wma" -> OutputProfile(extension = "wma", mimeType = MIME_TYPE_WMA, kind = OutputMediaKind.Audio)
+                    "opus" -> OutputProfile(extension = "opus", mimeType = MIME_TYPE_OPUS, kind = OutputMediaKind.Audio)
                     else -> null
                 }
             }
@@ -5178,6 +5186,7 @@ class ConversionService : Service() {
             normalized.contains("wav") -> "wav"
             normalized.contains("flac") -> "flac"
             normalized.contains("wma") -> "wma"
+            normalized.contains("opus") -> "opus"
             else -> null
         }
     }
@@ -5511,6 +5520,7 @@ class ConversionService : Service() {
         private const val FFMPEG_WAV_ENCODER = "pcm_s16le"
         private const val FFMPEG_FLAC_ENCODER = "flac"
         private const val FFMPEG_WMA_ENCODER = "wmav2"
+        private const val FFMPEG_OPUS_ENCODER = "libopus"
         private const val FFMPEG_DEFAULT_CRF_H264 = "23"
         private const val FFMPEG_DEFAULT_CRF_H265 = "28"
         private const val FFMPEG_VISUAL_LOSSLESS_CRF_H264 = "18"
@@ -5538,6 +5548,7 @@ class ConversionService : Service() {
         private const val MIME_TYPE_WAV = "audio/wav"
         private const val MIME_TYPE_FLAC = "audio/flac"
         private const val MIME_TYPE_WMA = "audio/x-ms-wma"
+        private const val MIME_TYPE_OPUS = "audio/opus"
         private const val MIME_TYPE_JPEG = "image/jpeg"
         private const val MIME_TYPE_PNG = "image/png"
         private const val MIME_TYPE_WEBP = "image/webp"

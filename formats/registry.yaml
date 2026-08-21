@@ -226,6 +226,46 @@ groups:
         engine: ffmpeg-compatible
         status: stable
         note: "Extracts the first audio track and encodes WMA v2 through FFmpeg compatibility mode. Advanced audio filters apply where selected."
+      - from: video
+        to: opus
+        engine: ffmpeg-compatible
+        status: stable
+        note: "Extracts the first audio track and encodes OPUS through FFmpeg compatibility mode. Advanced audio filters apply where selected."
+      - from: audio
+        to: opus
+        engine: ffmpeg-compatible
+        status: stable
+        note: "Encodes OPUS through libopus after runtime encoder probing. Advanced audio filters apply where selected."
+      - from: opus
+        to: mp3
+        engine: ffmpeg-compatible
+        status: stable
+        note: "Encodes MP3 through libmp3lame after runtime encoder probing. Advanced audio filters apply where selected."
+      - from: opus
+        to: m4a
+        engine: ffmpeg-compatible
+        status: stable
+        note: "Encodes AAC in an M4A container through FFmpeg compatibility mode. Advanced audio filters apply where selected."
+      - from: opus
+        to: wav
+        engine: ffmpeg-compatible
+        status: stable
+        note: "Writes PCM WAV through FFmpeg compatibility mode. Advanced audio filters apply where selected."
+      - from: opus
+        to: flac
+        engine: ffmpeg-compatible
+        status: stable
+        note: "Encodes FLAC through FFmpeg compatibility mode. Advanced audio filters apply where selected."
+      - from: opus
+        to: wma
+        engine: ffmpeg-compatible
+        status: stable
+        note: "Encodes WMA v2 through FFmpeg compatibility mode. Advanced audio filters apply where selected."
+      - from: opus
+        to: opus
+        engine: ffmpeg-compatible
+        status: stable
+        note: "Re-encodes OPUS through libopus. Advanced audio filters apply where selected."
   image:
     # Raster image outputs (jpg/jfif/png/webp) also expose an optional
     # super-resolution option: bilinear 2x/3x/4x through Android
