@@ -10,7 +10,7 @@
   <img alt="GitHub stars" src="https://img.shields.io/github/stars/Jasonzhu1207/ZenConverter?style=flat&logo=github&color=F59E0B">
   <img alt="GitHub downloads" src="https://img.shields.io/github/downloads/Jasonzhu1207/ZenConverter/total?style=flat&logo=github">
   <img alt="最后提交" src="https://img.shields.io/github/last-commit/Jasonzhu1207/ZenConverter?style=flat&logo=github">
-  <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?logo=kotlin&logoColor=white">
+  <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.2.20-7F52FF?logo=kotlin&logoColor=white">
   <img alt="Jetpack Compose" src="https://img.shields.io/badge/UI-Jetpack%20Compose-4285F4">
   <img alt="No ads" src="https://img.shields.io/badge/ads-none-16A34A">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/Jasonzhu1207/ZenConverter?style=flat"></a>
@@ -50,21 +50,23 @@ ZenConverter 想做的是一个本地优先的 Android 转换器：
 
 ## 当前状态
 
-`稳定` 路线已在 Android 真机验证；`Beta` 路线可用，但仍受明确写出的兼容性边界约束；计划中的功能放在最后。
+`稳定` 路线已在 Android 真机验证；`Beta` 路线可用，但仍受明确写出的兼容性边界约束。
 
 | 模块 | 状态 | 说明 |
 | --- | --- | --- |
 | 原生 Android 外壳 | 已完成 | Kotlin、Compose、Material 3、前台服务任务管线。 |
-| 任务队列与结果 | 已完成 | 系统分享/打开方式导入、混合文件独立路由、逐文件目标设置、文件基础信息、逐任务进度和失败状态、转换前后摘要、取消、输出分享，以及尽力打开输出文件或所在位置。 |
-| 视频转换 | 已完成 | MP4 / MKV / MOV 输出均走 FFmpeg 视频与音频真重新编码，包含 MP4 转 MP4，可调整编码、码率、分辨率、帧率、音频和高级处理。开启压缩预设会固定 CRF、视频质量/体积策略及 AAC 音频码率。 |
+| 任务队列与结果 | 已完成 | 系统分享/打开方式导入、相册与文件夹批量导入、同类文件批量配置选项、混合文件独立路由、逐文件目标设置、文件基础信息、逐任务进度和失败状态、转换前后摘要、取消、输出分享，以及尽力打开输出文件或所在位置。 |
+| 视频转换 | 已完成 | MP4 / MKV / MOV 输出均走 FFmpeg 视频与音频真重新编码，包含 MP4 转 MP4。可调整编码、码率、分辨率、帧率、音频、可视化拖拽快捷裁剪与高级处理。开启压缩预设会固定 CRF、视频质量/体积策略及 AAC 音频码率。 |
 | 视频转动图 GIF | 已完成 | 使用 FFmpeg 调色板路线，自动取前 30 秒，最多 30 fps、900 帧；默认短边 480 px，可选 720 px 或原始尺寸。 |
 | 音频提取与互转 | 已完成 | 视频音频提取和 MP3 / M4A / WAV / FLAC / WMA 目标均走 FFmpeg 真重新编码；已接入适用的码率、采样率、声道和编码器检查。 |
 | 音视频高级处理 | 稳定 | 视频支持短视频倒放、淡入淡出、镜像、旋转和画幅适配/裁剪；音频支持倒放、无模型 `afftdn` 降噪、淡入淡出、音量/静音和回音。倒放有保守的安全限制。 |
 | 图片转换 | 稳定 / Beta | 支持 JPG / JPEG / JFIF / JPE、PNG、WEBP、GIF、HEIC / HEIF、ICO 输入，以及 JPG / JFIF / PNG / WEBP / ICO / PDF 输出。HEIC / HEIF 仍受设备解码器能力影响。GIF 可转首帧或拆帧到文件夹；不复制元数据和动画时序。 |
+| 图片超分辨率 | 稳定 | 支持双线性插值算法超分（2×、3×、4×）以及基于 ONNX Runtime 的 Real-ESRGAN 4× AI 深度学习超分模型（通用模型、高画质模型、动漫模型等）。支持按需下载模型并校验 SHA-256，采用瓦片式分块推理与基于设备内存的动态像素预算，避免 OOM。 |
 | 元数据安全 | 稳定 | 独立隐私工具可查看图片/视频元数据。JPG / JPEG / JFIF 可不重编码原地清理，被移除的元数据会备份到应用数据目录，支持同一张图恢复。 |
 | PDF 工具 | 稳定 | 图片/PDF 互转、PDF 合并、可选择文本导出 TXT / 轻量 MD，以及基于密码的 PDF 加密和解密。不包含 OCR 或密码破解。 |
 | Office 转换 | Beta | DOCX / PPTX / XLSX 可在本地输出 PDF、TXT 或轻量 MD。中文可用内置 CJK 字体渲染，但版式保真有限，源文件上限为 64 MiB。 |
-| ZIP 压缩包处理 | 计划中 | 待流式处理和压缩包安全边界设计完成后再接入。 |
+| 字体转换 | 稳定 | 支持 TTF、OTF、WOFF、WOFF2 字体格式互转。WOFF2 编解码使用内置 Google woff2 原生库（arm64），WOFF 1.0 使用纯 Kotlin zlib 实现；按字体轮廓自动匹配 .ttf / .otf 输出扩展名。 |
+| 歌词与字幕转换 | 稳定 | 支持 SRT、VTT、LRC、ASS 格式互转。LRC 歌词使用纯 Kotlin 解析与生成，支持多时间戳、`[offset:]` 偏移标签与 GB18030/GBK 编码回退；SRT/VTT/ASS 走 FFmpeg 字幕管线。 |
 
 ## 架构
 
@@ -74,7 +76,7 @@ flowchart LR
     Configure["逐项设置任务"]
     Queue["待开始队列"]
     Service["前台服务"]
-    Engine["FFmpeg / Native / Office"]
+    Engine["FFmpeg / Native / Office / WOFF2 / ONNX"]
     Output["保存输出"]
 
     Pick --> Configure --> Queue --> Service --> Engine --> Output
@@ -82,9 +84,11 @@ flowchart LR
 
 UI 不直接做转换。每个任务会根据输入、输出和所选模式选择引擎：
 
-- `Compatibility`：已接入音视频目标、GIF 输出和高级处理均走 FFmpeg 真重新编码路线。
-- `Native`：用 Android 平台 API 处理图片、PDF 等不需要媒体引擎的任务。
+- `Compatibility`：已接入音视频目标、GIF 输出、字幕转换（SRT/VTT/ASS）和音视频高级处理均走 FFmpeg 路线。
+- `Native`：用 Android 平台 API 处理图片、PDF，结合 PDFBox-Android（合并/文本/安全）及纯 Kotlin 引擎（WOFF、LRC）。
 - `Office`：用本地初版 Office 渲染路线处理 DOCX、PPTX 和 XLSX。
+- `Font / WOFF2`：通过内置 `google/woff2` 原生库处理 WOFF2 字体压缩与解压。
+- `AI Super-Resolution`：基于 ONNX Runtime 在本地运行 Real-ESRGAN 神经网络超分推理。
 - `SafeCache`：后续用于处理无法提供可用文件描述符的文件来源。
 
 更多细节见 [docs/architecture.md](docs/architecture.md) 和
