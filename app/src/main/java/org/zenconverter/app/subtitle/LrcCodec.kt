@@ -19,6 +19,8 @@ object LrcCodec {
     private val METADATA_REGEX = Regex("""^\[(ti|ar|al|by):(.*)]$""", RegexOption.IGNORE_CASE)
     private val OFFSET_REGEX = Regex("""^\[offset:([+-]?\d+)]$""", RegexOption.IGNORE_CASE)
     private val TIMESTAMP_REGEX = Regex("""\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?]""")
+    private val HTML_TAG_REGEX = Regex("<[^>]+>")
+    private val ASS_TAG_REGEX = Regex("""\{[^}]*\}""")
 
     fun parse(text: String): SubtitleDocument {
         val normalized = text
@@ -105,6 +107,8 @@ object LrcCodec {
 
     private fun singleLine(text: String): String {
         return text
+            .replace(HTML_TAG_REGEX, "")
+            .replace(ASS_TAG_REGEX, "")
             .replace('\r', ' ')
             .replace('\n', ' ')
             .trim()

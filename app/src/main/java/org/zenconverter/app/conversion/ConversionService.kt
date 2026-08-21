@@ -5553,7 +5553,7 @@ class ConversionService : Service() {
         private const val MIME_TYPE_SRT = "application/x-subrip"
         private const val MIME_TYPE_VTT = "text/vtt"
         private const val MIME_TYPE_ASS = "text/x-ssa"
-        private const val MIME_TYPE_LRC = "text/plain"
+        private const val MIME_TYPE_LRC = "text/x-lrc"
         private const val PDF_ENCRYPTION_KEY_LENGTH_BITS = 128
         private const val MIME_TYPE_DOCX =
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"

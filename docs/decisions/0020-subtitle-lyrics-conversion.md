@@ -57,5 +57,7 @@ whole with an 8 MiB cap.
 - Non-UTF-8 SRT/VTT/ASS inputs are still assumed to be UTF-8 by FFmpeg; only the
   Kotlin-parsed LRC path gains the GB18030 fallback.
 - Outputs are written to the Documents collection with format-specific MIME
-  types (`application/x-subrip`, `text/vtt`, `text/x-ssa`, `text/plain` for
-  LRC). Same-format and TXT targets are excluded in the UI.
+  types (`application/x-subrip`, `text/vtt`, `text/x-ssa`, `text/x-lrc` for
+  LRC). `text/plain` is deliberately avoided for LRC because MediaStore would
+  otherwise append a `.txt` extension. Same-format and TXT targets are excluded
+  in the UI.
