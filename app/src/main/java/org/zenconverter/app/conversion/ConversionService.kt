@@ -76,6 +76,7 @@ import org.zenconverter.app.subtitle.SubtitleFormat
 import org.zenconverter.app.subtitle.SubtitleTextDecoder
 import org.zenconverter.app.model.EsrganModelManager
 import org.zenconverter.app.model.RealEsrganUpscaler
+import org.zenconverter.app.settings.AppPreferences
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -97,6 +98,7 @@ class ConversionService : Service() {
     private var activeFfmpegSession: FFmpegSession? = null
     private var activeTempFile: File? = null
     private var copyThread: Thread? = null
+    private var customOutputFallbackOccurred = false
     private var ffmpegKitReady = false
     private var ffmpegKitLoadFailure: Throwable? = null
     private var pdfBoxReady = false
@@ -138,6 +140,7 @@ class ConversionService : Service() {
                     else -> startForeground(NOTIFICATION_ID, buildNotification("Preparing", 0))
                 }
                 taskIndex = 0
+                customOutputFallbackOccurred = false
                 processNextTask()
             }
         }
@@ -619,10 +622,11 @@ class ConversionService : Service() {
                 )
                 val outputDisplayName = outputNameFor(input, result.extension)
                 val tempFileSizeBytes = tempFile.length().takeIf { it >= 0L }
-                val createdOutputUri = createOutput(input, outputDisplayName, outputProfile)
+                val createdOutput = createOutput(input, outputDisplayName, outputProfile)
+                val createdOutputUri = createdOutput.uri
                 outputUri = createdOutputUri
                 copyFileToOutput(tempFile, createdOutputUri)
-                finalizeOutput(input, createdOutputUri, outputProfile.mimeType)
+                finalizeOutput(createdOutput.isDefaultPublicDestination, createdOutputUri, outputProfile.mimeType)
                 val outputInfo = FileBasicInfoReader.read(
                     context = this,
                     uri = createdOutputUri,
@@ -643,7 +647,7 @@ class ConversionService : Service() {
                         index = taskIndex,
                         outputUri = createdOutputUri,
                         outputUris = listOf(createdOutputUri),
-                        outputDirectoryUri = outputDirectoryUriFor(input, outputProfile),
+                        outputDirectoryUri = createdOutput.outputDirectoryUri,
                         outputMimeType = outputProfile.mimeType,
                         outputInfo = outputInfo
                     )
@@ -4527,14 +4531,15 @@ class ConversionService : Service() {
                     ?: error("Unsupported output format")
                 val outputDisplayName = outputNameFor(input, outputProfile.extension)
                 val tempFileSizeBytes = tempFile.length().takeIf { it >= 0L }
-                val createdOutputUri = createOutput(
+                val createdOutput = createOutput(
                     input,
                     outputDisplayName,
                     outputProfile
                 )
+                val createdOutputUri = createdOutput.uri
                 outputUri = createdOutputUri
                 copyFileToOutput(tempFile, createdOutputUri)
-                finalizeOutput(input, createdOutputUri, outputProfile.mimeType)
+                finalizeOutput(createdOutput.isDefaultPublicDestination, createdOutputUri, outputProfile.mimeType)
                 val outputInfo = FileBasicInfoReader.read(
                     context = this,
                     uri = createdOutputUri,
@@ -4555,7 +4560,7 @@ class ConversionService : Service() {
                         index = taskIndex,
                         outputUri = createdOutputUri,
                         outputUris = listOf(createdOutputUri),
-                        outputDirectoryUri = outputDirectoryUriFor(input, outputProfile),
+                        outputDirectoryUri = createdOutput.outputDirectoryUri,
                         outputMimeType = outputProfile.mimeType,
                         outputInfo = outputInfo
                     )
@@ -4588,6 +4593,7 @@ class ConversionService : Service() {
 
         copyThread = Thread {
             val outputUris = mutableListOf<Uri>()
+            var outputDirectoryUri: Uri? = null
             var outputSizeBytes = 0L
             try {
                 tempFiles.forEachIndexed { index, tempFile ->
@@ -4595,7 +4601,7 @@ class ConversionService : Service() {
                         throw InterruptedException()
                     }
                     outputSizeBytes += tempFile.length().coerceAtLeast(0L)
-                    val createdOutputUri = createOutput(
+                    val createdOutput = createOutput(
                         input,
                         outputNameForPage(
                             input = input,
@@ -4605,9 +4611,11 @@ class ConversionService : Service() {
                         ),
                         outputProfile
                     )
+                    val createdOutputUri = createdOutput.uri
+                    outputDirectoryUri = createdOutput.outputDirectoryUri
                     outputUris.add(createdOutputUri)
                     copyFileToOutput(tempFile, createdOutputUri)
-                    finalizeOutput(input, createdOutputUri, outputProfile.mimeType)
+                    finalizeOutput(createdOutput.isDefaultPublicDestination, createdOutputUri, outputProfile.mimeType)
                     tempFile.delete()
                 }
                 handler.post {
@@ -4621,7 +4629,7 @@ class ConversionService : Service() {
                         index = taskIndex,
                         outputUri = outputUris.firstOrNull(),
                         outputUris = outputUris.toList(),
-                        outputDirectoryUri = outputDirectoryUriFor(input, outputProfile),
+                        outputDirectoryUri = outputDirectoryUri,
                         outputMimeType = outputProfile.mimeType,
                         outputInfo = aggregateOutputInfo(outputProfile, outputUris.size, outputSizeBytes)
                     )
@@ -4677,7 +4685,7 @@ class ConversionService : Service() {
                     )
                     outputUris.add(createdOutputUri)
                     copyFileToOutput(tempFile, createdOutputUri)
-                    finalizeOutput(input, createdOutputUri, outputProfile.mimeType)
+                    finalizeOutput(folder.isDefaultPublicDestination, createdOutputUri, outputProfile.mimeType)
                     tempFile.delete()
                 }
                 handler.post {
@@ -4693,7 +4701,7 @@ class ConversionService : Service() {
                         outputUri = outputUris.firstOrNull(),
                         outputUris = outputUris.toList(),
                         outputDirectoryUri = outputFolderOpenUri(outputFolder)
-                            ?: outputDirectoryUriFor(input, outputProfile),
+                            ?: defaultOutputDirectoryUriFor(outputProfile),
                         outputMimeType = outputProfile.mimeType,
                         outputInfo = aggregateOutputInfo(outputProfile, outputUris.size, outputSizeBytes)
                     )
@@ -4738,7 +4746,11 @@ class ConversionService : Service() {
     private fun finishRun() {
         activeFfmpegSession = null
         activeTempFile = null
-        ConversionTaskStore.markRunFinished()
+        if (customOutputFallbackOccurred && ConversionTaskStore.tasks.none { it.status == ConversionTaskStatus.Failed }) {
+            ConversionTaskStore.markRunFinished("Custom output folder was unavailable; saved to default directory")
+        } else {
+            ConversionTaskStore.markRunFinished()
+        }
         updateNotification(
             ConversionTaskStore.summaryMessage.value ?: "Conversion complete",
             (ConversionTaskStore.aggregateProgress() * 100).toInt()
@@ -4795,18 +4807,43 @@ class ConversionService : Service() {
         input: ConversionTaskInput,
         displayName: String,
         outputProfile: OutputProfile
-    ): Uri {
+    ): CreatedOutput {
         return when (val destination = input.outputDestination) {
-            OutputDestination.DefaultPublicDirectory -> createDefaultOutput(
-                displayName,
-                outputProfile
+            OutputDestination.DefaultPublicDirectory -> CreatedOutput(
+                uri = createDefaultOutput(displayName, outputProfile),
+                outputDirectoryUri = defaultOutputDirectoryUriFor(outputProfile),
+                isDefaultPublicDestination = true
             )
-            is OutputDestination.CustomDirectory -> createOutputDocument(
-                destination.uri,
-                displayName,
-                outputProfile.mimeType
-            )
+            is OutputDestination.CustomDirectory -> {
+                try {
+                    val uri = createOutputDocument(
+                        destination.uri,
+                        displayName,
+                        outputProfile.mimeType
+                    )
+                    CreatedOutput(
+                        uri = uri,
+                        outputDirectoryUri = documentUriForTree(destination.uri),
+                        isDefaultPublicDestination = false
+                    )
+                } catch (throwable: Throwable) {
+                    Log.w(TAG, "Custom output directory unavailable, falling back to default output", throwable)
+                    handleCustomOutputDirectoryUnavailable()
+                    CreatedOutput(
+                        uri = createDefaultOutput(displayName, outputProfile),
+                        outputDirectoryUri = defaultOutputDirectoryUriFor(outputProfile),
+                        isDefaultPublicDestination = true
+                    )
+                }
+            }
         }
+    }
+
+    private fun handleCustomOutputDirectoryUnavailable() {
+        customOutputFallbackOccurred = true
+        AppPreferences.clearOutputDirectory(this)
+        AppPreferences.setUsesCustomOutput(this, false)
+        ConversionTaskStore.showMessage("Custom output folder was unavailable; saved to default directory")
     }
 
     private fun createOutputFolder(
@@ -4816,23 +4853,56 @@ class ConversionService : Service() {
     ): OutputFolder {
         return when (val destination = input.outputDestination) {
             OutputDestination.DefaultPublicDirectory -> {
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                    val publicDirectory = Environment.getExternalStoragePublicDirectory(
-                        defaultPublicDirectoryFor(outputProfile)
-                    )
-                    val folder = File(File(publicDirectory, DEFAULT_OUTPUT_DIRECTORY), folderName)
-                    if (!folder.exists() && !folder.mkdirs()) {
-                        error("Could not create output directory")
-                    }
-                    OutputFolder(fileDirectory = folder)
-                } else {
-                    OutputFolder(defaultRelativeSubdirectory = folderName)
-                }
+                createDefaultOutputFolder(outputProfile, folderName)
             }
             is OutputDestination.CustomDirectory -> {
-                val folderUri = createOutputDirectoryDocument(destination.uri, folderName)
-                OutputFolder(documentDirectoryUri = folderUri)
+                try {
+                    val folderUri = createOutputDirectoryDocument(destination.uri, folderName)
+                    OutputFolder(
+                        documentDirectoryUri = folderUri,
+                        isDefaultPublicDestination = false
+                    )
+                } catch (throwable: Throwable) {
+                    Log.w(TAG, "Custom output directory unavailable for folder export, falling back to default output", throwable)
+                    handleCustomOutputDirectoryUnavailable()
+                    createDefaultOutputFolder(outputProfile, folderName)
+                }
             }
+        }
+    }
+
+    private fun createDefaultOutputFolder(
+        outputProfile: OutputProfile,
+        folderName: String
+    ): OutputFolder {
+        return if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            val publicDirectory = Environment.getExternalStoragePublicDirectory(
+                defaultPublicDirectoryFor(outputProfile)
+            )
+            val folder = File(File(publicDirectory, DEFAULT_OUTPUT_DIRECTORY), folderName)
+            if (!folder.exists() && !folder.mkdirs()) {
+                error("Could not create output directory")
+            }
+            OutputFolder(
+                fileDirectory = folder,
+                isDefaultPublicDestination = true
+            )
+        } else {
+            OutputFolder(
+                defaultRelativeSubdirectory = folderName,
+                isDefaultPublicDestination = true
+            )
+        }
+    }
+
+    private fun defaultOutputDirectoryUriFor(outputProfile: OutputProfile): Uri? {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            null
+        } else {
+            val publicDirectory = Environment.getExternalStoragePublicDirectory(
+                defaultPublicDirectoryFor(outputProfile)
+            )
+            Uri.fromFile(File(publicDirectory, DEFAULT_OUTPUT_DIRECTORY))
         }
     }
 
@@ -4841,16 +4911,7 @@ class ConversionService : Service() {
         outputProfile: OutputProfile
     ): Uri? {
         return when (val destination = input.outputDestination) {
-            OutputDestination.DefaultPublicDirectory -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    null
-                } else {
-                    val publicDirectory = Environment.getExternalStoragePublicDirectory(
-                        defaultPublicDirectoryFor(outputProfile)
-                    )
-                    Uri.fromFile(File(publicDirectory, DEFAULT_OUTPUT_DIRECTORY))
-                }
-            }
+            OutputDestination.DefaultPublicDirectory -> defaultOutputDirectoryUriFor(outputProfile)
             is OutputDestination.CustomDirectory -> documentUriForTree(destination.uri)
         }
     }
@@ -5040,11 +5101,11 @@ class ConversionService : Service() {
     }
 
     private fun finalizeOutput(
-        input: ConversionTaskInput,
+        isDefaultPublicDestination: Boolean,
         outputUri: Uri,
         mimeType: String
     ) {
-        if (input.outputDestination != OutputDestination.DefaultPublicDirectory) return
+        if (!isDefaultPublicDestination) return
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val values = ContentValues().apply {
@@ -5225,10 +5286,17 @@ class ConversionService : Service() {
         }
     }
 
+    private data class CreatedOutput(
+        val uri: Uri,
+        val outputDirectoryUri: Uri?,
+        val isDefaultPublicDestination: Boolean
+    )
+
     private data class OutputFolder(
         val defaultRelativeSubdirectory: String? = null,
         val fileDirectory: File? = null,
-        val documentDirectoryUri: Uri? = null
+        val documentDirectoryUri: Uri? = null,
+        val isDefaultPublicDestination: Boolean = false
     )
 
     private enum class OutputMediaKind {

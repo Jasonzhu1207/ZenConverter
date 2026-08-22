@@ -330,10 +330,10 @@ object ConversionTaskStore {
         summaryMessage.value = message
     }
 
-    fun markRunFinished() {
+    fun markRunFinished(customSummary: String? = null) {
         isRunning.value = false
-        summaryMessage.value = tasks.lastOrNull { it.status == ConversionTaskStatus.Failed }
-            ?.message
+        summaryMessage.value = customSummary
+            ?: tasks.lastOrNull { it.status == ConversionTaskStatus.Failed }?.message
             ?: "Conversion complete"
         clearSensitiveInputs()
     }

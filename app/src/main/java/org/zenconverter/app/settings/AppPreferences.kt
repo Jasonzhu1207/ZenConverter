@@ -2,6 +2,7 @@ package org.zenconverter.app.settings
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 
 data class SavedOutputDirectory(
     val uri: Uri,
@@ -75,6 +76,22 @@ object AppPreferences {
             .remove(KEY_OUTPUT_DIRECTORY_URI)
             .remove(KEY_OUTPUT_DIRECTORY_LABEL)
             .apply()
+    }
+
+    fun isOutputDirectoryAccessible(context: Context, uri: Uri): Boolean {
+        return runCatching {
+            val treeDocumentId = DocumentsContract.getTreeDocumentId(uri)
+            val documentUri = DocumentsContract.buildDocumentUriUsingTree(uri, treeDocumentId)
+            context.contentResolver.query(
+                documentUri,
+                arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                cursor.moveToFirst()
+            } == true
+        }.getOrDefault(false)
     }
 
     private fun preferences(context: Context) =

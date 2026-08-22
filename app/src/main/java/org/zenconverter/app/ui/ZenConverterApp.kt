@@ -8951,6 +8951,16 @@ private data class UiText(
                 simplifiedChineseText -> "输入文件权限已失效"
                 else -> "輸入檔案權限已失效"
             }
+            "Custom output folder was unavailable; saved to default directory" -> when (this) {
+                englishText -> "Custom output folder was unavailable; saved to default directory"
+                simplifiedChineseText -> "自定义输出目录不可用，已保存至默认目录"
+                else -> "自訂輸出目錄不可用，已儲存至預設目錄"
+            }
+            "Custom output folder no longer exists; reset to default directory" -> when (this) {
+                englishText -> "Custom output folder no longer exists; reset to default directory"
+                simplifiedChineseText -> "自定义输出目录不存在，已重置为默认目录"
+                else -> "自訂輸出目錄不存在，已重設為預設目錄"
+            }
             "Could not save output file" -> when (this) {
                 englishText -> "Could not save output file"
                 simplifiedChineseText -> "无法保存输出文件"

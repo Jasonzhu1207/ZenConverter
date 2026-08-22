@@ -289,6 +289,14 @@ class MainActivity : ComponentActivity() {
                 outputLocationMode = outputLocationMode.value,
                 outputDirectory = outputDirectory.value,
                 onOutputLocationModeChange = { mode ->
+                    if (mode == OutputLocationMode.Custom) {
+                        val current = outputDirectory.value
+                        if (current != null && !AppPreferences.isOutputDirectoryAccessible(this, current.uri)) {
+                            outputDirectory.value = null
+                            AppPreferences.clearOutputDirectory(this)
+                            ConversionTaskStore.showMessage("Custom output folder no longer exists; reset to default directory")
+                        }
+                    }
                     outputLocationMode.value = mode
                     AppPreferences.setUsesCustomOutput(
                         this,
@@ -452,6 +460,22 @@ class MainActivity : ComponentActivity() {
         handleExternalIntent(intent)
     }
 
+    override fun onResume() {
+        super.onResume()
+        validateCustomOutputLocation()
+    }
+
+    private fun validateCustomOutputLocation() {
+        val current = outputDirectory.value ?: return
+        if (!AppPreferences.isOutputDirectoryAccessible(this, current.uri)) {
+            outputDirectory.value = null
+            outputLocationMode.value = OutputLocationMode.Default
+            AppPreferences.clearOutputDirectory(this)
+            AppPreferences.setUsesCustomOutput(this, false)
+            ConversionTaskStore.showMessage("Custom output folder no longer exists; reset to default directory")
+        }
+    }
+
     private fun refreshEsrganModelState() {
         for (spec in EsrganModelManager.ALL_MODELS) {
             esrganModelStates[spec.id] = if (EsrganModelManager.isDownloaded(this, spec)) {
@@ -562,8 +586,12 @@ class MainActivity : ComponentActivity() {
             OutputLocationMode.Default -> OutputDestination.DefaultPublicDirectory
             OutputLocationMode.Custom -> {
                 val outputUri = outputDirectory.value?.uri
-                if (outputUri == null) {
-                    ConversionTaskStore.showMessage("Choose output folder first")
+                if (outputUri == null || !AppPreferences.isOutputDirectoryAccessible(this, outputUri)) {
+                    outputDirectory.value = null
+                    outputLocationMode.value = OutputLocationMode.Default
+                    AppPreferences.clearOutputDirectory(this)
+                    AppPreferences.setUsesCustomOutput(this, false)
+                    ConversionTaskStore.showMessage("Custom output folder no longer exists; reset to default directory")
                     return
                 }
                 OutputDestination.CustomDirectory(outputUri)
@@ -1629,6 +1657,8 @@ class MainActivity : ComponentActivity() {
     private fun restoreOutputLocationPreference() {
         val savedDirectory = AppPreferences.savedOutputDirectory(this)
         if (savedDirectory == null) {
+            outputDirectory.value = null
+            outputLocationMode.value = OutputLocationMode.Default
             if (AppPreferences.usesCustomOutput(this)) {
                 AppPreferences.setUsesCustomOutput(this, false)
             }
@@ -1639,7 +1669,10 @@ class MainActivity : ComponentActivity() {
             contentResolver.persistedUriPermissions.any { permission ->
                 permission.uri == savedDirectory.uri && permission.isWritePermission
             }
-        if (!hasWritePermission) {
+        val isAccessible = hasWritePermission && AppPreferences.isOutputDirectoryAccessible(this, savedDirectory.uri)
+        if (!isAccessible) {
+            outputDirectory.value = null
+            outputLocationMode.value = OutputLocationMode.Default
             AppPreferences.clearOutputDirectory(this)
             AppPreferences.setUsesCustomOutput(this, false)
             return
