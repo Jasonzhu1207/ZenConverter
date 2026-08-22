@@ -130,7 +130,13 @@ class MainActivity : ComponentActivity() {
     private val openDocuments = registerForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
-        enqueueUnifiedDocuments(selectedDocumentsFromUris(uris))
+        if (uris.isEmpty()) return@registerForActivityResult
+        lifecycleScope.launch {
+            val documents = withContext(Dispatchers.IO) {
+                selectedDocumentsFromUris(uris)
+            }
+            enqueueUnifiedDocuments(documents)
+        }
     }
 
     private val openImportAlbum = registerForActivityResult(
@@ -139,7 +145,12 @@ class MainActivity : ComponentActivity() {
         if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult
         val uris = galleryUrisFromIntent(result.data)
         if (uris.isEmpty()) return@registerForActivityResult
-        enqueueUnifiedDocuments(selectedDocumentsFromUris(uris))
+        lifecycleScope.launch {
+            val documents = withContext(Dispatchers.IO) {
+                selectedDocumentsFromUris(uris)
+            }
+            enqueueUnifiedDocuments(documents)
+        }
     }
 
     private val requestAlbumMediaReadPermission = registerForActivityResult(
@@ -1153,7 +1164,9 @@ class MainActivity : ComponentActivity() {
             normalizedMimeType.startsWith("audio/") ||
                 extension in AUDIO_INPUT_EXTENSIONS -> FileCategory.Audio
             normalizedMimeType == MIME_TYPE_PDF ||
-                extension == "pdf" -> FileCategory.Pdf
+                normalizedMimeType == "application/x-pdf" ||
+                normalizedMimeType.endsWith("/pdf") ||
+                extension.equals("pdf", ignoreCase = true) -> FileCategory.Pdf
             normalizedMimeType in OFFICE_MIME_TYPES ||
                 extension in OFFICE_INPUT_EXTENSIONS -> FileCategory.Document
             normalizedMimeType in FONT_MIME_TYPES ||

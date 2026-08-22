@@ -142,6 +142,14 @@ android {
             // directly from base.apk. Extracting them avoids that device-specific path.
             useLegacyPackaging = true
         }
+        resources {
+            // Exclude Bouncy Castle PQC parameter matrices and properties (~4.0 MB compressed APK saving)
+            excludes += "org/bouncycastle/pqc/**"
+            excludes += "org/bouncycastle/x509/CertPathReviewerMessages*.properties"
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/DEPENDENCIES"
+            excludes += "META-INF/LICENSE-1DS"
+        }
     }
 }
 

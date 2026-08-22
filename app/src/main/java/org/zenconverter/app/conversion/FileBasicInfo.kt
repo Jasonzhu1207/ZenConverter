@@ -185,7 +185,10 @@ object FileBasicInfoReader {
     }
 
     private fun isLikelyPdf(mimeType: String, extension: String): Boolean {
-        return mimeType == "application/pdf" || extension == "pdf"
+        return mimeType == "application/pdf" ||
+            mimeType == "application/x-pdf" ||
+            mimeType.endsWith("/pdf") ||
+            extension.equals("pdf", ignoreCase = true)
     }
 
     private const val URI_SCHEME_FILE = "file"
