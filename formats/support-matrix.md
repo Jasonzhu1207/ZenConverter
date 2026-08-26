@@ -95,9 +95,7 @@ as supported until it has a tested path, sample files, and failure behavior.
 - Video files selected in the Audio lane map only the first audio stream and
   encode the selected audio target. Video, subtitles, data streams, attachments,
   extra audio tracks, and metadata are not copied.
-- MP4/MKV/MOV video outputs use the FFmpeg compatibility path with true
-  video/audio re-encoding, including MP4-to-MP4.
-- Video and audio FFmpeg outputs can apply integer start/end-second trimming.
+- Video and audio FFmpeg outputs can apply start/end-second trimming and multi-point splitting into multiple segment files.
   Trimming is a re-encode range selection, not byte-exact lossless cutting. If a
   range is set, start must be before the readable source duration and end must
   be greater than start and not exceed the source duration.

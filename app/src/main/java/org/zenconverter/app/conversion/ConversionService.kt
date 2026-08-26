@@ -2702,11 +2702,26 @@ class ConversionService : Service() {
                 activeFfmpegSession = null
                 if (ConversionTaskStore.isCancelled() || result.cancelled) {
                     tempFile.delete()
+                    result.segmentTempFiles.forEach { it.delete() }
                     cancelRun()
                     return@onSuccess
                 }
                 if (result.success) {
-                    saveCompletedExport(input, tempFile)
+                    if (result.segmentTempFiles.isNotEmpty()) {
+                        tempFile.delete()
+                        val outputProfile = outputProfileFor(input) ?: error("Unsupported output format")
+                        saveCompletedExportFilesInFolder(
+                            input = input,
+                            tempFiles = result.segmentTempFiles,
+                            outputProfile = outputProfile,
+                            folderName = outputFolderNameForSplit(input),
+                            nameGenerator = { index, count ->
+                                outputNameForPart(input, outputProfile.extension, index, count)
+                            }
+                        )
+                    } else {
+                        saveCompletedExport(input, tempFile)
+                    }
                 } else {
                     Log.e(
                         TAG,
@@ -2715,6 +2730,7 @@ class ConversionService : Service() {
                             "message=${result.message} outputTail=${result.outputTail.orEmpty()}"
                     )
                     tempFile.delete()
+                    result.segmentTempFiles.forEach { it.delete() }
                     failCurrentTask(result.message ?: compatibilityFailureMessageFor(input))
                 }
             }.onFailure { exception ->
@@ -2750,48 +2766,61 @@ class ConversionService : Service() {
             )
         }
 
-        val inputSource = openFfmpegInputSource(input.inputUri)
-            ?: return@withContext FfmpegRunResult(
+        val sourceDurationMs = readDurationMs(input.inputUri)
+            ?: run {
+                val probeSource = openFfmpegInputSource(input.inputUri)
+                    ?: return@withContext FfmpegRunResult(
+                        success = false,
+                        cancelled = false,
+                        message = "Compatibility engine could not open SAF input"
+                    )
+                try {
+                    readFfmpegDurationMs(probeSource.path)
+                } finally {
+                    probeSource.close()
+                }
+            }
+
+        val trimWindow = ffmpegTrimWindowFor(input, sourceDurationMs)
+        if (trimWindow.errorMessage != null) {
+            return@withContext FfmpegRunResult(
                 success = false,
                 cancelled = false,
-                message = "Compatibility engine could not open SAF input"
+                message = trimWindow.errorMessage
             )
-
-        try {
-            val sourceDurationMs = ffmpegSourceDurationMsFor(input, inputSource.path)
-            val trimWindow = ffmpegTrimWindowFor(input, sourceDurationMs)
-            if (trimWindow.errorMessage != null) {
-                return@withContext FfmpegRunResult(
+        }
+        val effectiveDurationMs = ffmpegProgressDurationMsFor(input, sourceDurationMs, trimWindow)
+        ffmpegMissingAdvancedMetadataMessageFor(input, effectiveDurationMs)?.let { message ->
+            return@withContext FfmpegRunResult(
+                success = false,
+                cancelled = false,
+                message = message
+            )
+        }
+        ffmpegUnsupportedAdvancedSelectionMessageFor(input, effectiveDurationMs)?.let { message ->
+            return@withContext FfmpegRunResult(
+                success = false,
+                cancelled = false,
+                message = message
+            )
+        }
+        ffmpegMissingFilterMessageFor(input)?.let { message ->
+            return@withContext FfmpegRunResult(
+                success = false,
+                cancelled = false,
+                message = message
+            )
+        }
+        val logTail = mutableListOf<String>()
+        if (isVideoGifOutput(input)) {
+            val inputSource = openFfmpegInputSource(input.inputUri)
+                ?: return@withContext FfmpegRunResult(
                     success = false,
                     cancelled = false,
-                    message = trimWindow.errorMessage
+                    message = "Compatibility engine could not open SAF input"
                 )
-            }
-            val effectiveDurationMs = ffmpegProgressDurationMsFor(input, sourceDurationMs, trimWindow)
-            ffmpegMissingAdvancedMetadataMessageFor(input, effectiveDurationMs)?.let { message ->
-                return@withContext FfmpegRunResult(
-                    success = false,
-                    cancelled = false,
-                    message = message
-                )
-            }
-            ffmpegUnsupportedAdvancedSelectionMessageFor(input, effectiveDurationMs)?.let { message ->
-                return@withContext FfmpegRunResult(
-                    success = false,
-                    cancelled = false,
-                    message = message
-                )
-            }
-            ffmpegMissingFilterMessageFor(input)?.let { message ->
-                return@withContext FfmpegRunResult(
-                    success = false,
-                    cancelled = false,
-                    message = message
-                )
-            }
-            val logTail = mutableListOf<String>()
-            if (isVideoGifOutput(input)) {
-                return@withContext runFfmpegVideoGifExport(
+            return@withContext try {
+                runFfmpegVideoGifExport(
                     input = input,
                     inputSource = inputSource,
                     tempFile = tempFile,
@@ -2799,13 +2828,92 @@ class ConversionService : Service() {
                     trimWindow = trimWindow,
                     logTail = logTail
                 )
+            } finally {
+                inputSource.close()
             }
+        }
+        if (trimWindow.isMultiSegment) {
+            val outputProfile = outputProfileFor(input)
+                ?: return@withContext FfmpegRunResult(
+                    success = false,
+                    cancelled = false,
+                    message = "Unsupported output format"
+                )
+            val segmentTempFiles = mutableListOf<File>()
+            val segmentCount = trimWindow.segments.size
+            for (i in 0 until segmentCount) {
+                if (ConversionTaskStore.isCancelled()) {
+                    segmentTempFiles.forEach { it.delete() }
+                    return@withContext FfmpegRunResult(success = false, cancelled = true)
+                }
+                val segment = trimWindow.segments[i]
+                val segTrimWindow = FfmpegTrimWindow(segments = listOf(segment))
+                val partTempFile = File(
+                    tempFile.parentFile ?: (externalCacheDir ?: cacheDir),
+                    "${input.fileId}_part_${i + 1}_${System.nanoTime()}.${outputProfile.extension}"
+                )
+                val segInputSource = openFfmpegInputSource(input.inputUri)
+                    ?: run {
+                        segmentTempFiles.forEach { it.delete() }
+                        return@withContext FfmpegRunResult(
+                            success = false,
+                            cancelled = false,
+                            message = "Compatibility engine could not open SAF input"
+                        )
+                    }
+                val partResult = try {
+                    val partArguments = ffmpegArgumentsFor(
+                        input = input,
+                        inputPath = segInputSource.path,
+                        outputFile = partTempFile,
+                        durationMs = segment.effectiveDurationMs,
+                        trimWindow = segTrimWindow
+                    )
+                    val segStartProgress = (i.toFloat() / segmentCount.toFloat()) * FFMPEG_MAX_PROGRESS_BEFORE_SAVE
+                    val segEndProgress = ((i + 1).toFloat() / segmentCount.toFloat()) * FFMPEG_MAX_PROGRESS_BEFORE_SAVE
+                    executeFfmpeg(
+                        input = input,
+                        arguments = partArguments,
+                        durationMs = segment.effectiveDurationMs,
+                        logTail = logTail,
+                        inputSourceLabel = segInputSource.label,
+                        progressStart = segStartProgress,
+                        progressEnd = segEndProgress
+                    )
+                } finally {
+                    segInputSource.close()
+                }
+                if (partResult.cancelled || ConversionTaskStore.isCancelled()) {
+                    partTempFile.delete()
+                    segmentTempFiles.forEach { it.delete() }
+                    return@withContext FfmpegRunResult(success = false, cancelled = true)
+                }
+                if (!partResult.success) {
+                    partTempFile.delete()
+                    segmentTempFiles.forEach { it.delete() }
+                    return@withContext partResult
+                }
+                segmentTempFiles.add(partTempFile)
+            }
+            return@withContext FfmpegRunResult(
+                success = true,
+                cancelled = false,
+                segmentTempFiles = segmentTempFiles
+            )
+        }
+        val inputSource = openFfmpegInputSource(input.inputUri)
+            ?: return@withContext FfmpegRunResult(
+                success = false,
+                cancelled = false,
+                message = "Compatibility engine could not open SAF input"
+            )
+        try {
             val arguments = ffmpegArgumentsFor(
-                input,
-                inputSource.path,
-                tempFile,
-                effectiveDurationMs,
-                trimWindow
+                input = input,
+                inputPath = inputSource.path,
+                outputFile = tempFile,
+                durationMs = effectiveDurationMs,
+                trimWindow = trimWindow
             )
             executeFfmpeg(input, arguments, effectiveDurationMs, logTail, inputSource.label)
         } finally {
@@ -4366,10 +4474,52 @@ class ConversionService : Service() {
         } else {
             sourceDuration - startMs
         }
+
+        if (trimRange.splitPoints.isNotEmpty()) {
+            val effectiveEndSec = endSeconds ?: (sourceDuration.toDouble() / 1_000.0)
+            val cutPoints = mutableListOf<Double>()
+            cutPoints.add(startSeconds)
+            cutPoints.addAll(trimRange.splitPoints)
+            cutPoints.add(effectiveEndSec)
+            for (i in 0 until cutPoints.size - 1) {
+                val p1 = cutPoints[i]
+                val p2 = cutPoints[i + 1]
+                if (p2 <= p1) {
+                    return FfmpegTrimWindow(errorMessage = "Split points must be in strictly increasing order")
+                }
+                if (p2 * 1_000.0 > sourceDuration) {
+                    return FfmpegTrimWindow(errorMessage = "Split points must not exceed media duration")
+                }
+            }
+            val segments = mutableListOf<FfmpegTrimSegment>()
+            for (i in 0 until cutPoints.size - 1) {
+                val p1 = cutPoints[i]
+                val p2 = cutPoints[i + 1]
+                val segEndMs = trimSecondsToMs(p2) ?: return FfmpegTrimWindow(errorMessage = "Trim range is too large")
+                val segStartMs = trimSecondsToMs(p1) ?: return FfmpegTrimWindow(errorMessage = "Trim range is too large")
+                val segDurationMs = segEndMs - segStartMs
+                if (segDurationMs <= 0L) {
+                    return FfmpegTrimWindow(errorMessage = "Split points must be distinct")
+                }
+                segments.add(
+                    FfmpegTrimSegment(
+                        startSeconds = p1,
+                        durationLimitMs = segDurationMs,
+                        effectiveDurationMs = segDurationMs
+                    )
+                )
+            }
+            return FfmpegTrimWindow(segments = segments)
+        }
+
         return FfmpegTrimWindow(
-            startSeconds = startSeconds,
-            durationLimitMs = endSeconds?.let { effectiveDurationMs },
-            effectiveDurationMs = effectiveDurationMs
+            segments = listOf(
+                FfmpegTrimSegment(
+                    startSeconds = startSeconds,
+                    durationLimitMs = endSeconds?.let { effectiveDurationMs },
+                    effectiveDurationMs = effectiveDurationMs
+                )
+            )
         )
     }
 
@@ -4656,7 +4806,10 @@ class ConversionService : Service() {
         input: ConversionTaskInput,
         tempFiles: List<File>,
         outputProfile: OutputProfile,
-        folderName: String
+        folderName: String,
+        nameGenerator: (Int, Int) -> String = { index, count ->
+            outputNameForFrame(input, outputProfile.extension, index, count)
+        }
     ) {
         ConversionTaskStore.markSaving(taskIndex)
         updateNotification("Saving", (ConversionTaskStore.aggregateProgress() * 100).toInt())
@@ -4675,12 +4828,7 @@ class ConversionService : Service() {
                     outputSizeBytes += tempFile.length().coerceAtLeast(0L)
                     val createdOutputUri = createOutputInFolder(
                         folder = folder,
-                        displayName = outputNameForFrame(
-                            input = input,
-                            extension = outputProfile.extension,
-                            frameIndex = index,
-                            frameCount = tempFiles.size
-                        ),
+                        displayName = nameGenerator(index, tempFiles.size),
                         outputProfile = outputProfile
                     )
                     outputUris.add(createdOutputUri)
@@ -5337,7 +5485,8 @@ class ConversionService : Service() {
         val success: Boolean,
         val cancelled: Boolean,
         val message: String? = null,
-        val outputTail: String? = null
+        val outputTail: String? = null,
+        val segmentTempFiles: List<File> = emptyList()
     )
 
     private data class FfmpegInputSource(
@@ -5350,12 +5499,21 @@ class ConversionService : Service() {
         }
     }
 
-    private data class FfmpegTrimWindow(
+    private data class FfmpegTrimSegment(
         val startSeconds: Double = 0.0,
         val durationLimitMs: Long? = null,
-        val effectiveDurationMs: Long? = null,
-        val errorMessage: String? = null
+        val effectiveDurationMs: Long? = null
     )
+
+    private data class FfmpegTrimWindow(
+        val segments: List<FfmpegTrimSegment> = listOf(FfmpegTrimSegment()),
+        val errorMessage: String? = null
+    ) {
+        val startSeconds: Double get() = segments.firstOrNull()?.startSeconds ?: 0.0
+        val durationLimitMs: Long? get() = segments.firstOrNull()?.durationLimitMs
+        val effectiveDurationMs: Long? get() = segments.firstOrNull()?.effectiveDurationMs
+        val isMultiSegment: Boolean get() = segments.size > 1
+    }
 
     private data class GifFrameExtraction(
         val directory: File,
@@ -5485,6 +5643,25 @@ class ConversionService : Service() {
         val width = frameCount.toString().length.coerceAtLeast(3)
         val frameNumber = (frameIndex + 1).toString().padStart(width, '0')
         return "${baseName}_frame_${frameNumber}.$extension"
+    }
+
+    private fun outputFolderNameForSplit(input: ConversionTaskInput): String {
+        val baseName = sanitizedBaseNameFor(input)
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val shortId = input.fileId.take(8)
+        return "${baseName}_split_${timestamp}_$shortId"
+    }
+
+    private fun outputNameForPart(
+        input: ConversionTaskInput,
+        extension: String,
+        partIndex: Int,
+        partCount: Int
+    ): String {
+        val baseName = sanitizedBaseNameFor(input)
+        val width = partCount.toString().length.coerceAtLeast(2)
+        val partNumber = (partIndex + 1).toString().padStart(width, '0')
+        return "${baseName}_part_${partNumber}.$extension"
     }
 
     private fun sanitizedBaseNameFor(input: ConversionTaskInput): String {

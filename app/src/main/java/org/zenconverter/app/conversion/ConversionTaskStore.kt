@@ -70,10 +70,17 @@ data class AudioExportOptions(
 
 data class MediaTrimRange(
     val startSeconds: Double? = null,
-    val endSeconds: Double? = null
+    val endSeconds: Double? = null,
+    val splitPoints: List<Double> = emptyList()
 ) {
     val isEnabled: Boolean
-        get() = startSeconds != null || endSeconds != null
+        get() = startSeconds != null || endSeconds != null || splitPoints.isNotEmpty()
+
+    val isSplitActive: Boolean
+        get() = splitPoints.isNotEmpty()
+
+    val segmentCount: Int
+        get() = splitPoints.size + 1
 }
 
 data class VideoAdvancedOptions(

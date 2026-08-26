@@ -804,6 +804,20 @@ class MainActivity : ComponentActivity() {
         if (durationMs != null && startMs >= durationMs) {
             return "Trim start must be before media duration"
         }
+        if (trimRange.splitPoints.isNotEmpty()) {
+            var lastSeconds = startSeconds
+            val maxLimitSeconds = endSeconds ?: durationMs?.let { it.toDouble() / 1_000.0 }
+            for (splitPoint in trimRange.splitPoints) {
+                if (!splitPoint.isFinite() || splitPoint < 0.0) return "Invalid split point"
+                if (splitPoint <= lastSeconds) {
+                    return "Split points must be in strictly increasing order after start"
+                }
+                if (maxLimitSeconds != null && splitPoint >= maxLimitSeconds) {
+                    return "Split points must be before end or media duration"
+                }
+                lastSeconds = splitPoint
+            }
+        }
         return null
     }
 

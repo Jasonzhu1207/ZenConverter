@@ -72,6 +72,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image as BrandImage
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.Check
@@ -83,6 +84,7 @@ import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FontDownload
 import androidx.compose.material.icons.rounded.FolderOpen
@@ -135,6 +137,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -145,9 +148,11 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.Placeable
@@ -2617,7 +2622,8 @@ private fun HelpScreen(
                     GuideCardData(Icons.Rounded.AudioFile, copy.audioTitle, copy.audioBody, copy.audioFormats),
                     GuideCardData(Icons.Rounded.Image, copy.imageTitle, copy.imageBody, copy.imageFormats),
                     GuideCardData(Icons.Rounded.Description, copy.documentTitle, copy.documentBody, copy.documentFormats),
-                    GuideCardData(Icons.Rounded.FontDownload, copy.fontTitle, copy.fontBody, copy.fontFormats)
+                    GuideCardData(Icons.Rounded.FontDownload, copy.fontTitle, copy.fontBody, copy.fontFormats),
+                    GuideCardData(Icons.Rounded.Subtitles, copy.subtitleTitle, copy.subtitleBody, copy.subtitleFormats)
                 )
             ) { card ->
                 GuideCard(card)
@@ -5521,6 +5527,10 @@ private fun MediaTrimOptions(
     onTrimRangeChange: (MediaTrimRange) -> Unit
 ) {
     val errorText = mediaTrimErrorText(trimRange, sourceDurationMs, texts)
+    val durationSeconds = sourceDurationMs
+        ?.takeIf { it > 0L }
+        ?.let { it.toDouble() / 1_000.0 }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -5548,47 +5558,112 @@ private fun MediaTrimOptions(
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
             )
+            val durationText = sourceDurationMs?.let { formatDurationMs(it, texts) }
+            val hint = if (trimRange.isSplitActive) {
+                texts.trimDurationHint(durationText) + " · " + texts.trimSplitSegmentsHint(trimRange.segmentCount)
+            } else {
+                texts.trimDurationHint(durationText)
+            }
             Text(
-                text = texts.trimDurationHint(sourceDurationMs?.let { formatDurationMs(it, texts) }),
+                text = hint,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
-        TrimModeToggle(
-            texts = texts,
-            selected = inputMode,
-            onSelected = onInputModeChange
-        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(modifier = Modifier.weight(1f)) {
+                TrimModeToggle(
+                    texts = texts,
+                    selected = inputMode,
+                    onSelected = onInputModeChange
+                )
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier
+                    .background(Color(0xFFF1F1F1), RoundedCornerShape(100.dp))
+                    .padding(horizontal = 4.dp, vertical = 2.dp)
+            ) {
+                IconButton(
+                    onClick = {
+                        if (trimRange.splitPoints.isNotEmpty()) {
+                            onTrimRangeChange(trimRange.copy(splitPoints = trimRange.splitPoints.dropLast(1)))
+                        }
+                    },
+                    enabled = trimRange.splitPoints.isNotEmpty(),
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Remove,
+                        contentDescription = "Remove split point",
+                        modifier = Modifier.size(16.dp),
+                        tint = if (trimRange.splitPoints.isNotEmpty()) MaterialTheme.colorScheme.primary else Color.Gray
+                    )
+                }
+                Text(
+                    text = "✂️ ${trimRange.splitPoints.size}",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 2.dp)
+                )
+                IconButton(
+                    onClick = {
+                        val totalSec = durationSeconds ?: 100.0
+                        val startSec = trimRange.startSeconds ?: 0.0
+                        val endSec = trimRange.endSeconds ?: totalSec
+                        val points = (listOf(startSec) + trimRange.splitPoints + listOf(endSec)).sorted()
+                        var maxGap = 0.0
+                        var insertPos = (startSec + endSec) / 2.0
+                        for (i in 0 until points.size - 1) {
+                            val gap = points[i + 1] - points[i]
+                            if (gap > maxGap) {
+                                maxGap = gap
+                                insertPos = (points[i] + points[i + 1]) / 2.0
+                            }
+                        }
+                        val rounded = (Math.round(insertPos * 10.0) / 10.0).coerceIn(startSec + 0.1, endSec - 0.1)
+                        onTrimRangeChange(trimRange.copy(splitPoints = (trimRange.splitPoints + rounded).sorted()))
+                    },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Add,
+                        contentDescription = "Add split point",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
+
         if (inputMode == TrimInputMode.Quick) {
-            TrimRangeSlider(
+            TrimAndSplitSlider(
                 trimRange = trimRange,
                 sourceDurationMs = sourceDurationMs,
                 texts = texts,
                 onRangeChange = onTrimRangeChange
             )
         } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                TrimSecondsField(
-                    value = trimRange.startSeconds,
-                    label = texts.trimStartSeconds,
-                    isError = errorText != null,
-                    onValueChange = onStartSecondsChange,
-                    modifier = Modifier.weight(1f)
-                )
-                TrimSecondsField(
-                    value = trimRange.endSeconds,
-                    label = texts.trimEndSeconds,
-                    isError = errorText != null,
-                    onValueChange = onEndSecondsChange,
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            PreciseTrimAndSplitFields(
+                trimRange = trimRange,
+                sourceDurationMs = sourceDurationMs,
+                texts = texts,
+                errorText = errorText,
+                onStartSecondsChange = onStartSecondsChange,
+                onEndSecondsChange = onEndSecondsChange,
+                onTrimRangeChange = onTrimRangeChange
+            )
         }
+
         errorText?.let { message ->
             Text(
                 text = message,
@@ -5657,7 +5732,7 @@ private fun TrimModeChip(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TrimRangeSlider(
+private fun TrimAndSplitSlider(
     trimRange: MediaTrimRange,
     sourceDurationMs: Long?,
     texts: UiText,
@@ -5679,55 +5754,133 @@ private fun TrimRangeSlider(
     val currentStart = if (start <= end) start.coerceIn(valueRange) else end.coerceIn(valueRange)
     val currentEnd = if (start <= end) end.coerceIn(valueRange) else start.coerceIn(valueRange)
     val currentRange = currentStart..currentEnd
+
+    var sliderWidthPx by remember { mutableStateOf(0f) }
+    val density = LocalDensity.current
+
+    val currentTrimRange by rememberUpdatedState(trimRange)
+    val currentOnRangeChange by rememberUpdatedState(onRangeChange)
+    val currentSliderMax by rememberUpdatedState(sliderMax)
+    val currentDurationSeconds by rememberUpdatedState(durationSeconds)
+    val currentSliderWidthPx by rememberUpdatedState(sliderWidthPx)
+
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         val sliderColors = SliderDefaults.colors(
             thumbColor = MaterialTheme.colorScheme.primary,
             activeTrackColor = MaterialTheme.colorScheme.primary,
             inactiveTrackColor = Color(0xFFE1E1E1)
         )
-        RangeSlider(
-            value = currentRange,
-            onValueChange = { range ->
-                onRangeChange(
-                    MediaTrimRange(
-                        startSeconds = range.start.toDouble(),
-                        endSeconds = range.endInclusive.toDouble()
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 22.dp, bottom = 4.dp)
+                .onSizeChanged { sliderWidthPx = it.width.toFloat() },
+            contentAlignment = Alignment.CenterStart
+        ) {
+            RangeSlider(
+                value = currentRange,
+                onValueChange = { range ->
+                    onRangeChange(
+                        trimRange.copy(
+                            startSeconds = range.start.toDouble(),
+                            endSeconds = range.endInclusive.toDouble()
+                        )
                     )
-                )
-            },
-            modifier = Modifier.fillMaxWidth(),
-            valueRange = valueRange,
-            colors = sliderColors,
-            startThumb = { SmallTrimThumb() },
-            endThumb = { SmallTrimThumb() },
-            track = { state ->
-                TrimRangeTrack(state = state, colors = sliderColors)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                valueRange = valueRange,
+                colors = sliderColors,
+                startThumb = { SmallTrimThumb() },
+                endThumb = { SmallTrimThumb() },
+                track = { state ->
+                    TrimAndSplitTrack(
+                        state = state,
+                        colors = sliderColors,
+                        splitFractions = trimRange.splitPoints.map { (it.toFloat() / sliderMax).coerceIn(0f, 1f) }
+                    )
+                }
+            )
+
+            if (sliderWidthPx > 0f && trimRange.splitPoints.isNotEmpty()) {
+                trimRange.splitPoints.forEachIndexed { index, pointVal ->
+                    val frac = (pointVal.toFloat() / sliderMax).coerceIn(0f, 1f)
+                    val xPosPx = frac * sliderWidthPx
+                    val xDp = with(density) { xPosPx.toDp() } - 18.dp
+
+                    Box(
+                        modifier = Modifier
+                            .offset(x = xDp, y = (-22).dp)
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color.White)
+                            .border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                            .pointerInput(index, trimRange.splitPoints.size) {
+                                var dragAccumulatedSec = 0.0
+                                detectDragGestures(
+                                    onDragStart = {
+                                        val range = currentTrimRange
+                                        dragAccumulatedSec = range.splitPoints.getOrNull(index) ?: 0.0
+                                    },
+                                    onDrag = { change, dragAmount ->
+                                        change.consume()
+                                        val sWidth = currentSliderWidthPx
+                                        val sMax = currentSliderMax
+                                        val range = currentTrimRange
+                                        if (sWidth > 0f && sMax > 0f) {
+                                            val deltaSec = (dragAmount.x / sWidth) * sMax
+                                            val prevLimit = if (index == 0) (range.startSeconds ?: 0.0) + 0.1 else range.splitPoints[index - 1] + 0.1
+                                            val nextLimit = if (index == range.splitPoints.size - 1) (range.endSeconds ?: currentDurationSeconds ?: sMax.toDouble()) - 0.1 else range.splitPoints[index + 1] - 0.1
+                                            dragAccumulatedSec = (dragAccumulatedSec + deltaSec).coerceIn(prevLimit, maxOf(prevLimit, nextLimit))
+                                            val updated = range.splitPoints.toMutableList()
+                                            if (index < updated.size) {
+                                                updated[index] = Math.round(dragAccumulatedSec * 100.0) / 100.0
+                                                currentOnRangeChange(range.copy(splitPoints = updated))
+                                            }
+                                        }
+                                    }
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "✂️",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
             }
-        )
+        }
+
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = texts.trimStartSeconds + " " + formatTrimSeconds(currentStart.toDouble(), texts),
+                text = "${texts.trimStartSeconds} ${formatTrimSeconds(currentStart.toDouble(), texts)}",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            trimRange.splitPoints.forEachIndexed { i, pt ->
+                Text(
+                    text = "✂️${i + 1} ${formatTrimSeconds(pt, texts)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium
+                )
+            }
             Text(
-                text = texts.trimEndSeconds + " " + formatTrimSeconds(currentEnd.toDouble(), texts),
+                text = "${texts.trimEndSeconds} ${formatTrimSeconds(currentEnd.toDouble(), texts)}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                fontWeight = FontWeight.SemiBold
             )
         }
     }
 }
-
 
 @Composable
 private fun SmallTrimThumb() {
@@ -5740,12 +5893,16 @@ private fun SmallTrimThumb() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TrimRangeTrack(state: RangeSliderState, colors: SliderColors) {
+private fun TrimAndSplitTrack(
+    state: RangeSliderState,
+    colors: SliderColors,
+    splitFractions: List<Float>
+) {
     val trackHeight = 4.dp
     Canvas(
         modifier = Modifier
             .fillMaxWidth()
-            .height(trackHeight)
+            .height(28.dp)
     ) {
         val strokeWidth = trackHeight.toPx()
         val y = center.y
@@ -5770,6 +5927,118 @@ private fun TrimRangeTrack(state: RangeSliderState, colors: SliderColors) {
                 strokeWidth = strokeWidth,
                 cap = StrokeCap.Round
             )
+        }
+
+        val dashEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
+        splitFractions.forEach { frac ->
+            val x = frac * size.width
+            drawLine(
+                color = colors.activeTrackColor,
+                start = Offset(x, 2.dp.toPx()),
+                end = Offset(x, size.height - 2.dp.toPx()),
+                strokeWidth = 2.dp.toPx(),
+                pathEffect = dashEffect
+            )
+        }
+    }
+}
+
+@Composable
+private fun PreciseTrimAndSplitFields(
+    trimRange: MediaTrimRange,
+    sourceDurationMs: Long?,
+    texts: UiText,
+    errorText: String?,
+    onStartSecondsChange: (Double?) -> Unit,
+    onEndSecondsChange: (Double?) -> Unit,
+    onTrimRangeChange: (MediaTrimRange) -> Unit
+) {
+    val durationSeconds = sourceDurationMs?.takeIf { it > 0L }?.let { it.toDouble() / 1_000.0 }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            TrimSecondsField(
+                value = trimRange.startSeconds,
+                label = texts.trimStartSeconds,
+                isError = errorText != null,
+                onValueChange = onStartSecondsChange,
+                modifier = Modifier.weight(1f)
+            )
+            TrimSecondsField(
+                value = trimRange.endSeconds,
+                label = texts.trimEndSeconds,
+                isError = errorText != null,
+                onValueChange = onEndSecondsChange,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        trimRange.splitPoints.forEachIndexed { index, pointSec ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TrimSecondsField(
+                    value = pointSec,
+                    label = "✂️ ${texts.trimSplitPoints} ${index + 1}",
+                    isError = errorText != null,
+                    onValueChange = { newVal ->
+                        val updated = trimRange.splitPoints.toMutableList()
+                        if (newVal != null) {
+                            updated[index] = newVal
+                        }
+                        onTrimRangeChange(trimRange.copy(splitPoints = updated))
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(
+                    onClick = {
+                        val updated = trimRange.splitPoints.toMutableList()
+                        updated.removeAt(index)
+                        onTrimRangeChange(trimRange.copy(splitPoints = updated))
+                    },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = "Remove",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        OutlinedButton(
+            onClick = {
+                val totalSec = durationSeconds ?: 100.0
+                val startSec = trimRange.startSeconds ?: 0.0
+                val endSec = trimRange.endSeconds ?: totalSec
+                val points = (listOf(startSec) + trimRange.splitPoints + listOf(endSec)).sorted()
+                var maxGap = 0.0
+                var insertPos = (startSec + endSec) / 2.0
+                for (i in 0 until points.size - 1) {
+                    val gap = points[i + 1] - points[i]
+                    if (gap > maxGap) {
+                        maxGap = gap
+                        insertPos = (points[i] + points[i + 1]) / 2.0
+                    }
+                }
+                val rounded = (Math.round(insertPos * 10.0) / 10.0).coerceIn(startSec + 0.1, endSec - 0.1)
+                onTrimRangeChange(trimRange.copy(splitPoints = (trimRange.splitPoints + rounded).sorted()))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Add,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(text = texts.trimAddSplitPoint)
         }
     }
 }
@@ -5871,6 +6140,16 @@ private fun mediaTrimErrorText(
         if (durationMs != null && endMs > durationMs) return texts.trimEndWithinDuration
     }
     if (durationMs != null && startMs >= durationMs) return texts.trimStartBeforeDuration
+    if (trimRange.splitPoints.isNotEmpty()) {
+        var lastSeconds = startSeconds
+        val maxLimitSeconds = endSeconds ?: durationMs?.let { it.toDouble() / 1_000.0 }
+        for (splitPoint in trimRange.splitPoints) {
+            if (!splitPoint.isFinite() || splitPoint < 0.0) return texts.trimRangeTooLarge
+            if (splitPoint <= lastSeconds) return texts.trimSplitPointsOrder
+            if (maxLimitSeconds != null && splitPoint >= maxLimitSeconds) return texts.trimSplitPointsWithinDuration
+            lastSeconds = splitPoint
+        }
+    }
     return null
 }
 
@@ -8083,6 +8362,9 @@ private data class HelpGuideCopy(
     val fontTitle: String,
     val fontBody: String,
     val fontFormats: String,
+    val subtitleTitle: String,
+    val subtitleBody: String,
+    val subtitleFormats: String,
     val flowInput: String,
     val flowProcess: String,
     val flowOutput: String,
@@ -8224,6 +8506,10 @@ private data class UiText(
     val trimPrecise: String,
     val trimStartSeconds: String,
     val trimEndSeconds: String,
+    val trimSplitPoints: String,
+    val trimAddSplitPoint: String,
+    val trimSplitPointsOrder: String,
+    val trimSplitPointsWithinDuration: String,
     val trimDurationUnknown: String,
     val trimRangeTooLarge: String,
     val trimStartBeforeDuration: String,
@@ -8355,6 +8641,14 @@ private data class UiText(
             englishText -> durationText?.let { "Duration $it" } ?: trimDurationUnknown
             simplifiedChineseText -> durationText?.let { "时长 $it" } ?: trimDurationUnknown
             else -> durationText?.let { "時長 $it" } ?: trimDurationUnknown
+        }
+    }
+
+    fun trimSplitSegmentsHint(segmentCount: Int): String {
+        return when (this) {
+            englishText -> if (segmentCount == 1) "1 part" else "$segmentCount parts"
+            simplifiedChineseText -> "共 $segmentCount 段"
+            else -> "共 $segmentCount 段"
         }
     }
 
@@ -10089,20 +10383,23 @@ private val englishHelpGuide = HelpGuideCopy(
     body = "Choose a file, pick a target, and let the conversion run locally.",
     back = "Back",
     videoTitle = "Video",
-    videoBody = "Convert common video formats and extract audio tracks.",
-    videoFormats = "MP4 · MKV · MOV · GIF  →  M4A · MP3 · WAV · FLAC · WMA · OPUS",
+    videoBody = "Convert common video formats, trim & split segments, or extract audio tracks.",
+    videoFormats = "MP4 · MKV · MOV · GIF  →  MP4 · MKV · MOV · GIF",
     audioTitle = "Audio",
-    audioBody = "Convert audio files between the formats used most often.",
+    audioBody = "Convert audio files, trim range, and apply audio filters.",
     audioFormats = "MP3 · M4A · WAV · FLAC · WMA · OPUS",
-    imageTitle = "Images",
-    imageBody = "Convert images, make PDFs, and combine multiple images into one PDF.",
-    imageFormats = "JPG · PNG · JFIF · WEBP · ICO  →  PDF",
+    imageTitle = "Images & Super-Resolution",
+    imageBody = "Convert images, AI 4× upscaling, split GIF frames, or combine into a PDF.",
+    imageFormats = "JPG · PNG · JFIF · WEBP · ICO  →  JPG · PNG · WEBP · ICO · PDF",
     documentTitle = "Documents and PDF",
-    documentBody = "Turn Office files into readable documents, render PDFs, or protect them with a password.",
+    documentBody = "Turn Office files into readable documents, render PDFs, or protect with passwords.",
     documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  PNG · JPG · WEBP · TXT · MD",
     fontTitle = "Fonts",
     fontBody = "Convert fonts between desktop and web formats.",
     fontFormats = "TTF · OTF  →  WOFF2 · WOFF  |  WOFF2 · WOFF  →  TTF · OTF",
+    subtitleTitle = "Subtitles and Lyrics",
+    subtitleBody = "Convert between subtitle and lyrics formats with timing preserved.",
+    subtitleFormats = "SRT · VTT · LRC · ASS",
     flowInput = "Choose",
     flowProcess = "Convert",
     flowOutput = "Use result",
@@ -10114,20 +10411,23 @@ private val simplifiedChineseHelpGuide = HelpGuideCopy(
     body = "选择文件、指定目标格式，转换过程默认在本机完成。",
     back = "返回",
     videoTitle = "视频",
-    videoBody = "转换常见视频格式，也可以提取视频中的音频。",
-    videoFormats = "MP4 · MKV · MOV · GIF  →  M4A · MP3 · WAV · FLAC · WMA · OPUS",
+    videoBody = "转换常见视频格式，支持时间轴裁剪与多段分割，也可提取音频。",
+    videoFormats = "MP4 · MKV · MOV · GIF  →  MP4 · MKV · MOV · GIF",
     audioTitle = "音频",
-    audioBody = "在常用音频格式之间互相转换。",
+    audioBody = "在常用音频格式之间互相转换，支持剪辑、降噪与高级音效。",
     audioFormats = "MP3 · M4A · WAV · FLAC · WMA · OPUS",
-    imageTitle = "图片",
-    imageBody = "转换图片、生成 PDF，也可以把多张图片合并成一个 PDF。",
-    imageFormats = "JPG · PNG · JFIF · WEBP · ICO  →  PDF",
+    imageTitle = "图片与超分",
+    imageBody = "转换图片、AI 深度学习 4× 高清放大、拆分 GIF 帧或合并为 PDF。",
+    imageFormats = "JPG · PNG · JFIF · WEBP · ICO  →  JPG · PNG · WEBP · ICO · PDF",
     documentTitle = "文档与 PDF",
     documentBody = "Office 文档转为可读文件，PDF 转图片或文本，也支持密码保护。",
     documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  PNG · JPG · WEBP · TXT · MD",
     fontTitle = "字体",
     fontBody = "在桌面字体与网页字体之间互相转换。",
     fontFormats = "TTF · OTF  →  WOFF2 · WOFF  |  WOFF2 · WOFF  →  TTF · OTF",
+    subtitleTitle = "字幕与歌词",
+    subtitleBody = "在常用字幕与歌词格式之间互相转换，保留时序与时间轴。",
+    subtitleFormats = "SRT · VTT · LRC · ASS",
     flowInput = "选择文件",
     flowProcess = "本地处理",
     flowOutput = "使用结果",
@@ -10139,20 +10439,23 @@ private val traditionalChineseHelpGuide = HelpGuideCopy(
     body = "選擇檔案、指定目標格式，轉換過程預設在本機完成。",
     back = "返回",
     videoTitle = "影片",
-    videoBody = "轉換常見影片格式，也可以擷取影片中的音訊。",
-    videoFormats = "MP4 · MKV · MOV · GIF  →  M4A · MP3 · WAV · FLAC · WMA · OPUS",
+    videoBody = "轉換常見影片格式，支援時間軸裁剪與多段分割，也可擷取音訊。",
+    videoFormats = "MP4 · MKV · MOV · GIF  →  MP4 · MKV · MOV · GIF",
     audioTitle = "音訊",
-    audioBody = "在常用音訊格式之間互相轉換。",
+    audioBody = "在常用音訊格式之間互相轉換，支援剪輯、降噪與進階音效。",
     audioFormats = "MP3 · M4A · WAV · FLAC · WMA · OPUS",
-    imageTitle = "圖片",
-    imageBody = "轉換圖片、建立 PDF，也可以把多張圖片合併成一個 PDF。",
-    imageFormats = "JPG · PNG · JFIF · WEBP · ICO  →  PDF",
+    imageTitle = "圖片與超高解析度",
+    imageBody = "轉換圖片、AI 深度學習 4× 高畫質放大、拆分 GIF 影格或合併為 PDF。",
+    imageFormats = "JPG · PNG · JFIF · WEBP · ICO  →  JPG · PNG · WEBP · ICO · PDF",
     documentTitle = "文件與 PDF",
     documentBody = "Office 文件轉為可讀檔案，PDF 轉圖片或文字，也支援密碼保護。",
     documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  PNG · JPG · WEBP · TXT · MD",
     fontTitle = "字型",
     fontBody = "在桌面字型與網頁字型之間互相轉換。",
     fontFormats = "TTF · OTF  →  WOFF2 · WOFF  |  WOFF2 · WOFF  →  TTF · OTF",
+    subtitleTitle = "字幕與歌詞",
+    subtitleBody = "在常用字幕與歌詞格式之間互相轉換，保留時序與時間軸。",
+    subtitleFormats = "SRT · VTT · LRC · ASS",
     flowInput = "選擇檔案",
     flowProcess = "本機處理",
     flowOutput = "使用結果",
@@ -10289,11 +10592,15 @@ private val englishText = UiText(
     frameRate = "Frame rate",
     sampleRate = "Sample rate",
     channels = "Channels",
-    trimRange = "Trim",
+    trimRange = "Trim & split",
     trimQuick = "Quick",
     trimPrecise = "Precise",
     trimStartSeconds = "Start (s)",
     trimEndSeconds = "End (s)",
+    trimSplitPoints = "Cut point",
+    trimAddSplitPoint = "Add cut point",
+    trimSplitPointsOrder = "Cut points must be in ascending order between start and end",
+    trimSplitPointsWithinDuration = "Cut points must not exceed end time or duration",
     trimDurationUnknown = "Duration unknown",
     trimRangeTooLarge = "Trim range is too large",
     trimStartBeforeDuration = "Start must be before the media duration",
@@ -10437,11 +10744,15 @@ private val simplifiedChineseText = UiText(
     frameRate = "帧率",
     sampleRate = "采样率",
     channels = "声道",
-    trimRange = "裁剪",
+    trimRange = "裁剪与分割",
     trimQuick = "快速",
     trimPrecise = "精准",
     trimStartSeconds = "起始秒",
     trimEndSeconds = "结束秒",
+    trimSplitPoints = "分割点",
+    trimAddSplitPoint = "添加分割点",
+    trimSplitPointsOrder = "分割点必须在起止时间之间且依次递增",
+    trimSplitPointsWithinDuration = "分割点不能超出结束时间或文件时长",
     trimDurationUnknown = "时长未知",
     trimRangeTooLarge = "裁剪范围过大",
     trimStartBeforeDuration = "起始秒必须早于文件时长",
@@ -10585,11 +10896,15 @@ private val traditionalChineseText = UiText(
     frameRate = "幀率",
     sampleRate = "取樣率",
     channels = "聲道",
-    trimRange = "裁剪",
+    trimRange = "裁剪與分割",
     trimQuick = "快速",
     trimPrecise = "精準",
     trimStartSeconds = "起始秒",
     trimEndSeconds = "結束秒",
+    trimSplitPoints = "分割點",
+    trimAddSplitPoint = "新增分割點",
+    trimSplitPointsOrder = "分割點必須在起止時間之間且依序遞增",
+    trimSplitPointsWithinDuration = "分割點不能超出結束時間或檔案時長",
     trimDurationUnknown = "時長未知",
     trimRangeTooLarge = "裁剪範圍過大",
     trimStartBeforeDuration = "起始秒必須早於檔案時長",
