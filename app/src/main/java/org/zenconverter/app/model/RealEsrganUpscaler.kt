@@ -3,10 +3,12 @@ package org.zenconverter.app.model
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.os.Build
+import android.os.Process
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtException
 import ai.onnxruntime.OrtSession
+import android.util.Log
 import java.nio.FloatBuffer
 import kotlin.math.max
 import kotlin.math.min
@@ -22,6 +24,7 @@ import kotlin.math.roundToInt
  * the tile loop would leak native memory and crash with a native OOM.
  */
 object RealEsrganUpscaler {
+    private const val TAG = "RealEsrganUpscaler"
     private const val SCALE = 4
     private const val INPUT_NAME = "input"
     private const val TILE_SIZE = 256
@@ -56,7 +59,6 @@ object RealEsrganUpscaler {
         val tileCols = (inputW + TILE_SIZE - 1) / TILE_SIZE
         val tileRows = (inputH + TILE_SIZE - 1) / TILE_SIZE
         val totalTiles = tileCols * tileRows
-        var completedTiles = 0
 
         val maxTileW = TILE_SIZE + 2 * TILE_PAD
         val maxTileH = TILE_SIZE + 2 * TILE_PAD
@@ -66,76 +68,179 @@ object RealEsrganUpscaler {
         val pixelBuffer = IntArray(TILE_SIZE * SCALE * TILE_SIZE * SCALE)
 
         val env = OrtEnvironment.getEnvironment()
-        
+        val canAttemptNnapi = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !isEmulator()
+        var nnapiSucceeded = false
+
+        val tid = Process.myTid()
+        val originalPriority = runCatching { Process.getThreadPriority(tid) }.getOrDefault(Process.THREAD_PRIORITY_DEFAULT)
+
+        // Elevate current thread priority to DISPLAY (-4) to signal the Android EAS
+        // (Energy Aware Scheduling) kernel governor to bias execution onto Big/Prime performance cores.
+        runCatching {
+            Process.setThreadPriority(Process.THREAD_PRIORITY_DISPLAY)
+        }
+
         try {
-            OrtSession.SessionOptions().use { options ->
-                val availableProcessors = Runtime.getRuntime().availableProcessors()
-                val threads = (availableProcessors - 1)
-                    .coerceIn(MIN_INTRA_OP_THREADS, MAX_INTRA_OP_THREADS)
-                    .coerceAtLeast(1)
-                runCatching { options.setIntraOpNumThreads(threads) }
-                runCatching { options.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT) }
-                runCatching { options.setCPUArenaAllocator(true) }
-                runCatching { options.setMemoryPatternOptimization(true) }
+            if (canAttemptNnapi) {
+                try {
+                    Log.i(TAG, "Attempting AI super-resolution with NNAPI (GPU/NPU) acceleration...")
+                    executeTiledInference(
+                        env = env,
+                        modelPath = modelPath,
+                        source = source,
+                        output = output,
+                        inputW = inputW,
+                        inputH = inputH,
+                        tileCols = tileCols,
+                        tileRows = tileRows,
+                        totalTiles = totalTiles,
+                        tilePixelBuffer = tilePixelBuffer,
+                        inputFloatBuffer = inputFloatBuffer,
+                        outputFloatBuffer = outputFloatBuffer,
+                        pixelBuffer = pixelBuffer,
+                        useNnapi = true,
+                        onTileProgress = onTileProgress,
+                        isCancelled = isCancelled
+                    )
+                    nnapiSucceeded = true
+                    Log.i(TAG, "Super-resolution completed successfully via NNAPI (GPU/NPU) acceleration!")
+                } catch (cancellation: kotlinx.coroutines.CancellationException) {
+                    throw cancellation
+                } catch (driverError: Throwable) {
+                    Log.w(TAG, "NNAPI acceleration failed or unsupported on this device; falling back to CPU: ${driverError.message}")
+                }
+            }
 
-                env.createSession(modelPath, options).use { session ->
-                    for (row in 0 until tileRows) {
-                        for (col in 0 until tileCols) {
-                            if (isCancelled()) {
-                                throw kotlinx.coroutines.CancellationException("Image super-resolution cancelled")
-                            }
+            if (!nnapiSucceeded) {
+                try {
+                    Log.i(TAG, "Running AI super-resolution with multi-core CPU engine...")
+                    executeTiledInference(
+                        env = env,
+                        modelPath = modelPath,
+                        source = source,
+                        output = output,
+                        inputW = inputW,
+                        inputH = inputH,
+                        tileCols = tileCols,
+                        tileRows = tileRows,
+                        totalTiles = totalTiles,
+                        tilePixelBuffer = tilePixelBuffer,
+                        inputFloatBuffer = inputFloatBuffer,
+                        outputFloatBuffer = outputFloatBuffer,
+                        pixelBuffer = pixelBuffer,
+                        useNnapi = false,
+                        onTileProgress = onTileProgress,
+                        isCancelled = isCancelled
+                    )
+                    Log.i(TAG, "Super-resolution completed successfully via multi-core CPU engine")
+                } catch (cancellation: kotlinx.coroutines.CancellationException) {
+                    throw cancellation
+                } catch (e: Exception) {
+                    throw IllegalStateException(
+                        "Image engine could not run the Real-ESRGAN model: ${e.message ?: "ONNX Runtime error"}",
+                        e
+                    )
+                }
+            }
 
-                            val tx = col * TILE_SIZE
-                            val ty = row * TILE_SIZE
-                            val x0 = max(0, tx - TILE_PAD)
-                            val y0 = max(0, ty - TILE_PAD)
-                            val x1 = min(inputW, tx + TILE_SIZE + TILE_PAD)
-                            val y1 = min(inputH, ty + TILE_SIZE + TILE_PAD)
-                            val tileW = x1 - x0
-                            val tileH = y1 - y0
+            return output
+        } finally {
+            // Restore previous thread priority so subsequent background tasks don't retain high priority
+            runCatching {
+                Process.setThreadPriority(tid, originalPriority)
+            }
+        }
+    }
 
-                            source.getPixels(tilePixelBuffer, 0, tileW, x0, y0, tileW, tileH)
-                            bitmapRegionToNchw(tilePixelBuffer, tileW, tileH, inputFloatBuffer)
-                            val shape = longArrayOf(1L, 3L, tileH.toLong(), tileW.toLong())
-                            
-                            val inputBuf = FloatBuffer.wrap(inputFloatBuffer, 0, tileW * tileH * 3)
+    private fun createSessionOptions(useNnapi: Boolean): OrtSession.SessionOptions {
+        val options = OrtSession.SessionOptions()
+        val availableProcessors = Runtime.getRuntime().availableProcessors()
+        val threads = (availableProcessors - 1)
+            .coerceIn(MIN_INTRA_OP_THREADS, MAX_INTRA_OP_THREADS)
+            .coerceAtLeast(1)
+        runCatching { options.setIntraOpNumThreads(threads) }
+        runCatching { options.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT) }
+        runCatching { options.setCPUArenaAllocator(true) }
+        runCatching { options.setMemoryPatternOptimization(true) }
 
-                            OnnxTensor.createTensor(env, inputBuf, shape).use { inputTensor ->
-                                session.run(mapOf(INPUT_NAME to inputTensor)).use { result ->
-                                    val outTensor = result.get(0) as OnnxTensor
-                                    val outW = tileW * SCALE
-                                    val outH = tileH * SCALE
-                                    outTensor.floatBuffer.get(outputFloatBuffer, 0, outW * outH * 3)
-                                    writeTile(
-                                        output = output,
-                                        outFloat = outputFloatBuffer,
-                                        outW = outW,
-                                        outH = outH,
-                                        srcOffsetX = (tx - x0) * SCALE,
-                                        srcOffsetY = (ty - y0) * SCALE,
-                                        destX = tx * SCALE,
-                                        destY = ty * SCALE,
-                                        coreW = min(tx + TILE_SIZE, inputW) - tx,
-                                        coreH = min(ty + TILE_SIZE, inputH) - ty,
-                                        pixelBuffer = pixelBuffer
-                                    )
-                                }
-                            }
+        if (useNnapi && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            runCatching {
+                options.addNnapi()
+            }
+        }
+        return options
+    }
 
-                            completedTiles++
-                            onTileProgress(completedTiles.toFloat() / totalTiles.toFloat())
+    private fun executeTiledInference(
+        env: OrtEnvironment,
+        modelPath: String,
+        source: Bitmap,
+        output: Bitmap,
+        inputW: Int,
+        inputH: Int,
+        tileCols: Int,
+        tileRows: Int,
+        totalTiles: Int,
+        tilePixelBuffer: IntArray,
+        inputFloatBuffer: FloatArray,
+        outputFloatBuffer: FloatArray,
+        pixelBuffer: IntArray,
+        useNnapi: Boolean,
+        onTileProgress: (Float) -> Unit,
+        isCancelled: () -> Boolean
+    ) {
+        var completedTiles = 0
+        createSessionOptions(useNnapi).use { options ->
+            env.createSession(modelPath, options).use { session ->
+                for (row in 0 until tileRows) {
+                    for (col in 0 until tileCols) {
+                        if (isCancelled()) {
+                            throw kotlinx.coroutines.CancellationException("Image super-resolution cancelled")
                         }
+
+                        val tx = col * TILE_SIZE
+                        val ty = row * TILE_SIZE
+                        val x0 = max(0, tx - TILE_PAD)
+                        val y0 = max(0, ty - TILE_PAD)
+                        val x1 = min(inputW, tx + TILE_SIZE + TILE_PAD)
+                        val y1 = min(inputH, ty + TILE_SIZE + TILE_PAD)
+                        val tileW = x1 - x0
+                        val tileH = y1 - y0
+
+                        source.getPixels(tilePixelBuffer, 0, tileW, x0, y0, tileW, tileH)
+                        bitmapRegionToNchw(tilePixelBuffer, tileW, tileH, inputFloatBuffer)
+                        val shape = longArrayOf(1L, 3L, tileH.toLong(), tileW.toLong())
+                        
+                        val inputBuf = FloatBuffer.wrap(inputFloatBuffer, 0, tileW * tileH * 3)
+
+                        OnnxTensor.createTensor(env, inputBuf, shape).use { inputTensor ->
+                            session.run(mapOf(INPUT_NAME to inputTensor)).use { result ->
+                                val outTensor = result.get(0) as OnnxTensor
+                                val outW = tileW * SCALE
+                                val outH = tileH * SCALE
+                                outTensor.floatBuffer.get(outputFloatBuffer, 0, outW * outH * 3)
+                                writeTile(
+                                    output = output,
+                                    outFloat = outputFloatBuffer,
+                                    outW = outW,
+                                    outH = outH,
+                                    srcOffsetX = (tx - x0) * SCALE,
+                                    srcOffsetY = (ty - y0) * SCALE,
+                                    destX = tx * SCALE,
+                                    destY = ty * SCALE,
+                                    coreW = min(tx + TILE_SIZE, inputW) - tx,
+                                    coreH = min(ty + TILE_SIZE, inputH) - ty,
+                                    pixelBuffer = pixelBuffer
+                                )
+                            }
+                        }
+
+                        completedTiles++
+                        onTileProgress(completedTiles.toFloat() / totalTiles.toFloat())
                     }
                 }
             }
-        } catch (e: OrtException) {
-            throw IllegalStateException(
-                "Image engine could not run the Real-ESRGAN model: ${e.message ?: "ONNX Runtime error"}",
-                e
-            )
         }
-
-        return output
     }
 
     /**
