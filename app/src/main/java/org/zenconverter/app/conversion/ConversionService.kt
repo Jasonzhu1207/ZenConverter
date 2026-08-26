@@ -51,12 +51,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
+import com.tom_roush.pdfbox.cos.COSBase
+import com.tom_roush.pdfbox.cos.COSName
 import com.tom_roush.pdfbox.io.MemoryUsageSetting
 import com.tom_roush.pdfbox.multipdf.PDFMergerUtility
 import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.pdmodel.PDResources
 import com.tom_roush.pdfbox.pdmodel.encryption.AccessPermission
 import com.tom_roush.pdfbox.pdmodel.encryption.InvalidPasswordException
 import com.tom_roush.pdfbox.pdmodel.encryption.StandardProtectionPolicy
+import com.tom_roush.pdfbox.pdmodel.graphics.form.PDFormXObject
+import com.tom_roush.pdfbox.pdmodel.graphics.image.JPEGFactory
+import com.tom_roush.pdfbox.pdmodel.graphics.image.PDImageXObject
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import org.zenconverter.app.MainActivity
 import org.zenconverter.app.R
@@ -675,6 +681,11 @@ class ConversionService : Service() {
         outputFile: File,
         outputProfile: OutputProfile
     ) {
+        if (input.targetFormat.equals("Compress PDF", ignoreCase = true)) {
+            writeCompressedPdf(input, outputFile)
+            return
+        }
+
         when (input.pdfSecurityOptions.mode) {
             PdfSecurityMode.Encrypt -> {
                 writePdfSecurityFile(input, outputFile, encrypt = true)
@@ -693,6 +704,158 @@ class ConversionService : Service() {
             "md" -> writePdfTextFile(input, outputFile, TextDocumentFormat.Markdown)
             else -> error("PDF conversion failed")
         }
+    }
+
+    private fun writeCompressedPdf(
+        input: ConversionTaskInput,
+        outputFile: File
+    ) {
+        val inputUris = input.inputUris.ifEmpty { listOf(input.inputUri) }
+        if (inputUris.size != 1) error("Select one PDF to compress")
+
+        throwIfConversionCancelled()
+        ensurePdfBoxReady()
+        val cachedInputs = cachePdfInputsForPdfBox(input, inputUris)
+        var document: PDDocument? = null
+
+        try {
+            document = loadPdfBoxDocument(cachedInputs.files.first(), input.pdfPasswordAt(0))
+            val pageCount = document.numberOfPages
+            if (pageCount <= 0) error("PDF has no pages")
+            throwIfConversionCancelled()
+
+            val preset = input.pdfOptions.compressionPreset
+            val (jpegQuality, maxDimension) = when (preset) {
+                PdfCompressionPreset.HighQuality -> Pair(0.85f, 2160)
+                PdfCompressionPreset.Balanced -> Pair(0.70f, 1440)
+                PdfCompressionPreset.SmallFile -> Pair(0.50f, 1080)
+            }
+
+            val visitedCosObjects = mutableSetOf<COSBase>()
+            for (pageIndex in 0 until pageCount) {
+                throwIfConversionCancelled()
+                val page = document.getPage(pageIndex)
+                page.cosObject?.removeItem(COSName.THUMB)
+                val resources = page.resources
+                if (resources != null) {
+                    compressPdfResources(
+                        document = document,
+                        resources = resources,
+                        jpegQuality = jpegQuality,
+                        maxDimension = maxDimension,
+                        visited = visitedCosObjects
+                    )
+                }
+                updateImageProgress(
+                    progressForIndexedWork(pageIndex, pageCount, 0.08f, 0.90f)
+                )
+            }
+
+            throwIfConversionCancelled()
+            document.save(outputFile)
+            throwIfConversionCancelled()
+            updateImageProgress(0.95f)
+        } catch (throwable: Throwable) {
+            outputFile.delete()
+            throw throwable
+        } finally {
+            runCatching { document?.close() }
+            cachedInputs.delete()
+        }
+    }
+
+    private fun compressPdfResources(
+        document: PDDocument,
+        resources: PDResources,
+        jpegQuality: Float,
+        maxDimension: Int,
+        visited: MutableSet<COSBase>
+    ) {
+        val xObjectNames = resources.xObjectNames ?: return
+        for (name in xObjectNames) {
+            throwIfConversionCancelled()
+            val cosDict = resources.cosObject
+            val cosObject = cosDict?.getDictionaryObject(name)
+            if (cosObject != null && !visited.add(cosObject)) {
+                continue
+            }
+            if (resources.isImageXObject(name)) {
+                val xObject = runCatching { resources.getXObject(name) }.getOrNull()
+                if (xObject is PDImageXObject) {
+                    compressPdfImageXObject(
+                        document = document,
+                        resources = resources,
+                        name = name,
+                        imageXObject = xObject,
+                        jpegQuality = jpegQuality,
+                        maxDimension = maxDimension
+                    )
+                }
+            } else {
+                val xObject = runCatching { resources.getXObject(name) }.getOrNull()
+                if (xObject is PDFormXObject) {
+                    val formResources = xObject.resources
+                    if (formResources != null) {
+                        compressPdfResources(
+                            document = document,
+                            resources = formResources,
+                            jpegQuality = jpegQuality,
+                            maxDimension = maxDimension,
+                            visited = visited
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun compressPdfImageXObject(
+        document: PDDocument,
+        resources: PDResources,
+        name: COSName,
+        imageXObject: PDImageXObject,
+        jpegQuality: Float,
+        maxDimension: Int
+    ) {
+        val width = imageXObject.width
+        val height = imageXObject.height
+        if (width <= 64 && height <= 64) return
+        if (imageXObject.isStencil) return
+
+        val originalBitmap = runCatching { imageXObject.image }.getOrNull() ?: return
+        try {
+            val (scaledBitmap, needsRecycle) = downscalePdfBitmapIfNeeded(originalBitmap, maxDimension)
+            try {
+                val newImageXObject = JPEGFactory.createFromImage(
+                    document,
+                    scaledBitmap,
+                    jpegQuality
+                )
+                resources.put(name, newImageXObject)
+            } finally {
+                if (needsRecycle) {
+                    scaledBitmap.recycle()
+                }
+            }
+        } finally {
+            originalBitmap.recycle()
+        }
+    }
+
+    private fun downscalePdfBitmapIfNeeded(
+        source: Bitmap,
+        maxDimension: Int
+    ): Pair<Bitmap, Boolean> {
+        val width = source.width
+        val height = source.height
+        if (width <= maxDimension && height <= maxDimension) {
+            return Pair(source, false)
+        }
+        val scale = minOf(maxDimension.toFloat() / width, maxDimension.toFloat() / height)
+        val targetWidth = (width * scale).roundToInt().coerceAtLeast(1)
+        val targetHeight = (height * scale).roundToInt().coerceAtLeast(1)
+        val scaled = Bitmap.createScaledBitmap(source, targetWidth, targetHeight, true)
+        return Pair(scaled, scaled !== source)
     }
 
     private fun writeMergedPdf(
@@ -2245,6 +2408,9 @@ class ConversionService : Service() {
     ): String {
         val message = pdfFailureMessageFor(exception)
         if (message != "PDF conversion failed") return message
+        if (input.targetFormat.equals("Compress PDF", ignoreCase = true)) {
+            return "PDF compression failed"
+        }
         when (input.pdfSecurityOptions.mode) {
             PdfSecurityMode.Encrypt -> return "PDF encryption failed"
             PdfSecurityMode.Decrypt -> return "PDF decryption failed"
@@ -5348,7 +5514,8 @@ class ConversionService : Service() {
                     input.targetFormat.equals("MD", ignoreCase = true) ->
                         OutputProfile(extension = "md", mimeType = MIME_TYPE_MARKDOWN, kind = OutputMediaKind.Document)
                     input.targetFormat.equals("Encrypt PDF", ignoreCase = true) ||
-                        input.targetFormat.equals("Decrypt PDF", ignoreCase = true) ->
+                        input.targetFormat.equals("Decrypt PDF", ignoreCase = true) ||
+                        input.targetFormat.equals("Compress PDF", ignoreCase = true) ->
                         OutputProfile(extension = "pdf", mimeType = MIME_TYPE_PDF, kind = OutputMediaKind.Document)
                     else -> null
                 }

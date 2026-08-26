@@ -188,6 +188,7 @@ import org.zenconverter.app.conversion.GifFrameExportMode
 import org.zenconverter.app.conversion.ImageExportOptions
 import org.zenconverter.app.conversion.ImageSuperResolutionMode
 import org.zenconverter.app.conversion.MediaTrimRange
+import org.zenconverter.app.conversion.PdfCompressionPreset
 import org.zenconverter.app.conversion.PdfExportOptions
 import org.zenconverter.app.conversion.PdfImagePageMode
 import org.zenconverter.app.conversion.PdfRenderQuality
@@ -294,6 +295,7 @@ enum class FileCategory(
             TargetFormat("JPG", "jpg", "Page rasterization"),
             TargetFormat("WEBP", "webp", "Page rasterization"),
             TargetFormat("PDF", "pdf", "Merge PDFs"),
+            TargetFormat("Compress PDF", "pdf", "Reduce file size"),
             TargetFormat("TXT", "txt", "Text layer"),
             TargetFormat("MD", "md", "Markdown"),
             TargetFormat("Encrypt PDF", "pdf", "Password protect"),
@@ -737,6 +739,15 @@ private val PDF_RENDER_QUALITY_OPTIONS = listOf(
     PDF_RENDER_QUALITY_BALANCED,
     PDF_RENDER_QUALITY_LOW,
     PDF_RENDER_QUALITY_HIGH
+)
+
+private const val PDF_COMPRESSION_PRESET_HIGH = "High quality"
+private const val PDF_COMPRESSION_PRESET_BALANCED = "Balanced"
+private const val PDF_COMPRESSION_PRESET_SMALL = "Small file"
+private val PDF_COMPRESSION_PRESET_OPTIONS = listOf(
+    PDF_COMPRESSION_PRESET_BALANCED,
+    PDF_COMPRESSION_PRESET_HIGH,
+    PDF_COMPRESSION_PRESET_SMALL
 )
 
 private const val GIF_FRAME_FIRST = "First frame"
@@ -4842,6 +4853,7 @@ private fun BatchPdfTargetOptions(
         menuPrefix = "batch-pdf-",
         targetFormat = target,
         renderQuality = commonBatchLabel(files) { pdfRenderQualityLabelFor(it.pdfOptions.renderQuality) },
+        compressionPreset = commonBatchLabel(files) { pdfCompressionPresetLabelFor(it.pdfOptions.compressionPreset) },
         openMenuId = openMenuId,
         onOpenMenuChange = onOpenMenuChange,
         onRenderQualityChange = { value ->
@@ -4851,6 +4863,18 @@ private fun BatchPdfTargetOptions(
                     file.copy(
                         pdfOptions = file.pdfOptions.copy(
                             renderQuality = pdfRenderQualityToOption(value)
+                        )
+                    )
+                }
+            )
+        },
+        onCompressionPresetChange = { value ->
+            onOpenMenuChange(null)
+            onUpdateFiles(
+                files.map { file ->
+                    file.copy(
+                        pdfOptions = file.pdfOptions.copy(
+                            compressionPreset = pdfCompressionPresetToOption(value)
                         )
                     )
                 }
@@ -6542,10 +6566,28 @@ private fun PdfOptions(
     menuPrefix: String = "",
     targetFormat: TargetFormat,
     renderQuality: String,
+    compressionPreset: String = "",
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
-    onRenderQualityChange: (String) -> Unit
+    onRenderQualityChange: (String) -> Unit = {},
+    onCompressionPresetChange: (String) -> Unit = {}
 ) {
+    if (targetFormat.label.equals("Compress PDF", ignoreCase = true)) {
+        OptionGrid {
+            OptionDropdown(
+                "${menuPrefix}pdf-compression-preset",
+                texts.compressionPreset,
+                compressionPreset,
+                PDF_COMPRESSION_PRESET_OPTIONS,
+                texts,
+                openMenuId,
+                onOpenMenuChange,
+                onCompressionPresetChange
+            )
+        }
+        return
+    }
+
     if (
         targetFormat.extension.equals("pdf", ignoreCase = true) ||
         targetFormat.extension.equals("txt", ignoreCase = true) ||
@@ -7217,10 +7259,14 @@ private fun QueuedFileOptionsPanel(
                 menuPrefix = menuPrefix,
                 targetFormat = selectedTarget.targetFormat,
                 renderQuality = pdfRenderQualityLabelFor(file.pdfOptions.renderQuality),
+                compressionPreset = pdfCompressionPresetLabelFor(file.pdfOptions.compressionPreset),
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
                 onRenderQualityChange = { value ->
                     onUpdateFile(file.copy(pdfOptions = file.pdfOptions.copy(renderQuality = pdfRenderQualityToOption(value))))
+                },
+                onCompressionPresetChange = { value ->
+                    onUpdateFile(file.copy(pdfOptions = file.pdfOptions.copy(compressionPreset = pdfCompressionPresetToOption(value))))
                 }
             )
             FileCategory.Document -> Text(
@@ -8042,6 +8088,14 @@ private fun pdfRenderQualityLabelFor(value: PdfRenderQuality): String {
     }
 }
 
+private fun pdfCompressionPresetLabelFor(value: PdfCompressionPreset): String {
+    return when (value) {
+        PdfCompressionPreset.HighQuality -> PDF_COMPRESSION_PRESET_HIGH
+        PdfCompressionPreset.SmallFile -> PDF_COMPRESSION_PRESET_SMALL
+        PdfCompressionPreset.Balanced -> PDF_COMPRESSION_PRESET_BALANCED
+    }
+}
+
 private fun gifFrameModeLabelFor(
     value: GifFrameExportMode,
     targetFormat: TargetFormat
@@ -8327,6 +8381,14 @@ private fun pdfRenderQualityToOption(value: String): PdfRenderQuality {
     }
 }
 
+private fun pdfCompressionPresetToOption(value: String): PdfCompressionPreset {
+    return when (value) {
+        PDF_COMPRESSION_PRESET_HIGH -> PdfCompressionPreset.HighQuality
+        PDF_COMPRESSION_PRESET_SMALL -> PdfCompressionPreset.SmallFile
+        else -> PdfCompressionPreset.Balanced
+    }
+}
+
 private val AUDIO_LOSSLESS_OUTPUT_EXTENSIONS = setOf("wav", "flac")
 
 private data class PrivacyPolicySection(
@@ -8493,6 +8555,7 @@ private data class UiText(
     val quality: String,
     val pageSize: String,
     val renderQuality: String,
+    val compressionPreset: String,
     val resolution: String,
     val superResolution: String,
     val videoCompressionMode: String,
@@ -9712,6 +9775,26 @@ private data class UiText(
                 simplifiedChineseText -> "解密 PDF"
                 else -> "解密 PDF"
             }
+            "Compress PDF" -> when (this) {
+                englishText -> "Compress PDF"
+                simplifiedChineseText -> "压缩 PDF"
+                else -> "壓縮 PDF"
+            }
+            "Reduce file size" -> when (this) {
+                englishText -> "Reduce file size"
+                simplifiedChineseText -> "缩减文件体积"
+                else -> "縮減檔案體積"
+            }
+            "High quality" -> when (this) {
+                englishText -> "High quality"
+                simplifiedChineseText -> "高画质"
+                else -> "高畫質"
+            }
+            "Small file" -> when (this) {
+                englishText -> "Small file"
+                simplifiedChineseText -> "小体积"
+                else -> "小體積"
+            }
             "Password protect" -> when (this) {
                 englishText -> "Password protect"
                 simplifiedChineseText -> "密码保护"
@@ -10392,8 +10475,8 @@ private val englishHelpGuide = HelpGuideCopy(
     imageBody = "Convert images, AI 4× upscaling, split GIF frames, or combine into a PDF.",
     imageFormats = "JPG · PNG · JFIF · WEBP · ICO  →  JPG · PNG · WEBP · ICO · PDF",
     documentTitle = "Documents and PDF",
-    documentBody = "Turn Office files into readable documents, render PDFs, or protect with passwords.",
-    documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  PNG · JPG · WEBP · TXT · MD",
+    documentBody = "Turn Office files into readable documents, compress PDF size, render PDFs to images/text, or protect with passwords.",
+    documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  Compress · PNG · JPG · WEBP · TXT · MD",
     fontTitle = "Fonts",
     fontBody = "Convert fonts between desktop and web formats.",
     fontFormats = "TTF · OTF  →  WOFF2 · WOFF  |  WOFF2 · WOFF  →  TTF · OTF",
@@ -10420,8 +10503,8 @@ private val simplifiedChineseHelpGuide = HelpGuideCopy(
     imageBody = "转换图片、AI 深度学习 4× 高清放大、拆分 GIF 帧或合并为 PDF。",
     imageFormats = "JPG · PNG · JFIF · WEBP · ICO  →  JPG · PNG · WEBP · ICO · PDF",
     documentTitle = "文档与 PDF",
-    documentBody = "Office 文档转为可读文件，PDF 转图片或文本，也支持密码保护。",
-    documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  PNG · JPG · WEBP · TXT · MD",
+    documentBody = "Office 文档转为可读文件，PDF 智能压缩瘦身，转图片/文本或添加密码保护。",
+    documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  压缩 · PNG · JPG · WEBP · TXT · MD",
     fontTitle = "字体",
     fontBody = "在桌面字体与网页字体之间互相转换。",
     fontFormats = "TTF · OTF  →  WOFF2 · WOFF  |  WOFF2 · WOFF  →  TTF · OTF",
@@ -10448,8 +10531,8 @@ private val traditionalChineseHelpGuide = HelpGuideCopy(
     imageBody = "轉換圖片、AI 深度學習 4× 高畫質放大、拆分 GIF 影格或合併為 PDF。",
     imageFormats = "JPG · PNG · JFIF · WEBP · ICO  →  JPG · PNG · WEBP · ICO · PDF",
     documentTitle = "文件與 PDF",
-    documentBody = "Office 文件轉為可讀檔案，PDF 轉圖片或文字，也支援密碼保護。",
-    documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  PNG · JPG · WEBP · TXT · MD",
+    documentBody = "Office 文件轉為可讀檔案，PDF 智慧壓縮瘦身，轉圖片/文字或新增密碼保護。",
+    documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  壓縮 · PNG · JPG · WEBP · TXT · MD",
     fontTitle = "字型",
     fontBody = "在桌面字型與網頁字型之間互相轉換。",
     fontFormats = "TTF · OTF  →  WOFF2 · WOFF  |  WOFF2 · WOFF  →  TTF · OTF",
@@ -10584,6 +10667,7 @@ private val englishText = UiText(
     quality = "Quality",
     pageSize = "Page size",
     renderQuality = "Render quality",
+    compressionPreset = "Compression preset",
     resolution = "Resolution",
     superResolution = "Super resolution",
     videoCompressionMode = "Compression preset",
@@ -10736,6 +10820,7 @@ private val simplifiedChineseText = UiText(
     quality = "质量",
     pageSize = "页面尺寸",
     renderQuality = "渲染质量",
+    compressionPreset = "压缩预设",
     resolution = "分辨率",
     superResolution = "超分",
     videoCompressionMode = "压缩预设",
@@ -10888,6 +10973,7 @@ private val traditionalChineseText = UiText(
     quality = "品質",
     pageSize = "頁面尺寸",
     renderQuality = "渲染品質",
+    compressionPreset = "壓縮預設",
     resolution = "解析度",
     superResolution = "超高解析度",
     videoCompressionMode = "壓縮預設",

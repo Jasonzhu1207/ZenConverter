@@ -63,7 +63,7 @@ ZenConverter 想做的是一个本地优先的 Android 转换器：
 | 图片转换 | 稳定 / Beta | 支持 JPG / JPEG / JFIF / JPE、PNG、WEBP、GIF、HEIC / HEIF、ICO 输入，以及 JPG / JFIF / PNG / WEBP / ICO / PDF 输出。HEIC / HEIF 仍受设备解码器能力影响。GIF 可转首帧或拆帧到文件夹；不复制元数据和动画时序。 |
 | 图片超分辨率 | 稳定 | 支持双线性插值算法超分（2×、3×、4×）以及基于 ONNX Runtime 的 Real-ESRGAN 4× AI 深度学习超分模型（通用模型、高画质模型、动漫模型等）。支持按需下载模型并校验 SHA-256，采用瓦片式分块推理与基于设备内存的动态像素预算，避免 OOM。 |
 | 元数据安全 | 稳定 | 独立隐私工具可查看图片/视频元数据。JPG / JPEG / JFIF 可不重编码原地清理，被移除的元数据会备份到应用数据目录，支持同一张图恢复。 |
-| PDF 工具 | 稳定 | 图片/PDF 互转、PDF 合并、可选择文本导出 TXT / 轻量 MD，以及基于密码的 PDF 加密和解密。不包含 OCR 或密码破解。 |
+| PDF 工具 | 稳定 | 图片/PDF 互转、PDF 合并、PDF 智能压缩（高画质/均衡/小体积）、可选择文本导出 TXT / 轻量 MD，以及基于密码的 PDF 加密和解密。不包含 OCR 或密码破解。 |
 | Office 转换 | Beta | DOCX / PPTX / XLSX 可在本地输出 PDF、TXT 或轻量 MD。中文默认使用系统 CJK 字体渲染，也可在设置中按需下载高保真 Noto CJK 字体；无版式完全保真承诺，源文件上限为 64 MiB。 |
 | 字体转换 | 稳定 | 支持 TTF、OTF、WOFF、WOFF2 字体格式互转。WOFF2 编解码使用内置 Google woff2 原生库（arm64），WOFF 1.0 使用纯 Kotlin zlib 实现；按字体轮廓自动匹配 .ttf / .otf 输出扩展名。 |
 | 歌词与字幕转换 | 稳定 | 支持 SRT、VTT、LRC、ASS 格式互转。LRC 歌词使用纯 Kotlin 解析与生成，支持多时间戳、`[offset:]` 偏移标签与 GB18030/GBK 编码回退；SRT/VTT/ASS 走 FFmpeg 字幕管线。 |

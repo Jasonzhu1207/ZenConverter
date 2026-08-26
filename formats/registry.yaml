@@ -401,6 +401,11 @@ groups:
         status: stable
         note: "Exports lightweight Markdown through PDFBox-Android text extraction. Output uses a document title and per-page headings only; it does not do OCR, table reconstruction, or heading inference. Password-protected source PDFs can be loaded with transient passwords."
       - from: pdf
+        to: compressed-pdf
+        engine: pdfbox-android
+        status: stable
+        note: "Compresses PDF documents by downsampling and re-encoding embedded images with JPEG presets (High Quality 85%/2160px, Balanced 70%/1440px, Small File 50%/1080px) and stripping redundant thumbnail metadata through PDFBox-Android. Preserves selectable text, vectors, and page layouts."
+      - from: pdf
         to: encrypted-pdf
         engine: pdfbox-android
         status: stable

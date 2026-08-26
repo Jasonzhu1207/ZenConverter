@@ -2129,7 +2129,8 @@ private fun QueuedFile.hasConnectedNativeTarget(): Boolean {
             targetFormat.equals("TXT", ignoreCase = true) ||
             targetFormat.equals("MD", ignoreCase = true) ||
             targetFormat.equals("Encrypt PDF", ignoreCase = true) ||
-            targetFormat.equals("Decrypt PDF", ignoreCase = true)
+            targetFormat.equals("Decrypt PDF", ignoreCase = true) ||
+            targetFormat.equals("Compress PDF", ignoreCase = true)
         FileCategory.Document -> targetFormat.equals("PDF", ignoreCase = true) ||
             targetFormat.equals("TXT", ignoreCase = true) ||
             targetFormat.equals("MD", ignoreCase = true)
@@ -2158,12 +2159,18 @@ private fun PendingSelection.isPdfDecryptTarget(): Boolean {
         targetFormat.label.equals("Decrypt PDF", ignoreCase = true)
 }
 
+private fun PendingSelection.isPdfCompressTarget(): Boolean {
+    return category == FileCategory.Pdf &&
+        targetFormat.label.equals("Compress PDF", ignoreCase = true)
+}
+
 private fun PendingSelection.usesPdfBoxTarget(): Boolean {
     return category == FileCategory.Pdf &&
         (
             isPdfMergeTarget() ||
                 isPdfEncryptTarget() ||
                 isPdfDecryptTarget() ||
+                isPdfCompressTarget() ||
                 pdfSecurityOptions.mode != PdfSecurityMode.None ||
                 targetFormat.extension.equals("txt", ignoreCase = true) ||
                 targetFormat.extension.equals("md", ignoreCase = true)

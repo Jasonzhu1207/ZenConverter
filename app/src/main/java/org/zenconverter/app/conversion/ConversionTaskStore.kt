@@ -178,7 +178,8 @@ data class ImageExportOptions(
 
 data class PdfExportOptions(
     val imagePageMode: PdfImagePageMode = PdfImagePageMode.A4Fit,
-    val renderQuality: PdfRenderQuality = PdfRenderQuality.Balanced
+    val renderQuality: PdfRenderQuality = PdfRenderQuality.Balanced,
+    val compressionPreset: PdfCompressionPreset = PdfCompressionPreset.Balanced
 )
 
 data class PdfSecurityOptions(
@@ -190,6 +191,12 @@ enum class PdfSecurityMode {
     None,
     Encrypt,
     Decrypt
+}
+
+enum class PdfCompressionPreset {
+    HighQuality,
+    Balanced,
+    SmallFile
 }
 
 enum class PdfImagePageMode {
