@@ -24,9 +24,10 @@ import kotlin.math.roundToInt
 object RealEsrganUpscaler {
     private const val SCALE = 4
     private const val INPUT_NAME = "input"
-    private const val TILE_SIZE = 192
+    private const val TILE_SIZE = 256
     private const val TILE_PAD = 16
-    private const val MAX_INTRA_OP_THREADS = 2
+    private const val MIN_INTRA_OP_THREADS = 2
+    private const val MAX_INTRA_OP_THREADS = 6
 
     /**
      * Up-scales [source] by 4x using the model at [modelPath].
@@ -68,10 +69,14 @@ object RealEsrganUpscaler {
         
         try {
             OrtSession.SessionOptions().use { options ->
-                val threads = Runtime.getRuntime().availableProcessors().coerceIn(1, MAX_INTRA_OP_THREADS)
+                val availableProcessors = Runtime.getRuntime().availableProcessors()
+                val threads = (availableProcessors - 1)
+                    .coerceIn(MIN_INTRA_OP_THREADS, MAX_INTRA_OP_THREADS)
+                    .coerceAtLeast(1)
                 runCatching { options.setIntraOpNumThreads(threads) }
-                runCatching { options.setCPUArenaAllocator(false) }
-                runCatching { options.setMemoryPatternOptimization(false) }
+                runCatching { options.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT) }
+                runCatching { options.setCPUArenaAllocator(true) }
+                runCatching { options.setMemoryPatternOptimization(true) }
 
                 env.createSession(modelPath, options).use { session ->
                     for (row in 0 until tileRows) {
@@ -148,29 +153,24 @@ object RealEsrganUpscaler {
         val rOffset = 0
         val gOffset = planeSize
         val bOffset = planeSize * 2
+        val inv255 = 1f / 255f
 
-        for (yy in 0 until tileH) {
-            val rowBase = yy * tileW
-            for (xx in 0 until tileW) {
-                val idx = rowBase + xx
-                val color = tilePixels[idx]
-                val alpha = Color.alpha(color)
-                if (alpha == 255) {
-                    outData[rOffset + idx] = Color.red(color) / 255f
-                    outData[gOffset + idx] = Color.green(color) / 255f
-                    outData[bOffset + idx] = Color.blue(color) / 255f
-                } else {
-                    outData[rOffset + idx] = compositeOnWhite(Color.red(color), alpha)
-                    outData[gOffset + idx] = compositeOnWhite(Color.green(color), alpha)
-                    outData[bOffset + idx] = compositeOnWhite(Color.blue(color), alpha)
-                }
+        for (idx in 0 until planeSize) {
+            val color = tilePixels[idx]
+            val alpha = (color ushr 24) and 0xFF
+            val red = (color ushr 16) and 0xFF
+            val green = (color ushr 8) and 0xFF
+            val blue = color and 0xFF
+            if (alpha == 255) {
+                outData[rOffset + idx] = red * inv255
+                outData[gOffset + idx] = green * inv255
+                outData[bOffset + idx] = blue * inv255
+            } else {
+                outData[rOffset + idx] = ((red * alpha + 255 * (255 - alpha)) / 255) * inv255
+                outData[gOffset + idx] = ((green * alpha + 255 * (255 - alpha)) / 255) * inv255
+                outData[bOffset + idx] = ((blue * alpha + 255 * (255 - alpha)) / 255) * inv255
             }
         }
-    }
-
-    private fun compositeOnWhite(channel: Int, alpha: Int): Float {
-        val blended = (channel * alpha + 255 * (255 - alpha)) / 255
-        return blended / 255f
     }
 
     /**
@@ -193,6 +193,8 @@ object RealEsrganUpscaler {
         pixelBuffer: IntArray
     ) {
         val planeSize = outW * outH
+        val gOffset = planeSize
+        val bOffset = planeSize * 2
         val dstW = coreW * SCALE
         val dstH = coreH * SCALE
         var p = 0
@@ -201,18 +203,13 @@ object RealEsrganUpscaler {
             val rowBase = srcY * outW + srcOffsetX
             for (dx in 0 until dstW) {
                 val sx = rowBase + dx
-                pixelBuffer[p++] = Color.rgb(
-                    clampToByte(outFloat[sx]),
-                    clampToByte(outFloat[planeSize + sx]),
-                    clampToByte(outFloat[planeSize * 2 + sx])
-                )
+                val r = (outFloat[sx].coerceIn(0f, 1f) * 255f + 0.5f).toInt().coerceIn(0, 255)
+                val g = (outFloat[gOffset + sx].coerceIn(0f, 1f) * 255f + 0.5f).toInt().coerceIn(0, 255)
+                val b = (outFloat[bOffset + sx].coerceIn(0f, 1f) * 255f + 0.5f).toInt().coerceIn(0, 255)
+                pixelBuffer[p++] = (-0x1000000) or (r shl 16) or (g shl 8) or b
             }
         }
         output.setPixels(pixelBuffer, 0, dstW, destX, destY, dstW, dstH)
-    }
-
-    private fun clampToByte(value: Float): Int {
-        return (value.coerceIn(0f, 1f) * 255f).roundToInt().coerceIn(0, 255)
     }
 
     /**
