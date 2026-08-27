@@ -2932,6 +2932,15 @@ class ConversionService : Service() {
             )
         }
 
+        val logTail = mutableListOf<String>()
+        if (input.category == ConversionMediaCategory.Video && input.inputUris.size > 1) {
+            return@withContext runFfmpegVideoMergeExport(
+                input = input,
+                tempFile = tempFile,
+                logTail = logTail
+            )
+        }
+
         val sourceDurationMs = readDurationMs(input.inputUri)
             ?: run {
                 val probeSource = openFfmpegInputSource(input.inputUri)
@@ -2977,7 +2986,6 @@ class ConversionService : Service() {
                 message = message
             )
         }
-        val logTail = mutableListOf<String>()
         if (isVideoGifOutput(input)) {
             val inputSource = openFfmpegInputSource(input.inputUri)
                 ?: return@withContext FfmpegRunResult(
@@ -3084,6 +3092,188 @@ class ConversionService : Service() {
             executeFfmpeg(input, arguments, effectiveDurationMs, logTail, inputSource.label)
         } finally {
             inputSource.close()
+        }
+    }
+
+    private suspend fun runFfmpegVideoMergeExport(
+        input: ConversionTaskInput,
+        tempFile: File,
+        logTail: MutableList<String>
+    ): FfmpegRunResult {
+        val inputUris = input.inputUris
+        if (inputUris.size < 2) {
+            return FfmpegRunResult(
+                success = false,
+                cancelled = false,
+                message = "At least two videos are required for merge"
+            )
+        }
+
+        val videoProfile = ffmpegVideoProfileFor(input)
+            ?: return FfmpegRunResult(
+                success = false,
+                cancelled = false,
+                message = "Unsupported video target ${input.targetFormat}"
+            )
+
+        val inputSources = mutableListOf<FfmpegInputSource>()
+        val inputDurations = mutableListOf<Long>()
+        val inputAudioFlags = mutableListOf<Boolean>()
+
+        try {
+            for (uri in inputUris) {
+                if (ConversionTaskStore.isCancelled()) {
+                    return FfmpegRunResult(success = false, cancelled = true)
+                }
+                val src = openFfmpegInputSource(uri)
+                    ?: return FfmpegRunResult(
+                        success = false,
+                        cancelled = false,
+                        message = "Compatibility engine could not open SAF input"
+                    )
+                inputSources.add(src)
+                val duration = readDurationMs(uri)
+                    ?: readFfmpegDurationMs(src.path)
+                    ?: 0L
+                inputDurations.add(duration)
+                inputAudioFlags.add(probeHasAudio(uri))
+            }
+
+            val totalDurationMs = inputDurations.sum().takeIf { it > 0L }
+            val videoAudioOptions = ffmpegVideoAudioOptionsFor(
+                compressionMode = input.videoOptions.compressionMode,
+                manualAudioOptions = input.audioOptions
+            )
+            val includeAudio = videoAudioOptions.advanced.volume != AudioVolumeMode.Mute
+
+            // Determine output video dimensions
+            val firstUri = inputUris.first()
+            val rawSourceSize = input.inputInfo?.let {
+                if (it.width != null && it.height != null && it.width > 0 && it.height > 0) {
+                    VideoSize(it.width, it.height)
+                } else null
+            } ?: readVideoSize(firstUri) ?: VideoSize(1920, 1080)
+
+            val targetShortSide = input.videoOptions.maxShortSidePixels?.takeIf { it > 0 }
+            val baseSize = if (targetShortSide != null && rawSourceSize.shortSide > targetShortSide) {
+                scaledVideoSizeFor(rawSourceSize, targetShortSide)
+            } else {
+                rawSourceSize
+            }
+            val targetW = (baseSize.width / 2) * 2
+            val targetH = (baseSize.height / 2) * 2
+
+            // Build filter_complex
+            val filterComplex = buildString {
+                for (i in inputSources.indices) {
+                    // Video scaling and padding with SAR=1
+                    append("[$i:v:0]scale=w=$targetW:h=$targetH:force_original_aspect_ratio=decrease,")
+                    append("pad=w=$targetW:h=$targetH:x=(ow-iw)/2:y=(oh-ih)/2:color=black,setsar=1[v$i];")
+
+                    if (includeAudio) {
+                        if (inputAudioFlags[i]) {
+                            append("[$i:a:0]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a$i];")
+                        } else {
+                            val durSec = (inputDurations[i].toDouble() / 1000.0).coerceAtLeast(0.1)
+                            append("aevalsrc=0:d=$durSec:s=44100:c=stereo[a$i];")
+                        }
+                    }
+                }
+
+                if (includeAudio) {
+                    for (i in inputSources.indices) {
+                        append("[v$i][a$i]")
+                    }
+                    append("concat=n=${inputSources.size}:v=1:a=1[outv][outa]")
+                } else {
+                    for (i in inputSources.indices) {
+                        append("[v$i]")
+                    }
+                    append("concat=n=${inputSources.size}:v=1:a=0[outv]")
+                }
+            }
+
+            val arguments = buildList {
+                add("-hide_banner")
+                add("-nostdin")
+                add("-y")
+                inputSources.forEach { src ->
+                    add("-i")
+                    add(src.path)
+                }
+                add("-filter_complex")
+                add(filterComplex)
+                add("-map")
+                add("[outv]")
+                if (includeAudio) {
+                    add("-map")
+                    add("[outa]")
+                }
+                add("-sn")
+                add("-dn")
+                if (!includeAudio) {
+                    add("-an")
+                }
+                add("-c:v")
+                add(videoProfile.videoCodec)
+                add("-pix_fmt")
+                add(videoProfile.pixelFormat)
+                add("-preset")
+                add(videoProfile.preset)
+                input.videoOptions.videoBitrate?.let { bitrate ->
+                    add("-b:v")
+                    add(bitrate.toString())
+                } ?: run {
+                    add("-crf")
+                    add(videoProfile.crf)
+                }
+                input.videoOptions.maxFrameRate
+                    ?.takeIf { it > 0 }
+                    ?.let { maxFps ->
+                        add("-fpsmax")
+                        add(maxFps.toString())
+                    }
+                if (videoProfile.videoTag != null) {
+                    add("-tag:v")
+                    add(videoProfile.videoTag)
+                }
+                if (includeAudio) {
+                    add("-c:a")
+                    add(FFMPEG_AAC_ENCODER)
+                    if (videoAudioOptions.audioBitrate != null) {
+                        add("-b:a")
+                        add(videoAudioOptions.audioBitrate.toString())
+                    }
+                }
+                if (videoProfile.useFastStart) {
+                    add("-movflags")
+                    add("+faststart")
+                }
+                add("-f")
+                add(videoProfile.format)
+                add(tempFile.absolutePath)
+            }
+
+            return executeFfmpeg(
+                input = input,
+                arguments = arguments,
+                durationMs = totalDurationMs,
+                logTail = logTail,
+                inputSourceLabel = "${inputSources.size} inputs"
+            )
+        } finally {
+            inputSources.forEach { it.close() }
+        }
+    }
+
+    private fun probeHasAudio(uri: Uri): Boolean {
+        val retriever = MediaMetadataRetriever()
+        return runCatching {
+            retriever.setDataSource(this, uri)
+            val hasAudio = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO)
+            hasAudio.equals("yes", ignoreCase = true) || hasAudio == "true" || hasAudio == "1"
+        }.getOrDefault(false).also {
+            runCatching { retriever.release() }
         }
     }
 
@@ -5776,7 +5966,8 @@ class ConversionService : Service() {
         val baseName = sanitizedBaseNameFor(input)
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val shortId = input.fileId.take(8)
-        return "${baseName}_converted_${timestamp}_$shortId.$extension"
+        val action = if (input.inputUris.size > 1) "merged" else "converted"
+        return "${baseName}_${action}_${timestamp}_$shortId.$extension"
     }
 
     private fun outputNameForPage(

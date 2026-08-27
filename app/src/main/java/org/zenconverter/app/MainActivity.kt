@@ -74,6 +74,7 @@ import org.zenconverter.app.ui.QueuedFile
 import org.zenconverter.app.ui.TaskProgress
 import org.zenconverter.app.ui.TaskProgressStatus
 import org.zenconverter.app.ui.TargetFormat
+import org.zenconverter.app.ui.VideoMergeGroup
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -86,6 +87,7 @@ import java.util.UUID
 class MainActivity : ComponentActivity() {
     private val queuedFiles = mutableStateListOf<QueuedFile>()
     private val pdfMergeGroups = mutableStateListOf<PdfMergeGroup>()
+    private val videoMergeGroups = mutableStateListOf<VideoMergeGroup>()
     private val outputDirectory = mutableStateOf<OutputDirectory?>(null)
     private val outputLocationMode = mutableStateOf(OutputLocationMode.Default)
     private val pdfPasswordPrompt = mutableStateOf<PdfPasswordPrompt?>(null)
@@ -296,6 +298,7 @@ class MainActivity : ComponentActivity() {
             ZenConverterApp(
                 queuedFiles = queuedFiles,
                 pdfMergeGroups = pdfMergeGroups,
+                videoMergeGroups = videoMergeGroups,
                 supportedVideoMimeTypes = supportedVideoMimeTypes,
                 outputLocationMode = outputLocationMode.value,
                 outputDirectory = outputDirectory.value,
@@ -347,6 +350,21 @@ class MainActivity : ComponentActivity() {
                 onRemoveFileFromPdfMergeGroup = { groupId, fileId ->
                     removeFileFromPdfMergeGroup(groupId, fileId)
                 },
+                onCreateVideoMergeGroup = {
+                    createVideoMergeGroup()
+                },
+                onUpdateVideoMergeGroup = { updatedGroup ->
+                    updateVideoMergeGroup(updatedGroup)
+                },
+                onRemoveVideoMergeGroup = { groupId ->
+                    videoMergeGroups.removeAll { it.id == groupId }
+                },
+                onAddFileToVideoMergeGroup = { groupId, fileId ->
+                    addFileToVideoMergeGroup(groupId, fileId)
+                },
+                onRemoveFileFromVideoMergeGroup = { groupId, fileId ->
+                    removeFileFromVideoMergeGroup(groupId, fileId)
+                },
                 onPickOutputDirectory = {
                     openOutputDirectory.launch(null)
                 },
@@ -356,6 +374,7 @@ class MainActivity : ComponentActivity() {
                 onClearQueue = {
                     queuedFiles.clear()
                     pdfMergeGroups.clear()
+                    videoMergeGroups.clear()
                     pendingQueuedPdfSelections.clear()
                     activeQueuedPdfPasswordSelection = null
                     pendingPdfOutputPasswordQueuedFileIds = emptyList()
@@ -829,6 +848,7 @@ class MainActivity : ComponentActivity() {
     private fun removeQueuedFile(fileId: String) {
         queuedFiles.removeAll { it.id == fileId }
         sanitizePdfMergeGroups()
+        sanitizeVideoMergeGroups()
     }
 
     private fun createPdfMergeGroup(type: PdfMergeType) {
@@ -914,6 +934,88 @@ class MainActivity : ComponentActivity() {
         return pdfMergeGroups.flatMap { it.memberFileIds }.toSet()
     }
 
+    private fun createVideoMergeGroup() {
+        val memberIds = mergeableVideoFiles().map { it.id }
+        if (memberIds.size < 2) {
+            ConversionTaskStore.showMessage("Select at least two videos to merge")
+            return
+        }
+        videoMergeGroups.add(
+            VideoMergeGroup(
+                id = UUID.randomUUID().toString(),
+                memberFileIds = memberIds,
+                targetFormat = "MP4"
+            )
+        )
+    }
+
+    private fun updateVideoMergeGroup(group: VideoMergeGroup) {
+        val index = videoMergeGroups.indexOfFirst { it.id == group.id }
+        if (index >= 0) {
+            videoMergeGroups[index] = group.copy(
+                memberFileIds = group.memberFileIds.orderedByQueue()
+            )
+            sanitizeVideoMergeGroups()
+        }
+    }
+
+    private fun addFileToVideoMergeGroup(groupId: String, fileId: String) {
+        val index = videoMergeGroups.indexOfFirst { it.id == groupId }
+        if (index < 0) return
+        val group = videoMergeGroups[index]
+        val file = queuedFiles.firstOrNull { it.id == fileId } ?: return
+        if (file.category != FileCategory.Video || fileId in groupedVideoMergeFileIds()) return
+        videoMergeGroups[index] = group.copy(
+            memberFileIds = (group.memberFileIds + fileId).distinct().orderedByQueue()
+        )
+        sanitizeVideoMergeGroups()
+    }
+
+    private fun removeFileFromVideoMergeGroup(groupId: String, fileId: String) {
+        val index = videoMergeGroups.indexOfFirst { it.id == groupId }
+        if (index < 0) return
+        val group = videoMergeGroups[index]
+        val nextMemberIds = group.memberFileIds
+            .filterNot { it == fileId }
+            .orderedByQueue()
+        if (nextMemberIds.size < 2) {
+            videoMergeGroups.removeAt(index)
+        } else {
+            videoMergeGroups[index] = group.copy(memberFileIds = nextMemberIds)
+        }
+    }
+
+    private fun sanitizeVideoMergeGroups() {
+        if (videoMergeGroups.isEmpty()) return
+        val sanitizedGroups = mutableListOf<VideoMergeGroup>()
+        val usedIds = mutableSetOf<String>()
+        videoMergeGroups.forEach { group ->
+            val memberIds = group.memberFileIds
+                .orderedByQueue()
+                .filter { fileId ->
+                    fileId !in usedIds &&
+                        queuedFiles.firstOrNull { it.id == fileId }?.category == FileCategory.Video
+                }
+            if (memberIds.size >= 2) {
+                sanitizedGroups += group.copy(memberFileIds = memberIds)
+                usedIds += memberIds
+            }
+        }
+        videoMergeGroups.clear()
+        videoMergeGroups.addAll(sanitizedGroups)
+    }
+
+    private fun mergeableVideoFiles(): List<QueuedFile> {
+        val groupedIds = groupedVideoMergeFileIds()
+        return queuedFiles.filter { file ->
+            file.id !in groupedIds && file.category == FileCategory.Video
+        }
+    }
+
+    private fun groupedVideoMergeFileIds(): Set<String> {
+        return videoMergeGroups.flatMap { it.memberFileIds }.toSet()
+    }
+
     private fun List<String>.orderedByQueue(): List<String> {
         val ids = toSet()
         return queuedFiles.map { it.id }.filter { it in ids }
@@ -921,22 +1023,38 @@ class MainActivity : ComponentActivity() {
 
     private fun buildConversionInputs(outputDestination: OutputDestination): List<ConversionTaskInput> {
         sanitizePdfMergeGroups()
-        val activeGroups = pdfMergeGroups
+        sanitizeVideoMergeGroups()
+        val activePdfGroups = pdfMergeGroups
             .mapNotNull { group ->
                 val members = group.memberFileIds.mapNotNull { fileId ->
                     queuedFiles.firstOrNull { it.id == fileId }
                 }
                 if (members.size >= 2) group to members else null
             }
-        val groupedIds = activeGroups.flatMap { it.second.map { file -> file.id } }.toSet()
-        val groupByFirstMemberId = activeGroups.associateBy { (_, members) -> members.first().id }
+        val activeVideoGroups = videoMergeGroups
+            .mapNotNull { group ->
+                val members = group.memberFileIds.mapNotNull { fileId ->
+                    queuedFiles.firstOrNull { it.id == fileId }
+                }
+                if (members.size >= 2) group to members else null
+            }
+        val groupedPdfIds = activePdfGroups.flatMap { it.second.map { file -> file.id } }.toSet()
+        val groupedVideoIds = activeVideoGroups.flatMap { it.second.map { file -> file.id } }.toSet()
+        val allGroupedIds = groupedPdfIds + groupedVideoIds
+
+        val pdfGroupByFirstMemberId = activePdfGroups.associateBy { (_, members) -> members.first().id }
+        val videoGroupByFirstMemberId = activeVideoGroups.associateBy { (_, members) -> members.first().id }
         return buildList {
             queuedFiles.forEach { file ->
-                val group = groupByFirstMemberId[file.id]
-                if (group != null) {
-                    add(group.first.toConversionTaskInput(group.second, outputDestination))
+                val pdfGroup = pdfGroupByFirstMemberId[file.id]
+                if (pdfGroup != null) {
+                    add(pdfGroup.first.toConversionTaskInput(pdfGroup.second, outputDestination))
                 }
-                if (file.id !in groupedIds) {
+                val videoGroup = videoGroupByFirstMemberId[file.id]
+                if (videoGroup != null) {
+                    add(videoGroup.first.toConversionTaskInput(videoGroup.second, outputDestination))
+                }
+                if (file.id !in allGroupedIds) {
                     add(file.toConversionTaskInput(outputDestination))
                 }
             }
@@ -2087,6 +2205,42 @@ private fun List<QueuedFile>.toMergedPdfInput(
             formatLabel = "PDF"
         ),
         pdfPasswords = passwords
+    )
+}
+
+private fun VideoMergeGroup.toConversionTaskInput(
+    members: List<QueuedFile>,
+    outputDestination: OutputDestination
+): ConversionTaskInput {
+    val first = members.first()
+    val totalSize = members.mapNotNull { it.sizeBytes }
+        .takeIf { it.size == members.size }
+        ?.sum()
+    val totalDurationMs = members.mapNotNull { it.inputInfo?.durationMs }
+        .takeIf { it.size == members.size }
+        ?.sum()
+    val inputUris = members.flatMap { file ->
+        file.inputUris.ifEmpty { listOf(file.uri) }
+    }
+    return ConversionTaskInput(
+        fileId = id,
+        inputUri = first.uri,
+        inputUris = inputUris,
+        displayName = "${members.size} videos",
+        mimeType = first.mimeType ?: "video/*",
+        category = ConversionMediaCategory.Video,
+        targetFormat = targetFormat,
+        outputDestination = outputDestination,
+        videoOptions = videoOptions,
+        audioOptions = audioOptions,
+        imageOptions = first.imageOptions,
+        pdfOptions = PdfExportOptions(),
+        inputInfo = FileBasicInfo(
+            durationMs = totalDurationMs,
+            width = first.inputInfo?.width,
+            height = first.inputInfo?.height,
+            frameRate = first.inputInfo?.frameRate
+        )
     )
 }
 

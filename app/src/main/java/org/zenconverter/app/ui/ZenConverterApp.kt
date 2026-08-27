@@ -361,6 +361,14 @@ data class PdfMergeGroup(
     val pdfOptions: PdfExportOptions = PdfExportOptions()
 )
 
+data class VideoMergeGroup(
+    val id: String,
+    val memberFileIds: List<String>,
+    val targetFormat: String = "MP4",
+    val videoOptions: VideoExportOptions = VideoExportOptions(),
+    val audioOptions: AudioExportOptions = AudioExportOptions()
+)
+
 data class QueuedFile(
     val id: String,
     val uri: Uri,
@@ -768,6 +776,7 @@ private val GIF_PDF_FRAME_MODE_OPTIONS = listOf(
 fun ZenConverterApp(
     queuedFiles: List<QueuedFile>,
     pdfMergeGroups: List<PdfMergeGroup>,
+    videoMergeGroups: List<VideoMergeGroup> = emptyList(),
     supportedVideoMimeTypes: Set<String>,
     outputLocationMode: OutputLocationMode,
     outputDirectory: OutputDirectory?,
@@ -788,6 +797,11 @@ fun ZenConverterApp(
     onRemovePdfMergeGroup: (String) -> Unit,
     onAddFileToPdfMergeGroup: (String, String) -> Unit,
     onRemoveFileFromPdfMergeGroup: (String, String) -> Unit,
+    onCreateVideoMergeGroup: () -> Unit = {},
+    onUpdateVideoMergeGroup: (VideoMergeGroup) -> Unit = {},
+    onRemoveVideoMergeGroup: (String) -> Unit = {},
+    onAddFileToVideoMergeGroup: (String, String) -> Unit = { _, _ -> },
+    onRemoveFileFromVideoMergeGroup: (String, String) -> Unit = { _, _ -> },
     onPickOutputDirectory: () -> Unit,
     onRemoveFile: (String) -> Unit,
     onClearQueue: () -> Unit,
@@ -839,6 +853,7 @@ fun ZenConverterApp(
                 texts = texts,
                 queuedFiles = queuedFiles,
                 pdfMergeGroups = pdfMergeGroups,
+                videoMergeGroups = videoMergeGroups,
                 supportedVideoMimeTypes = supportedVideoMimeTypes,
                 outputLocationMode = outputLocationMode,
                 outputDirectory = outputDirectory,
@@ -868,6 +883,11 @@ fun ZenConverterApp(
                 onRemovePdfMergeGroup = onRemovePdfMergeGroup,
                 onAddFileToPdfMergeGroup = onAddFileToPdfMergeGroup,
                 onRemoveFileFromPdfMergeGroup = onRemoveFileFromPdfMergeGroup,
+                onCreateVideoMergeGroup = onCreateVideoMergeGroup,
+                onUpdateVideoMergeGroup = onUpdateVideoMergeGroup,
+                onRemoveVideoMergeGroup = onRemoveVideoMergeGroup,
+                onAddFileToVideoMergeGroup = onAddFileToVideoMergeGroup,
+                onRemoveFileFromVideoMergeGroup = onRemoveFileFromVideoMergeGroup,
                 onPickOutputDirectory = onPickOutputDirectory,
                 onRemoveFile = onRemoveFile,
                 onClearQueue = onClearQueue,
@@ -910,6 +930,7 @@ private fun ZenConverterContent(
     texts: UiText,
     queuedFiles: List<QueuedFile>,
     pdfMergeGroups: List<PdfMergeGroup>,
+    videoMergeGroups: List<VideoMergeGroup> = emptyList(),
     supportedVideoMimeTypes: Set<String>,
     outputLocationMode: OutputLocationMode,
     outputDirectory: OutputDirectory?,
@@ -933,6 +954,11 @@ private fun ZenConverterContent(
     onRemovePdfMergeGroup: (String) -> Unit,
     onAddFileToPdfMergeGroup: (String, String) -> Unit,
     onRemoveFileFromPdfMergeGroup: (String, String) -> Unit,
+    onCreateVideoMergeGroup: () -> Unit = {},
+    onUpdateVideoMergeGroup: (VideoMergeGroup) -> Unit = {},
+    onRemoveVideoMergeGroup: (String) -> Unit = {},
+    onAddFileToVideoMergeGroup: (String, String) -> Unit = { _, _ -> },
+    onRemoveFileFromVideoMergeGroup: (String, String) -> Unit = { _, _ -> },
     onPickOutputDirectory: () -> Unit,
     onRemoveFile: (String) -> Unit,
     onClearQueue: () -> Unit,
@@ -961,7 +987,9 @@ private fun ZenConverterContent(
 
     val taskProgressById = conversionTasks.associateBy { it.fileId }
     val queueIds = queuedFiles.map { it.id }
-    val groupedFileIds = pdfMergeGroups.flatMap { it.memberFileIds }.toSet()
+    val pdfGroupedIds = pdfMergeGroups.flatMap { it.memberFileIds }.toSet()
+    val videoGroupedIds = videoMergeGroups.flatMap { it.memberFileIds }.toSet()
+    val groupedFileIds = pdfGroupedIds + videoGroupedIds
     val availableAiModels = buildSet {
         if (esrganModelStates[EsrganModelManager.MODEL_GENERAL_V3.id] is EsrganModelUiState.Downloaded) {
             add(IMAGE_SUPER_RESOLUTION_AI_V3)
@@ -1199,6 +1227,22 @@ private fun ZenConverterContent(
                                 onRemoveFileFromGroup = onRemoveFileFromPdfMergeGroup
                             )
                         }
+                        item(key = "video-merge-groups") {
+                            VideoMergeGroupsPanel(
+                                texts = texts,
+                                files = queuedFiles,
+                                groups = videoMergeGroups,
+                                taskProgress = taskProgressById,
+                                canEdit = !isConversionRunning,
+                                openMenuId = openMenuId,
+                                onOpenMenuChange = { openMenuId = it },
+                                onCreateGroup = onCreateVideoMergeGroup,
+                                onUpdateGroup = onUpdateVideoMergeGroup,
+                                onRemoveGroup = onRemoveVideoMergeGroup,
+                                onAddFileToGroup = onAddFileToVideoMergeGroup,
+                                onRemoveFileFromGroup = onRemoveFileFromVideoMergeGroup
+                            )
+                        }
                     }
 
                     if (queuedFiles.isNotEmpty()) {
@@ -1238,18 +1282,28 @@ private fun ZenConverterContent(
                     }
 
                     if (queuedFiles.isNotEmpty()) {
+                        val pdfGroupByFileId = pdfMergeGroups.flatMap { group ->
+                            group.memberFileIds.map { id -> id to group }
+                        }.toMap()
+                        val videoGroupByFileId = videoMergeGroups.flatMap { group ->
+                            group.memberFileIds.map { id -> id to group }
+                        }.toMap()
                         items(queuedFiles, key = { it.id }) { file ->
+                            val effectiveProgress = taskProgressById[file.id]
+                                ?: pdfGroupByFileId[file.id]?.let { taskProgressById[it.id] }
+                                ?: videoGroupByFileId[file.id]?.let { taskProgressById[it.id] }
                             FileRow(
                                 modifier = Modifier.animateItem(),
                                 texts = texts,
                                 file = file,
-                                progress = taskProgressById[file.id],
+                                progress = effectiveProgress,
                                 canEdit = !isConversionRunning,
                                 supportedVideoMimeTypes = supportedVideoMimeTypes,
                                 availableAiModels = availableAiModels,
                                 openMenuId = openMenuId,
                                 optionsExpanded = expandedFileId == file.id,
-                                groupedInPdfMerge = file.id in groupedFileIds,
+                                groupedInPdfMerge = file.id in pdfGroupedIds,
+                                groupedInVideoMerge = file.id in videoGroupedIds,
                                 onOpenMenuChange = { openMenuId = it },
                                 onUpdateFile = onUpdateQueuedFile,
                                 onOptionsExpandedChange = { expanded ->
@@ -5065,6 +5119,7 @@ private fun PdfMergeGroupCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     SmallTag(texts.fileCountLabel(members.size))
                     SmallTag("PDF")
+                    SmallTag(texts.progressLabel(progress))
                 }
             }
             Row(
@@ -5158,6 +5213,14 @@ private fun PdfMergeGroupCard(
                 }
             }
         }
+        if (progress?.status == TaskProgressStatus.Running) {
+            LinearProgressIndicator(
+                progress = progress.progress,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(4.dp))
+            )
+        }
         if (progress?.status == TaskProgressStatus.Completed && progress.outputInfo != null) {
             ResultInfoLine(
                 text = formatMergedResultInfoLine(progress.outputInfo, texts)
@@ -5213,6 +5276,437 @@ private fun PdfMergeMemberRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+        }
+        CompactTaskActionButton(
+            icon = Icons.Rounded.Close,
+            contentDescription = texts.remove,
+            enabled = canEdit,
+            onClick = onRemove
+        )
+    }
+}
+
+private fun mergeableVideoFilesFor(
+    files: List<QueuedFile>,
+    groups: List<VideoMergeGroup>
+): List<QueuedFile> {
+    val groupedIds = groups.flatMap { it.memberFileIds }.toSet()
+    return files.filter { file ->
+        file.category == FileCategory.Video && file.id !in groupedIds
+    }
+}
+
+@Composable
+private fun VideoMergeGroupsPanel(
+    texts: UiText,
+    files: List<QueuedFile>,
+    groups: List<VideoMergeGroup>,
+    taskProgress: Map<String, TaskProgress>,
+    canEdit: Boolean,
+    openMenuId: String?,
+    onOpenMenuChange: (String?) -> Unit,
+    onCreateGroup: () -> Unit,
+    onUpdateGroup: (VideoMergeGroup) -> Unit,
+    onRemoveGroup: (String) -> Unit,
+    onAddFileToGroup: (String, String) -> Unit,
+    onRemoveFileFromGroup: (String, String) -> Unit
+) {
+    val candidates = mergeableVideoFilesFor(files, groups)
+    val visibleGroups = groups.filter { group ->
+        group.memberFileIds.count { id -> files.any { it.id == id } } >= 2
+    }
+    if (
+        visibleGroups.isEmpty() &&
+        (!canEdit || candidates.size < 2)
+    ) return
+
+    QuietPanel(
+        borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    text = texts.videoMergeTitle,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = texts.videoMergeNote,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            if (visibleGroups.isNotEmpty()) {
+                SmallTag(texts.fileCountLabel(visibleGroups.size))
+            }
+        }
+
+        if (canEdit && candidates.size >= 2) {
+            Spacer(modifier = Modifier.height(10.dp))
+            CenteredFlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalSpacing = 8.dp,
+                verticalSpacing = 8.dp
+            ) {
+                VideoMergeActionChip(
+                    label = "${texts.createVideoMerge} · ${texts.fileCountLabel(candidates.size)}",
+                    onClick = {
+                        onOpenMenuChange(null)
+                        onCreateGroup()
+                    }
+                )
+            }
+        }
+
+        visibleGroups.forEach { group ->
+            Spacer(modifier = Modifier.height(10.dp))
+            VideoMergeGroupCard(
+                texts = texts,
+                files = files,
+                groups = groups,
+                group = group,
+                progress = taskProgress[group.id],
+                canEdit = canEdit,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                onUpdateGroup = onUpdateGroup,
+                onRemoveGroup = onRemoveGroup,
+                onAddFileToGroup = onAddFileToGroup,
+                onRemoveFileFromGroup = onRemoveFileFromGroup
+            )
+        }
+    }
+}
+
+@Composable
+private fun VideoMergeActionChip(
+    label: String,
+    onClick: () -> Unit
+) {
+    OutlinedButton(
+        onClick = onClick,
+        shape = RoundedCornerShape(100.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.36f)),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
+            contentColor = MaterialTheme.colorScheme.primary
+        ),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.Videocam,
+            contentDescription = null,
+            modifier = Modifier.size(17.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun VideoMergeGroupCard(
+    texts: UiText,
+    files: List<QueuedFile>,
+    groups: List<VideoMergeGroup>,
+    group: VideoMergeGroup,
+    progress: TaskProgress?,
+    canEdit: Boolean,
+    openMenuId: String?,
+    onOpenMenuChange: (String?) -> Unit,
+    onUpdateGroup: (VideoMergeGroup) -> Unit,
+    onRemoveGroup: (String) -> Unit,
+    onAddFileToGroup: (String, String) -> Unit,
+    onRemoveFileFromGroup: (String, String) -> Unit
+) {
+    val context = LocalContext.current
+    val filesById = files.associateBy { it.id }
+    val members = group.memberFileIds.mapNotNull { filesById[it] }
+    val addableFiles = mergeableVideoFilesFor(files, groups)
+    val completedProgress = progress?.takeIf {
+        it.status == TaskProgressStatus.Completed && it.outputUriList().isNotEmpty()
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.035f), RoundedCornerShape(8.dp))
+            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.16f), RoundedCornerShape(8.dp))
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    text = texts.videoMergeTitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SmallTag(texts.fileCountLabel(members.size))
+                    SmallTag(group.targetFormat)
+                    SmallTag(texts.progressLabel(progress))
+                }
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (completedProgress != null) {
+                    CompactTaskActionButton(
+                        icon = Icons.Rounded.Share,
+                        contentDescription = texts.shareOutput,
+                        onClick = { shareOutput(context, completedProgress, texts) }
+                    )
+                    CompactTaskActionButton(
+                        icon = Icons.Rounded.FolderOpen,
+                        contentDescription = texts.openOutputLocation,
+                        onClick = { openOutputLocation(context, completedProgress, texts) }
+                    )
+                }
+                CompactTaskActionButton(
+                    icon = Icons.Rounded.DeleteOutline,
+                    contentDescription = texts.removeMergeGroup,
+                    enabled = canEdit,
+                    onClick = { onRemoveGroup(group.id) }
+                )
+            }
+        }
+
+        if (canEdit) {
+            CenteredFlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalSpacing = 8.dp,
+                verticalSpacing = 8.dp
+            ) {
+                OptionDropdown(
+                    "video-merge-${group.id}-target",
+                    texts.target,
+                    group.targetFormat,
+                    listOf("MP4", "MKV", "MOV"),
+                    texts,
+                    openMenuId,
+                    onOpenMenuChange
+                ) { value ->
+                    onUpdateGroup(group.copy(targetFormat = value))
+                }
+
+                OptionDropdown(
+                    "video-merge-${group.id}-preset",
+                    texts.videoCompressionMode,
+                    videoCompressionLabelFor(group.videoOptions.compressionMode),
+                    VIDEO_COMPRESSION_OPTIONS,
+                    texts,
+                    openMenuId,
+                    onOpenMenuChange
+                ) { value ->
+                    val mode = videoCompressionModeFor(value)
+                    val presetActive = mode != VideoCompressionMode.Standard
+                    onUpdateGroup(
+                        group.copy(
+                            videoOptions = group.videoOptions.copy(
+                                compressionMode = mode,
+                                videoBitrate = if (presetActive) null else group.videoOptions.videoBitrate,
+                                maxShortSidePixels = videoCompressionShortSideFor(mode)
+                                    ?: group.videoOptions.maxShortSidePixels,
+                                maxFrameRate = videoCompressionFrameRateCapFor(mode)
+                                    ?: group.videoOptions.maxFrameRate
+                            )
+                        )
+                    )
+                }
+
+                if (group.videoOptions.compressionMode == VideoCompressionMode.Standard) {
+                    OptionDropdown(
+                        "video-merge-${group.id}-resolution",
+                        texts.resolution,
+                        videoResolutionLabelFor(group.videoOptions),
+                        VIDEO_RESOLUTION_OPTIONS,
+                        texts,
+                        openMenuId,
+                        onOpenMenuChange
+                    ) { value ->
+                        onUpdateGroup(
+                            group.copy(
+                                videoOptions = group.videoOptions.copy(
+                                    maxShortSidePixels = videoResolutionToShortSide(value)
+                                )
+                            )
+                        )
+                    }
+
+                    OptionDropdown(
+                        "video-merge-${group.id}-codec",
+                        texts.codec,
+                        videoCodecLabelFor(group.videoOptions.videoMimeType),
+                        listOf(VIDEO_CODEC_H264, VIDEO_CODEC_H265),
+                        texts,
+                        openMenuId,
+                        onOpenMenuChange
+                    ) { value ->
+                        onUpdateGroup(
+                            group.copy(
+                                videoOptions = group.videoOptions.copy(
+                                    videoMimeType = videoCodecToMimeType(value)
+                                )
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        members.forEachIndexed { index, member ->
+            VideoMergeMemberRow(
+                texts = texts,
+                index = index + 1,
+                file = member,
+                canEdit = canEdit,
+                onRemove = {
+                    onOpenMenuChange(null)
+                    onRemoveFileFromGroup(group.id, member.id)
+                }
+            )
+        }
+
+        if (addableFiles.isNotEmpty() && canEdit) {
+            Text(
+                text = texts.addToMerge,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            CenteredFlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalSpacing = 8.dp,
+                verticalSpacing = 8.dp
+            ) {
+                if (addableFiles.size > 6) {
+                    VideoMergeActionChip(
+                        label = "${texts.addToMerge} · ${texts.fileCountLabel(addableFiles.size)}",
+                        onClick = {
+                            onOpenMenuChange(null)
+                            addableFiles.forEach { file ->
+                                onAddFileToGroup(group.id, file.id)
+                            }
+                        }
+                    )
+                }
+                addableFiles.take(6).forEach { file ->
+                    BatchScopeChip(
+                        label = compactMergeFileName(file.displayName),
+                        selected = false,
+                        onClick = {
+                            onOpenMenuChange(null)
+                            onAddFileToGroup(group.id, file.id)
+                        }
+                    )
+                }
+            }
+        }
+        if (progress?.status == TaskProgressStatus.Running) {
+            LinearProgressIndicator(
+                progress = progress.progress,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(4.dp))
+            )
+        }
+        if (progress?.status == TaskProgressStatus.Completed && progress.outputInfo != null) {
+            ResultInfoLine(
+                text = formatMergedResultInfoLine(progress.outputInfo, texts)
+            )
+        }
+        if (progress?.status == TaskProgressStatus.Failed) {
+            Text(
+                text = texts.taskMessage(progress.message),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun VideoMergeMemberRow(
+    texts: UiText,
+    index: Int,
+    file: QueuedFile,
+    canEdit: Boolean,
+    onRemove: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = index.toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = file.displayName,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = formatFileInfoLine(
+                        info = file.inputInfo,
+                        texts = texts,
+                        fallbackType = file.mimeType ?: texts.unknownType,
+                        fallbackSizeBytes = file.sizeBytes
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
         CompactTaskActionButton(
             icon = Icons.Rounded.Close,
@@ -6764,6 +7258,7 @@ private fun FileRow(
     openMenuId: String?,
     optionsExpanded: Boolean,
     groupedInPdfMerge: Boolean,
+    groupedInVideoMerge: Boolean = false,
     onOpenMenuChange: (String?) -> Unit,
     onUpdateFile: (QueuedFile) -> Unit,
     onOptionsExpandedChange: (Boolean) -> Unit,
@@ -6854,6 +7349,9 @@ private fun FileRow(
                 SmallTag(texts.progressLabel(progress))
                 if (groupedInPdfMerge) {
                     SmallTag(texts.pdfMergeMember)
+                }
+                if (groupedInVideoMerge) {
+                    SmallTag(texts.videoMergeMember)
                 }
             }
             if (canEdit) {
@@ -8520,6 +9018,10 @@ private data class UiText(
     val createImagePdfMerge: String,
     val createPdfMerge: String,
     val pdfMergeMember: String,
+    val videoMergeTitle: String,
+    val videoMergeNote: String,
+    val createVideoMerge: String,
+    val videoMergeMember: String,
     val addToMerge: String,
     val removeMergeGroup: String,
     val target: String,
@@ -10466,8 +10968,8 @@ private val englishHelpGuide = HelpGuideCopy(
     body = "Choose a file, pick a target, and let the conversion run locally.",
     back = "Back",
     videoTitle = "Video",
-    videoBody = "Convert common video formats, trim & split segments, or extract audio tracks.",
-    videoFormats = "MP4 · MKV · MOV · GIF  →  MP4 · MKV · MOV · GIF",
+    videoBody = "Convert common video formats, merge multiple videos, trim & split segments, or extract audio tracks.",
+    videoFormats = "MP4 · MKV · MOV · GIF  →  Merge · MP4 · MKV · MOV · GIF",
     audioTitle = "Audio",
     audioBody = "Convert audio files, trim range, and apply audio filters.",
     audioFormats = "MP3 · M4A · WAV · FLAC · WMA · OPUS",
@@ -10475,8 +10977,8 @@ private val englishHelpGuide = HelpGuideCopy(
     imageBody = "Convert images, AI 4× upscaling, split GIF frames, or combine into a PDF.",
     imageFormats = "JPG · PNG · JFIF · WEBP · ICO  →  JPG · PNG · WEBP · ICO · PDF",
     documentTitle = "Documents and PDF",
-    documentBody = "Turn Office files into readable documents, compress PDF size, render PDFs to images/text, or protect with passwords.",
-    documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  Compress · PNG · JPG · WEBP · TXT · MD",
+    documentBody = "Turn Office files into readable documents, merge PDFs, compress PDF size, render PDFs to images/text, or protect with passwords.",
+    documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  Merge · Compress · PNG · JPG · WEBP · TXT · MD",
     fontTitle = "Fonts",
     fontBody = "Convert fonts between desktop and web formats.",
     fontFormats = "TTF · OTF  →  WOFF2 · WOFF  |  WOFF2 · WOFF  →  TTF · OTF",
@@ -10494,8 +10996,8 @@ private val simplifiedChineseHelpGuide = HelpGuideCopy(
     body = "选择文件、指定目标格式，转换过程默认在本机完成。",
     back = "返回",
     videoTitle = "视频",
-    videoBody = "转换常见视频格式，支持时间轴裁剪与多段分割，也可提取音频。",
-    videoFormats = "MP4 · MKV · MOV · GIF  →  MP4 · MKV · MOV · GIF",
+    videoBody = "转换常见视频格式，支持多视频拼接合并、时间轴裁剪与多段分割，也可提取音频。",
+    videoFormats = "MP4 · MKV · MOV · GIF  →  合并 · MP4 · MKV · MOV · GIF",
     audioTitle = "音频",
     audioBody = "在常用音频格式之间互相转换，支持剪辑、降噪与高级音效。",
     audioFormats = "MP3 · M4A · WAV · FLAC · WMA · OPUS",
@@ -10503,8 +11005,8 @@ private val simplifiedChineseHelpGuide = HelpGuideCopy(
     imageBody = "转换图片、AI 深度学习 4× 高清放大、拆分 GIF 帧或合并为 PDF。",
     imageFormats = "JPG · PNG · JFIF · WEBP · ICO  →  JPG · PNG · WEBP · ICO · PDF",
     documentTitle = "文档与 PDF",
-    documentBody = "Office 文档转为可读文件，PDF 智能压缩瘦身，转图片/文本或添加密码保护。",
-    documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  压缩 · PNG · JPG · WEBP · TXT · MD",
+    documentBody = "Office 文档转为可读文件，合并多个 PDF，智能压缩瘦身，转图片/文本或添加密码保护。",
+    documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  合并 · 压缩 · PNG · JPG · WEBP · TXT · MD",
     fontTitle = "字体",
     fontBody = "在桌面字体与网页字体之间互相转换。",
     fontFormats = "TTF · OTF  →  WOFF2 · WOFF  |  WOFF2 · WOFF  →  TTF · OTF",
@@ -10522,8 +11024,8 @@ private val traditionalChineseHelpGuide = HelpGuideCopy(
     body = "選擇檔案、指定目標格式，轉換過程預設在本機完成。",
     back = "返回",
     videoTitle = "影片",
-    videoBody = "轉換常見影片格式，支援時間軸裁剪與多段分割，也可擷取音訊。",
-    videoFormats = "MP4 · MKV · MOV · GIF  →  MP4 · MKV · MOV · GIF",
+    videoBody = "轉換常見影片格式，支援多影片拼接合併、時間軸裁剪與多段分割，也可擷取音訊。",
+    videoFormats = "MP4 · MKV · MOV · GIF  →  合併 · MP4 · MKV · MOV · GIF",
     audioTitle = "音訊",
     audioBody = "在常用音訊格式之間互相轉換，支援剪輯、降噪與進階音效。",
     audioFormats = "MP3 · M4A · WAV · FLAC · WMA · OPUS",
@@ -10531,8 +11033,8 @@ private val traditionalChineseHelpGuide = HelpGuideCopy(
     imageBody = "轉換圖片、AI 深度學習 4× 高畫質放大、拆分 GIF 影格或合併為 PDF。",
     imageFormats = "JPG · PNG · JFIF · WEBP · ICO  →  JPG · PNG · WEBP · ICO · PDF",
     documentTitle = "文件與 PDF",
-    documentBody = "Office 文件轉為可讀檔案，PDF 智慧壓縮瘦身，轉圖片/文字或新增密碼保護。",
-    documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  壓縮 · PNG · JPG · WEBP · TXT · MD",
+    documentBody = "Office 文件轉為可讀檔案，合併多個 PDF，智慧壓縮瘦身，轉圖片/文字或新增密碼保護。",
+    documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  合併 · 壓縮 · PNG · JPG · WEBP · TXT · MD",
     fontTitle = "字型",
     fontBody = "在桌面字型與網頁字型之間互相轉換。",
     fontFormats = "TTF · OTF  →  WOFF2 · WOFF  |  WOFF2 · WOFF  →  TTF · OTF",
@@ -10632,6 +11134,10 @@ private val englishText = UiText(
     createImagePdfMerge = "Image PDF merge",
     createPdfMerge = "PDF merge",
     pdfMergeMember = "In PDF merge",
+    videoMergeTitle = "Video merge",
+    videoMergeNote = "Merge multiple videos in sequence into one video.",
+    createVideoMerge = "Video merge",
+    videoMergeMember = "In video merge",
     addToMerge = "Add to merge",
     removeMergeGroup = "Remove merge",
     target = "Target",
@@ -10785,6 +11291,10 @@ private val simplifiedChineseText = UiText(
     createImagePdfMerge = "图片 PDF 合并",
     createPdfMerge = "PDF 合并",
     pdfMergeMember = "在 PDF 合并中",
+    videoMergeTitle = "视频合并",
+    videoMergeNote = "按顺序将多个视频拼接为一个完整视频。",
+    createVideoMerge = "视频合并",
+    videoMergeMember = "在视频合并中",
     addToMerge = "加入合并",
     removeMergeGroup = "移除合并",
     target = "目标",
@@ -10938,6 +11448,10 @@ private val traditionalChineseText = UiText(
     createImagePdfMerge = "圖片 PDF 合併",
     createPdfMerge = "PDF 合併",
     pdfMergeMember = "在 PDF 合併中",
+    videoMergeTitle = "影片合併",
+    videoMergeNote = "按順序將多個影片拼接為一個完整影片。",
+    createVideoMerge = "影片合併",
+    videoMergeMember = "在影片合併中",
     addToMerge = "加入合併",
     removeMergeGroup = "移除合併",
     target = "目標",

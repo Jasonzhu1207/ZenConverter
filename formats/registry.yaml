@@ -26,6 +26,11 @@ groups:
         engine: ffmpeg-compatible
         status: stable
         note: "FFmpeg re-encode path for video inputs. Encodes the first video track with H.264/H.265 and writes AAC audio in a QuickTime MOV container. Fixed compression presets own CRF/preset/resolution/frame-rate strategy and AAC audio bitrate; manual-mode advanced filters apply."
+      - from: multiple-videos
+        to: mp4-mkv-mov
+        engine: ffmpeg-compatible
+        status: stable
+        note: "Video merge path. Concatenates multiple selected video files in order using FFmpeg filter_complex concat with aspect-ratio letterboxing/pillarboxing (scale+pad) and audio track normalization."
       - from: video
         to: gif
         engine: ffmpeg-compatible
