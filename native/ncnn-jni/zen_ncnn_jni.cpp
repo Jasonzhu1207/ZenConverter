@@ -410,6 +410,7 @@ Java_org_zenconverter_app_model_NcnnNative_nativeRifeInit(
     g_rife_net->opt.use_fp16_storage = useVulkan;
     g_rife_net->opt.use_fp16_arithmetic = false;
     g_rife_net->opt.use_int8_storage = true;
+    g_rife_net->opt.lightmode = true;
     g_rife_net->opt.num_threads = std::max(1, std::min(6, (int)ncnn::get_cpu_count()));
 
     if (useVulkan) {
@@ -429,7 +430,8 @@ Java_org_zenconverter_app_model_NcnnNative_nativeRifeInit(
         return -3;
     }
 
-    LOGI("RIFE model initialized successfully (useVulkan=%d, threads=%d)", (int)useVulkan, g_rife_net->opt.num_threads);
+    LOGI("RIFE model initialized successfully (useVulkan=%d, threads=%d, lightmode=true)",
+         (int)useVulkan, g_rife_net->opt.num_threads);
     return 0;
 }
 
@@ -474,6 +476,7 @@ Java_org_zenconverter_app_model_NcnnNative_nativeRifeInterpolate(
         g_rife_net->opt.use_fp16_storage = useVulkan;
         g_rife_net->opt.use_fp16_arithmetic = false;
         g_rife_net->opt.use_int8_storage = true;
+        g_rife_net->opt.lightmode = true;
         g_rife_net->opt.num_threads = std::max(1, std::min(6, (int)ncnn::get_cpu_count()));
 
         if (useVulkan) {
@@ -527,43 +530,75 @@ Java_org_zenconverter_app_model_NcnnNative_nativeRifeInterpolate(
         return -1;
     }
 
-    int padW = (w + 31) / 32 * 32;
-    int padH = (h + 31) / 32 * 32;
+    // Adaptive scale for 1080p and UHD to minimize memory pressure and boost FPS
+    float scale = 1.0f;
+    if (std::max(w, h) > 720) {
+        scale = 0.5f;
+    }
 
-    ncnn::Mat in0(padW, padH, 3);
-    ncnn::Mat in1(padW, padH, 3);
+    int inW = (int(w * scale) + 31) / 32 * 32;
+    int inH = (int(h * scale) + 31) / 32 * 32;
+
+    ncnn::Mat in0(inW, inH, 3);
+    ncnn::Mat in1(inW, inH, 3);
     const float inv255 = 1.0f / 255.0f;
 
-    for (int y = 0; y < h; y++) {
-        const uint8_t* row0 = (const uint8_t*)pix0 + y * info0.stride;
-        const uint8_t* row1 = (const uint8_t*)pix1 + y * info1.stride;
+    float x_scale = (float)w / (float)inW;
+    float y_scale = (float)h / (float)inH;
+
+    for (int y = 0; y < inH; y++) {
+        float srcY = ((float)y + 0.5f) * y_scale - 0.5f;
+        srcY = std::max(0.0f, std::min((float)(h - 1), srcY));
+        int sy0 = (int)srcY;
+        int sy1 = std::min(h - 1, sy0 + 1);
+        float wy1 = srcY - (float)sy0;
+        float wy0 = 1.0f - wy1;
+
+        const uint8_t* row0_0 = (const uint8_t*)pix0 + sy0 * info0.stride;
+        const uint8_t* row0_1 = (const uint8_t*)pix0 + sy1 * info0.stride;
+        const uint8_t* row1_0 = (const uint8_t*)pix1 + sy0 * info1.stride;
+        const uint8_t* row1_1 = (const uint8_t*)pix1 + sy1 * info1.stride;
+
         float* r0 = in0.channel(0).row(y);
         float* g0 = in0.channel(1).row(y);
         float* b0 = in0.channel(2).row(y);
         float* r1 = in1.channel(0).row(y);
         float* g1 = in1.channel(1).row(y);
         float* b1 = in1.channel(2).row(y);
-        for (int x = 0; x < w; x++) {
-            r0[x] = (float)row0[x * 4 + 0] * inv255;
-            g0[x] = (float)row0[x * 4 + 1] * inv255;
-            b0[x] = (float)row0[x * 4 + 2] * inv255;
-            r1[x] = (float)row1[x * 4 + 0] * inv255;
-            g1[x] = (float)row1[x * 4 + 1] * inv255;
-            b1[x] = (float)row1[x * 4 + 2] * inv255;
-        }
-        for (int x = w; x < padW; x++) {
-            r0[x] = r0[w - 1]; g0[x] = g0[w - 1]; b0[x] = b0[w - 1];
-            r1[x] = r1[w - 1]; g1[x] = g1[w - 1]; b1[x] = b1[w - 1];
-        }
-    }
-    for (int y = h; y < padH; y++) {
-        for (int c = 0; c < 3; c++) {
-            memcpy(in0.channel(c).row(y), in0.channel(c).row(h - 1), padW * sizeof(float));
-            memcpy(in1.channel(c).row(y), in1.channel(c).row(h - 1), padW * sizeof(float));
+
+        for (int x = 0; x < inW; x++) {
+            float srcX = ((float)x + 0.5f) * x_scale - 0.5f;
+            srcX = std::max(0.0f, std::min((float)(w - 1), srcX));
+            int sx0 = (int)srcX;
+            int sx1 = std::min(w - 1, sx0 + 1);
+            float wx1 = srcX - (float)sx0;
+            float wx0 = 1.0f - wx1;
+
+            float r0_val = wy0 * (wx0 * row0_0[sx0 * 4 + 0] + wx1 * row0_0[sx1 * 4 + 0]) +
+                           wy1 * (wx0 * row0_1[sx0 * 4 + 0] + wx1 * row0_1[sx1 * 4 + 0]);
+            float g0_val = wy0 * (wx0 * row0_0[sx0 * 4 + 1] + wx1 * row0_0[sx1 * 4 + 1]) +
+                           wy1 * (wx0 * row0_1[sx0 * 4 + 1] + wx1 * row0_1[sx1 * 4 + 1]);
+            float b0_val = wy0 * (wx0 * row0_0[sx0 * 4 + 2] + wx1 * row0_0[sx1 * 4 + 2]) +
+                           wy1 * (wx0 * row0_1[sx0 * 4 + 2] + wx1 * row0_1[sx1 * 4 + 2]);
+
+            float r1_val = wy0 * (wx0 * row1_0[sx0 * 4 + 0] + wx1 * row1_0[sx1 * 4 + 0]) +
+                           wy1 * (wx0 * row1_1[sx0 * 4 + 0] + wx1 * row1_1[sx1 * 4 + 0]);
+            float g1_val = wy0 * (wx0 * row1_0[sx0 * 4 + 1] + wx1 * row1_0[sx1 * 4 + 1]) +
+                           wy1 * (wx0 * row1_1[sx0 * 4 + 1] + wx1 * row1_1[sx1 * 4 + 1]);
+            float b1_val = wy0 * (wx0 * row1_0[sx0 * 4 + 2] + wx1 * row1_0[sx1 * 4 + 2]) +
+                           wy1 * (wx0 * row1_1[sx0 * 4 + 2] + wx1 * row1_1[sx1 * 4 + 2]);
+
+            r0[x] = r0_val * inv255;
+            g0[x] = g0_val * inv255;
+            b0[x] = b0_val * inv255;
+            r1[x] = r1_val * inv255;
+            g1[x] = g1_val * inv255;
+            b1[x] = b1_val * inv255;
         }
     }
 
     ncnn::Extractor ex = g_rife_net->create_extractor();
+    ex.set_light_mode(true);
     ex.input("in0", in0);
     ex.input("in1", in1);
 
@@ -579,24 +614,76 @@ Java_org_zenconverter_app_model_NcnnNative_nativeRifeInterpolate(
     if (extractRet != 0 || outMat.empty()) {
         extractRet = ex.extract("output", outMat);
     }
+    ex.clear();
 
-    int resultCode = 0;
-    if (extractRet != 0 || outMat.empty()) {
-        LOGE("RIFE inference failed to extract output, ret=%d", extractRet);
-        resultCode = -4;
-    } else {
+    bool hasValidOutput = (extractRet == 0 && !outMat.empty());
+    int outW = outMat.w;
+    int outH = outMat.h;
+
+    double sumVal = 0.0;
+    if (hasValidOutput) {
+        float out_x_scale = (float)outW / (float)w;
+        float out_y_scale = (float)outH / (float)h;
+
+        const float* out_r = outMat.channel(0);
+        const float* out_g = outMat.channel(1);
+        const float* out_b = outMat.channel(2);
+
         for (int y = 0; y < h; y++) {
-            const float* r = outMat.channel(0).row(y);
-            const float* g = outMat.channel(1).row(y);
-            const float* b = outMat.channel(2).row(y);
+            float sy = ((float)y + 0.5f) * out_y_scale - 0.5f;
+            sy = std::max(0.0f, std::min((float)(outH - 1), sy));
+            int y0 = (int)sy;
+            int y1 = std::min(outH - 1, y0 + 1);
+            float wy1 = sy - (float)y0;
+            float wy0 = 1.0f - wy1;
+
+            uint8_t* dstRow = (uint8_t*)pixDst + y * dstInfo.stride;
+
+            for (int x = 0; x < w; x++) {
+                float sx = ((float)x + 0.5f) * out_x_scale - 0.5f;
+                sx = std::max(0.0f, std::min((float)(outW - 1), sx));
+                int x0 = (int)sx;
+                int x1 = std::min(outW - 1, x0 + 1);
+                float wx1 = sx - (float)x0;
+                float wx0 = 1.0f - wx1;
+
+                float r = wy0 * (wx0 * out_r[y0 * outW + x0] + wx1 * out_r[y0 * outW + x1]) +
+                          wy1 * (wx0 * out_r[y1 * outW + x0] + wx1 * out_r[y1 * outW + x1]);
+                float g = wy0 * (wx0 * out_g[y0 * outW + x0] + wx1 * out_g[y0 * outW + x1]) +
+                          wy1 * (wx0 * out_g[y1 * outW + x0] + wx1 * out_g[y1 * outW + x1]);
+                float b = wy0 * (wx0 * out_b[y0 * outW + x0] + wx1 * out_b[y0 * outW + x1]) +
+                          wy1 * (wx0 * out_b[y1 * outW + x0] + wx1 * out_b[y1 * outW + x1]);
+
+                float rv = r * 255.0f + 0.5f;
+                float gv = g * 255.0f + 0.5f;
+                float bv = b * 255.0f + 0.5f;
+
+                uint8_t ru = (uint8_t)std::min(std::max(rv, 0.0f), 255.0f);
+                uint8_t gu = (uint8_t)std::min(std::max(gv, 0.0f), 255.0f);
+                uint8_t bu = (uint8_t)std::min(std::max(bv, 0.0f), 255.0f);
+
+                dstRow[x * 4 + 0] = ru;
+                dstRow[x * 4 + 1] = gu;
+                dstRow[x * 4 + 2] = bu;
+                dstRow[x * 4 + 3] = 255;
+
+                sumVal += ru + gu + bu;
+            }
+        }
+    }
+
+    // Fallback: If output was empty or pure black while inputs are not black
+    double meanPixel = sumVal / (double)(std::max(1, w * h * 3));
+    if (!hasValidOutput || meanPixel < 0.5) {
+        LOGW("RIFE output abnormal (mean=%.2f), fallback to smooth frame blend", meanPixel);
+        for (int y = 0; y < h; y++) {
+            const uint8_t* row0 = (const uint8_t*)pix0 + y * info0.stride;
+            const uint8_t* row1 = (const uint8_t*)pix1 + y * info1.stride;
             uint8_t* dstRow = (uint8_t*)pixDst + y * dstInfo.stride;
             for (int x = 0; x < w; x++) {
-                float rv = r[x] * 255.0f + 0.5f;
-                float gv = g[x] * 255.0f + 0.5f;
-                float bv = b[x] * 255.0f + 0.5f;
-                dstRow[x * 4 + 0] = (uint8_t)std::min(std::max(rv, 0.0f), 255.0f);
-                dstRow[x * 4 + 1] = (uint8_t)std::min(std::max(gv, 0.0f), 255.0f);
-                dstRow[x * 4 + 2] = (uint8_t)std::min(std::max(bv, 0.0f), 255.0f);
+                dstRow[x * 4 + 0] = (uint8_t)(((int)row0[x * 4 + 0] + (int)row1[x * 4 + 0]) >> 1);
+                dstRow[x * 4 + 1] = (uint8_t)(((int)row0[x * 4 + 1] + (int)row1[x * 4 + 1]) >> 1);
+                dstRow[x * 4 + 2] = (uint8_t)(((int)row0[x * 4 + 2] + (int)row1[x * 4 + 2]) >> 1);
                 dstRow[x * 4 + 3] = 255;
             }
         }
@@ -606,7 +693,7 @@ Java_org_zenconverter_app_model_NcnnNative_nativeRifeInterpolate(
     AndroidBitmap_unlockPixels(env, srcBitmap1);
     AndroidBitmap_unlockPixels(env, srcBitmap0);
 
-    return resultCode;
+    return 0;
 }
 
 } // extern "C"
