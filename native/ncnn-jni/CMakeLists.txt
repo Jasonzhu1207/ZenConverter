@@ -37,3 +37,6 @@ target_link_libraries(zen_ncnn
     ${log-lib}
     ${android-lib}
 )
+
+# Android 15+ requires 16 KB page-aligned ELF LOAD segments
+target_link_options(zen_ncnn PRIVATE "LINKER:-z,max-page-size=16384")
