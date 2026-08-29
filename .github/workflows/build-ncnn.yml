@@ -1,0 +1,87 @@
+name: Build and Update NCNN Native SO
+
+on:
+  workflow_dispatch:
+    inputs:
+      auto_commit:
+        description: 'Automatically commit and push the new .so back to main'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-ncnn-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ncnn-so:
+    name: Build NCNN .so (arm64-v8a)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Android NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r27c
+
+      - name: Build Native Library
+        run: |
+          set -euo pipefail
+          cd native/ncnn-jni
+          bash build-arm64-v8a.sh
+
+      - name: Verify Exported JNI Symbols
+        run: |
+          set -euo pipefail
+          SO_FILE="app/src/main/jniLibs/arm64-v8a/libzen_ncnn.so"
+          if ! readelf -Ws "$SO_FILE" | grep -q "Java_org_zenconverter_app_model_NcnnNative_nativeRealEsrganUpscale"; then
+            echo "::error::Missing required JNI symbol Java_org_zenconverter_app_model_NcnnNative_nativeRealEsrganUpscale in $SO_FILE"
+            exit 1
+          fi
+          echo "JNI symbols verified successfully in $SO_FILE"
+
+      - name: Log Library Metadata
+        id: metadata
+        run: |
+          set -euo pipefail
+          ZEN_SO="app/src/main/jniLibs/arm64-v8a/libzen_ncnn.so"
+          NCNN_SO="app/src/main/jniLibs/arm64-v8a/libncnn.so"
+
+          echo "libzen_ncnn.so SHA256: $(sha256sum "$ZEN_SO" | awk '{ print $1 }')"
+          echo "libzen_ncnn.so Size:   $(stat -c '%s bytes' "$ZEN_SO")"
+          echo "libncnn.so SHA256:     $(sha256sum "$NCNN_SO" | awk '{ print $1 }')"
+          echo "libncnn.so Size:       $(stat -c '%s bytes' "$NCNN_SO")"
+
+      - name: Upload SO Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ncnn-arm64-v8a-so
+          path: |
+            app/src/main/jniLibs/arm64-v8a/libzen_ncnn.so
+            app/src/main/jniLibs/arm64-v8a/libncnn.so
+          if-no-files-found: error
+
+      - name: Commit and Push back to main
+        if: ${{ github.event.inputs.auto_commit == 'true' || github.event.inputs.auto_commit == true }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add app/src/main/jniLibs/arm64-v8a/libzen_ncnn.so app/src/main/jniLibs/arm64-v8a/libncnn.so
+
+          if git diff --staged --quiet; then
+            echo "No changes in .so files; skipping commit."
+          else
+            git commit -m "build(native): update libzen_ncnn.so and libncnn.so from GitHub Actions"
+            git pull --rebase origin "${{ github.ref_name }}"
+            git push origin "${{ github.ref_name }}"
+          fi

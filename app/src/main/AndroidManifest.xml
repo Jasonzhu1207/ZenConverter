@@ -120,20 +120,5 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!--
-            ONNX Runtime ships a ContentProvider (ai.onnxruntime.TelemetryInitializer)
-            that eagerly calls System.loadLibrary("onnxruntime") during app startup
-            to set up its 1DS telemetry transport. That forced native load crashes on
-            Android 16/17: ONNX Runtime's CPU feature detection reads the now-restricted
-            ro.hardware.chipname property and segfaults with a null pointer dereference
-            before the first activity is shown.
-
-            Removing the provider fixes the startup crash and disables ONNX Runtime
-            telemetry entirely. Super-resolution still works: OrtEnvironment loads the
-            library lazily (OnnxRuntime.init) only when the upscaler actually runs.
-        -->
-        <provider
-            android:name="ai.onnxruntime.TelemetryInitializer"
-            tools:node="remove" />
     </application>
 </manifest>

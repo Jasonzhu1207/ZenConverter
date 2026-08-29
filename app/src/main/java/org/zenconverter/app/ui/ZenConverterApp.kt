@@ -722,14 +722,14 @@ private const val IMAGE_SUPER_RESOLUTION_OFF = "Super resolution off"
 private const val IMAGE_SUPER_RESOLUTION_2X = "Bilinear 2×"
 private const val IMAGE_SUPER_RESOLUTION_3X = "Bilinear 3×"
 private const val IMAGE_SUPER_RESOLUTION_4X = "Bilinear 4×"
-private const val IMAGE_SUPER_RESOLUTION_AI_V3 = "realesr-general-x4v3 4× (AI)"
+private const val IMAGE_SUPER_RESOLUTION_AI_ANIME = "Real-ESRGAN Anime 4× (AI)"
 private const val IMAGE_SUPER_RESOLUTION_AI = "Real-ESRGAN 4× (AI)"
 private val IMAGE_SUPER_RESOLUTION_OPTIONS = listOf(
     IMAGE_SUPER_RESOLUTION_OFF,
     IMAGE_SUPER_RESOLUTION_2X,
     IMAGE_SUPER_RESOLUTION_3X,
     IMAGE_SUPER_RESOLUTION_4X,
-    IMAGE_SUPER_RESOLUTION_AI_V3,
+    IMAGE_SUPER_RESOLUTION_AI_ANIME,
     IMAGE_SUPER_RESOLUTION_AI
 )
 
@@ -991,8 +991,8 @@ private fun ZenConverterContent(
     val videoGroupedIds = videoMergeGroups.flatMap { it.memberFileIds }.toSet()
     val groupedFileIds = pdfGroupedIds + videoGroupedIds
     val availableAiModels = buildSet {
-        if (esrganModelStates[EsrganModelManager.MODEL_GENERAL_V3.id] is EsrganModelUiState.Downloaded) {
-            add(IMAGE_SUPER_RESOLUTION_AI_V3)
+        if (esrganModelStates[EsrganModelManager.MODEL_ANIME.id] is EsrganModelUiState.Downloaded) {
+            add(IMAGE_SUPER_RESOLUTION_AI_ANIME)
         }
         if (esrganModelStates[EsrganModelManager.MODEL_X4PLUS.id] is EsrganModelUiState.Downloaded) {
             add(IMAGE_SUPER_RESOLUTION_AI)
@@ -2205,8 +2205,8 @@ private fun EsrganModelDownloadSection(
     onCancel: () -> Unit
 ) {
     val context = LocalContext.current
-    val purposeText = if (spec.id == EsrganModelManager.MODEL_GENERAL_V3.id) {
-        texts.modelPurposeGeneralV3
+    val purposeText = if (spec.id == EsrganModelManager.MODEL_ANIME.id) {
+        texts.modelPurposeAnime
     } else {
         texts.modelPurpose
     }
@@ -6992,7 +6992,7 @@ private fun ImageOptions(
     val isPng = targetFormat.extension.equals("png", ignoreCase = true)
     val superResolutionActive = superResolution != IMAGE_SUPER_RESOLUTION_OFF &&
         superResolution != BATCH_MIXED_OPTION
-    val disabledOptions = setOf(IMAGE_SUPER_RESOLUTION_AI_V3, IMAGE_SUPER_RESOLUTION_AI) - availableAiModels
+    val disabledOptions = setOf(IMAGE_SUPER_RESOLUTION_AI_ANIME, IMAGE_SUPER_RESOLUTION_AI) - availableAiModels
 
     OptionGrid {
         OptionDropdown(
@@ -7019,7 +7019,7 @@ private fun ImageOptions(
 
         if (superResolutionActive) {
             val isAi = superResolution == IMAGE_SUPER_RESOLUTION_AI ||
-                superResolution == IMAGE_SUPER_RESOLUTION_AI_V3
+                superResolution == IMAGE_SUPER_RESOLUTION_AI_ANIME
             Text(
                 text = if (isAi) {
                     texts.aiSuperResolutionSummary()
@@ -8555,7 +8555,7 @@ private fun superResolutionLabelFor(mode: ImageSuperResolutionMode): String {
         ImageSuperResolutionMode.X2 -> IMAGE_SUPER_RESOLUTION_2X
         ImageSuperResolutionMode.X3 -> IMAGE_SUPER_RESOLUTION_3X
         ImageSuperResolutionMode.X4 -> IMAGE_SUPER_RESOLUTION_4X
-        ImageSuperResolutionMode.RealEsrGeneral4xV3 -> IMAGE_SUPER_RESOLUTION_AI_V3
+        ImageSuperResolutionMode.RealEsrganAnime4x -> IMAGE_SUPER_RESOLUTION_AI_ANIME
         ImageSuperResolutionMode.RealEsrgan4x -> IMAGE_SUPER_RESOLUTION_AI
     }
 }
@@ -8565,7 +8565,7 @@ private fun superResolutionModeFor(value: String): ImageSuperResolutionMode {
         IMAGE_SUPER_RESOLUTION_2X -> ImageSuperResolutionMode.X2
         IMAGE_SUPER_RESOLUTION_3X -> ImageSuperResolutionMode.X3
         IMAGE_SUPER_RESOLUTION_4X -> ImageSuperResolutionMode.X4
-        IMAGE_SUPER_RESOLUTION_AI_V3 -> ImageSuperResolutionMode.RealEsrGeneral4xV3
+        IMAGE_SUPER_RESOLUTION_AI_ANIME -> ImageSuperResolutionMode.RealEsrganAnime4x
         IMAGE_SUPER_RESOLUTION_AI -> ImageSuperResolutionMode.RealEsrgan4x
         else -> ImageSuperResolutionMode.Off
     }
@@ -8971,7 +8971,7 @@ private data class UiText(
     val modelDownload: String,
     val modelDownloadNote: String,
     val modelPurpose: String,
-    val modelPurposeGeneralV3: String,
+    val modelPurposeAnime: String,
     val modelSource: String,
     val modelDownloadAction: String,
     val modelDownloaded: String,
@@ -10514,10 +10514,10 @@ private data class UiText(
                 simplifiedChineseText -> "4× 双线性"
                 else -> "4× 雙線性"
             }
-            IMAGE_SUPER_RESOLUTION_AI_V3 -> when (this) {
-                englishText -> "realesr-general-x4v3 4× (AI)"
-                simplifiedChineseText -> "realesr-general-x4v3 4×（AI 轻量）"
-                else -> "realesr-general-x4v3 4×（AI 輕量）"
+            IMAGE_SUPER_RESOLUTION_AI_ANIME -> when (this) {
+                englishText -> "Real-ESRGAN Anime 4× (AI)"
+                simplifiedChineseText -> "Real-ESRGAN Anime 4×（AI 动漫）"
+                else -> "Real-ESRGAN Anime 4×（AI 動漫）"
             }
             IMAGE_SUPER_RESOLUTION_AI -> when (this) {
                 englishText -> "Real-ESRGAN 4× (AI)"
@@ -11086,8 +11086,8 @@ private val englishText = UiText(
     linkUnavailable = "No app can open this link",
     modelDownload = "Model download",
     modelDownloadNote = "Keep the app in the foreground while downloading — avoid switching screens.",
-    modelPurpose = "Deep-learning image upscaler (4×, high quality)",
-    modelPurposeGeneralV3 = "Deep-learning image upscaler (4×, lightweight & fast)",
+    modelPurpose = "Deep-learning image upscaler (4×, general high quality)",
+    modelPurposeAnime = "Deep-learning image upscaler (4×, anime & illustrations)",
     modelSource = "Source:",
     modelDownloadAction = "Download",
     modelDownloaded = "Downloaded",
@@ -11243,8 +11243,8 @@ private val simplifiedChineseText = UiText(
     linkUnavailable = "没有可打开此链接的应用",
     modelDownload = "模型下载",
     modelDownloadNote = "下载期间请保持应用在前台，不要切换页面。",
-    modelPurpose = "深度学习图片放大（4× 高画质）",
-    modelPurposeGeneralV3 = "深度学习图片放大（4× 轻量极速）",
+    modelPurpose = "深度学习通用图片放大（4× 高画质）",
+    modelPurposeAnime = "深度学习动漫/插画放大（4× 动漫专用）",
     modelSource = "来源：",
     modelDownloadAction = "下载",
     modelDownloaded = "已下载",
@@ -11400,8 +11400,8 @@ private val traditionalChineseText = UiText(
     linkUnavailable = "沒有可開啟此連結的應用",
     modelDownload = "模型下載",
     modelDownloadNote = "下載期間請保持應用在前台，不要切換頁面。",
-    modelPurpose = "深度學習圖片放大（4× 高畫質）",
-    modelPurposeGeneralV3 = "深度學習圖片放大（4× 輕量極速）",
+    modelPurpose = "深度學習通用圖片放大（4× 高畫質）",
+    modelPurposeAnime = "深度學習動漫/插畫放大（4× 動漫專用）",
     modelSource = "來源：",
     modelDownloadAction = "下載",
     modelDownloaded = "已下載",

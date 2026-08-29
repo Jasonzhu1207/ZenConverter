@@ -12,10 +12,5 @@
 # JNI symbol names in libzen_woff2.so reference this exact class/method.
 -keep class org.zenconverter.app.font.Woff2Native { *; }
 
-# ONNX Runtime's JNI layer (libonnxruntime4j_jni.so) looks up ai.onnxruntime.*
-# classes and members by name via FindClass/GetMethodID at runtime. R8 full-mode
-# shrinking + obfuscation renames/removes them, which aborts with
-# "JNI DETECTED ERROR ... java_class == null in call to GetMethodID" on release
-# builds. Keep the whole package so the native reflection keeps working.
-# See microsoft/onnxruntime#17847.
--keep class ai.onnxruntime.** { *; }
+# JNI symbol names and callbacks for libzen_ncnn.so
+-keep class org.zenconverter.app.model.NcnnNative** { *; }

@@ -13,134 +13,186 @@ import java.net.URL
 import java.security.MessageDigest
 import java.util.Locale
 
+data class ModelFileEntry(
+    val fileName: String,
+    val url: String,
+    val sizeBytes: Long,
+    val sha256: String
+)
+
 data class EsrganModelSpec(
     val id: String,
     val displayName: String,
-    val url: String,
-    val sizeBytes: Long,
+    val paramFile: ModelFileEntry,
+    val binFile: ModelFileEntry,
     val sizeDisplay: String,
-    val sha256: String,
     val sourceUrl: String = "https://github.com/xinntao/Real-ESRGAN"
-)
+) {
+    val totalSizeBytes: Long get() = paramFile.sizeBytes + binFile.sizeBytes
+}
 
 /**
- * Download and verify the Real-ESRGAN ONNX models that power the deep-learning
- * image super-resolution paths. The models are treated as static files on our R2
- * direct link, not hot-updated remote configs: adding or changing a model is
- * a code change that ships with an app update.
+ * Download and verify the Real-ESRGAN NCNN models (.param and .bin) that power
+ * the deep-learning image super-resolution paths.
  */
 object EsrganModelManager {
-    val MODEL_GENERAL_V3 = EsrganModelSpec(
-        id = "realesr-general-x4v3",
-        displayName = "realesr-general-x4v3",
-        url = "https://assets.xlab.my/models/realesr-general-x4v3.onnx",
-        sizeBytes = 4_873_412L,
-        sizeDisplay = "4.65 MB",
-        sha256 = "04c4cfea5759f94e5b5ab98b5d1ef176b904bbcd670a3b661e99e623374fc370"
+    val MODEL_ANIME = EsrganModelSpec(
+        id = "realesrgan-x4plus-anime",
+        displayName = "realesrgan-x4plus-anime",
+        paramFile = ModelFileEntry(
+            fileName = "realesrgan-x4plus-anime.param",
+            url = "https://assets.xlab.my/models/realesrgan-x4plus-anime.param",
+            sizeBytes = 30_290L,
+            sha256 = "2b8fb6e0ae4d2d85704ca08c119a2f5ea40add4f2ecd512eb7f4cd44b6127ed4"
+        ),
+        binFile = ModelFileEntry(
+            fileName = "realesrgan-x4plus-anime.bin",
+            url = "https://assets.xlab.my/models/realesrgan-x4plus-anime.bin",
+            sizeBytes = 8_943_500L,
+            sha256 = "fe01c269cfd10cdef8e018ab66ebe750cf79c7af4d1f9c16c737e1295229bacc"
+        ),
+        sizeDisplay = "8.97 MB"
     )
 
     val MODEL_X4PLUS = EsrganModelSpec(
-        id = "RealESRGAN_x4plus",
-        displayName = "RealESRGAN_x4plus",
-        url = "https://assets.xlab.my/models/RealESRGAN_x4plus.onnx",
-        sizeBytes = 67_051_973L,
-        sizeDisplay = "63.9 MB",
-        sha256 = "39d5218cfcef542d667821a0d2072cfa51bfd857ab0e4ae7dc067c399a88d323"
+        id = "realesrgan-x4plus",
+        displayName = "realesrgan-x4plus",
+        paramFile = ModelFileEntry(
+            fileName = "realesrgan-x4plus.param",
+            url = "https://assets.xlab.my/models/realesrgan-x4plus.param",
+            sizeBytes = 116_029L,
+            sha256 = "35330ececcea33b6c397a72548e788d5d53becee4734c50b7fada36e89f10a86"
+        ),
+        binFile = ModelFileEntry(
+            fileName = "realesrgan-x4plus.bin",
+            url = "https://assets.xlab.my/models/realesrgan-x4plus.bin",
+            sizeBytes = 33_424_520L,
+            sha256 = "713ee713b0353afaa27976f0563a64a5043bd70b9bd8936c2e26e25ebcdbcddf"
+        ),
+        sizeDisplay = "33.5 MB"
     )
 
-    val ALL_MODELS = listOf(MODEL_GENERAL_V3, MODEL_X4PLUS)
-
-    const val MODEL_NAME = "RealESRGAN_x4plus"
-    const val MODEL_URL = "https://assets.xlab.my/models/RealESRGAN_x4plus.onnx"
-    const val MODEL_SIZE_BYTES = 67_051_973L
-    const val MODEL_SIZE_DISPLAY = "63.9 MB"
-    const val MODEL_SHA256 = "39d5218cfcef542d667821a0d2072cfa51bfd857ab0e4ae7dc067c399a88d323"
-    const val MODEL_SOURCE_URL = "https://github.com/xinntao/Real-ESRGAN"
+    val ALL_MODELS = listOf(MODEL_ANIME, MODEL_X4PLUS)
 
     private const val CONNECT_TIMEOUT_MILLIS = 15_000
     private const val READ_TIMEOUT_MILLIS = 60_000
     private const val BUFFER_SIZE = 64 * 1024
 
-    fun modelFile(context: Context, spec: EsrganModelSpec = MODEL_X4PLUS): File {
-        val appContext = context.applicationContext
-        val dir = File(appContext.filesDir, "models")
+    private fun modelDir(context: Context): File {
+        val dir = File(context.applicationContext.filesDir, "models")
         if (!dir.exists() && !dir.mkdirs()) {
             throw IOException("Could not create model folder")
         }
-        return File(dir, "${spec.id}.onnx")
+        return dir
     }
 
-    /** Fast availability check (file exists with the expected byte length). */
+    fun paramFile(context: Context, spec: EsrganModelSpec): File {
+        return File(modelDir(context), spec.paramFile.fileName)
+    }
+
+    fun binFile(context: Context, spec: EsrganModelSpec): File {
+        return File(modelDir(context), spec.binFile.fileName)
+    }
+
+    /** Fast availability check (both param and bin files exist with expected length). */
     fun isDownloaded(context: Context, spec: EsrganModelSpec = MODEL_X4PLUS): Boolean {
-        val file = modelFile(context, spec)
-        return file.isFile && file.length() == spec.sizeBytes
+        val p = paramFile(context, spec)
+        val b = binFile(context, spec)
+        return p.isFile && p.length() == spec.paramFile.sizeBytes &&
+               b.isFile && b.length() == spec.binFile.sizeBytes
     }
 
     suspend fun download(
         context: Context,
         spec: EsrganModelSpec = MODEL_X4PLUS,
         onProgress: (Float) -> Unit
-    ): File {
-        val targetFile = modelFile(context, spec)
+    ): Pair<File, File> {
         return withContext(Dispatchers.IO) {
-            val tempFile = File(targetFile.parentFile, "${spec.id}.onnx.part")
-            if (tempFile.exists() && !tempFile.delete()) {
-                throw IOException("Could not reset previous model download")
-            }
-
-            val progressContext = currentCoroutineContext()
-            val digest = MessageDigest.getInstance("SHA-256")
-            var bytesDownloaded = 0L
-            val totalBytes = spec.sizeBytes
+            val totalBytes = spec.totalSizeBytes
+            var totalDownloaded = 0L
 
             reportProgress(onProgress, 0f)
-            val connection = openDownloadConnection(spec.url)
-            try {
-                connection.inputStream.use { input ->
-                    FileOutputStream(tempFile).use { output ->
-                        val buffer = ByteArray(BUFFER_SIZE)
-                        while (true) {
-                            progressContext.ensureActive()
-                            val read = input.read(buffer)
-                            if (read == -1) break
-                            output.write(buffer, 0, read)
-                            digest.update(buffer, 0, read)
-                            bytesDownloaded += read.toLong()
-                            reportProgress(
-                                onProgress,
-                                bytesDownloaded.toFloat() / totalBytes.toFloat()
-                            )
-                        }
+
+            val pFile = downloadSingleFile(
+                context = context,
+                entry = spec.paramFile,
+                onChunkRead = { bytes ->
+                    totalDownloaded += bytes
+                    reportProgress(onProgress, totalDownloaded.toFloat() / totalBytes.toFloat())
+                }
+            )
+
+            val bFile = downloadSingleFile(
+                context = context,
+                entry = spec.binFile,
+                onChunkRead = { bytes ->
+                    totalDownloaded += bytes
+                    reportProgress(onProgress, totalDownloaded.toFloat() / totalBytes.toFloat())
+                }
+            )
+
+            reportProgress(onProgress, 1f)
+            Pair(pFile, bFile)
+        }
+    }
+
+    private suspend fun downloadSingleFile(
+        context: Context,
+        entry: ModelFileEntry,
+        onChunkRead: suspend (Int) -> Unit
+    ): File {
+        val dir = modelDir(context)
+        val targetFile = File(dir, entry.fileName)
+        val tempFile = File(dir, "${entry.fileName}.part")
+
+        if (tempFile.exists() && !tempFile.delete()) {
+            throw IOException("Could not reset previous model download: ${tempFile.name}")
+        }
+
+        val progressContext = currentCoroutineContext()
+        val digest = MessageDigest.getInstance("SHA-256")
+        val connection = openDownloadConnection(entry.url)
+        try {
+            connection.inputStream.use { input ->
+                FileOutputStream(tempFile).use { output ->
+                    val buffer = ByteArray(BUFFER_SIZE)
+                    while (true) {
+                        progressContext.ensureActive()
+                        val read = input.read(buffer)
+                        if (read == -1) break
+                        output.write(buffer, 0, read)
+                        digest.update(buffer, 0, read)
+                        onChunkRead(read)
                     }
                 }
-            } catch (throwable: Throwable) {
-                tempFile.delete()
-                throw throwable
-            } finally {
-                connection.disconnect()
             }
-
-            val actualSha256 = digest.digest().toHexString()
-            if (!actualSha256.equals(spec.sha256, ignoreCase = true)) {
-                tempFile.delete()
-                throw IOException("Downloaded model checksum did not match")
-            }
-            if (tempFile.length() != spec.sizeBytes) {
-                tempFile.delete()
-                throw IOException("Downloaded model size did not match")
-            }
-
-            if (targetFile.exists() && !targetFile.delete()) {
-                tempFile.delete()
-                throw IOException("Could not replace previous model file")
-            }
-            if (!tempFile.renameTo(targetFile)) {
-                tempFile.copyTo(targetFile, overwrite = true)
-                tempFile.delete()
-            }
-
-            targetFile
+        } catch (throwable: Throwable) {
+            tempFile.delete()
+            throw throwable
+        } finally {
+            connection.disconnect()
         }
+
+        val actualSha256 = digest.digest().toHexString()
+        if (!actualSha256.equals(entry.sha256, ignoreCase = true)) {
+            tempFile.delete()
+            throw IOException("Downloaded ${entry.fileName} checksum mismatch (expected ${entry.sha256}, got $actualSha256)")
+        }
+        if (tempFile.length() != entry.sizeBytes) {
+            tempFile.delete()
+            throw IOException("Downloaded ${entry.fileName} size mismatch (expected ${entry.sizeBytes}, got ${tempFile.length()})")
+        }
+
+        if (targetFile.exists() && !targetFile.delete()) {
+            tempFile.delete()
+            throw IOException("Could not replace previous model file: ${targetFile.name}")
+        }
+        if (!tempFile.renameTo(targetFile)) {
+            tempFile.copyTo(targetFile, overwrite = true)
+            tempFile.delete()
+        }
+
+        return targetFile
     }
 
     private fun openDownloadConnection(downloadUrl: String): HttpURLConnection {

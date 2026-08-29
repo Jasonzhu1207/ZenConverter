@@ -2182,8 +2182,8 @@ class ConversionService : Service() {
 
         throwIfConversionCancelled()
 
-        if (mode == ImageSuperResolutionMode.RealEsrGeneral4xV3) {
-            return applyRealEsrganSuperResolution(bitmap, EsrganModelManager.MODEL_GENERAL_V3)
+        if (mode == ImageSuperResolutionMode.RealEsrganAnime4x) {
+            return applyRealEsrganSuperResolution(bitmap, EsrganModelManager.MODEL_ANIME)
         }
         if (mode == ImageSuperResolutionMode.RealEsrgan4x) {
             return applyRealEsrganSuperResolution(bitmap, EsrganModelManager.MODEL_X4PLUS)
@@ -2213,7 +2213,8 @@ class ConversionService : Service() {
         return try {
             RealEsrganUpscaler.upscale(
                 source = inferenceBitmap,
-                modelPath = EsrganModelManager.modelFile(this, spec).absolutePath,
+                paramPath = EsrganModelManager.paramFile(this, spec).absolutePath,
+                binPath = EsrganModelManager.binFile(this, spec).absolutePath,
                 onTileProgress = { progress ->
                     updateImageProgress(0.05f + 0.90f * progress)
                 },
