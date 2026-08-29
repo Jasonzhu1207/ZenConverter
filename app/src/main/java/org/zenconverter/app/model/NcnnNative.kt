@@ -59,6 +59,9 @@ object NcnnNative {
         cancelCheck: CancelCheck?
     ): Int
 
+    external fun nativeRifeInit(paramPath: String, binPath: String, gpuIndex: Int): Int
+    external fun nativeRifeDestroy()
+
     external fun nativeRifeInterpolate(
         srcBitmap0: Bitmap,
         srcBitmap1: Bitmap,

@@ -3238,43 +3238,48 @@ class ConversionService : Service() {
             val totalInFrames = inFrames.size
             var outFrameIdx = 1
 
-            for (i in 0 until totalInFrames) {
-                if (ConversionTaskStore.isCancelled()) {
-                    return@withContext FfmpegRunResult(success = false, cancelled = true)
-                }
-
-                val currentFrameFile = inFrames[i]
-                val currentBitmap = BitmapFactory.decodeFile(currentFrameFile.absolutePath)
-                    ?: continue
-
-                val curOutFile = File(framesOutDir, String.format(Locale.US, "f_%06d.jpg", outFrameIdx++))
-                curOutFile.outputStream().use { fos ->
-                    currentBitmap.compress(Bitmap.CompressFormat.JPEG, 98, fos)
-                }
-
-                if (i < totalInFrames - 1) {
-                    val nextFrameFile = inFrames[i + 1]
-                    val nextBitmap = BitmapFactory.decodeFile(nextFrameFile.absolutePath)
-                    if (nextBitmap != null) {
-                        val interpolated = RifeInterpolator.interpolate(
-                            frame0 = currentBitmap,
-                            frame1 = nextBitmap,
-                            paramPath = paramPath,
-                            binPath = binPath,
-                            isCancelled = { ConversionTaskStore.isCancelled() }
-                        )
-                        val interOutFile = File(framesOutDir, String.format(Locale.US, "f_%06d.jpg", outFrameIdx++))
-                        interOutFile.outputStream().use { fos ->
-                            interpolated.compress(Bitmap.CompressFormat.JPEG, 98, fos)
-                        }
-                        interpolated.recycle()
-                        nextBitmap.recycle()
+            RifeInterpolator.initSession(paramPath, binPath)
+            try {
+                for (i in 0 until totalInFrames) {
+                    if (ConversionTaskStore.isCancelled()) {
+                        return@withContext FfmpegRunResult(success = false, cancelled = true)
                     }
-                }
-                currentBitmap.recycle()
 
-                val interpolateProgress = 0.20f + 0.60f * ((i + 1).toFloat() / totalInFrames.toFloat())
-                updateCompatibilityProgress(interpolateProgress)
+                    val currentFrameFile = inFrames[i]
+                    val currentBitmap = BitmapFactory.decodeFile(currentFrameFile.absolutePath)
+                        ?: continue
+
+                    val curOutFile = File(framesOutDir, String.format(Locale.US, "f_%06d.jpg", outFrameIdx++))
+                    curOutFile.outputStream().use { fos ->
+                        currentBitmap.compress(Bitmap.CompressFormat.JPEG, 98, fos)
+                    }
+
+                    if (i < totalInFrames - 1) {
+                        val nextFrameFile = inFrames[i + 1]
+                        val nextBitmap = BitmapFactory.decodeFile(nextFrameFile.absolutePath)
+                        if (nextBitmap != null) {
+                            val interpolated = RifeInterpolator.interpolate(
+                                frame0 = currentBitmap,
+                                frame1 = nextBitmap,
+                                paramPath = paramPath,
+                                binPath = binPath,
+                                isCancelled = { ConversionTaskStore.isCancelled() }
+                            )
+                            val interOutFile = File(framesOutDir, String.format(Locale.US, "f_%06d.jpg", outFrameIdx++))
+                            interOutFile.outputStream().use { fos ->
+                                interpolated.compress(Bitmap.CompressFormat.JPEG, 98, fos)
+                            }
+                            interpolated.recycle()
+                            nextBitmap.recycle()
+                        }
+                    }
+                    currentBitmap.recycle()
+
+                    val interpolateProgress = 0.20f + 0.60f * ((i + 1).toFloat() / totalInFrames.toFloat())
+                    updateCompatibilityProgress(interpolateProgress)
+                }
+            } finally {
+                RifeInterpolator.releaseSession()
             }
 
             if (ConversionTaskStore.isCancelled()) {

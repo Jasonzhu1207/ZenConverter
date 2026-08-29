@@ -12,6 +12,25 @@ object RifeInterpolator {
     private const val TAG = "RifeInterpolator"
 
     /**
+     * Pre-initializes the RIFE session once for processing multiple frames.
+     */
+    fun initSession(paramPath: String, binPath: String): Boolean {
+        if (!NcnnNative.ensureLoaded()) return false
+        val gpuCount = NcnnNative.getGpuCount()
+        val gpuIndex = if (gpuCount > 0) 0 else -1
+        return NcnnNative.nativeRifeInit(paramPath, binPath, gpuIndex) == 0
+    }
+
+    /**
+     * Destroys the persistent RIFE session after frame processing completes.
+     */
+    fun releaseSession() {
+        if (NcnnNative.ensureLoaded()) {
+            NcnnNative.nativeRifeDestroy()
+        }
+    }
+
+    /**
      * Interpolates an intermediate frame between [frame0] and [frame1] using
      * the RIFE NCNN model at [paramPath] and [binPath].
      */

@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <cmath>
+#include <mutex>
 
 #include "net.h"
 #include "gpu.h"
@@ -18,6 +19,8 @@
 
 static int g_gpu_count = 0;
 static bool g_gpu_instance_initialized = false;
+static ncnn::Net* g_rife_net = nullptr;
+static std::mutex g_rife_mutex;
 
 class Warp : public ncnn::Layer
 {
@@ -376,6 +379,71 @@ cleanup:
 }
 
 JNIEXPORT jint JNICALL
+Java_org_zenconverter_app_model_NcnnNative_nativeRifeInit(
+    JNIEnv* env,
+    jclass clazz,
+    jstring paramPath,
+    jstring binPath,
+    jint gpuIndex
+) {
+    std::lock_guard<std::mutex> lock(g_rife_mutex);
+    if (g_rife_net != nullptr) {
+        delete g_rife_net;
+        g_rife_net = nullptr;
+    }
+
+    if (paramPath == nullptr || binPath == nullptr) {
+        LOGE("Invalid model paths passed to nativeRifeInit");
+        return -1;
+    }
+
+    const char* paramPathStr = env->GetStringUTFChars(paramPath, nullptr);
+    const char* binPathStr = env->GetStringUTFChars(binPath, nullptr);
+
+    g_rife_net = new ncnn::Net();
+    g_rife_net->register_custom_layer("rife.Warp", Warp_layer_creator);
+    g_rife_net->register_custom_layer("Warp", Warp_layer_creator);
+
+    bool useVulkan = (gpuIndex >= 0 && gpuIndex < g_gpu_count);
+    g_rife_net->opt.use_vulkan_compute = useVulkan;
+    g_rife_net->opt.use_fp16_packed = useVulkan;
+    g_rife_net->opt.use_fp16_storage = useVulkan;
+    g_rife_net->opt.use_fp16_arithmetic = false;
+    g_rife_net->opt.use_int8_storage = true;
+    g_rife_net->opt.num_threads = std::max(1, std::min(6, (int)ncnn::get_cpu_count()));
+
+    if (useVulkan) {
+        g_rife_net->set_vulkan_device(gpuIndex);
+    }
+
+    int loadParamRet = g_rife_net->load_param(paramPathStr);
+    int loadModelRet = g_rife_net->load_model(binPathStr);
+
+    env->ReleaseStringUTFChars(paramPath, paramPathStr);
+    env->ReleaseStringUTFChars(binPath, binPathStr);
+
+    if (loadParamRet != 0 || loadModelRet != 0) {
+        LOGE("Failed to load RIFE model in nativeRifeInit: param=%d, bin=%d", loadParamRet, loadModelRet);
+        delete g_rife_net;
+        g_rife_net = nullptr;
+        return -3;
+    }
+
+    LOGI("RIFE model initialized successfully (useVulkan=%d, threads=%d)", (int)useVulkan, g_rife_net->opt.num_threads);
+    return 0;
+}
+
+JNIEXPORT void JNICALL
+Java_org_zenconverter_app_model_NcnnNative_nativeRifeDestroy(JNIEnv* env, jclass clazz) {
+    std::lock_guard<std::mutex> lock(g_rife_mutex);
+    if (g_rife_net != nullptr) {
+        delete g_rife_net;
+        g_rife_net = nullptr;
+        LOGI("RIFE model destroyed.");
+    }
+}
+
+JNIEXPORT jint JNICALL
 Java_org_zenconverter_app_model_NcnnNative_nativeRifeInterpolate(
     JNIEnv* env,
     jclass clazz,
@@ -387,8 +455,46 @@ Java_org_zenconverter_app_model_NcnnNative_nativeRifeInterpolate(
     jint gpuIndex,
     jobject cancelCheck
 ) {
-    if (srcBitmap0 == nullptr || srcBitmap1 == nullptr || dstBitmap == nullptr ||
-        paramPath == nullptr || binPath == nullptr) {
+    std::lock_guard<std::mutex> lock(g_rife_mutex);
+    if (g_rife_net == nullptr) {
+        if (paramPath == nullptr || binPath == nullptr) {
+            LOGE("RIFE model not initialized");
+            return -1;
+        }
+        const char* paramPathStr = env->GetStringUTFChars(paramPath, nullptr);
+        const char* binPathStr = env->GetStringUTFChars(binPath, nullptr);
+
+        g_rife_net = new ncnn::Net();
+        g_rife_net->register_custom_layer("rife.Warp", Warp_layer_creator);
+        g_rife_net->register_custom_layer("Warp", Warp_layer_creator);
+
+        bool useVulkan = (gpuIndex >= 0 && gpuIndex < g_gpu_count);
+        g_rife_net->opt.use_vulkan_compute = useVulkan;
+        g_rife_net->opt.use_fp16_packed = useVulkan;
+        g_rife_net->opt.use_fp16_storage = useVulkan;
+        g_rife_net->opt.use_fp16_arithmetic = false;
+        g_rife_net->opt.use_int8_storage = true;
+        g_rife_net->opt.num_threads = std::max(1, std::min(6, (int)ncnn::get_cpu_count()));
+
+        if (useVulkan) {
+            g_rife_net->set_vulkan_device(gpuIndex);
+        }
+
+        int loadParamRet = g_rife_net->load_param(paramPathStr);
+        int loadModelRet = g_rife_net->load_model(binPathStr);
+
+        env->ReleaseStringUTFChars(paramPath, paramPathStr);
+        env->ReleaseStringUTFChars(binPath, binPathStr);
+
+        if (loadParamRet != 0 || loadModelRet != 0) {
+            LOGE("Failed to auto-load RIFE model: param=%d, bin=%d", loadParamRet, loadModelRet);
+            delete g_rife_net;
+            g_rife_net = nullptr;
+            return -3;
+        }
+    }
+
+    if (srcBitmap0 == nullptr || srcBitmap1 == nullptr || dstBitmap == nullptr) {
         LOGE("Invalid arguments passed to nativeRifeInterpolate");
         return -1;
     }
@@ -406,36 +512,6 @@ Java_org_zenconverter_app_model_NcnnNative_nativeRifeInterpolate(
     if ((int)info1.width != w || (int)info1.height != h || (int)dstInfo.width != w || (int)dstInfo.height != h) {
         LOGE("Dimensions mismatch between src0, src1, dst (%dx%d vs %dx%d)", w, h, (int)dstInfo.width, (int)dstInfo.height);
         return -1;
-    }
-
-    const char* paramPathStr = env->GetStringUTFChars(paramPath, nullptr);
-    const char* binPathStr = env->GetStringUTFChars(binPath, nullptr);
-
-    ncnn::Net net;
-    net.register_custom_layer("rife.Warp", Warp_layer_creator);
-    net.register_custom_layer("Warp", Warp_layer_creator);
-
-    bool useVulkan = (gpuIndex >= 0 && gpuIndex < g_gpu_count);
-    net.opt.use_vulkan_compute = useVulkan;
-    net.opt.use_fp16_packed = useVulkan;
-    net.opt.use_fp16_storage = useVulkan;
-    net.opt.use_fp16_arithmetic = false;
-    net.opt.use_int8_storage = true;
-    net.opt.num_threads = std::max(1, std::min(6, (int)ncnn::get_cpu_count()));
-
-    if (useVulkan) {
-        net.set_vulkan_device(gpuIndex);
-    }
-
-    int loadParamRet = net.load_param(paramPathStr);
-    int loadModelRet = net.load_model(binPathStr);
-
-    env->ReleaseStringUTFChars(paramPath, paramPathStr);
-    env->ReleaseStringUTFChars(binPath, binPathStr);
-
-    if (loadParamRet != 0 || loadModelRet != 0) {
-        LOGE("Failed to load RIFE model: param=%d, bin=%d", loadParamRet, loadModelRet);
-        return -3;
     }
 
     void* pix0 = nullptr;
@@ -487,22 +563,13 @@ Java_org_zenconverter_app_model_NcnnNative_nativeRifeInterpolate(
         }
     }
 
-    ncnn::Extractor ex = net.create_extractor();
+    ncnn::Extractor ex = g_rife_net->create_extractor();
     ex.input("in0", in0);
     ex.input("in1", in1);
 
     ncnn::Mat in2(1, 1, 1);
     in2[0] = 0.5f;
     ex.input("in2", in2);
-
-    // Also support models that take a 6-channel single input "input"
-    ncnn::Mat inConcat(padW, padH, 6);
-    for (int c = 0; c < 3; c++) {
-        memcpy(inConcat.channel(c), in0.channel(c), padW * padH * sizeof(float));
-        memcpy(inConcat.channel(c + 3), in1.channel(c), padW * padH * sizeof(float));
-    }
-    ex.input("input", inConcat);
-    ex.input("data", inConcat);
 
     ncnn::Mat outMat;
     int extractRet = ex.extract("out0", outMat);
