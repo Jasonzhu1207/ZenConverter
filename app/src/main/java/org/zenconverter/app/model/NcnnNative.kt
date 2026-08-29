@@ -11,7 +11,7 @@ object NcnnNative {
 
     private val isLoaded: Boolean by lazy {
         try {
-            System.loadLibrary("ncnn")
+            // ncnn is statically linked into libzen_ncnn.so; no separate libncnn.so needed.
             System.loadLibrary("zen_ncnn")
             val gpuCount = nativeInit()
             Log.i(TAG, "NCNN native library loaded successfully. Available Vulkan GPUs: $gpuCount")
