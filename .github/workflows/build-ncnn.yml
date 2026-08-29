@@ -76,7 +76,7 @@ jobs:
           if-no-files-found: error
 
       - name: Commit and Push back to main
-        if: ${{ github.event.inputs.auto_commit == 'true' || github.event.inputs.auto_commit == true }}
+        if: ${{ github.event_name == 'push' || github.event.inputs.auto_commit == 'true' || github.event.inputs.auto_commit == true }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
