@@ -9,6 +9,7 @@
 #include "net.h"
 #include "gpu.h"
 #include "cpu.h"
+#include "layer.h"
 
 #define TAG "ZenNcnnJNI"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
@@ -17,6 +18,78 @@
 
 static int g_gpu_count = 0;
 static bool g_gpu_instance_initialized = false;
+
+class Warp : public ncnn::Layer
+{
+public:
+    Warp()
+    {
+        one_blob_only = false;
+        support_inplace = false;
+    }
+
+    virtual int forward(const std::vector<ncnn::Mat>& bottom_blobs, std::vector<ncnn::Mat>& top_blobs, const ncnn::Option& opt) const
+    {
+        if (bottom_blobs.size() < 2) return -1;
+        const ncnn::Mat& image = bottom_blobs[0];
+        const ncnn::Mat& flow = bottom_blobs[1];
+
+        int w = image.w;
+        int h = image.h;
+        int channels = image.c;
+
+        ncnn::Mat& top_blob = top_blobs[0];
+        top_blob.create(w, h, channels, sizeof(float), opt.blob_allocator);
+        if (top_blob.empty())
+            return -100;
+
+        const float* flow_x_ptr = flow.channel(0);
+        const float* flow_y_ptr = flow.channel(1);
+
+        #pragma omp parallel for num_threads(opt.num_threads)
+        for (int q = 0; q < channels; q++)
+        {
+            const float* image_ptr = image.channel(q);
+            float* top_ptr = top_blob.channel(q);
+
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    int idx = y * w + x;
+                    float fx = (float)x + flow_x_ptr[idx];
+                    float fy = (float)y + flow_y_ptr[idx];
+
+                    int x0 = (int)floorf(fx);
+                    int y0 = (int)floorf(fy);
+                    int x1 = x0 + 1;
+                    int y1 = y0 + 1;
+
+                    float wx1 = fx - (float)x0;
+                    float wy1 = fy - (float)y0;
+                    float wx0 = 1.0f - wx1;
+                    float wy0 = 1.0f - wy1;
+
+                    x0 = std::max(0, std::min(w - 1, x0));
+                    x1 = std::max(0, std::min(w - 1, x1));
+                    y0 = std::max(0, std::min(h - 1, y0));
+                    y1 = std::max(0, std::min(h - 1, y1));
+
+                    float v00 = image_ptr[y0 * w + x0];
+                    float v01 = image_ptr[y0 * w + x1];
+                    float v10 = image_ptr[y1 * w + x0];
+                    float v11 = image_ptr[y1 * w + x1];
+
+                    top_ptr[idx] = wy0 * (wx0 * v00 + wx1 * v01) + wy1 * (wx0 * v10 + wx1 * v11);
+                }
+            }
+        }
+
+        return 0;
+    }
+};
+
+DEFINE_LAYER_CREATOR(Warp)
 
 extern "C" {
 
@@ -339,13 +412,15 @@ Java_org_zenconverter_app_model_NcnnNative_nativeRifeInterpolate(
     const char* binPathStr = env->GetStringUTFChars(binPath, nullptr);
 
     ncnn::Net net;
+    net.register_custom_layer("rife.Warp", Warp_layer_creator);
+    net.register_custom_layer("Warp", Warp_layer_creator);
+
     bool useVulkan = (gpuIndex >= 0 && gpuIndex < g_gpu_count);
     net.opt.use_vulkan_compute = useVulkan;
-    net.opt.use_fp16_packed = true;
-    net.opt.use_fp16_storage = true;
-    net.opt.use_fp16_arithmetic = true;
+    net.opt.use_fp16_packed = useVulkan;
+    net.opt.use_fp16_storage = useVulkan;
+    net.opt.use_fp16_arithmetic = false;
     net.opt.use_int8_storage = true;
-    net.opt.use_int8_arithmetic = true;
     net.opt.num_threads = std::max(1, std::min(6, (int)ncnn::get_cpu_count()));
 
     if (useVulkan) {
@@ -416,6 +491,10 @@ Java_org_zenconverter_app_model_NcnnNative_nativeRifeInterpolate(
     ex.input("in0", in0);
     ex.input("in1", in1);
 
+    ncnn::Mat in2(1, 1, 1);
+    in2[0] = 0.5f;
+    ex.input("in2", in2);
+
     // Also support models that take a 6-channel single input "input"
     ncnn::Mat inConcat(padW, padH, 6);
     for (int c = 0; c < 3; c++) {
@@ -426,7 +505,10 @@ Java_org_zenconverter_app_model_NcnnNative_nativeRifeInterpolate(
     ex.input("data", inConcat);
 
     ncnn::Mat outMat;
-    int extractRet = ex.extract("out", outMat);
+    int extractRet = ex.extract("out0", outMat);
+    if (extractRet != 0 || outMat.empty()) {
+        extractRet = ex.extract("out", outMat);
+    }
     if (extractRet != 0 || outMat.empty()) {
         extractRet = ex.extract("output", outMat);
     }
