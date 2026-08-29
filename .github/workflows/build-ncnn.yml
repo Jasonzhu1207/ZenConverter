@@ -42,13 +42,15 @@ jobs:
         run: |
           set -euo pipefail
           SO_FILE="app/src/main/jniLibs/arm64-v8a/libzen_ncnn.so"
-          if ! readelf -Wd "$SO_FILE" | grep -q "Java_org_zenconverter_app_model_NcnnNative_nativeRealEsrganUpscale"; then
+          echo "Dynamic symbols containing Java_:"
+          nm -D "$SO_FILE" | grep "Java_" || true
+          if ! nm -D "$SO_FILE" | grep -q "Java_org_zenconverter_app_model_NcnnNative_nativeRealEsrganUpscale"; then
             echo "::error::Missing required JNI symbol in $SO_FILE"
-            echo "Dynamic symbols found:"
-            readelf -Wd "$SO_FILE" | grep "Java_" || echo "(none)"
+            echo "All dynamic symbols:"
+            nm -D "$SO_FILE" | head -50
             exit 1
           fi
-          echo "JNI symbols verified successfully in $SO_FILE"
+          echo "JNI symbols verified successfully."
 
       - name: Log Library Metadata
         id: metadata
