@@ -8,6 +8,11 @@ on:
         required: true
         default: true
         type: boolean
+  push:
+    branches: [ main ]
+    paths:
+      - 'native/ncnn-jni/**'
+      - '.github/workflows/build-ncnn.yml'
 
 permissions:
   contents: write
@@ -45,9 +50,11 @@ jobs:
           echo "Dynamic symbols containing Java_:"
           nm -D "$SO_FILE" | grep "Java_" || true
           if ! nm -D "$SO_FILE" | grep -q "Java_org_zenconverter_app_model_NcnnNative_nativeRealEsrganUpscale"; then
-            echo "::error::Missing required JNI symbol in $SO_FILE"
-            echo "All dynamic symbols:"
-            nm -D "$SO_FILE" | head -50
+            echo "::error::Missing required JNI symbol RealESRGAN in $SO_FILE"
+            exit 1
+          fi
+          if ! nm -D "$SO_FILE" | grep -q "Java_org_zenconverter_app_model_NcnnNative_nativeRifeInterpolate"; then
+            echo "::error::Missing required JNI symbol RIFE in $SO_FILE"
             exit 1
           fi
           echo "JNI symbols verified successfully."

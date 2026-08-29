@@ -55,6 +55,9 @@ import org.zenconverter.app.metadata.MetadataToolState
 import org.zenconverter.app.model.EsrganModelManager
 import org.zenconverter.app.model.EsrganModelSpec
 import org.zenconverter.app.model.EsrganModelUiState
+import org.zenconverter.app.model.RifeModelManager
+import org.zenconverter.app.model.RifeModelSpec
+import org.zenconverter.app.model.RifeModelUiState
 import org.zenconverter.app.office.OfficeFontManager
 import org.zenconverter.app.office.OfficeFontSpec
 import org.zenconverter.app.office.OfficeFontUiState
@@ -95,6 +98,8 @@ class MainActivity : ComponentActivity() {
     private val metadataToolState = mutableStateOf<MetadataToolState>(MetadataToolState.Empty)
     private val esrganModelStates = mutableStateMapOf<String, EsrganModelUiState>()
     private val esrganDownloadJobs = mutableMapOf<String, Job>()
+    private val rifeModelStates = mutableStateMapOf<String, RifeModelUiState>()
+    private val rifeDownloadJobs = mutableMapOf<String, Job>()
     private val officeFontStates = mutableStateMapOf<String, OfficeFontUiState>()
     private val officeFontDownloadJobs = mutableMapOf<String, Job>()
     private val pendingQueuedPdfSelections = ArrayDeque<PendingQueuedPdfSelection>()
@@ -293,6 +298,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         restoreOutputLocationPreference()
         refreshEsrganModelState()
+        refreshRifeModelState()
         refreshOfficeFontState()
         setContent {
             ZenConverterApp(
@@ -389,6 +395,7 @@ class MainActivity : ComponentActivity() {
                 isConversionRunning = ConversionTaskStore.isRunning.value,
                 metadataToolState = metadataToolState.value,
                 esrganModelStates = esrganModelStates,
+                rifeModelStates = rifeModelStates,
                 officeFontStates = officeFontStates,
                 pdfPasswordPrompt = pdfPasswordPrompt.value,
                 pdfOutputPasswordPrompt = pdfOutputPasswordPrompt.value,
@@ -409,6 +416,12 @@ class MainActivity : ComponentActivity() {
                 },
                 onCancelEsrganModelDownload = { spec ->
                     cancelEsrganModelDownload(spec)
+                },
+                onDownloadRifeModel = { spec ->
+                    downloadRifeModel(spec)
+                },
+                onCancelRifeModelDownload = { spec ->
+                    cancelRifeModelDownload(spec)
                 },
                 onDownloadOfficeFont = { spec ->
                     downloadOfficeFont(spec)
@@ -540,6 +553,42 @@ class MainActivity : ComponentActivity() {
         esrganDownloadJobs[spec.id]?.cancel()
         esrganDownloadJobs.remove(spec.id)
         refreshEsrganModelState()
+    }
+
+    private fun refreshRifeModelState() {
+        for (spec in RifeModelManager.ALL_MODELS) {
+            rifeModelStates[spec.id] = if (RifeModelManager.isDownloaded(this, spec)) {
+                RifeModelUiState.Downloaded
+            } else {
+                RifeModelUiState.NotDownloaded
+            }
+        }
+    }
+
+    private fun downloadRifeModel(spec: RifeModelSpec = RifeModelManager.MODEL_RIFE) {
+        rifeDownloadJobs[spec.id]?.cancel()
+        rifeDownloadJobs[spec.id] = lifecycleScope.launch {
+            rifeModelStates[spec.id] = RifeModelUiState.Downloading(0f)
+            try {
+                RifeModelManager.download(this@MainActivity, spec) { progress ->
+                    rifeModelStates[spec.id] = RifeModelUiState.Downloading(progress)
+                }
+                rifeModelStates[spec.id] = RifeModelUiState.Downloaded
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                refreshRifeModelState()
+                throw cancelled
+            } catch (throwable: Throwable) {
+                rifeModelStates[spec.id] = RifeModelUiState.Failed(
+                    throwable.message ?: "Model download failed"
+                )
+            }
+        }
+    }
+
+    private fun cancelRifeModelDownload(spec: RifeModelSpec = RifeModelManager.MODEL_RIFE) {
+        rifeDownloadJobs[spec.id]?.cancel()
+        rifeDownloadJobs.remove(spec.id)
+        refreshRifeModelState()
     }
 
     private fun refreshOfficeFontState() {

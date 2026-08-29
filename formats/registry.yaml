@@ -15,7 +15,7 @@ groups:
         to: mp4
         engine: ffmpeg-compatible
         status: stable
-        note: "FFmpeg re-encode path. Encodes the first video track with H.264/H.265 and writes AAC audio. Manual mode exposes video/audio controls and trim range; fixed compression presets own CRF/preset/resolution/frame-rate strategy and AAC audio bitrate while trim still applies. Manual-mode advanced filters apply where selected."
+        note: "FFmpeg re-encode path. Encodes the first video track with H.264/H.265 and writes AAC audio. Manual mode exposes video/audio controls and trim range; fixed compression presets own CRF/preset/resolution/frame-rate strategy and AAC audio bitrate while trim still applies. Video frame interpolation mode provides 2× RIFE optical flow frame interpolation via NCNN Vulkan. Manual-mode advanced filters apply where selected."
       - from: mp4
         to: mkv
         engine: ffmpeg-compatible

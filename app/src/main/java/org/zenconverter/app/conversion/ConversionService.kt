@@ -82,6 +82,9 @@ import org.zenconverter.app.subtitle.SubtitleFormat
 import org.zenconverter.app.subtitle.SubtitleTextDecoder
 import org.zenconverter.app.model.EsrganModelManager
 import org.zenconverter.app.model.RealEsrganUpscaler
+import org.zenconverter.app.model.RifeModelManager
+import org.zenconverter.app.model.RifeInterpolator
+import org.zenconverter.app.conversion.VideoFrameInterpolationMode
 import org.zenconverter.app.settings.AppPreferences
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -2987,6 +2990,17 @@ class ConversionService : Service() {
                 message = message
             )
         }
+        if (input.category == ConversionMediaCategory.Video &&
+            input.videoOptions.frameInterpolation == VideoFrameInterpolationMode.Rife2x
+        ) {
+            return@withContext runFfmpegVideoInterpolationExport(
+                input = input,
+                tempFile = tempFile,
+                effectiveDurationMs = effectiveDurationMs,
+                trimWindow = trimWindow,
+                logTail = logTail
+            )
+        }
         if (isVideoGifOutput(input)) {
             val inputSource = openFfmpegInputSource(input.inputUri)
                 ?: return@withContext FfmpegRunResult(
@@ -3093,6 +3107,212 @@ class ConversionService : Service() {
             executeFfmpeg(input, arguments, effectiveDurationMs, logTail, inputSource.label)
         } finally {
             inputSource.close()
+        }
+    }
+
+    private suspend fun runFfmpegVideoInterpolationExport(
+        input: ConversionTaskInput,
+        tempFile: File,
+        effectiveDurationMs: Long?,
+        trimWindow: FfmpegTrimWindow,
+        logTail: MutableList<String>
+    ): FfmpegRunResult = withContext(Dispatchers.IO) {
+        if (!RifeModelManager.isDownloaded(this@ConversionService)) {
+            return@withContext FfmpegRunResult(
+                success = false,
+                cancelled = false,
+                message = "AI 插帧模型未就绪，请先在设置中下载 RIFE 模型"
+            )
+        }
+
+        val workDir = File(externalCacheDir ?: cacheDir, "rife_${System.currentTimeMillis()}").apply { mkdirs() }
+        val framesInDir = File(workDir, "in").apply { mkdirs() }
+        val framesOutDir = File(workDir, "out").apply { mkdirs() }
+        val tempAudioFile = File(workDir, "audio.m4a")
+
+        try {
+            val probeFps = input.inputInfo?.frameRate
+                ?: runCatching {
+                    val retriever = MediaMetadataRetriever()
+                    try {
+                        retriever.setDataSource(this@ConversionService, input.inputUri)
+                        retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)?.toFloatOrNull()?.takeIf { it > 0f }
+                    } finally {
+                        runCatching { retriever.release() }
+                    }
+                }.getOrNull() ?: 30.0f
+            val targetFps = probeFps * 2.0f
+
+            val hasAudio = probeHasAudio(input.inputUri)
+            if (hasAudio) {
+                val audioInputSource = openFfmpegInputSource(input.inputUri)
+                if (audioInputSource != null) {
+                    try {
+                        val audioArgs = mutableListOf(
+                            "-hide_banner",
+                            "-nostdin",
+                            "-y"
+                        )
+                        audioArgs.addFfmpegTrimInputOptions(trimWindow)
+                        audioArgs.addAll(listOf(
+                            "-i", audioInputSource.path,
+                            "-map", "0:a:0",
+                            "-vn", "-sn", "-dn",
+                            "-c:a", "copy",
+                            tempAudioFile.absolutePath
+                        ))
+                        executeFfmpeg(
+                            input = input,
+                            arguments = audioArgs,
+                            durationMs = effectiveDurationMs,
+                            logTail = logTail,
+                            inputSourceLabel = "extract-audio",
+                            progressStart = 0.0f,
+                            progressEnd = 0.05f
+                        )
+                    } finally {
+                        audioInputSource.close()
+                    }
+                }
+            }
+
+            if (ConversionTaskStore.isCancelled()) {
+                return@withContext FfmpegRunResult(success = false, cancelled = true)
+            }
+
+            val extractInputSource = openFfmpegInputSource(input.inputUri)
+                ?: return@withContext FfmpegRunResult(
+                    success = false,
+                    cancelled = false,
+                    message = "Compatibility engine could not open SAF input"
+                )
+
+            val extractResult = try {
+                val framePatternIn = File(framesInDir, "f_%06d.jpg").absolutePath
+                val extractArgs = mutableListOf(
+                    "-hide_banner",
+                    "-nostdin",
+                    "-y"
+                )
+                extractArgs.addFfmpegTrimInputOptions(trimWindow)
+                extractArgs.addAll(listOf(
+                    "-i", extractInputSource.path,
+                    "-map", "0:v:0",
+                    "-an", "-sn", "-dn",
+                    "-c:v", "mjpeg",
+                    "-q:v", "2",
+                    framePatternIn
+                ))
+
+                executeFfmpeg(
+                    input = input,
+                    arguments = extractArgs,
+                    durationMs = effectiveDurationMs,
+                    logTail = logTail,
+                    inputSourceLabel = "extract-frames",
+                    progressStart = 0.05f,
+                    progressEnd = 0.20f
+                )
+            } finally {
+                extractInputSource.close()
+            }
+
+            if (!extractResult.success || extractResult.cancelled || ConversionTaskStore.isCancelled()) {
+                return@withContext extractResult
+            }
+
+            val inFrames = framesInDir.listFiles { file -> file.extension.equals("jpg", ignoreCase = true) || file.extension.equals("jpeg", ignoreCase = true) }
+                ?.sortedBy { it.name }
+                ?: emptyList()
+
+            if (inFrames.isEmpty()) {
+                return@withContext FfmpegRunResult(
+                    success = false,
+                    cancelled = false,
+                    message = "未能解析出视频帧"
+                )
+            }
+
+            val paramPath = RifeModelManager.paramFile(this@ConversionService).absolutePath
+            val binPath = RifeModelManager.binFile(this@ConversionService).absolutePath
+            val totalInFrames = inFrames.size
+            var outFrameIdx = 1
+
+            for (i in 0 until totalInFrames) {
+                if (ConversionTaskStore.isCancelled()) {
+                    return@withContext FfmpegRunResult(success = false, cancelled = true)
+                }
+
+                val currentFrameFile = inFrames[i]
+                val currentBitmap = BitmapFactory.decodeFile(currentFrameFile.absolutePath)
+                    ?: continue
+
+                val curOutFile = File(framesOutDir, String.format(Locale.US, "f_%06d.jpg", outFrameIdx++))
+                curOutFile.outputStream().use { fos ->
+                    currentBitmap.compress(Bitmap.CompressFormat.JPEG, 98, fos)
+                }
+
+                if (i < totalInFrames - 1) {
+                    val nextFrameFile = inFrames[i + 1]
+                    val nextBitmap = BitmapFactory.decodeFile(nextFrameFile.absolutePath)
+                    if (nextBitmap != null) {
+                        val interpolated = RifeInterpolator.interpolate(
+                            frame0 = currentBitmap,
+                            frame1 = nextBitmap,
+                            paramPath = paramPath,
+                            binPath = binPath,
+                            isCancelled = { ConversionTaskStore.isCancelled() }
+                        )
+                        val interOutFile = File(framesOutDir, String.format(Locale.US, "f_%06d.jpg", outFrameIdx++))
+                        interOutFile.outputStream().use { fos ->
+                            interpolated.compress(Bitmap.CompressFormat.JPEG, 98, fos)
+                        }
+                        interpolated.recycle()
+                        nextBitmap.recycle()
+                    }
+                }
+                currentBitmap.recycle()
+
+                val interpolateProgress = 0.20f + 0.60f * ((i + 1).toFloat() / totalInFrames.toFloat())
+                updateCompatibilityProgress(interpolateProgress)
+            }
+
+            if (ConversionTaskStore.isCancelled()) {
+                return@withContext FfmpegRunResult(success = false, cancelled = true)
+            }
+
+            val framePatternOut = File(framesOutDir, "f_%06d.jpg").absolutePath
+            val encodeArgs = mutableListOf(
+                "-hide_banner",
+                "-nostdin",
+                "-y",
+                "-framerate", String.format(Locale.US, "%.3f", targetFps),
+                "-i", framePatternOut
+            )
+            if (tempAudioFile.exists() && tempAudioFile.length() > 0) {
+                encodeArgs.addAll(listOf("-i", tempAudioFile.absolutePath, "-c:a", "aac", "-b:a", "192k"))
+            }
+            encodeArgs.addAll(listOf(
+                "-c:v", "libx264",
+                "-crf", "18",
+                "-preset", "medium",
+                "-pix_fmt", "yuv420p",
+                tempFile.absolutePath
+            ))
+
+            val encodeResult = executeFfmpeg(
+                input = input,
+                arguments = encodeArgs,
+                durationMs = effectiveDurationMs,
+                logTail = logTail,
+                inputSourceLabel = "encode-interpolated",
+                progressStart = 0.80f,
+                progressEnd = 0.95f
+            )
+
+            return@withContext encodeResult
+        } finally {
+            workDir.deleteRecursively()
         }
     }
 

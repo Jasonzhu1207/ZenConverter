@@ -44,6 +44,7 @@ data class VideoExportOptions(
     val videoMimeType: String = VIDEO_MIME_TYPE_H264,
     val maxFrameRate: Int? = null,
     val compressionMode: VideoCompressionMode = VideoCompressionMode.Standard,
+    val frameInterpolation: VideoFrameInterpolationMode = VideoFrameInterpolationMode.Off,
     val trimRange: MediaTrimRange = MediaTrimRange(),
     val advanced: VideoAdvancedOptions = VideoAdvancedOptions()
 ) {
@@ -58,6 +59,11 @@ enum class VideoCompressionMode {
     VisualLossless,
     BalancedShrink,
     SmallFile
+}
+
+enum class VideoFrameInterpolationMode {
+    Off,
+    Rife2x
 }
 
 data class AudioExportOptions(

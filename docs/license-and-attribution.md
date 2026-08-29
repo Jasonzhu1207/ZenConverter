@@ -251,6 +251,19 @@ Transitive dependencies required when consuming the local AAR through
 - The model list is hardcoded in the app; adding or changing a model is a code
   change that ships with an app update, not a remote hot-updated config.
 
+## RIFE Model (Runtime Download)
+
+- Model: `rife-v4.6` (RIFE optical flow neural network, 2× video frame interpolation).
+- Upstream source: `https://github.com/hzwer/Practical-RIFE` / `https://github.com/nihui/rife-ncnn-vulkan`, MIT / BSD-3-Clause.
+- Distribution: the model is not bundled in the repository or APK. It is
+  downloaded as paired `.param` and `.bin` files at runtime from the project's R2 direct link
+  and verified against hardcoded SHA-256 checksums before use.
+- Download URLs:
+  - `https://assets.xlab.my/models/rife-v4.6.param` (Size: `3,450` bytes, SHA-256: `8ae94eb1cece0bc7470f1a4e21a28a11326462bb95f543d3b76922ae6c7d3d4b`)
+  - `https://assets.xlab.my/models/rife-v4.6.bin` (Size: `16,742,400` bytes, SHA-256: `57ca0d6e6fe4ebf32b13289069d50a2b012eb4c9c7f66a2e46b9a896d7410051`)
+- The model list is hardcoded in the app; adding or changing a model is a code
+  change that ships with an app update, not a remote hot-updated config.
+
 ## License Guardrail
 
 ZenConverter's own source is AGPL-licensed. Do not introduce dependencies or

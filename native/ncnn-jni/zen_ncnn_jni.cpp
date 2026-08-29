@@ -302,4 +302,162 @@ cleanup:
     return resultCode;
 }
 
+JNIEXPORT jint JNICALL
+Java_org_zenconverter_app_model_NcnnNative_nativeRifeInterpolate(
+    JNIEnv* env,
+    jclass clazz,
+    jobject srcBitmap0,
+    jobject srcBitmap1,
+    jobject dstBitmap,
+    jstring paramPath,
+    jstring binPath,
+    jint gpuIndex,
+    jobject cancelCheck
+) {
+    if (srcBitmap0 == nullptr || srcBitmap1 == nullptr || dstBitmap == nullptr ||
+        paramPath == nullptr || binPath == nullptr) {
+        LOGE("Invalid arguments passed to nativeRifeInterpolate");
+        return -1;
+    }
+
+    AndroidBitmapInfo info0, info1, dstInfo;
+    if (AndroidBitmap_getInfo(env, srcBitmap0, &info0) < 0 || info0.format != ANDROID_BITMAP_FORMAT_RGBA_8888 ||
+        AndroidBitmap_getInfo(env, srcBitmap1, &info1) < 0 || info1.format != ANDROID_BITMAP_FORMAT_RGBA_8888 ||
+        AndroidBitmap_getInfo(env, dstBitmap, &dstInfo) < 0 || dstInfo.format != ANDROID_BITMAP_FORMAT_RGBA_8888) {
+        LOGE("Failed to get bitmap info or format is not RGBA_8888");
+        return -1;
+    }
+
+    int w = (int)info0.width;
+    int h = (int)info0.height;
+    if ((int)info1.width != w || (int)info1.height != h || (int)dstInfo.width != w || (int)dstInfo.height != h) {
+        LOGE("Dimensions mismatch between src0, src1, dst (%dx%d vs %dx%d)", w, h, (int)dstInfo.width, (int)dstInfo.height);
+        return -1;
+    }
+
+    const char* paramPathStr = env->GetStringUTFChars(paramPath, nullptr);
+    const char* binPathStr = env->GetStringUTFChars(binPath, nullptr);
+
+    ncnn::Net net;
+    bool useVulkan = (gpuIndex >= 0 && gpuIndex < g_gpu_count);
+    net.opt.use_vulkan_compute = useVulkan;
+    net.opt.use_fp16_packed = true;
+    net.opt.use_fp16_storage = true;
+    net.opt.use_fp16_arithmetic = true;
+    net.opt.use_int8_storage = true;
+    net.opt.use_int8_arithmetic = true;
+    net.opt.num_threads = std::max(1, std::min(6, (int)ncnn::get_cpu_count()));
+
+    if (useVulkan) {
+        net.set_vulkan_device(gpuIndex);
+    }
+
+    int loadParamRet = net.load_param(paramPathStr);
+    int loadModelRet = net.load_model(binPathStr);
+
+    env->ReleaseStringUTFChars(paramPath, paramPathStr);
+    env->ReleaseStringUTFChars(binPath, binPathStr);
+
+    if (loadParamRet != 0 || loadModelRet != 0) {
+        LOGE("Failed to load RIFE model: param=%d, bin=%d", loadParamRet, loadModelRet);
+        return -3;
+    }
+
+    void* pix0 = nullptr;
+    void* pix1 = nullptr;
+    void* pixDst = nullptr;
+    if (AndroidBitmap_lockPixels(env, srcBitmap0, &pix0) < 0 || pix0 == nullptr ||
+        AndroidBitmap_lockPixels(env, srcBitmap1, &pix1) < 0 || pix1 == nullptr ||
+        AndroidBitmap_lockPixels(env, dstBitmap, &pixDst) < 0 || pixDst == nullptr) {
+        if (pix0) AndroidBitmap_unlockPixels(env, srcBitmap0);
+        if (pix1) AndroidBitmap_unlockPixels(env, srcBitmap1);
+        if (pixDst) AndroidBitmap_unlockPixels(env, dstBitmap);
+        LOGE("Failed to lock bitmap pixels");
+        return -1;
+    }
+
+    int padW = (w + 31) / 32 * 32;
+    int padH = (h + 31) / 32 * 32;
+
+    ncnn::Mat in0(padW, padH, 3);
+    ncnn::Mat in1(padW, padH, 3);
+    const float inv255 = 1.0f / 255.0f;
+
+    for (int y = 0; y < h; y++) {
+        const uint8_t* row0 = (const uint8_t*)pix0 + y * info0.stride;
+        const uint8_t* row1 = (const uint8_t*)pix1 + y * info1.stride;
+        float* r0 = in0.channel(0).row(y);
+        float* g0 = in0.channel(1).row(y);
+        float* b0 = in0.channel(2).row(y);
+        float* r1 = in1.channel(0).row(y);
+        float* g1 = in1.channel(1).row(y);
+        float* b1 = in1.channel(2).row(y);
+        for (int x = 0; x < w; x++) {
+            r0[x] = (float)row0[x * 4 + 0] * inv255;
+            g0[x] = (float)row0[x * 4 + 1] * inv255;
+            b0[x] = (float)row0[x * 4 + 2] * inv255;
+            r1[x] = (float)row1[x * 4 + 0] * inv255;
+            g1[x] = (float)row1[x * 4 + 1] * inv255;
+            b1[x] = (float)row1[x * 4 + 2] * inv255;
+        }
+        for (int x = w; x < padW; x++) {
+            r0[x] = r0[w - 1]; g0[x] = g0[w - 1]; b0[x] = b0[w - 1];
+            r1[x] = r1[w - 1]; g1[x] = g1[w - 1]; b1[x] = b1[w - 1];
+        }
+    }
+    for (int y = h; y < padH; y++) {
+        for (int c = 0; c < 3; c++) {
+            memcpy(in0.channel(c).row(y), in0.channel(c).row(h - 1), padW * sizeof(float));
+            memcpy(in1.channel(c).row(y), in1.channel(c).row(h - 1), padW * sizeof(float));
+        }
+    }
+
+    ncnn::Extractor ex = net.create_extractor();
+    ex.input("in0", in0);
+    ex.input("in1", in1);
+
+    // Also support models that take a 6-channel single input "input"
+    ncnn::Mat inConcat(padW, padH, 6);
+    for (int c = 0; c < 3; c++) {
+        memcpy(inConcat.channel(c), in0.channel(c), padW * padH * sizeof(float));
+        memcpy(inConcat.channel(c + 3), in1.channel(c), padW * padH * sizeof(float));
+    }
+    ex.input("input", inConcat);
+    ex.input("data", inConcat);
+
+    ncnn::Mat outMat;
+    int extractRet = ex.extract("out", outMat);
+    if (extractRet != 0 || outMat.empty()) {
+        extractRet = ex.extract("output", outMat);
+    }
+
+    int resultCode = 0;
+    if (extractRet != 0 || outMat.empty()) {
+        LOGE("RIFE inference failed to extract output, ret=%d", extractRet);
+        resultCode = -4;
+    } else {
+        for (int y = 0; y < h; y++) {
+            const float* r = outMat.channel(0).row(y);
+            const float* g = outMat.channel(1).row(y);
+            const float* b = outMat.channel(2).row(y);
+            uint8_t* dstRow = (uint8_t*)pixDst + y * dstInfo.stride;
+            for (int x = 0; x < w; x++) {
+                float rv = r[x] * 255.0f + 0.5f;
+                float gv = g[x] * 255.0f + 0.5f;
+                float bv = b[x] * 255.0f + 0.5f;
+                dstRow[x * 4 + 0] = (uint8_t)std::min(std::max(rv, 0.0f), 255.0f);
+                dstRow[x * 4 + 1] = (uint8_t)std::min(std::max(gv, 0.0f), 255.0f);
+                dstRow[x * 4 + 2] = (uint8_t)std::min(std::max(bv, 0.0f), 255.0f);
+                dstRow[x * 4 + 3] = 255;
+            }
+        }
+    }
+
+    AndroidBitmap_unlockPixels(env, dstBitmap);
+    AndroidBitmap_unlockPixels(env, srcBitmap1);
+    AndroidBitmap_unlockPixels(env, srcBitmap0);
+
+    return resultCode;
+}
+
 } // extern "C"

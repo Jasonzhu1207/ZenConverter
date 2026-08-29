@@ -197,6 +197,7 @@ import org.zenconverter.app.conversion.VideoAdvancedOptions
 import org.zenconverter.app.conversion.VideoAspectRatioMode
 import org.zenconverter.app.conversion.VideoCompressionMode
 import org.zenconverter.app.conversion.VideoExportOptions
+import org.zenconverter.app.conversion.VideoFrameInterpolationMode
 import org.zenconverter.app.conversion.VideoMirrorMode
 import org.zenconverter.app.conversion.VideoRotationMode
 import org.zenconverter.app.BuildConfig
@@ -209,6 +210,9 @@ import org.zenconverter.app.metadata.MetadataToolState
 import org.zenconverter.app.model.EsrganModelManager
 import org.zenconverter.app.model.EsrganModelSpec
 import org.zenconverter.app.model.EsrganModelUiState
+import org.zenconverter.app.model.RifeModelManager
+import org.zenconverter.app.model.RifeModelSpec
+import org.zenconverter.app.model.RifeModelUiState
 import org.zenconverter.app.office.OfficeFontManager
 import org.zenconverter.app.office.OfficeFontSpec
 import org.zenconverter.app.office.OfficeFontUiState
@@ -563,6 +567,13 @@ private val VIDEO_COMPRESSION_OPTIONS = listOf(
     VIDEO_COMPRESSION_SMALL
 )
 
+private const val VIDEO_INTERPOLATION_OFF = "Video interpolation off"
+private const val VIDEO_INTERPOLATION_RIFE_2X = "Video interpolation rife 2x"
+private val VIDEO_INTERPOLATION_OPTIONS = listOf(
+    VIDEO_INTERPOLATION_OFF,
+    VIDEO_INTERPOLATION_RIFE_2X
+)
+
 private const val VIDEO_BITRATE_AUTO = "Auto bitrate"
 private const val VIDEO_BITRATE_LOW = "Low bitrate"
 private const val VIDEO_BITRATE_MEDIUM = "Medium bitrate"
@@ -811,6 +822,9 @@ fun ZenConverterApp(
     onRestoreMetadata: (String) -> Unit,
     onDownloadEsrganModel: (EsrganModelSpec) -> Unit,
     onCancelEsrganModelDownload: (EsrganModelSpec) -> Unit,
+    rifeModelStates: Map<String, RifeModelUiState> = emptyMap(),
+    onDownloadRifeModel: (RifeModelSpec) -> Unit = {},
+    onCancelRifeModelDownload: (RifeModelSpec) -> Unit = {},
     officeFontStates: Map<String, OfficeFontUiState> = emptyMap(),
     onDownloadOfficeFont: (OfficeFontSpec) -> Unit = {},
     onCancelOfficeFontDownload: (OfficeFontSpec) -> Unit = {},
@@ -862,6 +876,7 @@ fun ZenConverterApp(
                 isConversionRunning = isConversionRunning,
                 metadataToolState = metadataToolState,
                 esrganModelStates = esrganModelStates,
+                rifeModelStates = rifeModelStates,
                 officeFontStates = officeFontStates,
                 onAccentSelected = {
                     accent = it
@@ -897,6 +912,8 @@ fun ZenConverterApp(
                 onRestoreMetadata = onRestoreMetadata,
                 onDownloadEsrganModel = onDownloadEsrganModel,
                 onCancelEsrganModelDownload = onCancelEsrganModelDownload,
+                onDownloadRifeModel = onDownloadRifeModel,
+                onCancelRifeModelDownload = onCancelRifeModelDownload,
                 onDownloadOfficeFont = onDownloadOfficeFont,
                 onCancelOfficeFontDownload = onCancelOfficeFontDownload,
                 onDeleteOfficeFont = onDeleteOfficeFont,
@@ -939,6 +956,7 @@ private fun ZenConverterContent(
     isConversionRunning: Boolean,
     metadataToolState: MetadataToolState,
     esrganModelStates: Map<String, EsrganModelUiState>,
+    rifeModelStates: Map<String, RifeModelUiState> = emptyMap(),
     officeFontStates: Map<String, OfficeFontUiState>,
     onAccentSelected: (AccentColorOption) -> Unit,
     onLanguageSelected: (LanguageOption) -> Unit,
@@ -968,6 +986,8 @@ private fun ZenConverterContent(
     onRestoreMetadata: (String) -> Unit,
     onDownloadEsrganModel: (EsrganModelSpec) -> Unit,
     onCancelEsrganModelDownload: (EsrganModelSpec) -> Unit,
+    onDownloadRifeModel: (RifeModelSpec) -> Unit = {},
+    onCancelRifeModelDownload: (RifeModelSpec) -> Unit = {},
     onDownloadOfficeFont: (OfficeFontSpec) -> Unit,
     onCancelOfficeFontDownload: (OfficeFontSpec) -> Unit,
     onDeleteOfficeFont: (OfficeFontSpec) -> Unit,
@@ -998,6 +1018,7 @@ private fun ZenConverterContent(
             add(IMAGE_SUPER_RESOLUTION_AI)
         }
     }
+    val isRifeModelDownloaded = rifeModelStates[RifeModelManager.MODEL_RIFE.id] is RifeModelUiState.Downloaded
 
     LaunchedEffect(queueIds) {
         // 默认收起；只清理已不存在的展开项，不在添加文件时自动展开。
@@ -1147,6 +1168,7 @@ private fun ZenConverterContent(
                                                 outputLocationMode = outputLocationMode,
                                                 outputDirectory = outputDirectory,
                                                 esrganModelStates = esrganModelStates,
+                                                rifeModelStates = rifeModelStates,
                                                 officeFontStates = officeFontStates,
                                                 onAccentSelected = onAccentSelected,
                                                 onLanguageSelected = onLanguageSelected,
@@ -1154,6 +1176,8 @@ private fun ZenConverterContent(
                                                 onPickOutputDirectory = onPickOutputDirectory,
                                                 onDownloadEsrganModel = onDownloadEsrganModel,
                                                 onCancelEsrganModelDownload = onCancelEsrganModelDownload,
+                                                onDownloadRifeModel = onDownloadRifeModel,
+                                                onCancelRifeModelDownload = onCancelRifeModelDownload,
                                                 onDownloadOfficeFont = onDownloadOfficeFont,
                                                 onCancelOfficeFontDownload = onCancelOfficeFontDownload,
                                                 onDeleteOfficeFont = onDeleteOfficeFont
@@ -1204,6 +1228,7 @@ private fun ZenConverterContent(
                                 files = queuedFiles,
                                 supportedVideoMimeTypes = supportedVideoMimeTypes,
                                 availableAiModels = availableAiModels,
+                                isRifeModelDownloaded = isRifeModelDownloaded,
                                 openMenuId = openMenuId,
                                 onOpenMenuChange = { openMenuId = it },
                                 onUpdateFiles = onUpdateQueuedFiles
@@ -1300,6 +1325,7 @@ private fun ZenConverterContent(
                                 canEdit = !isConversionRunning,
                                 supportedVideoMimeTypes = supportedVideoMimeTypes,
                                 availableAiModels = availableAiModels,
+                                isRifeModelDownloaded = isRifeModelDownloaded,
                                 openMenuId = openMenuId,
                                 optionsExpanded = expandedFileId == file.id,
                                 groupedInPdfMerge = file.id in pdfGroupedIds,
@@ -2043,6 +2069,7 @@ private fun SettingsPanel(
     outputLocationMode: OutputLocationMode,
     outputDirectory: OutputDirectory?,
     esrganModelStates: Map<String, EsrganModelUiState>,
+    rifeModelStates: Map<String, RifeModelUiState>,
     officeFontStates: Map<String, OfficeFontUiState>,
     onAccentSelected: (AccentColorOption) -> Unit,
     onLanguageSelected: (LanguageOption) -> Unit,
@@ -2050,6 +2077,8 @@ private fun SettingsPanel(
     onPickOutputDirectory: () -> Unit,
     onDownloadEsrganModel: (EsrganModelSpec) -> Unit,
     onCancelEsrganModelDownload: (EsrganModelSpec) -> Unit,
+    onDownloadRifeModel: (RifeModelSpec) -> Unit,
+    onCancelRifeModelDownload: (RifeModelSpec) -> Unit,
     onDownloadOfficeFont: (OfficeFontSpec) -> Unit,
     onCancelOfficeFontDownload: (OfficeFontSpec) -> Unit,
     onDeleteOfficeFont: (OfficeFontSpec) -> Unit
@@ -2132,6 +2161,15 @@ private fun SettingsPanel(
                     state = esrganModelStates[spec.id] ?: EsrganModelUiState.NotDownloaded,
                     onDownload = { onDownloadEsrganModel(spec) },
                     onCancel = { onCancelEsrganModelDownload(spec) }
+                )
+            }
+            RifeModelManager.ALL_MODELS.forEach { spec ->
+                RifeModelDownloadSection(
+                    texts = texts,
+                    spec = spec,
+                    state = rifeModelStates[spec.id] ?: RifeModelUiState.NotDownloaded,
+                    onDownload = { onDownloadRifeModel(spec) },
+                    onCancel = { onCancelRifeModelDownload(spec) }
                 )
             }
         }
@@ -2324,6 +2362,148 @@ private fun EsrganModelDownloadSection(
                     }
                 }
                 is EsrganModelUiState.Failed -> {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = state.message?.let { "${texts.downloadFailed}: $it" }
+                                ?: texts.downloadFailed,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Button(
+                            onClick = onDownload,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(texts.modelDownloadAction)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RifeModelDownloadSection(
+    texts: UiText,
+    spec: RifeModelSpec,
+    state: RifeModelUiState,
+    onDownload: () -> Unit,
+    onCancel: () -> Unit
+) {
+    val context = LocalContext.current
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = Color(0xFFFAFAFA),
+        border = BorderStroke(1.dp, Color(0xFFE8E8E8))
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = spec.displayName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = texts.rifeModelPurpose,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = spec.sizeDisplay,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "${texts.modelSource} RIFE",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = texts.openLink,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable {
+                        openExternalLink(context, spec.sourceUrl, texts.linkUnavailable)
+                    }
+                )
+            }
+
+            when (state) {
+                RifeModelUiState.NotDownloaded -> {
+                    Button(
+                        onClick = onDownload,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(texts.modelDownloadAction)
+                    }
+                }
+                is RifeModelUiState.Downloading -> {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        LinearProgressIndicator(
+                            progress = state.progress,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${(state.progress * 100).toInt()}%",
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                            TextButton(onClick = onCancel) {
+                                Text(texts.cancelDownload)
+                            }
+                        }
+                        Text(
+                            text = texts.modelDownloadNote,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                RifeModelUiState.Downloaded -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            AppIcon(
+                                icon = Icons.Rounded.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = texts.modelDownloaded,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        TextButton(onClick = onDownload) {
+                            Text(texts.modelRedownload)
+                        }
+                    }
+                }
+                is RifeModelUiState.Failed -> {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
                             text = state.message?.let { "${texts.downloadFailed}: $it" }
@@ -4274,6 +4454,7 @@ private fun BatchSettingsPanel(
     files: List<QueuedFile>,
     supportedVideoMimeTypes: Set<String>,
     availableAiModels: Set<String>,
+    isRifeModelDownloaded: Boolean = false,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onUpdateFiles: (List<QueuedFile>) -> Unit
@@ -4395,6 +4576,7 @@ private fun BatchSettingsPanel(
                     target = commonTarget,
                     supportedVideoMimeTypes = supportedVideoMimeTypes,
                     availableAiModels = availableAiModels,
+                    isRifeModelDownloaded = isRifeModelDownloaded,
                     openMenuId = openMenuId,
                     onOpenMenuChange = onOpenMenuChange,
                     onUpdateFiles = onUpdateFiles
@@ -4443,6 +4625,7 @@ private fun BatchTargetOptions(
     target: ExternalImportTarget,
     supportedVideoMimeTypes: Set<String>,
     availableAiModels: Set<String>,
+    isRifeModelDownloaded: Boolean = false,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onUpdateFiles: (List<QueuedFile>) -> Unit
@@ -4462,6 +4645,7 @@ private fun BatchTargetOptions(
                 files = files,
                 target = target.targetFormat,
                 supportedVideoMimeTypes = supportedVideoMimeTypes,
+                isRifeModelDownloaded = isRifeModelDownloaded,
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
                 onUpdateFiles = onUpdateFiles
@@ -4544,27 +4728,97 @@ private fun QueuedFile.withBatchVideoCompressionMode(
     )
 }
 
+private fun QueuedFile.withBatchVideoInterpolationMode(
+    value: String
+): QueuedFile {
+    val mode = videoInterpolationModeFor(value)
+    val isInterpolationActive = mode != VideoFrameInterpolationMode.Off
+    return copy(
+        videoOptions = videoOptions.copy(
+            frameInterpolation = mode,
+            compressionMode = if (isInterpolationActive) VideoCompressionMode.Standard else videoOptions.compressionMode,
+            advanced = if (isInterpolationActive) VideoAdvancedOptions() else videoOptions.advanced
+        )
+    )
+}
+
 @Composable
 private fun BatchVideoTargetOptions(
     texts: UiText,
     files: List<QueuedFile>,
     target: TargetFormat,
     supportedVideoMimeTypes: Set<String>,
+    isRifeModelDownloaded: Boolean = false,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onUpdateFiles: (List<QueuedFile>) -> Unit
 ) {
     val isGifTarget = target.extension.equals("gif", ignoreCase = true)
+    val commonInterpolation = commonBatchLabel(files) {
+        videoInterpolationLabelFor(it.videoOptions.frameInterpolation)
+    }
+    val isInterpolationActive = !isGifTarget && videoInterpolationModeFor(commonInterpolation) != VideoFrameInterpolationMode.Off
+    val disabledInterpolationOptions = if (isRifeModelDownloaded) emptySet() else setOf(VIDEO_INTERPOLATION_RIFE_2X)
     val commonCompression = commonBatchLabel(files) {
         videoCompressionLabelFor(it.videoOptions.compressionMode)
     }
     val standardCompressionActive =
         videoCompressionModeFor(commonCompression) == VideoCompressionMode.Standard
     val mixedCompression = commonCompression == BATCH_MIXED_OPTION
-    val presetCompressionActive = !isGifTarget && !standardCompressionActive && !mixedCompression
+    val presetCompressionActive = !isGifTarget && !isInterpolationActive && !standardCompressionActive && !mixedCompression
 
     OptionGrid {
         if (!isGifTarget) {
+            OptionDropdown(
+                menuId = "batch-video-frame-interpolation",
+                label = texts.videoFrameInterpolation,
+                selected = commonInterpolation,
+                options = VIDEO_INTERPOLATION_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                disabledOptions = disabledInterpolationOptions
+            ) { value ->
+                onOpenMenuChange(null)
+                onUpdateFiles(
+                    files.map { it.withBatchVideoInterpolationMode(value) }
+                )
+            }
+
+            if (!isRifeModelDownloaded) {
+                Text(
+                    text = texts.rifeInterpolationHint(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        if (isInterpolationActive) {
+            Text(
+                text = texts.videoInterpolationSummary,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
+                        RoundedCornerShape(8.dp)
+                    )
+                    .border(
+                        1.dp,
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                        RoundedCornerShape(8.dp)
+                    )
+                    .padding(horizontal = 10.dp, vertical = 7.dp)
+            )
+        }
+
+        if (!isGifTarget && !isInterpolationActive) {
             OptionDropdown(
                 "batch-video-compression-mode",
                 texts.videoCompressionMode,
@@ -4581,7 +4835,7 @@ private fun BatchVideoTargetOptions(
             }
         }
 
-        if (isGifTarget || standardCompressionActive || mixedCompression) {
+        if (!isInterpolationActive && (isGifTarget || standardCompressionActive || mixedCompression)) {
             OptionDropdown(
                 "batch-video-size",
                 texts.resolution,
@@ -4625,7 +4879,7 @@ private fun BatchVideoTargetOptions(
                     .padding(horizontal = 10.dp, vertical = 7.dp)
             )
         }
-        if (!isGifTarget && (standardCompressionActive || mixedCompression)) {
+        if (!isGifTarget && !isInterpolationActive && (standardCompressionActive || mixedCompression)) {
             OptionDropdown(
                 "batch-video-bitrate",
                 texts.bitrate,
@@ -5759,12 +6013,15 @@ private fun VideoOptions(
     audioAdvanced: AudioAdvancedUiState,
     targetFormat: TargetFormat,
     trimInputMode: TrimInputMode,
+    frameInterpolation: String = VIDEO_INTERPOLATION_OFF,
+    isRifeModelDownloaded: Boolean = false,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onTrimInputModeChange: (TrimInputMode) -> Unit,
     onTrimStartSecondsChange: (Double?) -> Unit,
     onTrimEndSecondsChange: (Double?) -> Unit,
     onTrimRangeChange: (MediaTrimRange) -> Unit,
+    onFrameInterpolationChange: (String) -> Unit = {},
     onResolutionChange: (String) -> Unit,
     onCompressionModeChange: (String) -> Unit,
     onBitrateChange: (String) -> Unit,
@@ -5789,8 +6046,10 @@ private fun VideoOptions(
     onAudioNoiseReductionChange: (String) -> Unit
 ) {
     val isGifTarget = targetFormat.extension.equals("gif", ignoreCase = true)
+    val isInterpolationActive = !isGifTarget && videoInterpolationModeFor(frameInterpolation) != VideoFrameInterpolationMode.Off
+    val disabledInterpolationOptions = if (isRifeModelDownloaded) emptySet() else setOf(VIDEO_INTERPOLATION_RIFE_2X)
     val isStandardCompression = videoCompressionModeFor(compressionMode) == VideoCompressionMode.Standard
-    val presetCompressionActive = !isGifTarget && !isStandardCompression
+    val presetCompressionActive = !isGifTarget && !isInterpolationActive && !isStandardCompression
     OptionGrid {
         MediaTrimOptions(
             texts = texts,
@@ -5804,6 +6063,42 @@ private fun VideoOptions(
         )
         if (!isGifTarget) {
             OptionDropdown(
+                menuId = "${menuPrefix}video-frame-interpolation",
+                label = texts.videoFrameInterpolation,
+                selected = frameInterpolation,
+                options = VIDEO_INTERPOLATION_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                disabledOptions = disabledInterpolationOptions,
+                onSelected = onFrameInterpolationChange
+            )
+            if (!isRifeModelDownloaded) {
+                Text(
+                    text = texts.rifeInterpolationHint(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        if (isInterpolationActive) {
+            Text(
+                text = texts.videoInterpolationSummary,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.06f), RoundedCornerShape(8.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.14f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp, vertical = 7.dp)
+            )
+        }
+        if (!isGifTarget && !isInterpolationActive) {
+            OptionDropdown(
                 "${menuPrefix}video-compression-mode",
                 texts.videoCompressionMode,
                 compressionMode,
@@ -5814,7 +6109,7 @@ private fun VideoOptions(
                 onCompressionModeChange
             )
         }
-        if (isGifTarget || isStandardCompression) {
+        if (!isInterpolationActive && (isGifTarget || isStandardCompression)) {
             OptionDropdown(
                 "${menuPrefix}video-size",
                 texts.resolution,
@@ -5840,7 +6135,7 @@ private fun VideoOptions(
                     .padding(horizontal = 10.dp, vertical = 7.dp)
             )
         }
-        if (!isGifTarget && isStandardCompression) {
+        if (!isGifTarget && !isInterpolationActive && isStandardCompression) {
             OptionDropdown(
                 "${menuPrefix}video-bitrate",
                 texts.bitrate,
@@ -7255,6 +7550,7 @@ private fun FileRow(
     canEdit: Boolean,
     supportedVideoMimeTypes: Set<String>,
     availableAiModels: Set<String>,
+    isRifeModelDownloaded: Boolean = false,
     openMenuId: String?,
     optionsExpanded: Boolean,
     groupedInPdfMerge: Boolean,
@@ -7391,6 +7687,7 @@ private fun FileRow(
                     selectedTarget = selectedTarget,
                     supportedVideoMimeTypes = supportedVideoMimeTypes,
                     availableAiModels = availableAiModels,
+                    isRifeModelDownloaded = isRifeModelDownloaded,
                     videoAdvancedExpanded = videoAdvancedExpanded,
                     audioAdvancedExpanded = audioAdvancedExpanded,
                     trimInputMode = trimInputMode,
@@ -7478,6 +7775,7 @@ private fun QueuedFileOptionsPanel(
     selectedTarget: ExternalImportTarget,
     supportedVideoMimeTypes: Set<String>,
     availableAiModels: Set<String>,
+    isRifeModelDownloaded: Boolean = false,
     videoAdvancedExpanded: Boolean,
     audioAdvancedExpanded: Boolean,
     trimInputMode: TrimInputMode,
@@ -7517,9 +7815,24 @@ private fun QueuedFileOptionsPanel(
                 audioAdvanced = audioAdvancedUiStateFor(file.audioOptions.advanced, audioAdvancedExpanded),
                 targetFormat = selectedTarget.targetFormat,
                 trimInputMode = trimInputMode,
+                frameInterpolation = videoInterpolationLabelFor(file.videoOptions.frameInterpolation),
+                isRifeModelDownloaded = isRifeModelDownloaded,
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
                 onTrimInputModeChange = onTrimInputModeChange,
+                onFrameInterpolationChange = { value ->
+                    val mode = videoInterpolationModeFor(value)
+                    val isInterpolationActive = mode != VideoFrameInterpolationMode.Off
+                    onUpdateFile(
+                        file.copy(
+                            videoOptions = file.videoOptions.copy(
+                                frameInterpolation = mode,
+                                compressionMode = if (isInterpolationActive) VideoCompressionMode.Standard else file.videoOptions.compressionMode,
+                                advanced = if (isInterpolationActive) VideoAdvancedOptions() else file.videoOptions.advanced
+                            )
+                        )
+                    )
+                },
                 onTrimStartSecondsChange = { value ->
                     onUpdateFile(
                         file.copy(
@@ -8374,6 +8687,13 @@ private fun videoCompressionLabelFor(mode: VideoCompressionMode): String {
     }
 }
 
+private fun videoInterpolationLabelFor(mode: VideoFrameInterpolationMode): String {
+    return when (mode) {
+        VideoFrameInterpolationMode.Rife2x -> VIDEO_INTERPOLATION_RIFE_2X
+        VideoFrameInterpolationMode.Off -> VIDEO_INTERPOLATION_OFF
+    }
+}
+
 private fun videoBitrateLabelFor(value: Int?): String {
     return when (value) {
         1_000_000 -> VIDEO_BITRATE_LOW
@@ -8656,6 +8976,13 @@ private fun videoCompressionModeFor(value: String): VideoCompressionMode {
         VIDEO_COMPRESSION_BALANCED -> VideoCompressionMode.BalancedShrink
         VIDEO_COMPRESSION_SMALL -> VideoCompressionMode.SmallFile
         else -> VideoCompressionMode.Standard
+    }
+}
+
+private fun videoInterpolationModeFor(value: String): VideoFrameInterpolationMode {
+    return when (value) {
+        VIDEO_INTERPOLATION_RIFE_2X -> VideoFrameInterpolationMode.Rife2x
+        else -> VideoFrameInterpolationMode.Off
     }
 }
 
@@ -9061,6 +9388,9 @@ private data class UiText(
     val resolution: String,
     val superResolution: String,
     val videoCompressionMode: String,
+    val videoFrameInterpolation: String,
+    val videoInterpolationSummary: String,
+    val rifeModelPurpose: String,
     val bitrate: String,
     val codec: String,
     val frameRate: String,
@@ -9190,6 +9520,14 @@ private data class UiText(
             englishText -> "Download the Real-ESRGAN model in Settings to use AI upscale"
             simplifiedChineseText -> "请在设置中下载 Real-ESRGAN 模型后再使用"
             else -> "請在設定中下載 Real-ESRGAN 模型後再使用"
+        }
+    }
+
+    fun rifeInterpolationHint(): String {
+        return when (this) {
+            englishText -> "Download the RIFE model in Settings to enable AI frame interpolation"
+            simplifiedChineseText -> "请在设置中下载 RIFE 模型后再使用 AI 视频插帧"
+            else -> "請在設定中下載 RIFE 模型後再使用 AI 影片補幀"
         }
     }
 
@@ -10479,6 +10817,16 @@ private data class UiText(
                 simplifiedChineseText -> "关闭（手动）"
                 else -> "關閉（手動）"
             }
+            VIDEO_INTERPOLATION_OFF -> when (this) {
+                englishText -> "Off"
+                simplifiedChineseText -> "关闭"
+                else -> "關閉"
+            }
+            VIDEO_INTERPOLATION_RIFE_2X -> when (this) {
+                englishText -> "RIFE 2× Interpolation"
+                simplifiedChineseText -> "RIFE 2× 补帧"
+                else -> "RIFE 2× 補幀"
+            }
             VIDEO_COMPRESSION_VISUAL_LOSSLESS -> when (this) {
                 englishText -> "Visual lossless"
                 simplifiedChineseText -> "视觉无损"
@@ -11177,6 +11525,9 @@ private val englishText = UiText(
     resolution = "Resolution",
     superResolution = "Super resolution",
     videoCompressionMode = "Compression preset",
+    videoFrameInterpolation = "AI Frame Interpolation",
+    videoInterpolationSummary = "Enable 2× AI interpolation to double video frame rate (e.g. 30fps -> 60fps) for smoother motion.",
+    rifeModelPurpose = "Deep-learning optical flow frame interpolator (2× FPS enhancement)",
     bitrate = "Bitrate",
     codec = "Codec",
     frameRate = "Frame rate",
@@ -11334,6 +11685,9 @@ private val simplifiedChineseText = UiText(
     resolution = "分辨率",
     superResolution = "超分",
     videoCompressionMode = "压缩预设",
+    videoFrameInterpolation = "AI 视频插帧",
+    videoInterpolationSummary = "开启 2× AI 补帧，将视频帧率提升 1 倍 (如 30fps -> 60fps)，使画面更丝滑流畅",
+    rifeModelPurpose = "深度学习光流补帧（2× 帧率翻倍，提升运动流畅度）",
     bitrate = "码率",
     codec = "编码",
     frameRate = "帧率",
@@ -11491,6 +11845,9 @@ private val traditionalChineseText = UiText(
     resolution = "解析度",
     superResolution = "超高解析度",
     videoCompressionMode = "壓縮預設",
+    videoFrameInterpolation = "AI 影片補幀",
+    videoInterpolationSummary = "開啟 2× AI 補幀，將影片幀率提升 1 倍 (如 30fps -> 60fps)，使畫面更絲滑流暢",
+    rifeModelPurpose = "深度學習光流補幀（2× 幀率翻倍，提升運動流暢度）",
     bitrate = "位元率",
     codec = "編碼",
     frameRate = "幀率",

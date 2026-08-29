@@ -58,4 +58,14 @@ object NcnnNative {
         progressCallback: ProgressCallback?,
         cancelCheck: CancelCheck?
     ): Int
+
+    external fun nativeRifeInterpolate(
+        srcBitmap0: Bitmap,
+        srcBitmap1: Bitmap,
+        dstBitmap: Bitmap,
+        paramPath: String,
+        binPath: String,
+        gpuIndex: Int,
+        cancelCheck: CancelCheck?
+    ): Int
 }
