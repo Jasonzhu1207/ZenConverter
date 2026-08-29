@@ -57,20 +57,15 @@ jobs:
         run: |
           set -euo pipefail
           ZEN_SO="app/src/main/jniLibs/arm64-v8a/libzen_ncnn.so"
-          NCNN_SO="app/src/main/jniLibs/arm64-v8a/libncnn.so"
 
           echo "libzen_ncnn.so SHA256: $(sha256sum "$ZEN_SO" | awk '{ print $1 }')"
           echo "libzen_ncnn.so Size:   $(stat -c '%s bytes' "$ZEN_SO")"
-          echo "libncnn.so SHA256:     $(sha256sum "$NCNN_SO" | awk '{ print $1 }')"
-          echo "libncnn.so Size:       $(stat -c '%s bytes' "$NCNN_SO")"
 
       - name: Upload SO Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ncnn-arm64-v8a-so
-          path: |
-            app/src/main/jniLibs/arm64-v8a/libzen_ncnn.so
-            app/src/main/jniLibs/arm64-v8a/libncnn.so
+          path: app/src/main/jniLibs/arm64-v8a/libzen_ncnn.so
           if-no-files-found: error
 
       - name: Commit and Push back to main
@@ -80,12 +75,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add app/src/main/jniLibs/arm64-v8a/libzen_ncnn.so app/src/main/jniLibs/arm64-v8a/libncnn.so
+          git add app/src/main/jniLibs/arm64-v8a/libzen_ncnn.so
 
           if git diff --staged --quiet; then
             echo "No changes in .so files; skipping commit."
           else
-            git commit -m "build(native): update libzen_ncnn.so and libncnn.so from GitHub Actions"
+            git commit -m "build(native): update libzen_ncnn.so from GitHub Actions"
             git pull --rebase origin "${{ github.ref_name }}"
             git push origin "${{ github.ref_name }}"
           fi
