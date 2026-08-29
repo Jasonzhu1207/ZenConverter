@@ -16,10 +16,7 @@ find_ndk_home() {
     "${ANDROID_NDK_HOME:-}" \
     "${ANDROID_NDK_ROOT:-}" \
     "/opt/android-ndk" \
-    "/opt/android-sdk/ndk/*" \
-    "/root/Android/Sdk/ndk/*" \
-    "/root/android-ndk*" \
-    "$HOME/Android/Sdk/ndk/*"
+    "$HOME/Android/Sdk/ndk"
   do
     if [ -n "$candidate" ] && [ -f "$candidate/source.properties" ]; then
       printf '%s\n' "$candidate"
@@ -41,16 +38,28 @@ fi
 
 echo "Using NDK: $NDK_HOME"
 
-# Ensure NCNN Android Vulkan SDK is present
-NCNN_SDK_DIR="$SCRIPT_DIR/ncnn-android-vulkan"
-if [ ! -d "$NCNN_SDK_DIR/$ABI" ]; then
+# Download and extract NCNN Android Vulkan SDK
+NCNN_EXTRACT_DIR="$SCRIPT_DIR/ncnn-sdk-extract"
+if [ ! -d "$NCNN_EXTRACT_DIR" ] || [ -z "$(ls -A "$NCNN_EXTRACT_DIR" 2>/dev/null)" ]; then
   echo "Downloading NCNN Android Vulkan SDK (${NCNN_VERSION})..."
   mkdir -p "$SCRIPT_DIR/download"
   if [ ! -f "$SCRIPT_DIR/download/$NCNN_ZIP" ]; then
-    curl -sSL "$NCNN_URL" -o "$SCRIPT_DIR/download/$NCNN_ZIP"
+    curl -sSfL "$NCNN_URL" -o "$SCRIPT_DIR/download/$NCNN_ZIP"
   fi
-  unzip -q -o "$SCRIPT_DIR/download/$NCNN_ZIP" -d "$NCNN_SDK_DIR"
+  mkdir -p "$NCNN_EXTRACT_DIR"
+  unzip -q -o "$SCRIPT_DIR/download/$NCNN_ZIP" -d "$NCNN_EXTRACT_DIR"
 fi
+
+# The zip extracts with a versioned root dir, e.g. ncnn-20240410-android-vulkan/arm64-v8a
+# Search for the ABI directory wherever it ended up inside the extract root
+NCNN_ABI_DIR="$(find "$NCNN_EXTRACT_DIR" -type d -name "$ABI" | head -1)"
+if [ -z "$NCNN_ABI_DIR" ] || [ ! -d "$NCNN_ABI_DIR/include/ncnn" ]; then
+  echo "ERROR: Could not find $ABI/include/ncnn inside $NCNN_EXTRACT_DIR" >&2
+  find "$NCNN_EXTRACT_DIR" -maxdepth 4 | head -30 >&2
+  exit 1
+fi
+
+echo "Found NCNN SDK at: $NCNN_ABI_DIR"
 
 rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
@@ -62,7 +71,7 @@ cmake "$SCRIPT_DIR" \
   -DANDROID_PLATFORM="android-$ANDROID_API" \
   -DANDROID_STL=c++_static \
   -DCMAKE_BUILD_TYPE=Release \
-  -DNCNN_SDK_DIR="$NCNN_SDK_DIR/$ABI"
+  -DNCNN_ABI_DIR="$NCNN_ABI_DIR"
 
 cmake --build . --config Release -j"$(nproc 2>/dev/null || echo 4)"
 
@@ -75,14 +84,15 @@ fi
 DEST_DIR="$ROOT_DIR/app/src/main/jniLibs/$ABI"
 mkdir -p "$DEST_DIR"
 
-# Copy libzen_ncnn.so
 cp "$SO_PATH" "$DEST_DIR/libzen_ncnn.so"
 
-# Also ensure libncnn.so from the SDK is copied to jniLibs
-if [ -f "$NCNN_SDK_DIR/$ABI/lib/libncnn.so" ]; then
-  cp "$NCNN_SDK_DIR/$ABI/lib/libncnn.so" "$DEST_DIR/libncnn.so"
+# Copy libncnn.so from the SDK too if present (replaces any stale prebuilt)
+NCNN_SO="$NCNN_ABI_DIR/lib/libncnn.so"
+if [ -f "$NCNN_SO" ]; then
+  cp "$NCNN_SO" "$DEST_DIR/libncnn.so"
+  echo "Copied libncnn.so from SDK -> $DEST_DIR/libncnn.so"
 fi
 
-echo "Successfully built and copied libzen_ncnn.so -> $DEST_DIR/libzen_ncnn.so"
+echo "Successfully built: libzen_ncnn.so -> $DEST_DIR/libzen_ncnn.so"
 sha256sum "$DEST_DIR/libzen_ncnn.so"
 stat -c 'Size: %s bytes' "$DEST_DIR/libzen_ncnn.so" 2>/dev/null || ls -lh "$DEST_DIR/libzen_ncnn.so"
