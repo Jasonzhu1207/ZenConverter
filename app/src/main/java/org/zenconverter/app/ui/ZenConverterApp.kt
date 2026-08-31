@@ -1,5 +1,6 @@
 package org.zenconverter.app.ui
 
+import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -11,6 +12,7 @@ import android.os.Build
 import android.provider.DocumentsContract
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.core.view.WindowCompat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
@@ -37,6 +39,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.LocalOverscrollConfiguration
@@ -75,10 +78,13 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AudioFile
+import androidx.compose.material.icons.rounded.BrightnessAuto
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Contrast
+import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Download
@@ -90,6 +96,7 @@ import androidx.compose.material.icons.rounded.FontDownload
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.OpenInNew
@@ -107,6 +114,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -508,19 +516,34 @@ private val supportTargets = listOf(
 
 private enum class AccentColorOption(
     val englishLabel: String,
-    val color: Color,
-    val contentColor: Color
+    val lightColor: Color,
+    val lightContentColor: Color,
+    val darkColor: Color,
+    val darkContentColor: Color
 ) {
-    Charcoal("Charcoal", Color(0xFF111111), Color.White),
-    DeepNavy("Deep Navy", Color(0xFF36454F), Color.White),
-    ForestGreen("Forest Green", Color(0xFF2D4A2B), Color.White),
-    SteelBlue("Steel Blue", Color(0xFF4A6FA5), Color.White),
-    DustyRose("Dusty Rose", Color(0xFFD4A5A5), Color(0xFF111111)),
-    Mustard("Mustard", Color(0xFFF4A900), Color(0xFF111111)),
-    BurntOrange("Burnt Orange", Color(0xFFE76F51), Color(0xFF111111)),
-    ElectricBlue("Electric Blue", Color(0xFF0066FF), Color.White),
-    FernGreen("Fern Green", Color(0xFF4A7C59), Color.White),
-    DeepPurple("Deep Purple", Color(0xFF2B1E3E), Color.White)
+    Charcoal("Charcoal", Color(0xFF111111), Color.White, Color(0xFFE5E7EB), Color(0xFF111111)),
+    DeepNavy("Deep Navy", Color(0xFF36454F), Color.White, Color(0xFF93C5FD), Color(0xFF0F172A)),
+    ForestGreen("Forest Green", Color(0xFF2D4A2B), Color.White, Color(0xFF86EFAC), Color(0xFF052E16)),
+    SteelBlue("Steel Blue", Color(0xFF4A6FA5), Color.White, Color(0xFF60A5FA), Color(0xFF0F172A)),
+    DustyRose("Dusty Rose", Color(0xFFD4A5A5), Color(0xFF111111), Color(0xFFFDA4AF), Color(0xFF4C0519)),
+    Mustard("Mustard", Color(0xFFF4A900), Color(0xFF111111), Color(0xFFFCD34D), Color(0xFF451A03)),
+    BurntOrange("Burnt Orange", Color(0xFFE76F51), Color(0xFF111111), Color(0xFFFB923C), Color(0xFF431407)),
+    ElectricBlue("Electric Blue", Color(0xFF0066FF), Color.White, Color(0xFF38BDF8), Color(0xFF082F49)),
+    FernGreen("Fern Green", Color(0xFF4A7C59), Color.White, Color(0xFF34D399), Color(0xFF022C22)),
+    DeepPurple("Deep Purple", Color(0xFF2B1E3E), Color.White, Color(0xFFC084FC), Color(0xFF3B0764));
+
+    val color: Color get() = lightColor
+    val contentColor: Color get() = lightContentColor
+
+    fun color(isDark: Boolean): Color = if (isDark) darkColor else lightColor
+    fun contentColor(isDark: Boolean): Color = if (isDark) darkContentColor else lightContentColor
+}
+
+private enum class ThemeModeOption {
+    System,
+    Light,
+    Dark,
+    OledDark
 }
 
 private enum class LanguageOption {
@@ -842,11 +865,22 @@ fun ZenConverterApp(
     var accent by remember(context) {
         mutableStateOf(accentColorFromPreference(AppPreferences.accentColor(context)))
     }
+    var themeModeOption by remember(context) {
+        mutableStateOf(themeModeFromPreference(AppPreferences.themeMode(context)))
+    }
     var languageOption by remember(context) {
         mutableStateOf(languageFromPreference(AppPreferences.language(context)))
     }
     val texts = uiTextFor(resolveLanguage(languageOption))
     val rootView = LocalView.current
+    val isSystemDark = isSystemInDarkTheme()
+
+    val (isDark, isOled) = when (themeModeOption) {
+        ThemeModeOption.System -> Pair(isSystemDark, false)
+        ThemeModeOption.Light -> Pair(false, false)
+        ThemeModeOption.Dark -> Pair(true, false)
+        ThemeModeOption.OledDark -> Pair(true, true)
+    }
 
     DisposableEffect(rootView, isConversionRunning) {
         val previousKeepScreenOn = rootView.keepScreenOn
@@ -856,13 +890,26 @@ fun ZenConverterApp(
         }
     }
 
-    MaterialTheme(colorScheme = zenConverterColorScheme(accent)) {
+    if (!rootView.isInEditMode) {
+        DisposableEffect(rootView, isDark) {
+            val window = (rootView.context as? Activity)?.window
+            if (window != null) {
+                val insetsController = WindowCompat.getInsetsController(window, rootView)
+                insetsController.isAppearanceLightStatusBars = !isDark
+                insetsController.isAppearanceLightNavigationBars = !isDark
+            }
+            onDispose {}
+        }
+    }
+
+    MaterialTheme(colorScheme = zenConverterColorScheme(accent, isDark, isOled)) {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
             ZenConverterContent(
                 accent = accent,
+                themeModeOption = themeModeOption,
                 languageOption = languageOption,
                 texts = texts,
                 queuedFiles = queuedFiles,
@@ -881,6 +928,10 @@ fun ZenConverterApp(
                 onAccentSelected = {
                     accent = it
                     AppPreferences.setAccentColor(context, it.name)
+                },
+                onThemeModeSelected = {
+                    themeModeOption = it
+                    AppPreferences.setThemeMode(context, it.name)
                 },
                 onLanguageSelected = {
                     languageOption = it
@@ -943,6 +994,7 @@ fun ZenConverterApp(
 @Composable
 private fun ZenConverterContent(
     accent: AccentColorOption,
+    themeModeOption: ThemeModeOption,
     languageOption: LanguageOption,
     texts: UiText,
     queuedFiles: List<QueuedFile>,
@@ -959,6 +1011,7 @@ private fun ZenConverterContent(
     rifeModelStates: Map<String, RifeModelUiState> = emptyMap(),
     officeFontStates: Map<String, OfficeFontUiState>,
     onAccentSelected: (AccentColorOption) -> Unit,
+    onThemeModeSelected: (ThemeModeOption) -> Unit,
     onLanguageSelected: (LanguageOption) -> Unit,
     onOutputLocationModeChange: (OutputLocationMode) -> Unit,
     onPickFiles: () -> Unit,
@@ -1164,6 +1217,7 @@ private fun ZenConverterContent(
                                             HeaderPanel.Settings -> SettingsPanel(
                                                 texts = texts,
                                                 selectedAccent = accent,
+                                                selectedThemeMode = themeModeOption,
                                                 selectedLanguage = languageOption,
                                                 outputLocationMode = outputLocationMode,
                                                 outputDirectory = outputDirectory,
@@ -1171,6 +1225,7 @@ private fun ZenConverterContent(
                                                 rifeModelStates = rifeModelStates,
                                                 officeFontStates = officeFontStates,
                                                 onAccentSelected = onAccentSelected,
+                                                onThemeModeSelected = onThemeModeSelected,
                                                 onLanguageSelected = onLanguageSelected,
                                                 onOutputLocationModeChange = onOutputLocationModeChange,
                                                 onPickOutputDirectory = onPickOutputDirectory,
@@ -1682,9 +1737,9 @@ private fun ExternalImportTargetChip(
         OutlinedButton(
             onClick = onSelected,
             shape = RoundedCornerShape(100.dp),
-            border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
             colors = ButtonDefaults.outlinedButtonColors(
-                containerColor = Color.White,
+                containerColor = MaterialTheme.colorScheme.surface,
                 contentColor = MaterialTheme.colorScheme.onSurface
             ),
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 9.dp)
@@ -1729,10 +1784,10 @@ private fun ZenPromptFrame(
                     alpha = dialogAlpha
                 },
             shape = RoundedCornerShape(8.dp),
-            color = Color.White,
+            color = MaterialTheme.colorScheme.surface,
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,
-            border = BorderStroke(1.dp, Color(0xFFE5E5E5))
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
         ) {
             Column(
                 modifier = Modifier.padding(14.dp),
@@ -1759,9 +1814,9 @@ private fun ZenPromptActions(
             onClick = onDismissAction,
             modifier = Modifier.weight(1f),
             shape = RoundedCornerShape(8.dp),
-            border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
             colors = ButtonDefaults.outlinedButtonColors(
-                containerColor = Color.White,
+                containerColor = MaterialTheme.colorScheme.surface,
                 contentColor = MaterialTheme.colorScheme.onSurface
             ),
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 9.dp)
@@ -1973,7 +2028,7 @@ private fun HeaderOverflowActions(
             containerColor = MaterialTheme.colorScheme.surface,
             tonalElevation = 0.dp,
             shadowElevation = 2.dp,
-            border = BorderStroke(1.dp, Color(0xFFE5E5E5))
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
         ) {
             actions.forEach { action ->
                 DropdownMenuItem(
@@ -2035,7 +2090,7 @@ private fun HeaderIconButton(
             .border(
                 1.dp,
                 if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
-                else Color(0xFFE7E7E7),
+                else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
                 CircleShape
             )
             .bounceClick(onClick = onClick, scaleDown = 0.90f)
@@ -2065,6 +2120,7 @@ private fun HeaderIconButton(
 private fun SettingsPanel(
     texts: UiText,
     selectedAccent: AccentColorOption,
+    selectedThemeMode: ThemeModeOption,
     selectedLanguage: LanguageOption,
     outputLocationMode: OutputLocationMode,
     outputDirectory: OutputDirectory?,
@@ -2072,6 +2128,7 @@ private fun SettingsPanel(
     rifeModelStates: Map<String, RifeModelUiState>,
     officeFontStates: Map<String, OfficeFontUiState>,
     onAccentSelected: (AccentColorOption) -> Unit,
+    onThemeModeSelected: (ThemeModeOption) -> Unit,
     onLanguageSelected: (LanguageOption) -> Unit,
     onOutputLocationModeChange: (OutputLocationMode) -> Unit,
     onPickOutputDirectory: () -> Unit,
@@ -2083,6 +2140,8 @@ private fun SettingsPanel(
     onCancelOfficeFontDownload: (OfficeFontSpec) -> Unit,
     onDeleteOfficeFont: (OfficeFontSpec) -> Unit
 ) {
+    val isDark = MaterialTheme.colorScheme.background.red < 0.5f
+
     QuietPanel {
         SectionTitle(
             icon = Icons.Rounded.FolderOpen,
@@ -2114,6 +2173,54 @@ private fun SettingsPanel(
                     selected = option == selectedAccent,
                     onSelected = { onAccentSelected(option) }
                 )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(18.dp))
+        SectionTitle(
+            icon = Icons.Rounded.DarkMode,
+            title = texts.themeMode
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ThemeModeOption.entries.forEach { option ->
+                val selected = option == selectedThemeMode
+                val optionIcon = when (option) {
+                    ThemeModeOption.System -> Icons.Rounded.BrightnessAuto
+                    ThemeModeOption.Light -> Icons.Rounded.LightMode
+                    ThemeModeOption.Dark -> Icons.Rounded.DarkMode
+                    ThemeModeOption.OledDark -> Icons.Rounded.Contrast
+                }
+                if (selected) {
+                    Button(
+                        onClick = { onThemeModeSelected(option) },
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = optionIcon,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(texts.themeModeLabel(option))
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = { onThemeModeSelected(option) },
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = optionIcon,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(texts.themeModeLabel(option))
+                    }
+                }
             }
         }
 
@@ -2183,8 +2290,8 @@ private fun SettingsPanel(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(14.dp),
-            color = Color(0xFFF0FDF4),
-            border = BorderStroke(1.dp, Color(0xFFDCFCE7))
+            color = if (isDark) Color(0xFF064E3B).copy(alpha = 0.35f) else Color(0xFFF0FDF4),
+            border = BorderStroke(1.dp, if (isDark) Color(0xFF059669).copy(alpha = 0.45f) else Color(0xFFDCFCE7))
         ) {
             Row(
                 modifier = Modifier.padding(14.dp),
@@ -2193,7 +2300,7 @@ private fun SettingsPanel(
                 AppIcon(
                     icon = Icons.Rounded.CheckCircle,
                     contentDescription = null,
-                    tint = Color(0xFF16A34A),
+                    tint = if (isDark) Color(0xFF4ADE80) else Color(0xFF16A34A),
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(modifier = Modifier.width(10.dp))
@@ -2202,12 +2309,12 @@ private fun SettingsPanel(
                         text = texts.officeFontSystemReady,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF15803D)
+                        color = if (isDark) Color(0xFF86EFAC) else Color(0xFF15803D)
                     )
                     Text(
                         text = texts.officeFontSystemNote,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF166534)
+                        color = if (isDark) Color(0xFF4ADE80) else Color(0xFF166534)
                     )
                 }
             }
@@ -2252,8 +2359,8 @@ private fun EsrganModelDownloadSection(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
-        color = Color(0xFFFAFAFA),
-        border = BorderStroke(1.dp, Color(0xFFE8E8E8))
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -2394,8 +2501,8 @@ private fun RifeModelDownloadSection(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
-        color = Color(0xFFFAFAFA),
-        border = BorderStroke(1.dp, Color(0xFFE8E8E8))
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -2536,8 +2643,8 @@ private fun OfficeFontDownloadSection(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
-        color = Color(0xFFFAFAFA),
-        border = BorderStroke(1.dp, Color(0xFFE8E8E8))
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -2684,7 +2791,7 @@ private fun AboutPanel(
                 modifier = Modifier
                     .size(92.dp)
                     .clip(RoundedCornerShape(20.dp))
-                    .border(1.dp, Color(0xFFE4E4E4), RoundedCornerShape(20.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(20.dp))
             )
             Text(
                 text = "ZenConverter",
@@ -2789,15 +2896,15 @@ private fun AboutPanel(
                 .heightIn(min = 52.dp),
             shape = RoundedCornerShape(8.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF151515),
-                contentColor = Color.White
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
             ),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
         ) {
             AppIcon(
                 icon = Icons.Rounded.Favorite,
                 contentDescription = null,
-                tint = Color(0xFFFFD6C2),
+                tint = MaterialTheme.colorScheme.onPrimary,
                 modifier = Modifier.size(19.dp)
             )
             Spacer(modifier = Modifier.width(10.dp))
@@ -3209,9 +3316,9 @@ private fun MetadataSecurityPanel(
                     .weight(1f)
                     .heightIn(min = 48.dp),
                 shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                 colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = Color.White,
+                    containerColor = MaterialTheme.colorScheme.surface,
                     contentColor = MaterialTheme.colorScheme.onSurface
                 ),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
@@ -3301,7 +3408,7 @@ private fun MetadataInspectionCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, Color(0xFFEAEAEA), RoundedCornerShape(8.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -3445,7 +3552,7 @@ private fun MetadataCompactRows(rows: List<Pair<String, String>>) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFFF7F7F7), RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
@@ -3529,14 +3636,14 @@ private fun MetadataRestoreDialog(
                         if (index == 0) {
                             MaterialTheme.colorScheme.primary.copy(alpha = 0.34f)
                         } else {
-                            Color(0xFFE0E0E0)
+                            MaterialTheme.colorScheme.outline
                         }
                     ),
                     colors = ButtonDefaults.outlinedButtonColors(
                         containerColor = if (index == 0) {
                             MaterialTheme.colorScheme.primary.copy(alpha = 0.045f)
                         } else {
-                            Color.White
+                            MaterialTheme.colorScheme.surface
                         },
                         contentColor = MaterialTheme.colorScheme.onSurface
                     ),
@@ -3555,9 +3662,9 @@ private fun MetadataRestoreDialog(
             onClick = onDismiss,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(8.dp),
-            border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
             colors = ButtonDefaults.outlinedButtonColors(
-                containerColor = Color.White,
+                containerColor = MaterialTheme.colorScheme.surface,
                 contentColor = MaterialTheme.colorScheme.onSurface
             ),
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
@@ -3933,10 +4040,10 @@ private fun SupportDialog(
                 .padding(horizontal = 24.dp)
                 .heightIn(max = 640.dp),
             shape = RoundedCornerShape(8.dp),
-            color = Color.White,
+            color = MaterialTheme.colorScheme.surface,
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,
-            border = BorderStroke(1.dp, Color(0xFFE5E5E5))
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
         ) {
             Column(
                 modifier = Modifier.padding(14.dp),
@@ -3983,10 +4090,10 @@ private fun SupportTargetCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
-        color = Color.White,
+        color = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
-        border = BorderStroke(1.dp, Color(0xFFE5E5E5))
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     ) {
         Column(
             modifier = Modifier.padding(10.dp),
@@ -4016,15 +4123,15 @@ private fun SupportTargetCard(
                         onClick = { openExternalLink(context, target.value, texts.linkUnavailable) },
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF151515),
-                            contentColor = Color.White
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
                         ),
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                     ) {
                         AppIcon(
                             icon = Icons.Rounded.OpenInNew,
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier.size(17.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
@@ -4057,7 +4164,7 @@ private fun QrCodeView(
             .aspectRatio(1f)
             .clip(RoundedCornerShape(8.dp))
             .background(Color.White)
-            .border(1.dp, Color(0xFFE3E3E3), RoundedCornerShape(8.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
             .padding(8.dp)
             .semantics { this.contentDescription = contentDescription }
     ) {
@@ -4094,8 +4201,8 @@ private fun CopyableValueBox(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFFF6F7F8))
-            .border(1.dp, Color(0xFFE2E4E8), RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
             .clickable(
                 onClickLabel = texts.copy,
                 role = Role.Button,
@@ -4133,6 +4240,8 @@ private fun AccentSwatch(
     onSelected: () -> Unit
 ) {
     val label = texts.accentLabel(option)
+    val isDark = MaterialTheme.colorScheme.background.red < 0.5f
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -4142,10 +4251,10 @@ private fun AccentSwatch(
             modifier = Modifier
                 .size(32.dp)
                 .clip(CircleShape)
-                .background(option.color)
+                .background(option.color(isDark))
                 .border(
                     width = if (selected) 3.dp else 1.dp,
-                    color = if (selected) Color(0xFF111111) else Color(0xFFE2E2E2),
+                    color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
                     shape = CircleShape
                 )
                 .clickable(
@@ -4240,7 +4349,7 @@ private fun HeroAddButton(
     )
     val borderColor by animateColorAsState(
         targetValue = if (enabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                      else Color(0xFFE7E7E7),
+                      else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
         animationSpec = tween(ZenAnimations.ContentFadeDuration),
         label = "heroAddBorder"
     )
@@ -4309,9 +4418,9 @@ private fun AlbumSourceDialog(
                 onClick = onPickImages,
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, Color(0xFFE0E0E0)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                 colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = Color.White,
+                    containerColor = MaterialTheme.colorScheme.surface,
                     contentColor = MaterialTheme.colorScheme.onSurface
                 ),
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 9.dp)
@@ -4354,7 +4463,7 @@ private fun ImportSourceSheet(
                     .padding(top = 12.dp, bottom = 4.dp)
                     .size(width = 36.dp, height = 4.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFFD9D9D9))
+                    .background(MaterialTheme.colorScheme.outline)
             )
         }
     ) {
@@ -4405,7 +4514,7 @@ private fun ImportSourceRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
-            .border(1.dp, Color(0xFFE7E7E7), RoundedCornerShape(12.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
             .bounceClick(onClick = onClick, scaleDown = 0.97f)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -4595,12 +4704,12 @@ private fun BatchScopeChip(
     val borderColor = if (selected) {
         MaterialTheme.colorScheme.primary
     } else {
-        Color(0xFFE1E1E1)
+        MaterialTheme.colorScheme.outline
     }
     val backgroundColor = if (selected) {
         MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
     } else {
-        Color.White
+        MaterialTheme.colorScheme.surface
     }
     Text(
         text = label,
@@ -6402,7 +6511,7 @@ private fun MediaTrimOptions(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 modifier = Modifier
-                    .background(Color(0xFFF1F1F1), RoundedCornerShape(100.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(100.dp))
                     .padding(horizontal = 4.dp, vertical = 2.dp)
             ) {
                 IconButton(
@@ -6496,7 +6605,7 @@ private fun TrimModeToggle(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFFF1F1F1), RoundedCornerShape(100.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(100.dp))
             .padding(3.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp)
     ) {
@@ -6536,7 +6645,7 @@ private fun TrimModeChip(
             text = text,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -6581,7 +6690,7 @@ private fun TrimAndSplitSlider(
         val sliderColors = SliderDefaults.colors(
             thumbColor = MaterialTheme.colorScheme.primary,
             activeTrackColor = MaterialTheme.colorScheme.primary,
-            inactiveTrackColor = Color(0xFFE1E1E1)
+            inactiveTrackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
         )
 
         Box(
@@ -6890,12 +6999,12 @@ private fun TrimSecondsField(
             focusedLabelColor = MaterialTheme.colorScheme.primary,
             unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
             cursorColor = MaterialTheme.colorScheme.primary,
-            focusedContainerColor = Color.White,
-            unfocusedContainerColor = Color.White,
+            focusedContainerColor = MaterialTheme.colorScheme.surface,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
             errorBorderColor = MaterialTheme.colorScheme.error,
             errorLabelColor = MaterialTheme.colorScheme.error,
             errorCursorColor = MaterialTheme.colorScheme.error,
-            errorContainerColor = Color.White
+            errorContainerColor = MaterialTheme.colorScheme.surface
         ),
         modifier = modifier
             .defaultMinSize(minWidth = 0.dp)
@@ -7139,7 +7248,7 @@ private fun AdvancedSwitchRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .background(Color.White.copy(alpha = 0.72f))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.72f))
             .border(
                 1.dp,
                 MaterialTheme.colorScheme.primary.copy(alpha = if (checked) 0.22f else 0.08f),
@@ -7572,7 +7681,7 @@ private fun FileRow(
         modifier = modifier
             .fillMaxWidth()
             .animateContentSize()
-            .border(1.dp, Color(0xFFEAEAEA), RoundedCornerShape(8.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -7735,7 +7844,7 @@ private fun OptionsToggleChip(
             if (expanded) {
                 MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
             } else {
-                Color(0xFFE1E1E1)
+                MaterialTheme.colorScheme.outline
             }
         ),
         colors = ButtonDefaults.outlinedButtonColors(
@@ -8226,12 +8335,12 @@ private fun PillMenuButton(
         shape = RoundedCornerShape(100.dp),
         contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
         colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = if (expanded) Color(0xFFF3F3F3) else Color.White,
+            containerColor = if (expanded) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.onSurface
         ),
         border = BorderStroke(
             1.dp,
-            if (expanded) Color(0xFFD8D8D8) else Color(0xFFE2E2E2)
+            if (expanded) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
         )
     ) {
         Text(
@@ -8271,10 +8380,10 @@ private fun InlineDropdownPanel(
                 .fillMaxWidth()
                 .padding(top = 8.dp),
             shape = RoundedCornerShape(18.dp),
-            color = Color.White,
+            color = MaterialTheme.colorScheme.surface,
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,
-            border = BorderStroke(1.dp, Color(0xFFE4E4E4))
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
         ) {
             Column(
                 modifier = Modifier.padding(6.dp),
@@ -8313,7 +8422,7 @@ private fun DropdownOption(
             style = MaterialTheme.typography.bodyMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            color = if (enabled) Color.Unspecified else Color(0xFFB5B5B5),
+            color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
             modifier = Modifier.weight(1f)
         )
         if (selected) {
@@ -8327,7 +8436,7 @@ private fun DropdownOption(
             AppIcon(
                 icon = Icons.Rounded.Lock,
                 contentDescription = null,
-                tint = Color(0xFFB5B5B5),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                 modifier = Modifier.size(15.dp)
             )
         }
@@ -8343,7 +8452,7 @@ private fun SmallTag(text: String) {
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier
-            .background(Color(0xFFF5F5F5), RoundedCornerShape(100.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(100.dp))
             .padding(horizontal = 9.dp, vertical = 5.dp)
     )
 }
@@ -8369,7 +8478,7 @@ private fun StatusLine(
     text: String,
     isError: Boolean = false
 ) {
-    val color = if (isError) Color(0xFFB3261E) else MaterialTheme.colorScheme.primary
+    val color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
     Text(
         text = text,
         style = MaterialTheme.typography.bodySmall,
@@ -8384,7 +8493,7 @@ private fun StatusLine(
 @Composable
 private fun QuietPanel(
     modifier: Modifier = Modifier,
-    borderColor: Color = Color(0xFFE7E7E7),
+    borderColor: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
     content: @Composable ColumnScope.() -> Unit
 ) {
     Card(
@@ -8432,25 +8541,76 @@ private fun FileCategory.icon(): ImageVector {
     }
 }
 
-private fun zenConverterColorScheme(accent: AccentColorOption): ColorScheme {
-    return lightColorScheme(
-        primary = accent.color,
-        onPrimary = accent.contentColor,
-        secondary = accent.color,
-        onSecondary = accent.contentColor,
-        background = Color.White,
-        onBackground = Color(0xFF111111),
-        surface = Color.White,
-        onSurface = Color(0xFF111111),
-        surfaceVariant = Color(0xFFF6F6F6),
-        onSurfaceVariant = Color(0xFF666666),
-        outline = Color(0xFFD8D8D8)
-    )
+private fun zenConverterColorScheme(
+    accent: AccentColorOption,
+    isDark: Boolean,
+    isOled: Boolean
+): ColorScheme {
+    val primary = accent.color(isDark)
+    val onPrimary = accent.contentColor(isDark)
+
+    return if (!isDark) {
+        lightColorScheme(
+            primary = primary,
+            onPrimary = onPrimary,
+            secondary = primary,
+            onSecondary = onPrimary,
+            background = Color.White,
+            onBackground = Color(0xFF111111),
+            surface = Color.White,
+            onSurface = Color(0xFF111111),
+            surfaceVariant = Color(0xFFF6F6F6),
+            onSurfaceVariant = Color(0xFF666666),
+            outline = Color(0xFFD8D8D8),
+            outlineVariant = Color(0xFFEBEBEB),
+            error = Color(0xFFB3261E),
+            onError = Color.White
+        )
+    } else if (isOled) {
+        darkColorScheme(
+            primary = primary,
+            onPrimary = onPrimary,
+            secondary = primary,
+            onSecondary = onPrimary,
+            background = Color(0xFF000000),
+            onBackground = Color(0xFFF5F5F5),
+            surface = Color(0xFF000000),
+            onSurface = Color(0xFFF5F5F5),
+            surfaceVariant = Color(0xFF141414),
+            onSurfaceVariant = Color(0xFFA3A3A3),
+            outline = Color(0xFF282828),
+            outlineVariant = Color(0xFF1C1C1C),
+            error = Color(0xFFCF6679),
+            onError = Color(0xFF1E0005)
+        )
+    } else {
+        darkColorScheme(
+            primary = primary,
+            onPrimary = onPrimary,
+            secondary = primary,
+            onSecondary = onPrimary,
+            background = Color(0xFF16181D),
+            onBackground = Color(0xFFF3F4F6),
+            surface = Color(0xFF1E222A),
+            onSurface = Color(0xFFF3F4F6),
+            surfaceVariant = Color(0xFF262B35),
+            onSurfaceVariant = Color(0xFF9CA3AF),
+            outline = Color(0xFF374151),
+            outlineVariant = Color(0xFF2B3240),
+            error = Color(0xFFEF4444),
+            onError = Color.White
+        )
+    }
 }
 
 private fun accentColorFromPreference(value: String?): AccentColorOption {
     return AccentColorOption.entries.firstOrNull { it.name == value }
         ?: AccentColorOption.Charcoal
+}
+
+private fun themeModeFromPreference(value: String?): ThemeModeOption {
+    return ThemeModeOption.entries.firstOrNull { it.name == value }
+        ?: ThemeModeOption.System
 }
 
 private fun languageFromPreference(value: String?): LanguageOption {
@@ -9320,6 +9480,7 @@ private data class UiText(
     val metadataRestoreTitle: String,
     val metadataGps: String,
     val accentColor: String,
+    val themeMode: String,
     val language: String,
     val addFilesTitle: String,
     val addFilesNote: String,
@@ -10442,6 +10603,31 @@ private data class UiText(
 
     fun accentLabel(option: AccentColorOption): String = optionValue(option.englishLabel)
 
+    fun themeModeLabel(option: ThemeModeOption): String {
+        return when (option) {
+            ThemeModeOption.System -> when (this) {
+                englishText -> "Follow system"
+                simplifiedChineseText -> "跟随系统"
+                else -> "跟隨系統"
+            }
+            ThemeModeOption.Light -> when (this) {
+                englishText -> "Light"
+                simplifiedChineseText -> "日间"
+                else -> "日間"
+            }
+            ThemeModeOption.Dark -> when (this) {
+                englishText -> "Dark"
+                simplifiedChineseText -> "夜间"
+                else -> "夜間"
+            }
+            ThemeModeOption.OledDark -> when (this) {
+                englishText -> "OLED Dark"
+                simplifiedChineseText -> "OLED 夜间"
+                else -> "OLED 夜間"
+            }
+        }
+    }
+
     fun languageLabel(option: LanguageOption): String {
         return when (option) {
             LanguageOption.System -> when (this) {
@@ -11457,6 +11643,7 @@ private val englishText = UiText(
     metadataRestoreTitle = "Choose backup",
     metadataGps = "GPS",
     accentColor = "Accent color",
+    themeMode = "Dark mode",
     language = "Language",
     addFilesTitle = "Add files",
     addFilesNote = "Choose files first, then set targets and options in the task list.",
@@ -11617,6 +11804,7 @@ private val simplifiedChineseText = UiText(
     metadataRestoreTitle = "选择备份",
     metadataGps = "GPS",
     accentColor = "重点色",
+    themeMode = "深色模式",
     language = "语言",
     addFilesTitle = "添加文件",
     addFilesNote = "先选择文件，再在任务列表里设置目标格式和选项。",
@@ -11777,6 +11965,7 @@ private val traditionalChineseText = UiText(
     metadataRestoreTitle = "選擇備份",
     metadataGps = "GPS",
     accentColor = "重點色",
+    themeMode = "深色模式",
     language = "語言",
     addFilesTitle = "新增檔案",
     addFilesNote = "先選擇檔案，再在任務列表裡設定目標格式和選項。",

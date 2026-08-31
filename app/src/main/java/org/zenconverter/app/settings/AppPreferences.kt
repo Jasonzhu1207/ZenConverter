@@ -13,6 +13,7 @@ data class SavedOutputDirectory(
 object AppPreferences {
     private const val PREFERENCES_NAME = "zenconverter_preferences"
     private const val KEY_ACCENT_COLOR = "accent_color"
+    private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_LANGUAGE = "language"
     private const val KEY_USE_CUSTOM_OUTPUT = "use_custom_output"
     private const val KEY_OUTPUT_DIRECTORY_URI = "output_directory_uri"
@@ -25,6 +26,16 @@ object AppPreferences {
         preferences(context)
             .edit()
             .putString(KEY_ACCENT_COLOR, accentColor)
+            .apply()
+    }
+
+    fun themeMode(context: Context): String? =
+        preferences(context).getString(KEY_THEME_MODE, null)
+
+    fun setThemeMode(context: Context, themeMode: String) {
+        preferences(context)
+            .edit()
+            .putString(KEY_THEME_MODE, themeMode)
             .apply()
     }
 
