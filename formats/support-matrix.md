@@ -129,7 +129,10 @@ as supported until it has a tested path, sample files, and failure behavior.
   larger.
 - Video frame interpolation provides 2× deep-learning frame rate multiplication using
   RIFE optical flow running through Tencent NCNN with Vulkan GPU compute acceleration
-  (`libzen_ncnn.so`). The pipeline decodes frames via FFmpeg, applies sliding-window
+  (`libzen_ncnn.so`). This feature is currently **Experimental**: due to mobile GPU driver,
+  Vulkan compute extensions, and dynamic memory allocator variance across chipsets, inference
+  runs with adaptive 1080p+ downscaling and lightmode memory deallocation.
+  The pipeline decodes frames via FFmpeg, applies sliding-window
   RIFE inference ($N, N+1 \to N.5$), and re-encodes at 2× fps with high quality CRF 18
   libx264 while remuxing original audio. While active, conflicting options (compression
   presets, manual bitrate, manual codec, manual frame rate, and advanced video filters)

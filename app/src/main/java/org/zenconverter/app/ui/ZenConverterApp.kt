@@ -9525,9 +9525,9 @@ private data class UiText(
 
     fun rifeInterpolationHint(): String {
         return when (this) {
-            englishText -> "Download the RIFE model in Settings to enable AI frame interpolation"
-            simplifiedChineseText -> "请在设置中下载 RIFE 模型后再使用 AI 视频插帧"
-            else -> "請在設定中下載 RIFE 模型後再使用 AI 影片補幀"
+            englishText -> "Download the RIFE model in Settings to enable AI frame interpolation (Experimental)"
+            simplifiedChineseText -> "请在设置中下载 RIFE 模型后再使用 AI 视频插帧（实验性）"
+            else -> "請在設定中下載 RIFE 模型後再使用 AI 影片補幀（實驗性）"
         }
     }
 
@@ -11316,7 +11316,7 @@ private val englishHelpGuide = HelpGuideCopy(
     body = "Choose a file, pick a target, and let the conversion run locally.",
     back = "Back",
     videoTitle = "Video",
-    videoBody = "Convert common video formats, merge multiple videos, trim & split segments, or extract audio tracks.",
+    videoBody = "Convert common video formats, AI 2× frame rate interpolation (Experimental), merge multiple videos, trim & split segments, or extract audio tracks.",
     videoFormats = "MP4 · MKV · MOV · GIF  →  Merge · MP4 · MKV · MOV · GIF",
     audioTitle = "Audio",
     audioBody = "Convert audio files, trim range, and apply audio filters.",
@@ -11344,7 +11344,7 @@ private val simplifiedChineseHelpGuide = HelpGuideCopy(
     body = "选择文件、指定目标格式，转换过程默认在本机完成。",
     back = "返回",
     videoTitle = "视频",
-    videoBody = "转换常见视频格式，支持多视频拼接合并、时间轴裁剪与多段分割，也可提取音频。",
+    videoBody = "转换常见视频格式，支持 AI 2× 深度学习视频插帧（实验性）、多视频拼接合并、时间轴裁剪与多段分割，也可提取音频。",
     videoFormats = "MP4 · MKV · MOV · GIF  →  合并 · MP4 · MKV · MOV · GIF",
     audioTitle = "音频",
     audioBody = "在常用音频格式之间互相转换，支持剪辑、降噪与高级音效。",
@@ -11372,7 +11372,7 @@ private val traditionalChineseHelpGuide = HelpGuideCopy(
     body = "選擇檔案、指定目標格式，轉換過程預設在本機完成。",
     back = "返回",
     videoTitle = "影片",
-    videoBody = "轉換常見影片格式，支援多影片拼接合併、時間軸裁剪與多段分割，也可擷取音訊。",
+    videoBody = "轉換常見影片格式，支援 AI 2× 深度學習影片補幀（實驗性）、多影片拼接合併、時間軸裁剪與多段分割，也可擷取音訊。",
     videoFormats = "MP4 · MKV · MOV · GIF  →  合併 · MP4 · MKV · MOV · GIF",
     audioTitle = "音訊",
     audioBody = "在常用音訊格式之間互相轉換，支援剪輯、降噪與進階音效。",
@@ -11525,9 +11525,9 @@ private val englishText = UiText(
     resolution = "Resolution",
     superResolution = "Super resolution",
     videoCompressionMode = "Compression preset",
-    videoFrameInterpolation = "AI Frame Interpolation",
-    videoInterpolationSummary = "Enable 2× AI interpolation to double video frame rate (e.g. 30fps -> 60fps) for smoother motion.",
-    rifeModelPurpose = "Deep-learning optical flow frame interpolator (2× FPS enhancement)",
+    videoFrameInterpolation = "AI Frame Interpolation (Experimental)",
+    videoInterpolationSummary = "Enable 2× AI interpolation (Experimental) to double video frame rate (e.g. 30fps -> 60fps) for smoother motion. Performance and memory vary by device GPU drivers.",
+    rifeModelPurpose = "Deep-learning optical flow frame interpolator (2× FPS enhancement, Experimental)",
     bitrate = "Bitrate",
     codec = "Codec",
     frameRate = "Frame rate",
@@ -11685,9 +11685,9 @@ private val simplifiedChineseText = UiText(
     resolution = "分辨率",
     superResolution = "超分",
     videoCompressionMode = "压缩预设",
-    videoFrameInterpolation = "AI 视频插帧",
-    videoInterpolationSummary = "开启 2× AI 补帧，将视频帧率提升 1 倍 (如 30fps -> 60fps)，使画面更丝滑流畅",
-    rifeModelPurpose = "深度学习光流补帧（2× 帧率翻倍，提升运动流畅度）",
+    videoFrameInterpolation = "AI 视频插帧（实验性）",
+    videoInterpolationSummary = "开启 2× AI 补帧（实验性），将视频帧率提升 1 倍 (如 30fps -> 60fps)，使画面更丝滑。受移动端 GPU 驱动与显存调度影响，当前处于实验阶段",
+    rifeModelPurpose = "深度学习光流补帧（2× 帧率翻倍，提升运动流畅度，实验性）",
     bitrate = "码率",
     codec = "编码",
     frameRate = "帧率",
@@ -11845,9 +11845,9 @@ private val traditionalChineseText = UiText(
     resolution = "解析度",
     superResolution = "超高解析度",
     videoCompressionMode = "壓縮預設",
-    videoFrameInterpolation = "AI 影片補幀",
-    videoInterpolationSummary = "開啟 2× AI 補幀，將影片幀率提升 1 倍 (如 30fps -> 60fps)，使畫面更絲滑流暢",
-    rifeModelPurpose = "深度學習光流補幀（2× 幀率翻倍，提升運動流暢度）",
+    videoFrameInterpolation = "AI 影片補幀（實驗性）",
+    videoInterpolationSummary = "開啟 2× AI 補幀（實驗性），將影片幀率提升 1 倍 (如 30fps -> 60fps)，使畫面更絲滑。受行動端 GPU 驅動與顯存調度影響，目前處於實驗階段",
+    rifeModelPurpose = "深度學習光流補幀（2× 幀率翻倍，提升運動流暢度，實驗性）",
     bitrate = "位元率",
     codec = "編碼",
     frameRate = "幀率",

@@ -62,6 +62,7 @@ ZenConverter 想做的是一个本地优先的 Android 转换器：
 | 视频转动图 GIF | 已完成 | 使用 FFmpeg 调色板路线，自动取前 30 秒，最多 30 fps、900 帧；默认短边 480 px，可选 720 px 或原始尺寸。 |
 | 音频提取与互转 | 已完成 | 视频音频提取和 MP3 / M4A / WAV / FLAC / WMA 目标均走 FFmpeg 真重新编码；已接入适用的码率、采样率、声道和编码器检查。 |
 | 音视频高级处理 | 稳定 | 视频支持短视频倒放、淡入淡出、镜像、旋转和画幅适配/裁剪；音频支持倒放、无模型 `afftdn` 降噪、淡入淡出、音量/静音和回音。倒放有保守的安全限制。 |
+| 视频 AI 补帧插帧 | 实验性 | 基于 Tencent NCNN 与 Vulkan GPU 加速的 RIFE 深度学习 2× 补帧（如 30fps -> 60fps）。支持按需下载模型并校验 SHA-256，内置 1080p+ 自适应显存优化。由于移动端芯片 GPU 驱动与显存调度差异，目前处于实验阶段。 |
 | 图片转换 | 稳定 / Beta | 支持 JPG / JPEG / JFIF / JPE、PNG、WEBP、GIF、HEIC / HEIF、ICO 输入，以及 JPG / JFIF / PNG / WEBP / ICO / PDF 输出。HEIC / HEIF 仍受设备解码器能力影响。GIF 可转首帧或拆帧到文件夹；不复制元数据和动画时序。 |
 | 图片超分辨率 | 稳定 | 支持双线性插值算法超分（2×、3×、4×）以及基于 ONNX Runtime 的 Real-ESRGAN 4× AI 深度学习超分模型（通用模型、高画质模型、动漫模型等）。支持按需下载模型并校验 SHA-256，采用瓦片式分块推理与基于设备内存的动态像素预算，避免 OOM。 |
 | 元数据安全 | 稳定 | 独立隐私工具可查看图片/视频元数据。JPG / JPEG / JFIF 可不重编码原地清理，被移除的元数据会备份到应用数据目录，支持同一张图恢复。 |
@@ -91,6 +92,7 @@ UI 不直接做转换。每个任务会根据输入、输出和所选模式选�
 - `Office`：用本地初版 Office 渲染路线处理 DOCX、PPTX 和 XLSX。
 - `Font / WOFF2`：通过内置 `google/woff2` 原生库处理 WOFF2 字体压缩与解压。
 - `AI Super-Resolution`：基于 ONNX Runtime 在本地运行 Real-ESRGAN 神经网络超分推理。
+- `AI Frame Interpolation`：基于 Tencent NCNN 与 Vulkan GPU 加速在本地运行 RIFE 2× 视频补帧推理。
 - `SafeCache`：后续用于处理无法提供可用文件描述符的文件来源。
 
 更多细节见 [docs/architecture.md](docs/architecture.md) 和
