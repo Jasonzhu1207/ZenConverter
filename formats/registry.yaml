@@ -240,7 +240,7 @@ groups:
         to: opus
         engine: ffmpeg-compatible
         status: stable
-        note: "Encodes OPUS through libopus after runtime encoder probing. Advanced audio filters apply where selected."
+        note: "Encodes OPUS through libopus after runtime encoder probing. Opus operates natively at 48 kHz (RFC 6716 / RFC 7845) and supports {48k, 24k, 16k, 12k, 8k} Hz with 44.1 kHz auto-resampled. Advanced audio filters apply where selected."
       - from: opus
         to: mp3
         engine: ffmpeg-compatible
@@ -270,7 +270,7 @@ groups:
         to: opus
         engine: ffmpeg-compatible
         status: stable
-        note: "Re-encodes OPUS through libopus. Advanced audio filters apply where selected."
+        note: "Re-encodes OPUS through libopus. Supported sample rates are {48k, 24k, 16k, 12k, 8k} Hz. Advanced audio filters apply where selected."
   image:
     # Raster image outputs (jpg/jfif/png/webp) also expose an optional
     # super-resolution option: bilinear 2x/3x/4x through Android

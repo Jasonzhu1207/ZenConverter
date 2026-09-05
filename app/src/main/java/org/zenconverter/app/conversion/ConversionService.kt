@@ -3904,8 +3904,20 @@ class ConversionService : Service() {
         }
         if (audioProfile.supportsSampleRate) {
             audioOptions.sampleRateHz?.let { sampleRateHz ->
-                add("-ar")
-                add(sampleRateHz.toString())
+                if (audioProfile.codec == FFMPEG_OPUS_ENCODER) {
+                    if (sampleRateHz in OPUS_SUPPORTED_SAMPLE_RATES) {
+                        add("-ar")
+                        add(sampleRateHz.toString())
+                    } else {
+                        Log.w(
+                            TAG,
+                            "Ignoring unsupported sample rate $sampleRateHz for Opus; libopus will auto-resample"
+                        )
+                    }
+                } else {
+                    add("-ar")
+                    add(sampleRateHz.toString())
+                }
             }
         }
         if (audioProfile.supportsChannelCount) {
@@ -4873,6 +4885,16 @@ class ConversionService : Service() {
             )
         ) {
             return "Compatibility engine cannot encode this audio format yet"
+        }
+        if (
+            input.category == ConversionMediaCategory.Audio &&
+            (
+                normalizedTail.contains("specified sample rate") ||
+                    normalizedTail.contains("sample rate is not supported") ||
+                    normalizedTail.contains("sample rate not supported")
+            )
+        ) {
+            return "Selected sample rate is not supported by this audio format"
         }
         if (
             input.category == ConversionMediaCategory.Audio &&
@@ -6350,6 +6372,7 @@ class ConversionService : Service() {
         private const val FFMPEG_FLAC_ENCODER = "flac"
         private const val FFMPEG_WMA_ENCODER = "wmav2"
         private const val FFMPEG_OPUS_ENCODER = "libopus"
+        private val OPUS_SUPPORTED_SAMPLE_RATES = setOf(48_000, 24_000, 16_000, 12_000, 8_000)
         private const val FFMPEG_DEFAULT_CRF_H264 = "23"
         private const val FFMPEG_DEFAULT_CRF_H265 = "28"
         private const val FFMPEG_VISUAL_LOSSLESS_CRF_H264 = "18"

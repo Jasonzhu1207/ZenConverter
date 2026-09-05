@@ -643,12 +643,35 @@ private const val AUDIO_SAMPLE_RATE_ORIGINAL = "Original"
 private const val AUDIO_SAMPLE_RATE_RECOMMENDED = "Recommended sample rate"
 private const val AUDIO_SAMPLE_RATE_44100 = "44.1 kHz"
 private const val AUDIO_SAMPLE_RATE_32000 = "32 kHz"
+private const val AUDIO_SAMPLE_RATE_24000 = "24 kHz"
+private const val AUDIO_SAMPLE_RATE_16000 = "16 kHz"
+private const val AUDIO_SAMPLE_RATE_8000 = "8 kHz"
 private val AUDIO_SAMPLE_RATE_OPTIONS = listOf(
     AUDIO_SAMPLE_RATE_ORIGINAL,
     AUDIO_SAMPLE_RATE_RECOMMENDED,
     AUDIO_SAMPLE_RATE_44100,
     AUDIO_SAMPLE_RATE_32000
 )
+private val OPUS_SUPPORTED_SAMPLE_RATES = setOf(48_000, 24_000, 16_000, 12_000, 8_000)
+private val OPUS_AUDIO_SAMPLE_RATE_OPTIONS = listOf(
+    AUDIO_SAMPLE_RATE_ORIGINAL,
+    AUDIO_SAMPLE_RATE_RECOMMENDED,
+    AUDIO_SAMPLE_RATE_24000,
+    AUDIO_SAMPLE_RATE_16000,
+    AUDIO_SAMPLE_RATE_8000
+)
+
+private fun isOpusTarget(targetFormat: TargetFormat): Boolean {
+    return targetFormat.extension.equals("opus", ignoreCase = true)
+}
+
+private fun audioSampleRateOptionsFor(targetFormat: TargetFormat): List<String> {
+    return if (isOpusTarget(targetFormat)) {
+        OPUS_AUDIO_SAMPLE_RATE_OPTIONS
+    } else {
+        AUDIO_SAMPLE_RATE_OPTIONS
+    }
+}
 
 private const val AUDIO_CHANNELS_ORIGINAL = "Original"
 private const val AUDIO_CHANNELS_STEREO = "Stereo"
@@ -5154,7 +5177,7 @@ private fun BatchAudioTargetOptions(
             "batch-audio-sample-rate",
             texts.sampleRate,
             commonBatchLabel(files) { audioSampleRateLabelFor(it.audioOptions.sampleRateHz) },
-            AUDIO_SAMPLE_RATE_OPTIONS,
+            audioSampleRateOptionsFor(target),
             texts,
             openMenuId,
             onOpenMenuChange
@@ -5168,6 +5191,13 @@ private fun BatchAudioTargetOptions(
                         )
                     )
                 }
+            )
+        }
+        if (isOpusTarget(target)) {
+            Text(
+                text = texts.opusSampleRateHint,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         OptionDropdown(
@@ -6399,12 +6429,19 @@ private fun AudioOptions(
             "${menuPrefix}audio-sample-rate",
             texts.sampleRate,
             sampleRate,
-            AUDIO_SAMPLE_RATE_OPTIONS,
+            audioSampleRateOptionsFor(targetFormat),
             texts,
             openMenuId,
             onOpenMenuChange,
             onSampleRateChange
         )
+        if (isOpusTarget(targetFormat)) {
+            Text(
+                text = texts.opusSampleRateHint,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         OptionDropdown(
             "${menuPrefix}audio-channels",
             texts.channels,
@@ -8749,16 +8786,19 @@ private fun fileWithTarget(
                 options
             }
         }
-    val nextAudioOptions = if (
-        target.category == FileCategory.Audio &&
-        file.category == FileCategory.Video &&
-        !file.audioOptions.trimRange.isEnabled &&
-        file.videoOptions.trimRange.isEnabled
-    ) {
-        file.audioOptions.copy(trimRange = file.videoOptions.trimRange)
-    } else {
-        file.audioOptions
-    }
+    val nextAudioOptions = audioOptionsForTarget(
+        if (
+            target.category == FileCategory.Audio &&
+            file.category == FileCategory.Video &&
+            !file.audioOptions.trimRange.isEnabled &&
+            file.videoOptions.trimRange.isEnabled
+        ) {
+            file.audioOptions.copy(trimRange = file.videoOptions.trimRange)
+        } else {
+            file.audioOptions
+        },
+        targetFormat
+    )
     val nextPdfSecurityOptions = when {
         target.category == FileCategory.Pdf &&
             targetFormat.label.equals("Encrypt PDF", ignoreCase = true) ->
@@ -8825,6 +8865,20 @@ private fun imageOptionsForTarget(
             superResolution = if (superResolutionReset) ImageSuperResolutionMode.Off else current.superResolution
         )
     }
+}
+
+private fun audioOptionsForTarget(
+    current: AudioExportOptions,
+    targetFormat: TargetFormat
+): AudioExportOptions {
+    if (isOpusTarget(targetFormat)) {
+        return if (current.sampleRateHz != null && current.sampleRateHz !in OPUS_SUPPORTED_SAMPLE_RATES) {
+            current.copy(sampleRateHz = null)
+        } else {
+            current
+        }
+    }
+    return current
 }
 
 private fun videoResolutionLabelFor(options: VideoExportOptions): String {
@@ -8896,6 +8950,9 @@ private fun audioSampleRateLabelFor(value: Int?): String {
         48_000 -> AUDIO_SAMPLE_RATE_RECOMMENDED
         44_100 -> AUDIO_SAMPLE_RATE_44100
         32_000 -> AUDIO_SAMPLE_RATE_32000
+        24_000 -> AUDIO_SAMPLE_RATE_24000
+        16_000 -> AUDIO_SAMPLE_RATE_16000
+        8_000 -> AUDIO_SAMPLE_RATE_8000
         else -> AUDIO_SAMPLE_RATE_ORIGINAL
     }
 }
@@ -9215,6 +9272,9 @@ private fun audioSampleRateToHz(value: String): Int? {
         AUDIO_SAMPLE_RATE_RECOMMENDED -> 48_000
         AUDIO_SAMPLE_RATE_44100 -> 44_100
         AUDIO_SAMPLE_RATE_32000 -> 32_000
+        AUDIO_SAMPLE_RATE_24000 -> 24_000
+        AUDIO_SAMPLE_RATE_16000 -> 16_000
+        AUDIO_SAMPLE_RATE_8000 -> 8_000
         else -> null
     }
 }
@@ -9556,6 +9616,7 @@ private data class UiText(
     val codec: String,
     val frameRate: String,
     val sampleRate: String,
+    val opusSampleRateHint: String,
     val channels: String,
     val trimRange: String,
     val trimQuick: String,
@@ -10477,6 +10538,11 @@ private data class UiText(
                 englishText -> "Compatibility engine could not create this GIF"
                 simplifiedChineseText -> "兼容引擎无法生成这个 GIF"
                 else -> "相容引擎無法產生這個 GIF"
+            }
+            "Selected sample rate is not supported by this audio format" -> when (this) {
+                englishText -> "Selected sample rate is not supported by this audio format"
+                simplifiedChineseText -> "所选采样率不受该音频格式支持"
+                else -> "所選取樣率不被該音訊格式支援"
             }
             "Compatibility engine could not write this audio container" -> when (this) {
                 englishText -> "Compatibility engine could not write this audio container"
@@ -11719,6 +11785,7 @@ private val englishText = UiText(
     codec = "Codec",
     frameRate = "Frame rate",
     sampleRate = "Sample rate",
+    opusSampleRateHint = "Opus natively operates at 48 kHz (RFC 6716 / RFC 7845). Non-Opus rates like 44.1 kHz are automatically resampled to 48 kHz.",
     channels = "Channels",
     trimRange = "Trim & split",
     trimQuick = "Quick",
@@ -11880,6 +11947,7 @@ private val simplifiedChineseText = UiText(
     codec = "编码",
     frameRate = "帧率",
     sampleRate = "采样率",
+    opusSampleRateHint = "Opus 规范标准原生采用 48 kHz（RFC 6716 / RFC 7845），非标准采样率（如 44.1 kHz）会自动重采样为 48 kHz。",
     channels = "声道",
     trimRange = "裁剪与分割",
     trimQuick = "快速",
@@ -12041,6 +12109,7 @@ private val traditionalChineseText = UiText(
     codec = "編碼",
     frameRate = "幀率",
     sampleRate = "取樣率",
+    opusSampleRateHint = "Opus 規範標準原生採用 48 kHz（RFC 6716 / RFC 7845），非標準取樣率（如 44.1 kHz）會自動重新採樣為 48 kHz。",
     channels = "聲道",
     trimRange = "裁剪與分割",
     trimQuick = "快速",
