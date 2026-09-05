@@ -326,6 +326,43 @@ object MetadataPrivacyManager {
         val formatLabel = formatLabelFor(extension, mimeType)
         val bounds = readImageBounds(context, uri)
         val canModifyInPlace = canWrite || canRequestMediaWrite(context, uri, MetadataTargetKind.Image)
+
+        if (isHeicFamily(extension, mimeType)) {
+            val exifSummary = readExifSummary(context, uri)
+            val resolvedWidth = bounds?.first ?: exifSummary.width
+            val resolvedHeight = bounds?.second ?: exifSummary.height
+            return MetadataInspection(
+                uri = uri,
+                displayName = displayName,
+                mimeType = mimeType,
+                sizeBytes = sizeBytes,
+                kind = MetadataTargetKind.Image,
+                formatLabel = formatLabel,
+                canWrite = canModifyInPlace,
+                editable = false,
+                unsupportedMessage = MetadataMessageKey.UnsupportedImageFormat,
+                width = resolvedWidth,
+                height = resolvedHeight,
+                hasRemovableMetadata = false,
+                removableSegmentCount = 0,
+                removableBytes = 0L,
+                hasExif = exifSummary.hasAnyMetadata,
+                hasXmp = false,
+                hasIptc = false,
+                hasComment = false,
+                hasGps = exifSummary.hasGps,
+                capturedAt = exifSummary.capturedAt,
+                camera = exifSummary.camera,
+                software = exifSummary.software,
+                orientation = exifSummary.orientation,
+                description = exifSummary.description,
+                artist = exifSummary.artist,
+                copyright = exifSummary.copyright,
+                coreHash = null,
+                backups = emptyList()
+            )
+        }
+
         if (!isJpegFamily(extension, mimeType)) {
             return MetadataInspection(
                 uri = uri,
@@ -848,23 +885,40 @@ object MetadataPrivacyManager {
                 val exif = ExifInterface(input)
                 val make = exif.cleanAttribute(ExifInterface.TAG_MAKE)
                 val model = exif.cleanAttribute(ExifInterface.TAG_MODEL)
+                val width = exif.getAttributeInt(ExifInterface.TAG_IMAGE_WIDTH, 0).takeIf { it > 0 }
+                val height = exif.getAttributeInt(ExifInterface.TAG_IMAGE_LENGTH, 0).takeIf { it > 0 }
+                val hasGps = exif.cleanAttribute(ExifInterface.TAG_GPS_LATITUDE) != null ||
+                    exif.cleanAttribute(ExifInterface.TAG_GPS_LONGITUDE) != null
+                val capturedAt = exif.cleanAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
+                    ?: exif.cleanAttribute(ExifInterface.TAG_DATETIME_DIGITIZED)
+                    ?: exif.cleanAttribute(ExifInterface.TAG_DATETIME)
+                val camera = listOfNotNull(make, model)
+                    .joinToString(" ")
+                    .takeIf { it.isNotBlank() }
+                val software = exif.cleanAttribute(ExifInterface.TAG_SOFTWARE)
+                val orientation = exif.getAttributeInt(
+                    ExifInterface.TAG_ORIENTATION,
+                    ExifInterface.ORIENTATION_UNDEFINED
+                ).takeIf { it != ExifInterface.ORIENTATION_UNDEFINED }
+                val description = exif.cleanAttribute(ExifInterface.TAG_IMAGE_DESCRIPTION)
+                val artist = exif.cleanAttribute(ExifInterface.TAG_ARTIST)
+                val copyright = exif.cleanAttribute(ExifInterface.TAG_COPYRIGHT)
+                val hasExif = hasGps || capturedAt != null || camera != null ||
+                    software != null || orientation != null || description != null ||
+                    artist != null || copyright != null
+
                 ExifSummary(
-                    hasGps = exif.cleanAttribute(ExifInterface.TAG_GPS_LATITUDE) != null ||
-                        exif.cleanAttribute(ExifInterface.TAG_GPS_LONGITUDE) != null,
-                    capturedAt = exif.cleanAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
-                        ?: exif.cleanAttribute(ExifInterface.TAG_DATETIME_DIGITIZED)
-                        ?: exif.cleanAttribute(ExifInterface.TAG_DATETIME),
-                    camera = listOfNotNull(make, model)
-                        .joinToString(" ")
-                        .takeIf { it.isNotBlank() },
-                    software = exif.cleanAttribute(ExifInterface.TAG_SOFTWARE),
-                    orientation = exif.getAttributeInt(
-                        ExifInterface.TAG_ORIENTATION,
-                        ExifInterface.ORIENTATION_UNDEFINED
-                    ).takeIf { it != ExifInterface.ORIENTATION_UNDEFINED },
-                    description = exif.cleanAttribute(ExifInterface.TAG_IMAGE_DESCRIPTION),
-                    artist = exif.cleanAttribute(ExifInterface.TAG_ARTIST),
-                    copyright = exif.cleanAttribute(ExifInterface.TAG_COPYRIGHT)
+                    hasGps = hasGps,
+                    capturedAt = capturedAt,
+                    camera = camera,
+                    software = software,
+                    orientation = orientation,
+                    description = description,
+                    artist = artist,
+                    copyright = copyright,
+                    width = width,
+                    height = height,
+                    hasExif = hasExif
                 )
             }
         }.getOrNull() ?: ExifSummary()
@@ -1019,6 +1073,8 @@ object MetadataPrivacyManager {
         if (extension.isNotBlank()) return extension.uppercase(Locale.US)
         return when (mimeType.orEmpty().lowercase(Locale.US)) {
             "image/jpeg" -> "JPEG"
+            "image/heic", "image/heic-sequence" -> "HEIC"
+            "image/heif", "image/heif-sequence" -> "HEIF"
             "video/quicktime" -> "MOV"
             "video/x-matroska" -> "MKV"
             else -> mimeType?.substringAfter('/')?.uppercase(Locale.US) ?: "Unknown"
@@ -1028,6 +1084,15 @@ object MetadataPrivacyManager {
     private fun isJpegFamily(extension: String, mimeType: String?): Boolean {
         return extension in JPEG_EXTENSIONS ||
             mimeType.orEmpty().lowercase(Locale.US) == "image/jpeg"
+    }
+
+    private fun isHeicFamily(extension: String, mimeType: String?): Boolean {
+        val normalizedMime = mimeType.orEmpty().lowercase(Locale.US)
+        return extension in HEIC_EXTENSIONS ||
+            normalizedMime == "image/heic" ||
+            normalizedMime == "image/heif" ||
+            normalizedMime == "image/heic-sequence" ||
+            normalizedMime == "image/heif-sequence"
     }
 
     private fun dimensionMatches(value: String?, actual: Int?): Boolean {
@@ -1107,8 +1172,16 @@ object MetadataPrivacyManager {
         val orientation: Int? = null,
         val description: String? = null,
         val artist: String? = null,
-        val copyright: String? = null
-    )
+        val copyright: String? = null,
+        val width: Int? = null,
+        val height: Int? = null,
+        val hasExif: Boolean = false
+    ) {
+        val hasAnyMetadata: Boolean
+            get() = hasExif || hasGps || capturedAt != null || camera != null ||
+                software != null || orientation != null || description != null ||
+                artist != null || copyright != null
+    }
 
     private enum class JpegMetadataSegmentKind {
         Exif,
@@ -1144,4 +1217,5 @@ object MetadataPrivacyManager {
     private const val JPEG_MARKER_APP13 = 0xED
     private const val JPEG_MARKER_COM = 0xFE
     private val JPEG_EXTENSIONS = setOf("jpg", "jpeg", "jfif", "jpe")
+    private val HEIC_EXTENSIONS = setOf("heic", "heif")
 }

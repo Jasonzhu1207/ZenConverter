@@ -496,7 +496,12 @@ groups:
         engine: native-jpeg-segment
         status: stable
         note: "Separate privacy tool. Inspects common EXIF values and removable JPEG metadata segments, then can remove EXIF/XMP, IPTC/Photoshop, and comment segments in place without re-encoding image pixels. JFIF, ICC, and Adobe display-related segments are preserved. Removed metadata is stored in app-private backup data and can be restored only when the selected image's metadata-stripped core SHA-256 and dimensions match."
-      - from: png/webp/heic/heif/gif/ico
+      - from: heic/heif
+        to: inspect-metadata
+        engine: exif-interface
+        status: stable
+        note: "Separate privacy tool inspects EXIF metadata including GPS coordinates, capture time, camera make/model, orientation, and software via platform ExifInterface. In-place cleanup is not supported due to ISOBMFF container complexity and lack of platform writeback APIs."
+      - from: png/webp/gif/ico
         to: inspect-metadata
         engine: native-basic-info
         status: beta

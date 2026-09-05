@@ -3465,9 +3465,11 @@ private fun MetadataInspectionCard(
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SmallTag(texts.metadataSupportLabel(inspection))
-            if (inspection.kind == MetadataTargetKind.Image && inspection.editable) {
+            if (inspection.kind == MetadataTargetKind.Image) {
                 SmallTag(texts.yesNoLabel(inspection.hasGps, texts.metadataGps))
-                SmallTag(texts.metadataBackupCountLabel(inspection.backups.size))
+                if (inspection.editable) {
+                    SmallTag(texts.metadataBackupCountLabel(inspection.backups.size))
+                }
             }
         }
 
