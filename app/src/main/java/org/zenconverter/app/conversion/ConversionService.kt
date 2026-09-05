@@ -6212,10 +6212,19 @@ class ConversionService : Service() {
 
     private fun outputNameFor(input: ConversionTaskInput, extension: String): String {
         val baseName = sanitizedBaseNameFor(input)
-        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val shortId = input.fileId.take(8)
-        val action = if (input.inputUris.size > 1) "merged" else "converted"
-        return "${baseName}_${action}_${timestamp}_$shortId.$extension"
+        if (input.inputUris.size > 1) {
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+            val shortId = input.fileId.take(8)
+            return "${baseName}_merged_${timestamp}_$shortId.$extension"
+        }
+        val inputExtension = input.extension.trim().lowercase(Locale.US)
+        val targetExtension = extension.trim().lowercase(Locale.US)
+        val isSameFormat = inputExtension.isNotEmpty() && inputExtension == targetExtension
+        return if (isSameFormat) {
+            "$baseName (1).$extension"
+        } else {
+            "$baseName.$extension"
+        }
     }
 
     private fun outputNameForPage(
@@ -6225,11 +6234,9 @@ class ConversionService : Service() {
         pageCount: Int
     ): String {
         val baseName = sanitizedBaseNameFor(input)
-        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val shortId = input.fileId.take(8)
         val width = pageCount.toString().length.coerceAtLeast(3)
         val pageNumber = (pageIndex + 1).toString().padStart(width, '0')
-        return "${baseName}_page_${pageNumber}_${timestamp}_$shortId.$extension"
+        return "${baseName}_page_${pageNumber}.$extension"
     }
 
     private fun outputFolderNameForFrames(input: ConversionTaskInput): String {
