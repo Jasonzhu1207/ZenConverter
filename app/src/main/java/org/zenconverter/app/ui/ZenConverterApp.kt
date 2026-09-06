@@ -78,6 +78,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AudioFile
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BrightnessAuto
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -115,6 +116,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -268,8 +271,8 @@ enum class FileCategory(
             TargetFormat("MKV", "mkv", "Re-encode"),
             TargetFormat("MOV", "mov", "Re-encode"),
             TargetFormat("GIF", "gif", "30s GIF"),
-            TargetFormat("概览拼图 (JPG)", "contact_sheet_jpg", "Summary Sheet"),
-            TargetFormat("概览拼图 (PNG)", "contact_sheet_png", "Summary Sheet")
+            TargetFormat("概览拼图 · JPG", "contact_sheet_jpg", "Summary Sheet"),
+            TargetFormat("概览拼图 · PNG", "contact_sheet_png", "Summary Sheet")
         )
     ),
     Audio(
@@ -526,6 +529,7 @@ private enum class AccentColorOption(
     val darkColor: Color,
     val darkContentColor: Color
 ) {
+    Dynamic("Material You", Color(0xFF6750A4), Color.White, Color(0xFFD0BCFF), Color(0xFF381E72)),
     Charcoal("Charcoal", Color(0xFF111111), Color.White, Color(0xFFE5E7EB), Color(0xFF111111)),
     DeepNavy("Deep Navy", Color(0xFF36454F), Color.White, Color(0xFF93C5FD), Color(0xFF0F172A)),
     ForestGreen("Forest Green", Color(0xFF2D4A2B), Color.White, Color(0xFF86EFAC), Color(0xFF052E16)),
@@ -950,7 +954,7 @@ fun ZenConverterApp(
         }
     }
 
-    MaterialTheme(colorScheme = zenConverterColorScheme(accent, isDark, isOled)) {
+    MaterialTheme(colorScheme = zenConverterColorScheme(context, accent, isDark, isOled)) {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
@@ -2214,7 +2218,14 @@ private fun SettingsPanel(
             modifier = Modifier.horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            AccentColorOption.entries.forEach { option ->
+            val availableAccents = remember {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    AccentColorOption.entries
+                } else {
+                    AccentColorOption.entries.filter { it != AccentColorOption.Dynamic }
+                }
+            }
+            availableAccents.forEach { option ->
                 AccentSwatch(
                     texts = texts,
                     option = option,
@@ -4289,8 +4300,16 @@ private fun AccentSwatch(
     selected: Boolean,
     onSelected: () -> Unit
 ) {
+    val context = LocalContext.current
     val label = texts.accentLabel(option)
     val isDark = MaterialTheme.colorScheme.background.red < 0.5f
+
+    val (swatchColor, swatchContentColor) = if (option == AccentColorOption.Dynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val scheme = if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        Pair(scheme.primary, scheme.onPrimary)
+    } else {
+        Pair(option.color(isDark), option.contentColor(isDark))
+    }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -4298,10 +4317,11 @@ private fun AccentSwatch(
         modifier = Modifier.width(72.dp)
     ) {
         Box(
+            contentAlignment = Alignment.Center,
             modifier = Modifier
                 .size(32.dp)
                 .clip(CircleShape)
-                .background(option.color(isDark))
+                .background(swatchColor)
                 .border(
                     width = if (selected) 3.dp else 1.dp,
                     color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
@@ -4317,7 +4337,16 @@ private fun AccentSwatch(
                     role = Role.Button
                     this.selected = selected
                 }
-        )
+        ) {
+            if (option == AccentColorOption.Dynamic) {
+                Icon(
+                    imageVector = Icons.Rounded.AutoAwesome,
+                    contentDescription = null,
+                    tint = swatchContentColor,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
@@ -6248,9 +6277,11 @@ private fun VideoOptions(
     onAudioEchoChange: (String) -> Unit,
     onAudioNoiseReductionChange: (String) -> Unit,
     contactSheetOptions: VideoContactSheetOptions = VideoContactSheetOptions(),
-    onContactSheetOptionsChange: (VideoContactSheetOptions) -> Unit = {}
+    onContactSheetOptionsChange: (VideoContactSheetOptions) -> Unit = {},
 ) {
-    val isContactSheetTarget = targetFormat.extension.startsWith("contact_sheet", ignoreCase = true)
+    val isContactSheetTarget = targetFormat.extension.startsWith("contact_sheet", ignoreCase = true) ||
+        targetFormat.label.contains("概览拼图", ignoreCase = true) ||
+        targetFormat.label.contains("Contact Sheet", ignoreCase = true)
     if (isContactSheetTarget) {
         OptionGrid {
             MediaTrimOptions(
@@ -8694,12 +8725,38 @@ private fun FileCategory.icon(): ImageVector {
 }
 
 private fun zenConverterColorScheme(
+    context: Context,
     accent: AccentColorOption,
     isDark: Boolean,
     isOled: Boolean
 ): ColorScheme {
-    val primary = accent.color(isDark)
-    val onPrimary = accent.contentColor(isDark)
+    if (accent == AccentColorOption.Dynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        return if (!isDark) {
+            dynamicLightColorScheme(context)
+        } else if (isOled) {
+            dynamicDarkColorScheme(context).copy(
+                background = Color(0xFF000000),
+                surface = Color(0xFF000000),
+                surfaceVariant = Color(0xFF141414),
+                surfaceContainerLowest = Color(0xFF000000),
+                surfaceContainerLow = Color(0xFF0C0C0C),
+                surfaceContainer = Color(0xFF121212),
+                surfaceContainerHigh = Color(0xFF181818),
+                surfaceContainerHighest = Color(0xFF202020),
+                outline = Color(0xFF282828),
+                outlineVariant = Color(0xFF1C1C1C),
+                onBackground = Color(0xFFF5F5F5),
+                onSurface = Color(0xFFF5F5F5),
+                onSurfaceVariant = Color(0xFFA3A3A3)
+            )
+        } else {
+            dynamicDarkColorScheme(context)
+        }
+    }
+
+    val safeAccent = if (accent == AccentColorOption.Dynamic) AccentColorOption.Charcoal else accent
+    val primary = safeAccent.color(isDark)
+    val onPrimary = safeAccent.contentColor(isDark)
 
     return if (!isDark) {
         lightColorScheme(
@@ -8756,6 +8813,9 @@ private fun zenConverterColorScheme(
 }
 
 private fun accentColorFromPreference(value: String?): AccentColorOption {
+    if (value == "Dynamic" && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+        return AccentColorOption.Charcoal
+    }
     return AccentColorOption.entries.firstOrNull { it.name == value }
         ?: AccentColorOption.Charcoal
 }
@@ -8873,11 +8933,19 @@ private fun commonSelectedTargetFor(files: List<QueuedFile>): ExternalImportTarg
 private fun selectedTargetFor(file: QueuedFile): ExternalImportTarget {
     return targetsForQueuedFile(file).firstOrNull { target ->
         target.category == file.category &&
-            target.targetFormat.label.equals(file.targetFormat, ignoreCase = true)
+            (target.targetFormat.label.equals(file.targetFormat, ignoreCase = true) ||
+             (target.targetFormat.extension.startsWith("contact_sheet") &&
+              (file.targetFormat.contains("概览拼图") || file.targetFormat.contains("contact_sheet", ignoreCase = true) || file.targetFormat.contains("Contact Sheet", ignoreCase = true)) &&
+              ((target.targetFormat.extension.contains("jpg") && file.targetFormat.contains("jpg", ignoreCase = true)) ||
+               (target.targetFormat.extension.contains("png") && file.targetFormat.contains("png", ignoreCase = true)))))
     } ?: ExternalImportTarget(
         category = file.category,
         targetFormat = file.category.formats.firstOrNull {
-            it.label.equals(file.targetFormat, ignoreCase = true)
+            it.label.equals(file.targetFormat, ignoreCase = true) ||
+                (it.extension.startsWith("contact_sheet") &&
+                 (file.targetFormat.contains("概览拼图") || file.targetFormat.contains("contact_sheet", ignoreCase = true) || file.targetFormat.contains("Contact Sheet", ignoreCase = true)) &&
+                 ((it.extension.contains("jpg") && file.targetFormat.contains("jpg", ignoreCase = true)) ||
+                  (it.extension.contains("png") && file.targetFormat.contains("png", ignoreCase = true))))
         } ?: file.category.formats.first()
     )
 }
@@ -9775,7 +9843,14 @@ private data class UiText(
     }
 
     fun externalImportTargetLabel(target: ExternalImportTarget): String {
-        return "${categoryLabel(target.category)} · ${optionValue(target.targetFormat.label)}"
+        val formatLabel = optionValue(target.targetFormat.label)
+        if (target.targetFormat.extension.startsWith("contact_sheet", ignoreCase = true) ||
+            target.targetFormat.label.contains("概览拼图", ignoreCase = true) ||
+            target.targetFormat.label.contains("Contact Sheet", ignoreCase = true)
+        ) {
+            return formatLabel
+        }
+        return "${categoryLabel(target.category)} · $formatLabel"
     }
 
     fun fileCountLabel(count: Int): String {
@@ -10952,15 +11027,15 @@ private data class UiText(
                 simplifiedChineseText -> "概览长图"
                 else -> "概覽長圖"
             }
-            "概览拼图 (JPG)" -> when (this) {
-                englishText -> "Contact Sheet (JPG)"
-                simplifiedChineseText -> "概览拼图 (JPG)"
-                else -> "概覽拼圖 (JPG)"
+            "概览拼图 · JPG", "概览拼图▪JPG", "概览拼图 (JPG)" -> when (this) {
+                englishText -> "Contact Sheet · JPG"
+                simplifiedChineseText -> "概览拼图 · JPG"
+                else -> "概覽拼圖 · JPG"
             }
-            "概览拼图 (PNG)" -> when (this) {
-                englishText -> "Contact Sheet (PNG)"
-                simplifiedChineseText -> "概览拼图 (PNG)"
-                else -> "概覽拼圖 (PNG)"
+            "概览拼图 · PNG", "概览拼图▪PNG", "概览拼图 (PNG)" -> when (this) {
+                englishText -> "Contact Sheet · PNG"
+                simplifiedChineseText -> "概览拼图 · PNG"
+                else -> "概覽拼圖 · PNG"
             }
             "3 × 4 (12)" -> when (this) {
                 englishText -> "3 × 4 (12 frames)"
@@ -11452,6 +11527,11 @@ private data class UiText(
                 englishText -> "High detail"
                 simplifiedChineseText -> "高清细节"
                 else -> "高清細節"
+            }
+            "Material You" -> when (this) {
+                englishText -> "Material You"
+                simplifiedChineseText -> "动态取色"
+                else -> "動態取色"
             }
             "Charcoal" -> when (this) {
                 englishText -> "Charcoal"

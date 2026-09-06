@@ -2319,9 +2319,15 @@ private fun QueuedFile.hasConnectedNativeTarget(): Boolean {
             targetFormat.equals("MKV", ignoreCase = true) ||
             targetFormat.equals("MOV", ignoreCase = true) ||
             targetFormat.equals("GIF", ignoreCase = true) ||
+            targetFormat.equals("概览拼图 · JPG", ignoreCase = true) ||
+            targetFormat.equals("概览拼图 · PNG", ignoreCase = true) ||
+            targetFormat.equals("概览拼图▪JPG", ignoreCase = true) ||
+            targetFormat.equals("概览拼图▪PNG", ignoreCase = true) ||
             targetFormat.equals("概览拼图 (JPG)", ignoreCase = true) ||
             targetFormat.equals("概览拼图 (PNG)", ignoreCase = true) ||
-            targetFormat.startsWith("contact_sheet", ignoreCase = true)
+            targetFormat.contains("概览拼图", ignoreCase = true) ||
+            targetFormat.contains("contact_sheet", ignoreCase = true) ||
+            targetFormat.contains("contact sheet", ignoreCase = true)
         FileCategory.Audio -> audioTargetExtensionFor(targetFormat) in CONNECTED_AUDIO_TARGETS
         FileCategory.Image -> targetFormat.equals("JPG", ignoreCase = true) ||
             targetFormat.equals("JFIF", ignoreCase = true) ||
