@@ -36,6 +36,11 @@ groups:
         engine: ffmpeg-compatible
         status: stable
         note: "FFmpeg animated GIF output for video inputs. Uses palettegen/paletteuse, drops audio/subtitles/data streams, loops by default, and automatically limits output to the selected range's first 30 seconds, 30 fps, and 900 frames. GIF resolution defaults to a 480 px short side with 720 px and Original options."
+      - from: video
+        to: contact-sheet-jpg-png
+        engine: native
+        status: stable
+        note: "Video overview contact sheet output (JPG/PNG) for video inputs. Samples evenly spaced frames across the video duration (or within the selected trim range) into a customizable grid (3x3, 3x4, 4x4, 5x5) using hardware-accelerated MediaMetadataRetriever downsampling with FFprobe metadata probing. Renders on native Canvas with comprehensive media metadata header, Apple-style top-right watermark capsule badge with app logo, and timestamp overlay on each frame."
       - from: mkv
         to: mp4
         engine: ffmpeg-compatible

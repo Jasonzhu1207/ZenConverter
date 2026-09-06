@@ -17,7 +17,9 @@ import android.graphics.Color
 import android.graphics.ImageDecoder
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
+import android.graphics.Typeface
 import android.graphics.pdf.LoadParams
 import android.graphics.pdf.PdfDocument
 import android.graphics.pdf.PdfRenderer
@@ -247,6 +249,11 @@ class ConversionService : Service() {
             return
         }
 
+        if (input.category == ConversionMediaCategory.Video && isVideoContactSheetOutput(input)) {
+            startVideoContactSheetExport(input, tempFile, outputProfile)
+            return
+        }
+
         if (useCompatibilityEngine) {
             startCompatibilityExport(input, tempFile)
             return
@@ -255,6 +262,468 @@ class ConversionService : Service() {
         tempFile.delete()
         activeTempFile = null
         failCurrentTask("Only connected video, audio, image, PDF, document, font, and subtitle targets can run")
+    }
+
+    private fun startVideoContactSheetExport(
+        input: ConversionTaskInput,
+        tempFile: File,
+        outputProfile: OutputProfile
+    ) {
+        serviceScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    writeVideoContactSheet(input, tempFile, outputProfile)
+                }
+            }.onSuccess {
+                if (ConversionTaskStore.isCancelled()) {
+                    tempFile.delete()
+                    cancelRun()
+                    return@onSuccess
+                }
+                ConversionTaskStore.updateProgress(taskIndex, PROGRESS_BEFORE_SAVE)
+                saveCompletedExport(input, tempFile)
+            }.onFailure { exception ->
+                tempFile.delete()
+                if (exception is CancellationException) {
+                    return@onFailure
+                }
+                Log.w(TAG, "Could not create video contact sheet", exception)
+                failCurrentTask("Video contact sheet failed: ${exception.message ?: "Unknown error"}")
+            }
+        }
+    }
+
+    private fun writeVideoContactSheet(
+        input: ConversionTaskInput,
+        tempFile: File,
+        outputProfile: OutputProfile
+    ) {
+        val pfd = runCatching { contentResolver.openFileDescriptor(input.inputUri, "r") }.getOrNull()
+        val retriever = MediaMetadataRetriever()
+        try {
+            runCatching {
+                retriever.setDataSource(this, input.inputUri)
+            }.onFailure {
+                if (pfd != null) {
+                    retriever.setDataSource(pfd.fileDescriptor)
+                }
+            }
+
+            val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+                ?: input.inputInfo?.durationMs
+                ?: 0L
+            val rawWidth = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull()
+                ?: input.inputInfo?.width
+                ?: 1920
+            val rawHeight = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()
+                ?: input.inputInfo?.height
+                ?: 1080
+            val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+            val isRotated = rotation == 90 || rotation == 270
+            val displayWidth = if (isRotated) rawHeight else rawWidth
+            val displayHeight = if (isRotated) rawWidth else rawHeight
+            val captureFps = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)?.toFloatOrNull()
+                ?: input.inputInfo?.frameRate
+            val totalBitrateBps = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)?.toLongOrNull()
+                ?: input.inputInfo?.bitrateBitsPerSecond
+
+            var videoCodecName = "Unknown"
+            var videoProfile = ""
+            var videoPixFmt = ""
+            var videoBitrateKbps: Long? = null
+            var audioCodecName = ""
+            var audioSampleRate = ""
+            var audioChannels = ""
+            var audioBitrateKbps: Long? = null
+
+            val ffmpegFailure = ensureFfmpegKitReady()
+            if (ffmpegFailure == null) {
+                val inputSource = runCatching { openFfmpegInputSource(input.inputUri) }.getOrNull()
+                if (inputSource != null) {
+                    try {
+                        val mediaInfo = runCatching {
+                            FFprobeKit.getMediaInformation(inputSource.path, 2000)?.getMediaInformation()
+                        }.getOrNull()
+                        if (mediaInfo != null) {
+                            val streams = mediaInfo.getStreams().orEmpty()
+                            val vStream = streams.firstOrNull { it.getType().equals("video", ignoreCase = true) }
+                            if (vStream != null) {
+                                videoCodecName = vStream.getCodec().orEmpty().ifBlank { videoCodecName }
+                                videoProfile = vStream.getStringProperty("profile").orEmpty()
+                                videoPixFmt = vStream.getFormat().orEmpty()
+                                videoBitrateKbps = vStream.getBitrate()?.toLongOrNull()?.let { it / 1000 }
+                            }
+                            val aStream = streams.firstOrNull { it.getType().equals("audio", ignoreCase = true) }
+                            if (aStream != null) {
+                                audioCodecName = aStream.getCodec().orEmpty()
+                                audioSampleRate = aStream.getSampleRate().orEmpty().let { rate ->
+                                    rate.toIntOrNull()?.let { String.format(Locale.US, "%.1f kHz", it / 1000.0) } ?: rate
+                                }
+                                val chCount = aStream.getNumberProperty("channels") ?: 2L
+                                val chLayout = aStream.getChannelLayout().orEmpty()
+                                audioChannels = if (chLayout.isNotBlank()) "${chCount}ch ($chLayout)" else "${chCount}ch"
+                                audioBitrateKbps = aStream.getBitrate()?.toLongOrNull()?.let { it / 1000 }
+                            }
+                        }
+                    } finally {
+                        inputSource.close()
+                    }
+                }
+            }
+
+            if (audioCodecName.isBlank()) {
+                val hasAudio = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO)
+                if (hasAudio != null) {
+                    audioCodecName = "Audio Stream"
+                }
+            }
+
+            val startSeconds = input.videoOptions.trimRange.startSeconds ?: 0.0
+            val endSeconds = input.videoOptions.trimRange.endSeconds
+            val effectiveStartMs = (startSeconds * 1000).toLong().coerceAtLeast(0L)
+            val effectiveEndMs = if (endSeconds != null && endSeconds > startSeconds) {
+                (endSeconds * 1000).toLong().coerceAtMost(durationMs)
+            } else {
+                durationMs
+            }
+            val effectiveDurationMs = (effectiveEndMs - effectiveStartMs).coerceAtLeast(1000L)
+
+            val grid = input.contactSheetOptions.grid
+            val rows = grid.rows
+            val cols = grid.cols
+            val frameCount = rows * cols
+
+            val sheetWidth = 2048
+            val margin = 20
+            val gap = 12
+            val availableWidth = sheetWidth - (margin * 2) - ((cols - 1) * gap)
+            val cellWidth = availableWidth / cols
+            val cellHeight = (cellWidth * (displayHeight.toFloat() / displayWidth)).toInt().coerceAtLeast(80)
+
+            val includeHeader = input.contactSheetOptions.includeHeader
+            val headerHeight = if (includeHeader) 160 else 0
+            val sheetHeight = headerHeight + (margin * 2) + (rows * cellHeight) + ((rows - 1) * gap)
+
+            val stepMs = effectiveDurationMs / (frameCount + 1)
+            val frameBitmaps = mutableListOf<Pair<Bitmap, Long>>()
+
+            for (i in 0 until frameCount) {
+                if (ConversionTaskStore.isCancelled()) {
+                    frameBitmaps.forEach { it.first.recycle() }
+                    return
+                }
+                val timeMs = effectiveStartMs + (i + 1) * stepMs
+                val timeUs = timeMs * 1000L
+
+                var bmp: Bitmap? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                    runCatching {
+                        retriever.getScaledFrameAtTime(
+                            timeUs,
+                            MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+                            cellWidth,
+                            cellHeight
+                        )
+                    }.getOrNull()
+                } else null
+
+                if (bmp == null) {
+                    bmp = runCatching {
+                        retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                    }.getOrNull()
+                    if (bmp != null) {
+                        val scaled = Bitmap.createScaledBitmap(bmp, cellWidth, cellHeight, true)
+                        if (scaled != bmp) bmp.recycle()
+                        bmp = scaled
+                    }
+                }
+
+                if (bmp != null && rotation != 0) {
+                    val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
+                    val rotated = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, matrix, true)
+                    if (rotated != bmp) bmp.recycle()
+                    bmp = rotated
+                }
+
+                if (bmp != null) {
+                    frameBitmaps.add(bmp to timeMs)
+                }
+
+                ConversionTaskStore.updateProgress(taskIndex, 0.05f + 0.80f * ((i + 1).toFloat() / frameCount))
+            }
+
+            val sheetBitmap = Bitmap.createBitmap(sheetWidth, sheetHeight, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(sheetBitmap)
+            canvas.drawColor(Color.parseColor("#16181D"))
+
+            if (includeHeader) {
+                val headerRect = RectF(0f, 0f, sheetWidth.toFloat(), headerHeight.toFloat())
+                val headerBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.parseColor("#1C1F26")
+                }
+                canvas.drawRect(headerRect, headerBgPaint)
+
+                val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.parseColor("#2B303C")
+                    strokeWidth = 2f
+                }
+                canvas.drawLine(0f, headerHeight.toFloat(), sheetWidth.toFloat(), headerHeight.toFloat(), dividerPaint)
+
+                val headerPaddingX = margin.toFloat()
+                val headerPaddingY = 24f
+                val labelTextSize = 22f
+
+                val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.parseColor("#94A3B8")
+                    typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+                    textSize = labelTextSize
+                }
+                val valuePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.parseColor("#F8FAFC")
+                    typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+                    textSize = labelTextSize
+                }
+                val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.parseColor("#38BDF8")
+                    typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+                    textSize = labelTextSize
+                }
+                val separatorPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.parseColor("#475569")
+                    typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+                    textSize = labelTextSize
+                }
+
+                fun drawSegments(segments: List<Pair<String, Paint>>, x: Float, y: Float) {
+                    var curX = x
+                    for ((text, paint) in segments) {
+                        canvas.drawText(text, curX, y, paint)
+                        curX += paint.measureText(text)
+                    }
+                }
+
+                val lineLeading = 30f
+                var curY = headerPaddingY + labelTextSize
+
+                drawSegments(listOf(
+                    "文件名: " to labelPaint,
+                    input.displayName to valuePaint
+                ), headerPaddingX, curY)
+                curY += lineLeading
+
+                val fileSizeStr = formatFileSize(input.inputInfo?.sizeBytes ?: pfd?.statSize ?: 0L)
+                val durationStr = formatDuration(durationMs)
+                drawSegments(listOf(
+                    "文件大小: " to labelPaint,
+                    fileSizeStr to valuePaint,
+                    "  |  " to separatorPaint,
+                    "时长: " to labelPaint,
+                    durationStr to accentPaint
+                ), headerPaddingX, curY)
+                curY += lineLeading
+
+                val codecLabel = if (videoProfile.isNotBlank()) "$videoCodecName ($videoProfile)" else videoCodecName
+                val fpsStr = if (captureFps != null && captureFps > 0) String.format(Locale.US, "%.2f fps", captureFps) else "30.00 fps"
+                val vBitrateStr = videoBitrateKbps?.let { "${it} kbps" }
+                    ?: totalBitrateBps?.let { String.format(Locale.US, "%.2f Mbps", it / 1_000_000.0) }
+                    ?: "Auto"
+                val resStr = "${displayWidth}x${displayHeight}"
+                val line3Segments = mutableListOf(
+                    "视频: " to labelPaint,
+                    codecLabel to valuePaint,
+                    "  |  " to separatorPaint,
+                    "分辨率: " to labelPaint,
+                    resStr to accentPaint,
+                    "  |  " to separatorPaint,
+                    "帧率: " to labelPaint,
+                    fpsStr to valuePaint
+                )
+                if (videoPixFmt.isNotBlank()) {
+                    line3Segments.add("  |  " to separatorPaint)
+                    line3Segments.add("色深: " to labelPaint)
+                    line3Segments.add(videoPixFmt to valuePaint)
+                }
+                line3Segments.add("  |  " to separatorPaint)
+                line3Segments.add("码率: " to labelPaint)
+                line3Segments.add(vBitrateStr to valuePaint)
+                drawSegments(line3Segments, headerPaddingX, curY)
+                curY += lineLeading
+
+                if (audioCodecName.isNotBlank()) {
+                    val line4Segments = mutableListOf(
+                        "音频: " to labelPaint,
+                        audioCodecName to valuePaint
+                    )
+                    if (audioSampleRate.isNotBlank()) {
+                        line4Segments.add("  |  " to separatorPaint)
+                        line4Segments.add("采样率: " to labelPaint)
+                        line4Segments.add(audioSampleRate to valuePaint)
+                    }
+                    if (audioChannels.isNotBlank()) {
+                        line4Segments.add("  |  " to separatorPaint)
+                        line4Segments.add("声道: " to labelPaint)
+                        line4Segments.add(audioChannels to valuePaint)
+                    }
+                    if (audioBitrateKbps != null) {
+                        line4Segments.add("  |  " to separatorPaint)
+                        line4Segments.add("码率: " to labelPaint)
+                        line4Segments.add("${audioBitrateKbps} kbps" to valuePaint)
+                    }
+                    drawSegments(line4Segments, headerPaddingX, curY)
+                }
+
+                val wmText = "Generated by Jasonzhu1207/ZenConverter"
+                val wmPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.parseColor("#94A3B8")
+                    typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+                    textSize = 20f
+                }
+                val wmTextWidth = wmPaint.measureText(wmText)
+                val wmMetrics = wmPaint.fontMetrics
+                val wmTextHeight = wmMetrics.descent - wmMetrics.ascent
+
+                val logoBitmap = runCatching {
+                    BitmapFactory.decodeResource(resources, R.drawable.zenconverter)
+                }.getOrNull()
+                val logoSize = 28
+                val scaledLogo = if (logoBitmap != null) {
+                    Bitmap.createScaledBitmap(logoBitmap, logoSize, logoSize, true)
+                } else null
+
+                val pillPadX = 16f
+                val pillPadY = 10f
+                val logoSpacing = if (scaledLogo != null) 10f else 0f
+                val logoW = if (scaledLogo != null) logoSize.toFloat() else 0f
+                val pillWidth = pillPadX * 2 + logoW + logoSpacing + wmTextWidth
+                val pillHeight = (wmTextHeight + pillPadY * 2).coerceAtLeast(logoSize + pillPadY * 2)
+
+                val pillRight = (sheetWidth - margin).toFloat()
+                val pillCenterY = headerHeight / 2f
+                val pillTop = pillCenterY - pillHeight / 2f
+                val pillBottom = pillCenterY + pillHeight / 2f
+                val pillLeft = pillRight - pillWidth
+
+                val pillRect = RectF(pillLeft, pillTop, pillRight, pillBottom)
+                val pillBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.parseColor("#262B36")
+                }
+                val pillRadius = pillHeight / 2f
+                canvas.drawRoundRect(pillRect, pillRadius, pillRadius, pillBgPaint)
+
+                val pillBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.parseColor("#384152")
+                    style = Paint.Style.STROKE
+                    strokeWidth = 1.5f
+                }
+                canvas.drawRoundRect(pillRect, pillRadius, pillRadius, pillBorderPaint)
+
+                var curPillX = pillLeft + pillPadX
+                if (scaledLogo != null) {
+                    val logoTop = pillCenterY - logoSize / 2f
+                    val logoPath = Path().apply {
+                        addRoundRect(RectF(curPillX, logoTop, curPillX + logoSize, logoTop + logoSize), 6f, 6f, Path.Direction.CW)
+                    }
+                    canvas.save()
+                    canvas.clipPath(logoPath)
+                    canvas.drawBitmap(scaledLogo, curPillX, logoTop, null)
+                    canvas.restore()
+                    curPillX += logoSize + logoSpacing
+                }
+                val textY = pillCenterY + (wmTextHeight / 2f) - wmMetrics.descent
+                canvas.drawText(wmText, curPillX, textY, wmPaint)
+            }
+
+            val includeTimestamp = input.contactSheetOptions.includeTimestamp
+            val tsPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE
+                typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+                textSize = 20f
+            }
+            val tsMetrics = tsPaint.fontMetrics
+            val tsTextHeight = tsMetrics.descent - tsMetrics.ascent
+            val tsBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.argb(180, 0, 0, 0)
+            }
+
+            for (idx in frameBitmaps.indices) {
+                val (frameBmp, timeMs) = frameBitmaps[idx]
+                val row = idx / cols
+                val col = idx % cols
+                val cellLeft = (margin + col * (cellWidth + gap)).toFloat()
+                val cellTop = (headerHeight + margin + row * (cellHeight + gap)).toFloat()
+                val cellRect = RectF(cellLeft, cellTop, cellLeft + cellWidth, cellTop + cellHeight)
+
+                val cellPath = Path().apply {
+                    addRoundRect(cellRect, 8f, 8f, Path.Direction.CW)
+                }
+                canvas.save()
+                canvas.clipPath(cellPath)
+                canvas.drawBitmap(frameBmp, null, cellRect, null)
+                canvas.restore()
+
+                if (includeTimestamp) {
+                    val timeStr = formatTimestamp(timeMs)
+                    val tsTextWidth = tsPaint.measureText(timeStr)
+                    val tsPadX = 10f
+                    val tsPadY = 6f
+                    val tsWidth = tsTextWidth + tsPadX * 2
+                    val tsHeight = tsTextHeight + tsPadY * 2
+                    val tsRight = cellRect.right - 10f
+                    val tsBottom = cellRect.bottom - 10f
+                    val tsLeft = tsRight - tsWidth
+                    val tsTop = tsBottom - tsHeight
+
+                    val tsBadgeRect = RectF(tsLeft, tsTop, tsRight, tsBottom)
+                    canvas.drawRoundRect(tsBadgeRect, 6f, 6f, tsBgPaint)
+                    canvas.drawText(timeStr, tsLeft + tsPadX, tsBottom - tsPadY - tsMetrics.descent, tsPaint)
+                }
+
+                frameBmp.recycle()
+            }
+
+            tempFile.outputStream().use { outStream ->
+                if (outputProfile.extension.equals("png", ignoreCase = true)) {
+                    sheetBitmap.compress(Bitmap.CompressFormat.PNG, 100, outStream)
+                } else {
+                    sheetBitmap.compress(Bitmap.CompressFormat.JPEG, 92, outStream)
+                }
+            }
+            sheetBitmap.recycle()
+        } finally {
+            runCatching { retriever.release() }
+            runCatching { pfd?.close() }
+        }
+    }
+
+    private fun formatFileSize(bytes: Long): String {
+        if (bytes <= 0) return "0 B"
+        val units = arrayOf("B", "KB", "MB", "GB", "TB")
+        val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt().coerceIn(0, units.size - 1)
+        return String.format(Locale.US, "%.2f %s", bytes / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
+    }
+
+    private fun formatDuration(durationMs: Long): String {
+        val totalSeconds = (durationMs / 1000).coerceAtLeast(0)
+        val hours = totalSeconds / 3600
+        val minutes = (totalSeconds % 3600) / 60
+        val seconds = totalSeconds % 60
+        return if (hours > 0) {
+            String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            String.format(Locale.US, "%02d:%02d", minutes, seconds)
+        }
+    }
+
+    private fun formatTimestamp(timestampMs: Long): String {
+        val totalSeconds = (timestampMs / 1000).coerceAtLeast(0)
+        val hours = totalSeconds / 3600
+        val minutes = (totalSeconds % 3600) / 60
+        val seconds = totalSeconds % 60
+        val hundredths = ((timestampMs % 1000) / 10).coerceIn(0, 99)
+        return if (hours > 0) {
+            String.format(Locale.US, "%02d:%02d:%02d.%02d", hours, minutes, seconds, hundredths)
+        } else {
+            String.format(Locale.US, "%02d:%02d.%02d", minutes, seconds, hundredths)
+        }
     }
 
     private fun startImageExport(
@@ -5166,9 +5635,16 @@ class ConversionService : Service() {
         return durationMs
     }
 
+    private fun isVideoContactSheetOutput(input: ConversionTaskInput): Boolean {
+        return input.category == ConversionMediaCategory.Video &&
+            (input.targetFormat.startsWith("contact_sheet", ignoreCase = true) ||
+             input.targetFormat.contains("概览拼图", ignoreCase = true) ||
+             input.targetFormat.contains("Contact Sheet", ignoreCase = true))
+    }
+
     private fun shouldUseCompatibilityEngine(input: ConversionTaskInput): Boolean {
         return when (input.category) {
-            ConversionMediaCategory.Video -> true
+            ConversionMediaCategory.Video -> !isVideoContactSheetOutput(input)
             ConversionMediaCategory.Audio -> true
             ConversionMediaCategory.Image -> false
             ConversionMediaCategory.Pdf -> false
@@ -5904,6 +6380,8 @@ class ConversionService : Service() {
                     "mkv" -> OutputProfile(extension = "mkv", mimeType = MIME_TYPE_MKV, kind = OutputMediaKind.Video)
                     "mov" -> OutputProfile(extension = "mov", mimeType = MIME_TYPE_MOV, kind = OutputMediaKind.Video)
                     "gif" -> OutputProfile(extension = "gif", mimeType = MIME_TYPE_GIF, kind = OutputMediaKind.Image)
+                    "jpg" -> OutputProfile(extension = "jpg", mimeType = MIME_TYPE_JPEG, kind = OutputMediaKind.Image)
+                    "png" -> OutputProfile(extension = "png", mimeType = MIME_TYPE_PNG, kind = OutputMediaKind.Image)
                     else -> null
                 }
             }
@@ -6008,6 +6486,8 @@ class ConversionService : Service() {
     private fun videoTargetExtensionFor(targetFormat: String): String? {
         val normalized = targetFormat.lowercase(Locale.US)
         return when {
+            normalized.contains("contact_sheet_png") || (normalized.contains("contact_sheet") && normalized.contains("png")) || (normalized.contains("概览拼图") && normalized.contains("png")) || (normalized.contains("contact sheet") && normalized.contains("png")) -> "png"
+            normalized.contains("contact_sheet_jpg") || (normalized.contains("contact_sheet") && normalized.contains("jpg")) || (normalized.contains("概览拼图") && normalized.contains("jpg")) || (normalized.contains("contact sheet") && normalized.contains("jpg")) -> "jpg"
             normalized.contains("mp4") -> "mp4"
             normalized.contains("mkv") -> "mkv"
             normalized.contains("mov") -> "mov"
@@ -6216,6 +6696,9 @@ class ConversionService : Service() {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
             val shortId = input.fileId.take(8)
             return "${baseName}_merged_${timestamp}_$shortId.$extension"
+        }
+        if (isVideoContactSheetOutput(input)) {
+            return "${baseName}_summary.$extension"
         }
         val inputExtension = input.extension.trim().lowercase(Locale.US)
         val targetExtension = extension.trim().lowercase(Locale.US)

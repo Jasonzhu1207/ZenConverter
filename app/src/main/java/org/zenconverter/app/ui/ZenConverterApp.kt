@@ -208,6 +208,8 @@ import org.zenconverter.app.conversion.VideoExportOptions
 import org.zenconverter.app.conversion.VideoFrameInterpolationMode
 import org.zenconverter.app.conversion.VideoMirrorMode
 import org.zenconverter.app.conversion.VideoRotationMode
+import org.zenconverter.app.conversion.ContactSheetGrid
+import org.zenconverter.app.conversion.VideoContactSheetOptions
 import org.zenconverter.app.BuildConfig
 import org.zenconverter.app.metadata.MetadataBackupInfo
 import org.zenconverter.app.metadata.MetadataInspection
@@ -265,7 +267,9 @@ enum class FileCategory(
             TargetFormat("MP4", "mp4", "Re-encode"),
             TargetFormat("MKV", "mkv", "Re-encode"),
             TargetFormat("MOV", "mov", "Re-encode"),
-            TargetFormat("GIF", "gif", "30s GIF")
+            TargetFormat("GIF", "gif", "30s GIF"),
+            TargetFormat("概览拼图 (JPG)", "contact_sheet_jpg", "Summary Sheet"),
+            TargetFormat("概览拼图 (PNG)", "contact_sheet_png", "Summary Sheet")
         )
     ),
     Audio(
@@ -399,7 +403,8 @@ data class QueuedFile(
     val inputInfo: FileBasicInfo? = null,
     val gifFrameMode: GifFrameExportMode = GifFrameExportMode.FirstFrame,
     val pdfSecurityOptions: PdfSecurityOptions = PdfSecurityOptions(),
-    val pdfPasswords: List<String?> = emptyList()
+    val pdfPasswords: List<String?> = emptyList(),
+    val contactSheetOptions: VideoContactSheetOptions = VideoContactSheetOptions()
 )
 
 data class PdfPasswordPrompt(
@@ -596,6 +601,26 @@ private val VIDEO_INTERPOLATION_OPTIONS = listOf(
     VIDEO_INTERPOLATION_OFF,
     VIDEO_INTERPOLATION_RIFE_2X
 )
+
+private const val CONTACT_SHEET_GRID_3X4 = "3 × 4 (12)"
+private const val CONTACT_SHEET_GRID_3X3 = "3 × 3 (9)"
+private const val CONTACT_SHEET_GRID_4X4 = "4 × 4 (16)"
+private const val CONTACT_SHEET_GRID_5X5 = "5 × 5 (25)"
+private val CONTACT_SHEET_GRID_OPTIONS = listOf(
+    CONTACT_SHEET_GRID_3X4,
+    CONTACT_SHEET_GRID_3X3,
+    CONTACT_SHEET_GRID_4X4,
+    CONTACT_SHEET_GRID_5X5
+)
+
+private fun contactSheetGridFor(labelKey: String): ContactSheetGrid {
+    return when (labelKey) {
+        CONTACT_SHEET_GRID_3X3 -> ContactSheetGrid.Grid3x3
+        CONTACT_SHEET_GRID_4X4 -> ContactSheetGrid.Grid4x4
+        CONTACT_SHEET_GRID_5X5 -> ContactSheetGrid.Grid5x5
+        else -> ContactSheetGrid.Grid3x4
+    }
+}
 
 private const val VIDEO_BITRATE_AUTO = "Auto bitrate"
 private const val VIDEO_BITRATE_LOW = "Low bitrate"
@@ -4887,6 +4912,43 @@ private fun BatchVideoTargetOptions(
     onOpenMenuChange: (String?) -> Unit,
     onUpdateFiles: (List<QueuedFile>) -> Unit
 ) {
+    val isContactSheetTarget = target.extension.startsWith("contact_sheet", ignoreCase = true)
+    if (isContactSheetTarget) {
+        val commonGrid = commonBatchLabel(files) { it.contactSheetOptions.grid.labelKey }
+        val allIncludeHeader = files.all { it.contactSheetOptions.includeHeader }
+        val allIncludeTimestamp = files.all { it.contactSheetOptions.includeTimestamp }
+        OptionGrid {
+            OptionDropdown(
+                menuId = "batch-contact-sheet-grid",
+                label = texts.contactSheetGridLabel,
+                selected = commonGrid,
+                options = CONTACT_SHEET_GRID_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                onSelected = { key ->
+                    val grid = contactSheetGridFor(key)
+                    onUpdateFiles(files.map { it.copy(contactSheetOptions = it.contactSheetOptions.copy(grid = grid)) })
+                }
+            )
+            AdvancedSwitchRow(
+                label = texts.contactSheetIncludeHeader,
+                checked = allIncludeHeader,
+                onCheckedChange = { checked ->
+                    onUpdateFiles(files.map { it.copy(contactSheetOptions = it.contactSheetOptions.copy(includeHeader = checked)) })
+                }
+            )
+            AdvancedSwitchRow(
+                label = texts.contactSheetIncludeTimestamp,
+                checked = allIncludeTimestamp,
+                onCheckedChange = { checked ->
+                    onUpdateFiles(files.map { it.copy(contactSheetOptions = it.contactSheetOptions.copy(includeTimestamp = checked)) })
+                }
+            )
+        }
+        return
+    }
+
     val isGifTarget = target.extension.equals("gif", ignoreCase = true)
     val commonInterpolation = commonBatchLabel(files) {
         videoInterpolationLabelFor(it.videoOptions.frameInterpolation)
@@ -6184,8 +6246,55 @@ private fun VideoOptions(
     onAudioFadeOutChange: (String) -> Unit,
     onAudioVolumeChange: (String) -> Unit,
     onAudioEchoChange: (String) -> Unit,
-    onAudioNoiseReductionChange: (String) -> Unit
+    onAudioNoiseReductionChange: (String) -> Unit,
+    contactSheetOptions: VideoContactSheetOptions = VideoContactSheetOptions(),
+    onContactSheetOptionsChange: (VideoContactSheetOptions) -> Unit = {}
 ) {
+    val isContactSheetTarget = targetFormat.extension.startsWith("contact_sheet", ignoreCase = true)
+    if (isContactSheetTarget) {
+        OptionGrid {
+            MediaTrimOptions(
+                texts = texts,
+                trimRange = trimRange,
+                sourceDurationMs = sourceDurationMs,
+                inputMode = trimInputMode,
+                onInputModeChange = onTrimInputModeChange,
+                onStartSecondsChange = onTrimStartSecondsChange,
+                onEndSecondsChange = onTrimEndSecondsChange,
+                onTrimRangeChange = onTrimRangeChange
+            )
+            OptionDropdown(
+                menuId = "${menuPrefix}contact-sheet-grid",
+                label = texts.contactSheetGridLabel,
+                selected = contactSheetOptions.grid.labelKey,
+                options = CONTACT_SHEET_GRID_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                onSelected = { key ->
+                    onContactSheetOptionsChange(
+                        contactSheetOptions.copy(grid = contactSheetGridFor(key))
+                    )
+                }
+            )
+            AdvancedSwitchRow(
+                label = texts.contactSheetIncludeHeader,
+                checked = contactSheetOptions.includeHeader,
+                onCheckedChange = { checked ->
+                    onContactSheetOptionsChange(contactSheetOptions.copy(includeHeader = checked))
+                }
+            )
+            AdvancedSwitchRow(
+                label = texts.contactSheetIncludeTimestamp,
+                checked = contactSheetOptions.includeTimestamp,
+                onCheckedChange = { checked ->
+                    onContactSheetOptionsChange(contactSheetOptions.copy(includeTimestamp = checked))
+                }
+            )
+        }
+        return
+    }
+
     val isGifTarget = targetFormat.extension.equals("gif", ignoreCase = true)
     val isInterpolationActive = !isGifTarget && videoInterpolationModeFor(frameInterpolation) != VideoFrameInterpolationMode.Off
     val disabledInterpolationOptions = if (isRifeModelDownloaded) emptySet() else setOf(VIDEO_INTERPOLATION_RIFE_2X)
@@ -7963,6 +8072,10 @@ private fun QueuedFileOptionsPanel(
                 audioAdvanced = audioAdvancedUiStateFor(file.audioOptions.advanced, audioAdvancedExpanded),
                 targetFormat = selectedTarget.targetFormat,
                 trimInputMode = trimInputMode,
+                contactSheetOptions = file.contactSheetOptions,
+                onContactSheetOptionsChange = { options ->
+                    onUpdateFile(file.copy(contactSheetOptions = options))
+                },
                 frameInterpolation = videoInterpolationLabelFor(file.videoOptions.frameInterpolation),
                 isRifeModelDownloaded = isRifeModelDownloaded,
                 openMenuId = openMenuId,
@@ -9639,7 +9752,10 @@ private data class UiText(
     val skip: String,
     val pdfPasswordTitle: String,
     val pdfOutputPasswordTitle: String,
-    val toPrefix: String
+    val toPrefix: String,
+    val contactSheetGridLabel: String,
+    val contactSheetIncludeHeader: String,
+    val contactSheetIncludeTimestamp: String
 ) {
     fun selectedCount(count: Int): String = "$count $selectedSuffix"
 
@@ -10831,6 +10947,41 @@ private data class UiText(
                 simplifiedChineseText -> "上限 30 秒 GIF"
                 else -> "上限 30 秒 GIF"
             }
+            "Summary Sheet" -> when (this) {
+                englishText -> "Summary Sheet"
+                simplifiedChineseText -> "概览长图"
+                else -> "概覽長圖"
+            }
+            "概览拼图 (JPG)" -> when (this) {
+                englishText -> "Contact Sheet (JPG)"
+                simplifiedChineseText -> "概览拼图 (JPG)"
+                else -> "概覽拼圖 (JPG)"
+            }
+            "概览拼图 (PNG)" -> when (this) {
+                englishText -> "Contact Sheet (PNG)"
+                simplifiedChineseText -> "概览拼图 (PNG)"
+                else -> "概覽拼圖 (PNG)"
+            }
+            "3 × 4 (12)" -> when (this) {
+                englishText -> "3 × 4 (12 frames)"
+                simplifiedChineseText -> "3 × 4 (12 帧)"
+                else -> "3 × 4 (12 幀)"
+            }
+            "3 × 3 (9)" -> when (this) {
+                englishText -> "3 × 3 (9 frames)"
+                simplifiedChineseText -> "3 × 3 (9 帧)"
+                else -> "3 × 3 (9 幀)"
+            }
+            "4 × 4 (16)" -> when (this) {
+                englishText -> "4 × 4 (16 frames)"
+                simplifiedChineseText -> "4 × 4 (16 帧)"
+                else -> "4 × 4 (16 幀)"
+            }
+            "5 × 5 (25)" -> when (this) {
+                englishText -> "5 × 5 (25 frames)"
+                simplifiedChineseText -> "5 × 5 (25 帧)"
+                else -> "5 × 5 (25 幀)"
+            }
             "Auto engine" -> when (this) {
                 englishText -> "Native or compatibility"
                 simplifiedChineseText -> "原生或兼容引擎"
@@ -11808,7 +11959,10 @@ private val englishText = UiText(
     skip = "Skip",
     pdfPasswordTitle = "PDF password",
     pdfOutputPasswordTitle = "Set PDF password",
-    toPrefix = "to"
+    toPrefix = "to",
+    contactSheetGridLabel = "Grid Layout",
+    contactSheetIncludeHeader = "Include Metadata Header",
+    contactSheetIncludeTimestamp = "Include Timestamps"
 )
 
 private val simplifiedChineseText = UiText(
@@ -11970,7 +12124,10 @@ private val simplifiedChineseText = UiText(
     skip = "跳过",
     pdfPasswordTitle = "PDF 密码",
     pdfOutputPasswordTitle = "设置 PDF 密码",
-    toPrefix = "转为"
+    toPrefix = "转为",
+    contactSheetGridLabel = "网格规格",
+    contactSheetIncludeHeader = "顶部信息与水印",
+    contactSheetIncludeTimestamp = "缩略图时间戳"
 )
 
 private val traditionalChineseText = UiText(
@@ -12132,7 +12289,10 @@ private val traditionalChineseText = UiText(
     skip = "略過",
     pdfPasswordTitle = "PDF 密碼",
     pdfOutputPasswordTitle = "設定 PDF 密碼",
-    toPrefix = "轉為"
+    toPrefix = "轉為",
+    contactSheetGridLabel = "網格規格",
+    contactSheetIncludeHeader = "頂部資訊與水印",
+    contactSheetIncludeTimestamp = "縮略圖時間戳"
 )
 
 private fun installedAppVersion(context: Context): InstalledAppVersion {

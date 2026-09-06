@@ -20,8 +20,29 @@ data class ConversionTaskInput(
     val pdfSecurityOptions: PdfSecurityOptions = PdfSecurityOptions(),
     val inputInfo: FileBasicInfo? = null,
     val gifFrameMode: GifFrameExportMode = GifFrameExportMode.FirstFrame,
-    val pdfPasswords: List<String?> = emptyList()
+    val pdfPasswords: List<String?> = emptyList(),
+    val contactSheetOptions: VideoContactSheetOptions = VideoContactSheetOptions()
 )
+
+data class VideoContactSheetOptions(
+    val grid: ContactSheetGrid = ContactSheetGrid.Grid3x4,
+    val includeHeader: Boolean = true,
+    val includeTimestamp: Boolean = true
+)
+
+enum class ContactSheetGrid(val rows: Int, val cols: Int, val frameCount: Int) {
+    Grid3x3(3, 3, 9),
+    Grid3x4(3, 4, 12),
+    Grid4x4(4, 4, 16),
+    Grid5x5(5, 5, 25);
+
+    val labelKey: String get() = when (this) {
+        Grid3x3 -> "3 × 3 (9)"
+        Grid3x4 -> "3 × 4 (12)"
+        Grid4x4 -> "4 × 4 (16)"
+        Grid5x5 -> "5 × 5 (25)"
+    }
+}
 
 sealed interface OutputDestination {
     object DefaultPublicDirectory : OutputDestination
