@@ -1,4 +1,8 @@
 package org.zenconverter.app.updates
+import org.zenconverter.app.R
+import org.zenconverter.app.i18n.localizedText
+import org.zenconverter.app.i18n.LocalizedFailure
+
 
 import android.content.Context
 import android.os.Environment
@@ -33,14 +37,14 @@ object ApkUpdateDownloader {
                 "updates"
             )
             if (!downloadDir.exists() && !downloadDir.mkdirs()) {
-                throw IOException("Could not create update download folder")
+                throw LocalizedFailure(localizedText(R.string.message_could_not_create_update_download_folder))
             }
 
             val assetName = release.assetName.safeApkFileName()
             val targetFile = File(downloadDir, assetName)
             val tempFile = File(downloadDir, "$assetName.part")
             if (tempFile.exists() && !tempFile.delete()) {
-                throw IOException("Could not reset previous update download")
+                throw LocalizedFailure(localizedText(R.string.message_could_not_reset_previous_update_download))
             }
 
             val progressContext = currentCoroutineContext()
@@ -85,12 +89,12 @@ object ApkUpdateDownloader {
                 !actualSha256.equals(expectedSha256, ignoreCase = true)
             ) {
                 tempFile.delete()
-                throw IOException("Downloaded APK checksum did not match")
+                throw LocalizedFailure(localizedText(R.string.message_downloaded_apk_checksum_did_not_match))
             }
 
             if (targetFile.exists() && !targetFile.delete()) {
                 tempFile.delete()
-                throw IOException("Could not replace previous update APK")
+                throw LocalizedFailure(localizedText(R.string.message_could_not_replace_previous_update_apk))
             }
             if (!tempFile.renameTo(targetFile)) {
                 tempFile.copyTo(targetFile, overwrite = true)
@@ -113,7 +117,7 @@ object ApkUpdateDownloader {
         val responseCode = connection.responseCode
         if (responseCode !in 200..299) {
             connection.disconnect()
-            throw IOException("Download server returned HTTP $responseCode")
+            throw LocalizedFailure(localizedText(R.string.message_download_server_returned_http_1_s, responseCode))
         }
         return connection
     }

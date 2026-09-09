@@ -1,5 +1,7 @@
 package org.zenconverter.app.ui
 
+import org.zenconverter.app.conversion.TargetId
+
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.ClipData
@@ -248,12 +250,23 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 import java.util.Locale
+import org.zenconverter.app.i18n.toLocalizedDoubleOrNull
+import org.zenconverter.app.i18n.LocalizedText
+import org.zenconverter.app.i18n.localizedFailure
+import org.zenconverter.app.i18n.AppLanguages
+import org.zenconverter.app.i18n.LanguageOption
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 data class TargetFormat(
-    val label: String,
+    val id: TargetId,
     val extension: String,
     val modeHint: String
-)
+) {
+    val key: String get() = id.key
+}
 
 data class ExternalImportTarget(
     val category: FileCategory,
@@ -267,23 +280,23 @@ enum class FileCategory(
     Video(
         mimeTypes = listOf("video/*"),
         formats = listOf(
-            TargetFormat("MP4", "mp4", "Re-encode"),
-            TargetFormat("MKV", "mkv", "Re-encode"),
-            TargetFormat("MOV", "mov", "Re-encode"),
-            TargetFormat("GIF", "gif", "30s GIF"),
-            TargetFormat("概览拼图 · JPG", "contact_sheet_jpg", "Summary Sheet"),
-            TargetFormat("概览拼图 · PNG", "contact_sheet_png", "Summary Sheet")
+            TargetFormat(TargetId.Mp4, "mp4", "Re-encode"),
+            TargetFormat(TargetId.Mkv, "mkv", "Re-encode"),
+            TargetFormat(TargetId.Mov, "mov", "Re-encode"),
+            TargetFormat(TargetId.Gif, "gif", "30s GIF"),
+            TargetFormat(TargetId.ContactSheetJpg, "contact_sheet_jpg", "Summary Sheet"),
+            TargetFormat(TargetId.ContactSheetPng, "contact_sheet_png", "Summary Sheet")
         )
     ),
     Audio(
         mimeTypes = listOf("audio/*", "video/*"),
         formats = listOf(
-            TargetFormat("M4A (AAC)", "m4a", "Re-encode"),
-            TargetFormat("MP3", "mp3", "Re-encode"),
-            TargetFormat("WAV", "wav", "Re-encode"),
-            TargetFormat("FLAC", "flac", "Re-encode"),
-            TargetFormat("WMA", "wma", "Re-encode"),
-            TargetFormat("OPUS", "opus", "Re-encode")
+            TargetFormat(TargetId.M4a, "m4a", "Re-encode"),
+            TargetFormat(TargetId.Mp3, "mp3", "Re-encode"),
+            TargetFormat(TargetId.Wav, "wav", "Re-encode"),
+            TargetFormat(TargetId.Flac, "flac", "Re-encode"),
+            TargetFormat(TargetId.Wma, "wma", "Re-encode"),
+            TargetFormat(TargetId.Opus, "opus", "Re-encode")
         )
     ),
     Image(
@@ -299,26 +312,26 @@ enum class FileCategory(
             "image/ico"
         ),
         formats = listOf(
-            TargetFormat("JPG", "jpg", "Batch"),
-            TargetFormat("JFIF", "jfif", "JPEG"),
-            TargetFormat("PNG", "png", "Supports transparency"),
-            TargetFormat("WEBP", "webp", "Supports transparency"),
-            TargetFormat("ICO", "ico", "Icon"),
-            TargetFormat("PDF", "pdf", "PDF")
+            TargetFormat(TargetId.Jpg, "jpg", "Batch"),
+            TargetFormat(TargetId.Jfif, "jfif", "JPEG"),
+            TargetFormat(TargetId.Png, "png", "Supports transparency"),
+            TargetFormat(TargetId.Webp, "webp", "Supports transparency"),
+            TargetFormat(TargetId.Ico, "ico", "Icon"),
+            TargetFormat(TargetId.Pdf, "pdf", "PDF")
         )
     ),
     Pdf(
         mimeTypes = listOf("application/pdf"),
         formats = listOf(
-            TargetFormat("PNG", "png", "Page rasterization"),
-            TargetFormat("JPG", "jpg", "Page rasterization"),
-            TargetFormat("WEBP", "webp", "Page rasterization"),
-            TargetFormat("PDF", "pdf", "Merge PDFs"),
-            TargetFormat("Compress PDF", "pdf", "Reduce file size"),
-            TargetFormat("TXT", "txt", "Text layer"),
-            TargetFormat("MD", "md", "Markdown"),
-            TargetFormat("Encrypt PDF", "pdf", "Password protect"),
-            TargetFormat("Decrypt PDF", "pdf", "Remove password")
+            TargetFormat(TargetId.Png, "png", "Page rasterization"),
+            TargetFormat(TargetId.Jpg, "jpg", "Page rasterization"),
+            TargetFormat(TargetId.Webp, "webp", "Page rasterization"),
+            TargetFormat(TargetId.Pdf, "pdf", "Merge PDFs"),
+            TargetFormat(TargetId.PdfCompress, "pdf", "Reduce file size"),
+            TargetFormat(TargetId.Txt, "txt", "Text layer"),
+            TargetFormat(TargetId.Md, "md", "Markdown"),
+            TargetFormat(TargetId.PdfEncrypt, "pdf", "Password protect"),
+            TargetFormat(TargetId.PdfDecrypt, "pdf", "Remove password")
         )
     ),
     Document(
@@ -328,9 +341,9 @@ enum class FileCategory(
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         ),
         formats = listOf(
-            TargetFormat("PDF", "pdf", "Office to PDF"),
-            TargetFormat("TXT", "txt", "Text layer"),
-            TargetFormat("MD", "md", "Markdown")
+            TargetFormat(TargetId.Pdf, "pdf", "Office to PDF"),
+            TargetFormat(TargetId.Txt, "txt", "Text layer"),
+            TargetFormat(TargetId.Md, "md", "Markdown")
         )
     ),
     Font(
@@ -347,9 +360,9 @@ enum class FileCategory(
             "application/x-font-woff"
         ),
         formats = listOf(
-            TargetFormat("WOFF2", "woff2", "Web font"),
-            TargetFormat("WOFF", "woff", "Web font"),
-            TargetFormat("TTF/OTF", "ttf", "Uncompressed")
+            TargetFormat(TargetId.Woff2, "woff2", "Web font"),
+            TargetFormat(TargetId.Woff, "woff", "Web font"),
+            TargetFormat(TargetId.Sfnt, "ttf", "Uncompressed")
         )
     ),
     Subtitle(
@@ -360,10 +373,10 @@ enum class FileCategory(
             "text/x-ass"
         ),
         formats = listOf(
-            TargetFormat("SRT", "srt", "Subtitle"),
-            TargetFormat("VTT", "vtt", "Subtitle"),
-            TargetFormat("LRC", "lrc", "Lyrics"),
-            TargetFormat("ASS", "ass", "Styled subtitle")
+            TargetFormat(TargetId.Srt, "srt", "Subtitle"),
+            TargetFormat(TargetId.Vtt, "vtt", "Subtitle"),
+            TargetFormat(TargetId.Lrc, "lrc", "Lyrics"),
+            TargetFormat(TargetId.Ass, "ass", "Styled subtitle")
         )
     )
 }
@@ -433,7 +446,7 @@ data class TaskProgress(
     val fileId: String,
     val status: TaskProgressStatus,
     val progress: Float,
-    val message: String,
+    val message: LocalizedText,
     val outputUri: Uri? = null,
     val outputUris: List<Uri> = emptyList(),
     val outputDirectoryUri: Uri? = null,
@@ -467,7 +480,7 @@ private sealed interface UpdateUiState {
     data class UpToDate(val latest: UpdateRelease) : UpdateUiState
     data class Failed(
         val reason: UpdateFailureReason,
-        val detail: String?
+        val detail: LocalizedText?
     ) : UpdateUiState
 }
 
@@ -475,7 +488,7 @@ private sealed interface UpdateDownloadUiState {
     object Idle : UpdateDownloadUiState
     data class Downloading(val progress: DownloadProgress) : UpdateDownloadUiState
     data class Completed(val downloadedUpdate: DownloadedUpdate) : UpdateDownloadUiState
-    data class Failed(val message: String?) : UpdateDownloadUiState
+    data class Failed(val message: LocalizedText?) : UpdateDownloadUiState
 }
 
 private data class VideoAdvancedUiState(
@@ -522,7 +535,7 @@ private val supportTargets = listOf(
     SupportTarget("Ethereum (ETH / ERC-20)", ETH_ERC20_ADDRESS, SupportTargetType.Wallet)
 )
 
-private enum class AccentColorOption(
+internal enum class AccentColorOption(
     val englishLabel: String,
     val lightColor: Color,
     val lightContentColor: Color,
@@ -548,25 +561,14 @@ private enum class AccentColorOption(
     fun contentColor(isDark: Boolean): Color = if (isDark) darkContentColor else lightContentColor
 }
 
-private enum class ThemeModeOption {
+internal enum class ThemeModeOption {
     System,
     Light,
     Dark,
     OledDark
 }
 
-private enum class LanguageOption {
-    System,
-    English,
-    SimplifiedChinese,
-    TraditionalChinese
-}
 
-private enum class ResolvedLanguage {
-    English,
-    SimplifiedChinese,
-    TraditionalChinese
-}
 
 private const val VIDEO_RESOLUTION_ORIGINAL = "Original"
 private const val VIDEO_RESOLUTION_2160P = "2160p"
@@ -588,10 +590,10 @@ private val VIDEO_GIF_RESOLUTION_OPTIONS = listOf(
     VIDEO_RESOLUTION_ORIGINAL
 )
 
-private const val VIDEO_COMPRESSION_STANDARD = "Video compression standard"
-private const val VIDEO_COMPRESSION_VISUAL_LOSSLESS = "Video compression visual lossless"
-private const val VIDEO_COMPRESSION_BALANCED = "Video compression balanced"
-private const val VIDEO_COMPRESSION_SMALL = "Video compression small"
+internal const val VIDEO_COMPRESSION_STANDARD = "Video compression standard"
+internal const val VIDEO_COMPRESSION_VISUAL_LOSSLESS = "Video compression visual lossless"
+internal const val VIDEO_COMPRESSION_BALANCED = "Video compression balanced"
+internal const val VIDEO_COMPRESSION_SMALL = "Video compression small"
 private val VIDEO_COMPRESSION_OPTIONS = listOf(
     VIDEO_COMPRESSION_STANDARD,
     VIDEO_COMPRESSION_VISUAL_LOSSLESS,
@@ -599,8 +601,8 @@ private val VIDEO_COMPRESSION_OPTIONS = listOf(
     VIDEO_COMPRESSION_SMALL
 )
 
-private const val VIDEO_INTERPOLATION_OFF = "Video interpolation off"
-private const val VIDEO_INTERPOLATION_RIFE_2X = "Video interpolation rife 2x"
+internal const val VIDEO_INTERPOLATION_OFF = "Video interpolation off"
+internal const val VIDEO_INTERPOLATION_RIFE_2X = "Video interpolation rife 2x"
 private val VIDEO_INTERPOLATION_OPTIONS = listOf(
     VIDEO_INTERPOLATION_OFF,
     VIDEO_INTERPOLATION_RIFE_2X
@@ -711,10 +713,10 @@ private val AUDIO_CHANNEL_OPTIONS = listOf(
     AUDIO_CHANNELS_MONO
 )
 
-private const val ADVANCED_FADE_OFF = "Off"
-private const val ADVANCED_FADE_HALF_SECOND = "0.5s"
-private const val ADVANCED_FADE_ONE_SECOND = "1s"
-private const val ADVANCED_FADE_TWO_SECONDS = "2s"
+internal const val ADVANCED_FADE_OFF = "Off"
+internal const val ADVANCED_FADE_HALF_SECOND = "0.5s"
+internal const val ADVANCED_FADE_ONE_SECOND = "1s"
+internal const val ADVANCED_FADE_TWO_SECONDS = "2s"
 private val ADVANCED_FADE_OPTIONS = listOf(
     ADVANCED_FADE_OFF,
     ADVANCED_FADE_HALF_SECOND,
@@ -722,10 +724,10 @@ private val ADVANCED_FADE_OPTIONS = listOf(
     ADVANCED_FADE_TWO_SECONDS
 )
 
-private const val VIDEO_MIRROR_OFF = "Mirror off"
-private const val VIDEO_MIRROR_HORIZONTAL = "Horizontal"
-private const val VIDEO_MIRROR_VERTICAL = "Vertical"
-private const val VIDEO_MIRROR_BOTH = "Both"
+internal const val VIDEO_MIRROR_OFF = "Mirror off"
+internal const val VIDEO_MIRROR_HORIZONTAL = "Horizontal"
+internal const val VIDEO_MIRROR_VERTICAL = "Vertical"
+internal const val VIDEO_MIRROR_BOTH = "Both"
 private val VIDEO_MIRROR_OPTIONS = listOf(
     VIDEO_MIRROR_OFF,
     VIDEO_MIRROR_HORIZONTAL,
@@ -733,10 +735,10 @@ private val VIDEO_MIRROR_OPTIONS = listOf(
     VIDEO_MIRROR_BOTH
 )
 
-private const val VIDEO_ROTATION_NONE = "No rotation"
-private const val VIDEO_ROTATION_90_CW = "90 CW"
-private const val VIDEO_ROTATION_90_CCW = "90 CCW"
-private const val VIDEO_ROTATION_180 = "180"
+internal const val VIDEO_ROTATION_NONE = "No rotation"
+internal const val VIDEO_ROTATION_90_CW = "90 CW"
+internal const val VIDEO_ROTATION_90_CCW = "90 CCW"
+internal const val VIDEO_ROTATION_180 = "180"
 private val VIDEO_ROTATION_OPTIONS = listOf(
     VIDEO_ROTATION_NONE,
     VIDEO_ROTATION_90_CW,
@@ -744,13 +746,13 @@ private val VIDEO_ROTATION_OPTIONS = listOf(
     VIDEO_ROTATION_180
 )
 
-private const val VIDEO_ASPECT_KEEP = "Keep aspect"
-private const val VIDEO_ASPECT_FIT_16_9 = "Fit 16:9"
-private const val VIDEO_ASPECT_FIT_9_16 = "Fit 9:16"
-private const val VIDEO_ASPECT_FIT_1_1 = "Fit 1:1"
-private const val VIDEO_ASPECT_CROP_16_9 = "Crop 16:9"
-private const val VIDEO_ASPECT_CROP_9_16 = "Crop 9:16"
-private const val VIDEO_ASPECT_CROP_1_1 = "Crop 1:1"
+internal const val VIDEO_ASPECT_KEEP = "Keep aspect"
+internal const val VIDEO_ASPECT_FIT_16_9 = "Fit 16:9"
+internal const val VIDEO_ASPECT_FIT_9_16 = "Fit 9:16"
+internal const val VIDEO_ASPECT_FIT_1_1 = "Fit 1:1"
+internal const val VIDEO_ASPECT_CROP_16_9 = "Crop 16:9"
+internal const val VIDEO_ASPECT_CROP_9_16 = "Crop 9:16"
+internal const val VIDEO_ASPECT_CROP_1_1 = "Crop 1:1"
 private val VIDEO_ASPECT_OPTIONS = listOf(
     VIDEO_ASPECT_KEEP,
     VIDEO_ASPECT_FIT_16_9,
@@ -761,11 +763,11 @@ private val VIDEO_ASPECT_OPTIONS = listOf(
     VIDEO_ASPECT_CROP_1_1
 )
 
-private const val AUDIO_VOLUME_MUTE = "Mute"
-private const val AUDIO_VOLUME_50 = "50%"
-private const val AUDIO_VOLUME_100 = "100%"
-private const val AUDIO_VOLUME_150 = "150%"
-private const val AUDIO_VOLUME_200 = "200%"
+internal const val AUDIO_VOLUME_MUTE = "Mute"
+internal const val AUDIO_VOLUME_50 = "50%"
+internal const val AUDIO_VOLUME_100 = "100%"
+internal const val AUDIO_VOLUME_150 = "150%"
+internal const val AUDIO_VOLUME_200 = "200%"
 private val AUDIO_VOLUME_OPTIONS = listOf(
     AUDIO_VOLUME_100,
     AUDIO_VOLUME_50,
@@ -774,18 +776,18 @@ private val AUDIO_VOLUME_OPTIONS = listOf(
     AUDIO_VOLUME_MUTE
 )
 
-private const val AUDIO_ECHO_OFF = "Echo off"
-private const val AUDIO_ECHO_LIGHT = "Light echo"
-private const val AUDIO_ECHO_ROOM = "Room echo"
+internal const val AUDIO_ECHO_OFF = "Echo off"
+internal const val AUDIO_ECHO_LIGHT = "Light echo"
+internal const val AUDIO_ECHO_ROOM = "Room echo"
 private val AUDIO_ECHO_OPTIONS = listOf(
     AUDIO_ECHO_OFF,
     AUDIO_ECHO_LIGHT,
     AUDIO_ECHO_ROOM
 )
 
-private const val AUDIO_DENOISE_OFF = "Noise reduction off"
-private const val AUDIO_DENOISE_LIGHT = "Light denoise"
-private const val AUDIO_DENOISE_STANDARD = "Standard denoise"
+internal const val AUDIO_DENOISE_OFF = "Noise reduction off"
+internal const val AUDIO_DENOISE_LIGHT = "Light denoise"
+internal const val AUDIO_DENOISE_STANDARD = "Standard denoise"
 private val AUDIO_DENOISE_OPTIONS = listOf(
     AUDIO_DENOISE_OFF,
     AUDIO_DENOISE_LIGHT,
@@ -797,19 +799,19 @@ private const val IMAGE_QUALITY_LOSSLESS = "Lossless"
 private const val IMAGE_QUALITY_HIGH = "High"
 private const val IMAGE_QUALITY_BALANCED = "Balanced"
 private const val IMAGE_QUALITY_SMALL = "Small"
-private const val BATCH_MIXED_OPTION = "Mixed"
+internal const val BATCH_MIXED_OPTION = "Mixed"
 private val IMAGE_QUALITY_OPTIONS = listOf(
     IMAGE_QUALITY_ORIGINAL,
     IMAGE_QUALITY_HIGH,
     IMAGE_QUALITY_BALANCED,
     IMAGE_QUALITY_SMALL
 )
-private const val IMAGE_SUPER_RESOLUTION_OFF = "Super resolution off"
-private const val IMAGE_SUPER_RESOLUTION_2X = "Bilinear 2×"
-private const val IMAGE_SUPER_RESOLUTION_3X = "Bilinear 3×"
-private const val IMAGE_SUPER_RESOLUTION_4X = "Bilinear 4×"
-private const val IMAGE_SUPER_RESOLUTION_AI_ANIME = "Real-ESRGAN Anime 4× (AI)"
-private const val IMAGE_SUPER_RESOLUTION_AI = "Real-ESRGAN 4× (AI)"
+internal const val IMAGE_SUPER_RESOLUTION_OFF = "Super resolution off"
+internal const val IMAGE_SUPER_RESOLUTION_2X = "Bilinear 2×"
+internal const val IMAGE_SUPER_RESOLUTION_3X = "Bilinear 3×"
+internal const val IMAGE_SUPER_RESOLUTION_4X = "Bilinear 4×"
+internal const val IMAGE_SUPER_RESOLUTION_AI_ANIME = "Real-ESRGAN Anime 4× (AI)"
+internal const val IMAGE_SUPER_RESOLUTION_AI = "Real-ESRGAN 4× (AI)"
 private val IMAGE_SUPER_RESOLUTION_OPTIONS = listOf(
     IMAGE_SUPER_RESOLUTION_OFF,
     IMAGE_SUPER_RESOLUTION_2X,
@@ -867,7 +869,7 @@ fun ZenConverterApp(
     outputLocationMode: OutputLocationMode,
     outputDirectory: OutputDirectory?,
     conversionTasks: List<TaskProgress>,
-    conversionSummary: String?,
+    conversionSummary: LocalizedText?,
     isConversionRunning: Boolean,
     metadataToolState: MetadataToolState,
     esrganModelStates: Map<String, EsrganModelUiState>,
@@ -913,17 +915,18 @@ fun ZenConverterApp(
     onStartConversion: () -> Unit,
     onCancelConversion: () -> Unit
 ) {
-    val context = LocalContext.current.applicationContext
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val languageRevision by AppLanguages.revision.collectAsStateWithLifecycle()
     var accent by remember(context) {
         mutableStateOf(accentColorFromPreference(AppPreferences.accentColor(context)))
     }
     var themeModeOption by remember(context) {
         mutableStateOf(themeModeFromPreference(AppPreferences.themeMode(context)))
     }
-    var languageOption by remember(context) {
-        mutableStateOf(languageFromPreference(AppPreferences.language(context)))
-    }
-    val texts = uiTextFor(resolveLanguage(languageOption))
+    val languageOption = AppLanguages.selectedOption(context, configuration)
+    val resourceContext = remember(context, configuration, languageRevision) { AppLanguages.localizedContext(context) }
+    val texts = remember(resourceContext) { UiText(resourceContext) }
     val rootView = LocalView.current
     val isSystemDark = isSystemInDarkTheme()
 
@@ -954,90 +957,99 @@ fun ZenConverterApp(
         }
     }
 
-    MaterialTheme(colorScheme = zenConverterColorScheme(context, accent, isDark, isOled)) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            ZenConverterContent(
-                accent = accent,
-                themeModeOption = themeModeOption,
-                languageOption = languageOption,
-                texts = texts,
-                queuedFiles = queuedFiles,
-                pdfMergeGroups = pdfMergeGroups,
-                videoMergeGroups = videoMergeGroups,
-                supportedVideoMimeTypes = supportedVideoMimeTypes,
-                outputLocationMode = outputLocationMode,
-                outputDirectory = outputDirectory,
-                conversionTasks = conversionTasks,
-                conversionSummary = conversionSummary,
-                isConversionRunning = isConversionRunning,
-                metadataToolState = metadataToolState,
-                esrganModelStates = esrganModelStates,
-                rifeModelStates = rifeModelStates,
-                officeFontStates = officeFontStates,
-                onAccentSelected = {
-                    accent = it
-                    AppPreferences.setAccentColor(context, it.name)
-                },
-                onThemeModeSelected = {
-                    themeModeOption = it
-                    AppPreferences.setThemeMode(context, it.name)
-                },
-                onLanguageSelected = {
-                    languageOption = it
-                    AppPreferences.setLanguage(context, it.name)
-                },
-                onOutputLocationModeChange = onOutputLocationModeChange,
-                onPickFiles = onPickFiles,
-                onPickAlbumImages = onPickAlbumImages,
-                onPickAlbumVideos = onPickAlbumVideos,
-                onPickFolder = onPickFolder,
-                onUpdateQueuedFile = onUpdateQueuedFile,
-                onUpdateQueuedFiles = onUpdateQueuedFiles,
-                onCreatePdfMergeGroup = onCreatePdfMergeGroup,
-                onUpdatePdfMergeGroup = onUpdatePdfMergeGroup,
-                onRemovePdfMergeGroup = onRemovePdfMergeGroup,
-                onAddFileToPdfMergeGroup = onAddFileToPdfMergeGroup,
-                onRemoveFileFromPdfMergeGroup = onRemoveFileFromPdfMergeGroup,
-                onCreateVideoMergeGroup = onCreateVideoMergeGroup,
-                onUpdateVideoMergeGroup = onUpdateVideoMergeGroup,
-                onRemoveVideoMergeGroup = onRemoveVideoMergeGroup,
-                onAddFileToVideoMergeGroup = onAddFileToVideoMergeGroup,
-                onRemoveFileFromVideoMergeGroup = onRemoveFileFromVideoMergeGroup,
-                onPickOutputDirectory = onPickOutputDirectory,
-                onRemoveFile = onRemoveFile,
-                onClearQueue = onClearQueue,
-                onPickMetadataImage = onPickMetadataImage,
-                onPickMetadataVideo = onPickMetadataVideo,
-                onCleanMetadata = onCleanMetadata,
-                onRestoreMetadata = onRestoreMetadata,
-                onDownloadEsrganModel = onDownloadEsrganModel,
-                onCancelEsrganModelDownload = onCancelEsrganModelDownload,
-                onDownloadRifeModel = onDownloadRifeModel,
-                onCancelRifeModelDownload = onCancelRifeModelDownload,
-                onDownloadOfficeFont = onDownloadOfficeFont,
-                onCancelOfficeFontDownload = onCancelOfficeFontDownload,
-                onDeleteOfficeFont = onDeleteOfficeFont,
-                onStartConversion = onStartConversion,
-                onCancelConversion = onCancelConversion
-            )
-            pdfPasswordPrompt?.let { prompt ->
-                PdfPasswordDialog(
+    CompositionLocalProvider(
+        LocalContext provides resourceContext,
+        LocalConfiguration provides resourceContext.resources.configuration,
+        LocalLayoutDirection provides if (resourceContext.resources.configuration.layoutDirection == android.view.View.LAYOUT_DIRECTION_RTL) {
+            androidx.compose.ui.unit.LayoutDirection.Rtl
+        } else {
+            androidx.compose.ui.unit.LayoutDirection.Ltr
+        }
+    ) {
+        MaterialTheme(colorScheme = zenConverterColorScheme(context, accent, isDark, isOled)) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.background
+            ) {
+                ZenConverterContent(
+                    accent = accent,
+                    themeModeOption = themeModeOption,
+                    languageOption = languageOption,
                     texts = texts,
-                    prompt = prompt,
-                    onSubmit = onSubmitPdfPassword,
-                    onCancel = onCancelPdfPassword
+                    queuedFiles = queuedFiles,
+                    pdfMergeGroups = pdfMergeGroups,
+                    videoMergeGroups = videoMergeGroups,
+                    supportedVideoMimeTypes = supportedVideoMimeTypes,
+                    outputLocationMode = outputLocationMode,
+                    outputDirectory = outputDirectory,
+                    conversionTasks = conversionTasks,
+                    conversionSummary = conversionSummary,
+                    isConversionRunning = isConversionRunning,
+                    metadataToolState = metadataToolState,
+                    esrganModelStates = esrganModelStates,
+                    rifeModelStates = rifeModelStates,
+                    officeFontStates = officeFontStates,
+                    onAccentSelected = {
+                        accent = it
+                        AppPreferences.setAccentColor(context, it.name)
+                    },
+                    onThemeModeSelected = {
+                        themeModeOption = it
+                        AppPreferences.setThemeMode(context, it.name)
+                    },
+                    onLanguageSelected = {
+                        AppLanguages.select(it)
+                    },
+                    onOutputLocationModeChange = onOutputLocationModeChange,
+                    onPickFiles = onPickFiles,
+                    onPickAlbumImages = onPickAlbumImages,
+                    onPickAlbumVideos = onPickAlbumVideos,
+                    onPickFolder = onPickFolder,
+                    onUpdateQueuedFile = onUpdateQueuedFile,
+                    onUpdateQueuedFiles = onUpdateQueuedFiles,
+                    onCreatePdfMergeGroup = onCreatePdfMergeGroup,
+                    onUpdatePdfMergeGroup = onUpdatePdfMergeGroup,
+                    onRemovePdfMergeGroup = onRemovePdfMergeGroup,
+                    onAddFileToPdfMergeGroup = onAddFileToPdfMergeGroup,
+                    onRemoveFileFromPdfMergeGroup = onRemoveFileFromPdfMergeGroup,
+                    onCreateVideoMergeGroup = onCreateVideoMergeGroup,
+                    onUpdateVideoMergeGroup = onUpdateVideoMergeGroup,
+                    onRemoveVideoMergeGroup = onRemoveVideoMergeGroup,
+                    onAddFileToVideoMergeGroup = onAddFileToVideoMergeGroup,
+                    onRemoveFileFromVideoMergeGroup = onRemoveFileFromVideoMergeGroup,
+                    onPickOutputDirectory = onPickOutputDirectory,
+                    onRemoveFile = onRemoveFile,
+                    onClearQueue = onClearQueue,
+                    onPickMetadataImage = onPickMetadataImage,
+                    onPickMetadataVideo = onPickMetadataVideo,
+                    onCleanMetadata = onCleanMetadata,
+                    onRestoreMetadata = onRestoreMetadata,
+                    onDownloadEsrganModel = onDownloadEsrganModel,
+                    onCancelEsrganModelDownload = onCancelEsrganModelDownload,
+                    onDownloadRifeModel = onDownloadRifeModel,
+                    onCancelRifeModelDownload = onCancelRifeModelDownload,
+                    onDownloadOfficeFont = onDownloadOfficeFont,
+                    onCancelOfficeFontDownload = onCancelOfficeFontDownload,
+                    onDeleteOfficeFont = onDeleteOfficeFont,
+                    onStartConversion = onStartConversion,
+                    onCancelConversion = onCancelConversion
                 )
-            }
-            pdfOutputPasswordPrompt?.let { prompt ->
-                PdfOutputPasswordDialog(
-                    texts = texts,
-                    prompt = prompt,
-                    onSubmit = onSubmitPdfOutputPassword,
-                    onCancel = onCancelPdfOutputPassword
-                )
+                pdfPasswordPrompt?.let { prompt ->
+                    PdfPasswordDialog(
+                        texts = texts,
+                        prompt = prompt,
+                        onSubmit = onSubmitPdfPassword,
+                        onCancel = onCancelPdfPassword
+                    )
+                }
+                pdfOutputPasswordPrompt?.let { prompt ->
+                    PdfOutputPasswordDialog(
+                        texts = texts,
+                        prompt = prompt,
+                        onSubmit = onSubmitPdfOutputPassword,
+                        onCancel = onCancelPdfOutputPassword
+                    )
+                }
             }
         }
     }
@@ -1056,7 +1068,7 @@ private fun ZenConverterContent(
     outputLocationMode: OutputLocationMode,
     outputDirectory: OutputDirectory?,
     conversionTasks: List<TaskProgress>,
-    conversionSummary: String?,
+    conversionSummary: LocalizedText?,
     isConversionRunning: Boolean,
     metadataToolState: MetadataToolState,
     esrganModelStates: Map<String, EsrganModelUiState>,
@@ -1105,7 +1117,7 @@ private fun ZenConverterContent(
     var showHelpScreen by rememberSaveable { mutableStateOf(false) }
     var showImportSourceSheet by rememberSaveable { mutableStateOf(false) }
     var showAlbumSourceDialog by rememberSaveable { mutableStateOf(false) }
-    var queueMessage by remember { mutableStateOf<String?>(null) }
+    var queueMessage by remember { mutableStateOf<LocalizedText?>(null) }
     var openMenuId by remember { mutableStateOf<String?>(null) }
     var expandedFileId by remember { mutableStateOf<String?>(null) }
     val homeListState = rememberLazyListState()
@@ -1959,7 +1971,7 @@ private fun Header(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
-                        text = "ZenConverter",
+                        text = stringResource(R.string.app_name),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onBackground,
@@ -2293,7 +2305,7 @@ private fun SettingsPanel(
             modifier = Modifier.horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            LanguageOption.entries.forEach { option ->
+            AppLanguages.options(LocalContext.current).forEach { option ->
                 val selected = option == selectedLanguage
                 if (selected) {
                     Button(
@@ -2444,7 +2456,7 @@ private fun EsrganModelDownloadSection(
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = spec.sizeDisplay,
+                    text = formatBytes(spec.totalSizeBytes, texts),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -2452,7 +2464,7 @@ private fun EsrganModelDownloadSection(
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "${texts.modelSource} Real-ESRGAN",
+                    text = stringResource(R.string.display_esrgan_model_download_section_1_s_real_esrgan, texts.modelSource),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -2488,7 +2500,7 @@ private fun EsrganModelDownloadSection(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "${(state.progress * 100).toInt()}%",
+                                text = stringResource(R.string.display_esrgan_model_download_section_1_s, (state.progress * 100).toInt()),
                                 style = MaterialTheme.typography.labelMedium
                             )
                             TextButton(onClick = onCancel) {
@@ -2530,7 +2542,7 @@ private fun EsrganModelDownloadSection(
                 is EsrganModelUiState.Failed -> {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = state.message?.let { "${texts.downloadFailed}: $it" }
+                            text = state.message?.resolve(LocalContext.current)
                                 ?: texts.downloadFailed,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error
@@ -2586,7 +2598,7 @@ private fun RifeModelDownloadSection(
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = spec.sizeDisplay,
+                    text = formatBytes(spec.totalSizeBytes, texts),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -2594,7 +2606,7 @@ private fun RifeModelDownloadSection(
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "${texts.modelSource} RIFE",
+                    text = stringResource(R.string.display_rife_model_download_section_1_s_rife, texts.modelSource),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -2630,7 +2642,7 @@ private fun RifeModelDownloadSection(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "${(state.progress * 100).toInt()}%",
+                                text = stringResource(R.string.display_esrgan_model_download_section_1_s, (state.progress * 100).toInt()),
                                 style = MaterialTheme.typography.labelMedium
                             )
                             TextButton(onClick = onCancel) {
@@ -2672,7 +2684,7 @@ private fun RifeModelDownloadSection(
                 is RifeModelUiState.Failed -> {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = state.message?.let { "${texts.downloadFailed}: $it" }
+                            text = state.message?.resolve(LocalContext.current)
                                 ?: texts.downloadFailed,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error
@@ -2716,21 +2728,19 @@ private fun OfficeFontDownloadSection(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = spec.displayName,
+                        text = texts.taskMessage(spec.displayName),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium
                     )
-                    if (spec.description.isNotEmpty()) {
-                        Text(
-                            text = spec.description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Text(
+                        text = texts.taskMessage(spec.description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = spec.sizeDisplay,
+                    text = formatBytes(spec.sizeBytes, texts),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -2738,7 +2748,7 @@ private fun OfficeFontDownloadSection(
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "${texts.officeFontSource} Google Noto CJK (SIL OFL 1.1)",
+                    text = stringResource(R.string.display_office_font_download_section_1_s_google_noto_cjk_sil_ofl_1_1, texts.officeFontSource),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -2765,7 +2775,7 @@ private fun OfficeFontDownloadSection(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "${(state.progress * 100).toInt()}%",
+                                text = stringResource(R.string.display_esrgan_model_download_section_1_s, (state.progress * 100).toInt()),
                                 style = MaterialTheme.typography.labelMedium
                             )
                             TextButton(onClick = onCancel) {
@@ -2809,7 +2819,7 @@ private fun OfficeFontDownloadSection(
                 is OfficeFontUiState.Failed -> {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = state.message?.let { "${texts.downloadFailed}: $it" }
+                            text = state.message?.resolve(LocalContext.current)
                                 ?: texts.downloadFailed,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error
@@ -2853,7 +2863,7 @@ private fun AboutPanel(
                     .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(20.dp))
             )
             Text(
-                text = "ZenConverter",
+                text = stringResource(R.string.app_name),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -3135,7 +3145,7 @@ private fun PrivacyPolicyScreen(
                 Spacer(modifier = Modifier.width(4.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "ZenConverter",
+                        text = stringResource(R.string.app_name),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -3796,7 +3806,7 @@ private fun UpdatePanel(
                 downloadState = UpdateDownloadUiState.Idle
                 Toast.makeText(context, texts.downloadCancelled, Toast.LENGTH_SHORT).show()
             } catch (exception: Throwable) {
-                downloadState = UpdateDownloadUiState.Failed(exception.message)
+                downloadState = UpdateDownloadUiState.Failed(exception.localizedFailure(R.string.ui_download_failed))
             } finally {
                 downloadJob = null
             }
@@ -4703,7 +4713,7 @@ private fun BatchSettingsPanel(
         ) {
             groups.entries.sortedBy { it.key.ordinal }.forEach { (category, categoryFiles) ->
                 BatchScopeChip(
-                    label = "${texts.categoryLabel(category)} ${categoryFiles.size}",
+                    label = stringResource(R.string.display_batch_settings_panel_1_s_2_s, texts.categoryLabel(category), categoryFiles.size),
                     selected = category == activeCategory,
                     onClick = {
                         selectedCategory = category
@@ -4819,7 +4829,7 @@ private fun BatchTargetOptions(
     onUpdateFiles: (List<QueuedFile>) -> Unit
 ) {
     AnimatedContent(
-        targetState = "${category.name}-${target.targetFormat.label}",
+        targetState = "${category.name}-${target.targetFormat.key}",
         transitionSpec = {
             fadeIn(animationSpec = tween(ZenAnimations.ContentFadeDuration)) togetherWith
                 fadeOut(animationSpec = tween(ZenAnimations.ContentFadeOutDuration)) using
@@ -5487,7 +5497,7 @@ private fun PdfMergeGroupsPanel(
             ) {
                 if (imageCandidates.size >= 2) {
                     PdfMergeActionChip(
-                        label = "${texts.createImagePdfMerge} · ${texts.fileCountLabel(imageCandidates.size)}",
+                        label = stringResource(R.string.display_pdf_merge_groups_panel_1_s_2_s, texts.createImagePdfMerge, texts.fileCountLabel(imageCandidates.size)),
                         onClick = {
                             onOpenMenuChange(null)
                             onCreateGroup(PdfMergeType.Images)
@@ -5496,7 +5506,7 @@ private fun PdfMergeGroupsPanel(
                 }
                 if (pdfCandidates.size >= 2) {
                     PdfMergeActionChip(
-                        label = "${texts.createPdfMerge} · ${texts.fileCountLabel(pdfCandidates.size)}",
+                        label = stringResource(R.string.display_pdf_merge_groups_panel_1_s_2_s, texts.createPdfMerge, texts.fileCountLabel(pdfCandidates.size)),
                         onClick = {
                             onOpenMenuChange(null)
                             onCreateGroup(PdfMergeType.Pdfs)
@@ -5678,7 +5688,7 @@ private fun PdfMergeGroupCard(
             ) {
                 if (addableFiles.size > 6) {
                     PdfMergeActionChip(
-                        label = "${texts.addToMerge} · ${texts.fileCountLabel(addableFiles.size)}",
+                        label = stringResource(R.string.display_pdf_merge_groups_panel_1_s_2_s, texts.addToMerge, texts.fileCountLabel(addableFiles.size)),
                         onClick = {
                             onOpenMenuChange(null)
                             addableFiles.forEach { file ->
@@ -5844,7 +5854,7 @@ private fun VideoMergeGroupsPanel(
                 verticalSpacing = 8.dp
             ) {
                 VideoMergeActionChip(
-                    label = "${texts.createVideoMerge} · ${texts.fileCountLabel(candidates.size)}",
+                    label = stringResource(R.string.display_pdf_merge_groups_panel_1_s_2_s, texts.createVideoMerge, texts.fileCountLabel(candidates.size)),
                     onClick = {
                         onOpenMenuChange(null)
                         onCreateGroup()
@@ -6089,7 +6099,7 @@ private fun VideoMergeGroupCard(
             ) {
                 if (addableFiles.size > 6) {
                     VideoMergeActionChip(
-                        label = "${texts.addToMerge} · ${texts.fileCountLabel(addableFiles.size)}",
+                        label = stringResource(R.string.display_pdf_merge_groups_panel_1_s_2_s, texts.addToMerge, texts.fileCountLabel(addableFiles.size)),
                         onClick = {
                             onOpenMenuChange(null)
                             addableFiles.forEach { file ->
@@ -6279,9 +6289,7 @@ private fun VideoOptions(
     contactSheetOptions: VideoContactSheetOptions = VideoContactSheetOptions(),
     onContactSheetOptionsChange: (VideoContactSheetOptions) -> Unit = {},
 ) {
-    val isContactSheetTarget = targetFormat.extension.startsWith("contact_sheet", ignoreCase = true) ||
-        targetFormat.label.contains("概览拼图", ignoreCase = true) ||
-        targetFormat.label.contains("Contact Sheet", ignoreCase = true)
+    val isContactSheetTarget = targetFormat.id.isContactSheet
     if (isContactSheetTarget) {
         OptionGrid {
             MediaTrimOptions(
@@ -6704,13 +6712,13 @@ private fun MediaTrimOptions(
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Remove,
-                        contentDescription = "Remove split point",
+                        contentDescription = texts.text(R.string.a11y_remove_split_point),
                         modifier = Modifier.size(16.dp),
                         tint = if (trimRange.splitPoints.isNotEmpty()) MaterialTheme.colorScheme.primary else Color.Gray
                     )
                 }
                 Text(
-                    text = "✂️ ${trimRange.splitPoints.size}",
+                    text = stringResource(R.string.display_media_trim_options_1_s, trimRange.splitPoints.size),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -6738,7 +6746,7 @@ private fun MediaTrimOptions(
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Add,
-                        contentDescription = "Add split point",
+                        contentDescription = texts.text(R.string.a11y_add_split_point),
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.primary
                     )
@@ -6961,20 +6969,20 @@ private fun TrimAndSplitSlider(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "${texts.trimStartSeconds} ${formatTrimSeconds(currentStart.toDouble(), texts)}",
+                text = stringResource(R.string.display_batch_settings_panel_1_s_2_s, texts.trimStartSeconds, formatTrimSeconds(currentStart.toDouble(), texts)),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             trimRange.splitPoints.forEachIndexed { i, pt ->
                 Text(
-                    text = "✂️${i + 1} ${formatTrimSeconds(pt, texts)}",
+                    text = stringResource(R.string.display_trim_and_split_slider_1_s_2_s, i + 1, formatTrimSeconds(pt, texts)),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Medium
                 )
             }
             Text(
-                text = "${texts.trimEndSeconds} ${formatTrimSeconds(currentEnd.toDouble(), texts)}",
+                text = stringResource(R.string.display_batch_settings_panel_1_s_2_s, texts.trimEndSeconds, formatTrimSeconds(currentEnd.toDouble(), texts)),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold
@@ -7084,7 +7092,7 @@ private fun PreciseTrimAndSplitFields(
             ) {
                 TrimSecondsField(
                     value = pointSec,
-                    label = "✂️ ${texts.trimSplitPoints} ${index + 1}",
+                    label = stringResource(R.string.display_precise_trim_and_split_fields_1_s_2_s, texts.trimSplitPoints, index + 1),
                     isError = errorText != null,
                     onValueChange = { newVal ->
                         val updated = trimRange.splitPoints.toMutableList()
@@ -7105,7 +7113,7 @@ private fun PreciseTrimAndSplitFields(
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Close,
-                        contentDescription = "Remove",
+                        contentDescription = texts.text(R.string.ui_remove),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -7152,13 +7160,14 @@ private fun TrimSecondsField(
     onValueChange: (Double?) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val locale = LocalConfiguration.current.locales[0]
     var text by remember {
-        mutableStateOf(value?.let { formatTrimSecondsInput(it) }.orEmpty())
+        mutableStateOf(value?.let { formatTrimSecondsInput(it, locale) }.orEmpty())
     }
     var focused by remember { mutableStateOf(false) }
-    LaunchedEffect(value) {
-        if (!focused) {
-            text = value?.let { formatTrimSecondsInput(it) }.orEmpty()
+    LaunchedEffect(value, locale) {
+        if (!focused && (value == null || value.isFinite())) {
+            text = value?.let { formatTrimSecondsInput(it, locale) }.orEmpty()
         }
     }
     OutlinedTextField(
@@ -7166,11 +7175,12 @@ private fun TrimSecondsField(
         onValueChange = { rawValue ->
             val cleaned = sanitizeTrimSecondsInput(rawValue)
             text = cleaned
-            onValueChange(cleaned.toDoubleOrNull())
+            val parsed = cleaned.toLocalizedDoubleOrNull(locale)
+            if (cleaned.isBlank() || parsed != null) onValueChange(parsed)
         },
         singleLine = true,
         label = { Text(label) },
-        isError = isError,
+        isError = isError || (text.isNotBlank() && text.toLocalizedDoubleOrNull(locale) == null),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = MaterialTheme.colorScheme.primary,
@@ -7188,8 +7198,8 @@ private fun TrimSecondsField(
         modifier = modifier
             .defaultMinSize(minWidth = 0.dp)
             .onFocusChanged { focusState ->
-                if (focused && !focusState.isFocused) {
-                    text = value?.let { formatTrimSecondsInput(it) }.orEmpty()
+                if (focused && !focusState.isFocused && (value == null || value.isFinite())) {
+                    text = value?.let { formatTrimSecondsInput(it, locale) }.orEmpty()
                 }
                 focused = focusState.isFocused
             }
@@ -7197,27 +7207,17 @@ private fun TrimSecondsField(
 }
 
 private fun sanitizeTrimSecondsInput(rawValue: String): String {
-    val firstDot = rawValue.indexOf('.')
-    return if (firstDot < 0) {
-        rawValue.filter { it.isDigit() }.take(7)
-    } else {
-        rawValue.substring(0, firstDot).filter { it.isDigit() }.take(7) +
-            "." +
-            rawValue.substring(firstDot + 1).filter { it.isDigit() }.take(3)
-    }
+    return rawValue.take(32)
 }
 
-private fun formatTrimSecondsInput(seconds: Double): String {
+private fun formatTrimSecondsInput(seconds: Double, locale: Locale): String {
     if (!seconds.isFinite()) return ""
     val millis = Math.round(seconds * 1_000.0)
     val normalized = millis.toDouble() / 1_000.0
-    return if (normalized % 1.0 == 0.0) {
-        normalized.toLong().toString()
-    } else {
-        String.format(java.util.Locale.US, "%.3f", normalized)
-            .trimEnd('0')
-            .trimEnd('.')
-    }
+    return java.text.NumberFormat.getNumberInstance(locale).apply {
+        isGroupingUsed = false
+        maximumFractionDigits = 3
+    }.format(normalized)
 }
 
 private fun formatTrimSeconds(seconds: Double, texts: UiText): String {
@@ -7649,7 +7649,7 @@ private fun PdfOptions(
     onRenderQualityChange: (String) -> Unit = {},
     onCompressionPresetChange: (String) -> Unit = {}
 ) {
-    if (targetFormat.label.equals("Compress PDF", ignoreCase = true)) {
+    if (targetFormat.id == TargetId.PdfCompress) {
         OptionGrid {
             OptionDropdown(
                 "${menuPrefix}pdf-compression-preset",
@@ -7730,7 +7730,14 @@ private fun OutputLocationSection(
                     text = when (outputLocationMode) {
                         OutputLocationMode.Default -> texts.defaultOutputNote
                         OutputLocationMode.Custom ->
-                            outputDirectory?.label ?: texts.chooseFolderBeforeConversion
+                            outputDirectory?.let { directory ->
+                                directory.label.ifBlank {
+                                    texts.text(
+                                        if (directory.uri.lastPathSegment == null) R.string.ui_selected_folder
+                                        else R.string.ui_device_storage
+                                    )
+                                }
+                            } ?: texts.chooseFolderBeforeConversion
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -8459,7 +8466,7 @@ private fun OptionDropdown(
     Column(horizontalAlignment = Alignment.End) {
         PillMenuButton(
             onClick = { onOpenMenuChange(if (expanded) null else menuId) },
-            text = "$label: ${texts.optionValue(selected)}",
+            text = stringResource(R.string.display_option_dropdown_1_s_2_s, label, texts.optionValue(selected)),
             expanded = expanded
         )
         InlineDropdownPanel(
@@ -8712,7 +8719,7 @@ private fun AppIcon(
     )
 }
 
-private fun FileCategory.icon(): ImageVector {
+internal fun FileCategory.icon(): ImageVector {
     return when (this) {
         FileCategory.Video -> Icons.Rounded.Videocam
         FileCategory.Audio -> Icons.Rounded.AudioFile
@@ -8825,41 +8832,7 @@ private fun themeModeFromPreference(value: String?): ThemeModeOption {
         ?: ThemeModeOption.System
 }
 
-private fun languageFromPreference(value: String?): LanguageOption {
-    return LanguageOption.entries.firstOrNull { it.name == value }
-        ?: LanguageOption.System
-}
 
-private fun resolveLanguage(option: LanguageOption): ResolvedLanguage {
-    if (option == LanguageOption.English) return ResolvedLanguage.English
-    if (option == LanguageOption.SimplifiedChinese) return ResolvedLanguage.SimplifiedChinese
-    if (option == LanguageOption.TraditionalChinese) return ResolvedLanguage.TraditionalChinese
-
-    val locale = Locale.getDefault()
-    if (locale.language.equals("zh", ignoreCase = true)) {
-        val country = locale.country.uppercase(Locale.US)
-        val script = locale.script
-        return if (
-            script.equals("Hant", ignoreCase = true) ||
-            country == "TW" ||
-            country == "HK" ||
-            country == "MO"
-        ) {
-            ResolvedLanguage.TraditionalChinese
-        } else {
-            ResolvedLanguage.SimplifiedChinese
-        }
-    }
-    return ResolvedLanguage.English
-}
-
-private fun uiTextFor(language: ResolvedLanguage): UiText {
-    return when (language) {
-        ResolvedLanguage.English -> englishText
-        ResolvedLanguage.SimplifiedChinese -> simplifiedChineseText
-        ResolvedLanguage.TraditionalChinese -> traditionalChineseText
-    }
-}
 
 private fun targetsForSourceCategory(category: FileCategory?): List<ExternalImportTarget> {
     return when (category) {
@@ -8926,27 +8899,17 @@ private fun compactMergeFileName(name: String): String {
 private fun commonSelectedTargetFor(files: List<QueuedFile>): ExternalImportTarget? {
     return files
         .map { selectedTargetFor(it) }
-        .distinctBy { "${it.category.name}:${it.targetFormat.label}" }
+        .distinctBy { "${it.category.name}:${it.targetFormat.key}" }
         .singleOrNull()
 }
 
 private fun selectedTargetFor(file: QueuedFile): ExternalImportTarget {
     return targetsForQueuedFile(file).firstOrNull { target ->
-        target.category == file.category &&
-            (target.targetFormat.label.equals(file.targetFormat, ignoreCase = true) ||
-             (target.targetFormat.extension.startsWith("contact_sheet") &&
-              (file.targetFormat.contains("概览拼图") || file.targetFormat.contains("contact_sheet", ignoreCase = true) || file.targetFormat.contains("Contact Sheet", ignoreCase = true)) &&
-              ((target.targetFormat.extension.contains("jpg") && file.targetFormat.contains("jpg", ignoreCase = true)) ||
-               (target.targetFormat.extension.contains("png") && file.targetFormat.contains("png", ignoreCase = true)))))
+        target.category == file.category && target.targetFormat.id == TargetId.fromKey(file.targetFormat)
     } ?: ExternalImportTarget(
         category = file.category,
-        targetFormat = file.category.formats.firstOrNull {
-            it.label.equals(file.targetFormat, ignoreCase = true) ||
-                (it.extension.startsWith("contact_sheet") &&
-                 (file.targetFormat.contains("概览拼图") || file.targetFormat.contains("contact_sheet", ignoreCase = true) || file.targetFormat.contains("Contact Sheet", ignoreCase = true)) &&
-                 ((it.extension.contains("jpg") && file.targetFormat.contains("jpg", ignoreCase = true)) ||
-                  (it.extension.contains("png") && file.targetFormat.contains("png", ignoreCase = true))))
-        } ?: file.category.formats.first()
+        targetFormat = file.category.formats.firstOrNull { it.id == TargetId.fromKey(file.targetFormat) }
+            ?: file.category.formats.first()
     )
 }
 
@@ -8984,16 +8947,16 @@ private fun fileWithTarget(
     )
     val nextPdfSecurityOptions = when {
         target.category == FileCategory.Pdf &&
-            targetFormat.label.equals("Encrypt PDF", ignoreCase = true) ->
+            targetFormat.id == TargetId.PdfEncrypt ->
             PdfSecurityOptions(mode = org.zenconverter.app.conversion.PdfSecurityMode.Encrypt)
         target.category == FileCategory.Pdf &&
-            targetFormat.label.equals("Decrypt PDF", ignoreCase = true) ->
+            targetFormat.id == TargetId.PdfDecrypt ->
             PdfSecurityOptions(mode = org.zenconverter.app.conversion.PdfSecurityMode.Decrypt)
         else -> PdfSecurityOptions()
     }
     return file.copy(
         category = target.category,
-        targetFormat = targetFormat.label,
+        targetFormat = targetFormat.key,
         videoOptions = nextVideoOptions,
         audioOptions = nextAudioOptions,
         imageOptions = imageOptionsForTarget(file.imageOptions, targetFormat),
@@ -9619,2761 +9582,7 @@ private fun pdfCompressionPresetToOption(value: String): PdfCompressionPreset {
 
 private val AUDIO_LOSSLESS_OUTPUT_EXTENSIONS = setOf("wav", "flac")
 
-private data class PrivacyPolicySection(
-    val title: String,
-    val paragraphs: List<String>
-)
 
-private data class PrivacyPolicyText(
-    val title: String,
-    val back: String,
-    val updated: String,
-    val intro: String,
-    val sections: List<PrivacyPolicySection>,
-    val projectPage: String
-)
-
-private data class HelpGuideCopy(
-    val title: String,
-    val body: String,
-    val back: String,
-    val videoTitle: String,
-    val videoBody: String,
-    val videoFormats: String,
-    val audioTitle: String,
-    val audioBody: String,
-    val audioFormats: String,
-    val imageTitle: String,
-    val imageBody: String,
-    val imageFormats: String,
-    val documentTitle: String,
-    val documentBody: String,
-    val documentFormats: String,
-    val fontTitle: String,
-    val fontBody: String,
-    val fontFormats: String,
-    val subtitleTitle: String,
-    val subtitleBody: String,
-    val subtitleFormats: String,
-    val flowInput: String,
-    val flowProcess: String,
-    val flowOutput: String,
-    val help: String
-)
-
-private data class UiText(
-    val tagline: String,
-    val moreHeaderActions: String,
-    val openMetadataSecurity: String,
-    val closeMetadataSecurity: String,
-    val openAbout: String,
-    val closeAbout: String,
-    val openSettings: String,
-    val closeSettings: String,
-    val appLogo: String,
-    val appVersion: String,
-    val appLicense: String,
-    val aboutDescription: String,
-    val githubRepository: String,
-    val privacyPolicy: PrivacyPolicyText,
-    val helpGuide: HelpGuideCopy,
-    val checkUpdates: String,
-    val stableUpdateChannel: String,
-    val previewUpdateChannel: String,
-    val checkingUpdates: String,
-    val appDownload: String,
-    val browserDownload: String,
-    val downloadComplete: String,
-    val openDownloadedApk: String,
-    val downloadFailed: String,
-    val cancelDownload: String,
-    val downloadCancelled: String,
-    val installPermissionRequired: String,
-    val apkOpenFailed: String,
-    val supportDevelopment: String,
-    val sponsorTitle: String,
-    val sponsorIntro: String,
-    val sponsorNoBenefits: String,
-    val openLink: String,
-    val copy: String,
-    val copied: String,
-    val linkUnavailable: String,
-    val modelDownload: String,
-    val modelDownloadNote: String,
-    val modelPurpose: String,
-    val modelPurposeAnime: String,
-    val modelSource: String,
-    val modelDownloadAction: String,
-    val modelDownloaded: String,
-    val modelRedownload: String,
-    val officeFontTitle: String,
-    val officeFontSystemReady: String,
-    val officeFontSystemNote: String,
-    val officeFontEnhancementNote: String,
-    val officeFontSource: String,
-    val metadataSecurityTitle: String,
-    val metadataSecurityNote: String,
-    val metadataBackupNote: String,
-    val pickMetadataImage: String,
-    val pickMetadataVideo: String,
-    val metadataEmpty: String,
-    val metadataDetails: String,
-    val metadataCleanAndBackup: String,
-    val metadataRestore: String,
-    val metadataRestoreTitle: String,
-    val metadataGps: String,
-    val accentColor: String,
-    val themeMode: String,
-    val language: String,
-    val addFilesTitle: String,
-    val addFilesNote: String,
-    val addFiles: String,
-    val importSourceTitle: String,
-    val importAlbumTitle: String,
-    val importAlbumNote: String,
-    val importAlbumDialogNote: String,
-    val importAlbumImagesTitle: String,
-    val importAlbumVideosTitle: String,
-    val importFolderTitle: String,
-    val importFolderNote: String,
-    val importFilesTitle: String,
-    val importFilesNote: String,
-    val batchSettings: String,
-    val batchSettingsNote: String,
-    val batchOptions: String,
-    val batchOptionsNote: String,
-    val batchMixedTarget: String,
-    val adjustOptions: String,
-    val pdfMergeTitle: String,
-    val pdfMergeNote: String,
-    val createImagePdfMerge: String,
-    val createPdfMerge: String,
-    val pdfMergeMember: String,
-    val videoMergeTitle: String,
-    val videoMergeNote: String,
-    val createVideoMerge: String,
-    val videoMergeMember: String,
-    val addToMerge: String,
-    val removeMergeGroup: String,
-    val target: String,
-    val output: String,
-    val choose: String,
-    val chooseDirectory: String,
-    val chooseFolderBeforeConversion: String,
-    val defaultOutputLocation: String,
-    val defaultOutputNote: String,
-    val customOutputLocation: String,
-    val storagePermissionRequired: String,
-    val folderPermissionSaved: String,
-    val folderSelectedForSession: String,
-    val start: String,
-    val cancel: String,
-    val cancelOrClearTasks: String,
-    val queue: String,
-    val selectedSuffix: String,
-    val unknownType: String,
-    val unknownSize: String,
-    val remove: String,
-    val shareOutput: String,
-    val openOutputLocation: String,
-    val outputUnavailable: String,
-    val shareOutputFailed: String,
-    val openOutputFailed: String,
-    val waiting: String,
-    val processing: String,
-    val flowComplete: String,
-    val flowCompleteNoFiles: String,
-    val cancelled: String,
-    val failed: String,
-    val quality: String,
-    val pageSize: String,
-    val renderQuality: String,
-    val compressionPreset: String,
-    val resolution: String,
-    val superResolution: String,
-    val videoCompressionMode: String,
-    val videoFrameInterpolation: String,
-    val videoInterpolationSummary: String,
-    val rifeModelPurpose: String,
-    val bitrate: String,
-    val codec: String,
-    val frameRate: String,
-    val sampleRate: String,
-    val opusSampleRateHint: String,
-    val channels: String,
-    val trimRange: String,
-    val trimQuick: String,
-    val trimPrecise: String,
-    val trimStartSeconds: String,
-    val trimEndSeconds: String,
-    val trimSplitPoints: String,
-    val trimAddSplitPoint: String,
-    val trimSplitPointsOrder: String,
-    val trimSplitPointsWithinDuration: String,
-    val trimDurationUnknown: String,
-    val trimRangeTooLarge: String,
-    val trimStartBeforeDuration: String,
-    val trimEndAfterStart: String,
-    val trimEndWithinDuration: String,
-    val gifFrameMode: String,
-    val password: String,
-    val skip: String,
-    val pdfPasswordTitle: String,
-    val pdfOutputPasswordTitle: String,
-    val toPrefix: String,
-    val contactSheetGridLabel: String,
-    val contactSheetIncludeHeader: String,
-    val contactSheetIncludeTimestamp: String
-) {
-    fun selectedCount(count: Int): String = "$count $selectedSuffix"
-
-    fun batchCount(count: Int): String {
-        return when (this) {
-            englishText -> if (count == 1) "1 item" else "$count items"
-            simplifiedChineseText -> "$count 个文件"
-            else -> "$count 個檔案"
-        }
-    }
-
-    fun pdfMergeGroupTitle(type: PdfMergeType): String {
-        return when (type) {
-            PdfMergeType.Images -> createImagePdfMerge
-            PdfMergeType.Pdfs -> createPdfMerge
-        }
-    }
-
-    fun externalImportTargetLabel(target: ExternalImportTarget): String {
-        val formatLabel = optionValue(target.targetFormat.label)
-        if (target.targetFormat.extension.startsWith("contact_sheet", ignoreCase = true) ||
-            target.targetFormat.label.contains("概览拼图", ignoreCase = true) ||
-            target.targetFormat.label.contains("Contact Sheet", ignoreCase = true)
-        ) {
-            return formatLabel
-        }
-        return "${categoryLabel(target.category)} · $formatLabel"
-    }
-
-    fun fileCountLabel(count: Int): String {
-        return when (this) {
-            englishText -> if (count == 1) "1 file" else "$count files"
-            simplifiedChineseText -> "$count 个文件"
-            else -> "$count 個檔案"
-        }
-    }
-
-    fun pageCountLabel(count: Int): String {
-        return when (this) {
-            englishText -> if (count == 1) "1 page" else "$count pages"
-            simplifiedChineseText -> "$count 页"
-            else -> "$count 頁"
-        }
-    }
-
-    fun frameRateLabel(value: String): String {
-        return when (this) {
-            englishText -> "Frame rate $value"
-            simplifiedChineseText -> "帧率 $value"
-            else -> "幀率 $value"
-        }
-    }
-
-    fun bitrateLabel(value: String): String {
-        return when (this) {
-            englishText -> "Overall bitrate $value"
-            simplifiedChineseText -> "总码率 $value"
-            else -> "總碼率 $value"
-        }
-    }
-
-    fun outputLargerHint(): String {
-        return when (this) {
-            englishText -> "Source may already be efficiently compressed"
-            simplifiedChineseText -> "源文件可能已经高效压缩"
-            else -> "來源檔案可能已高效壓縮"
-        }
-    }
-
-    fun compressionPresetSummary(value: String): String {
-        return when (value) {
-            VIDEO_COMPRESSION_VISUAL_LOSSLESS -> when (this) {
-                englishText -> "H.265 preferred · Original resolution · Original frame rate · AAC 192 kbps"
-                simplifiedChineseText -> "优先 H.265 · 原分辨率 · 原帧率 · AAC 192 kbps"
-                else -> "優先 H.265 · 原解析度 · 原幀率 · AAC 192 kbps"
-            }
-            VIDEO_COMPRESSION_BALANCED -> when (this) {
-                englishText -> "H.265 preferred · Short side 1080p · Original frame rate · AAC 160 kbps"
-                simplifiedChineseText -> "优先 H.265 · 短边 1080p · 原帧率 · AAC 160 kbps"
-                else -> "優先 H.265 · 短邊 1080p · 原幀率 · AAC 160 kbps"
-            }
-            VIDEO_COMPRESSION_SMALL -> when (this) {
-                englishText -> "H.265 preferred · Short side 720p · Max 30 fps · AAC 128 kbps"
-                simplifiedChineseText -> "优先 H.265 · 短边 720p · 最高 30fps · AAC 128 kbps"
-                else -> "優先 H.265 · 短邊 720p · 最高 30fps · AAC 128 kbps"
-            }
-            else -> ""
-        }
-    }
-
-    fun superResolutionSummary(): String {
-        return when (this) {
-            englishText -> "Bilinear upscale · Original quality"
-            simplifiedChineseText -> "双线性放大 · 原图质量"
-            else -> "雙線性放大 · 原圖品質"
-        }
-    }
-
-    fun aiSuperResolutionSummary(): String {
-        return when (this) {
-            englishText -> "AI upscale 4× · Real-ESRGAN · Slower · Transparency not kept"
-            simplifiedChineseText -> "AI 放大 4× · Real-ESRGAN · 较慢 · 不保留透明"
-            else -> "AI 放大 4× · Real-ESRGAN · 較慢 · 不保留透明"
-        }
-    }
-
-    fun aiUpscaleHint(): String {
-        return when (this) {
-            englishText -> "Download the Real-ESRGAN model in Settings to use AI upscale"
-            simplifiedChineseText -> "请在设置中下载 Real-ESRGAN 模型后再使用"
-            else -> "請在設定中下載 Real-ESRGAN 模型後再使用"
-        }
-    }
-
-    fun rifeInterpolationHint(): String {
-        return when (this) {
-            englishText -> "Download the RIFE model in Settings to enable AI frame interpolation (Experimental)"
-            simplifiedChineseText -> "请在设置中下载 RIFE 模型后再使用 AI 视频插帧（实验性）"
-            else -> "請在設定中下載 RIFE 模型後再使用 AI 影片補幀（實驗性）"
-        }
-    }
-
-    fun audioBitrateLabel(): String {
-        return when (this) {
-            englishText -> "Audio bitrate"
-            simplifiedChineseText -> "音频码率"
-            else -> "音訊位元率"
-        }
-    }
-
-    fun trimDurationHint(durationText: String?): String {
-        return when (this) {
-            englishText -> durationText?.let { "Duration $it" } ?: trimDurationUnknown
-            simplifiedChineseText -> durationText?.let { "时长 $it" } ?: trimDurationUnknown
-            else -> durationText?.let { "時長 $it" } ?: trimDurationUnknown
-        }
-    }
-
-    fun trimSplitSegmentsHint(segmentCount: Int): String {
-        return when (this) {
-            englishText -> if (segmentCount == 1) "1 part" else "$segmentCount parts"
-            simplifiedChineseText -> "共 $segmentCount 段"
-            else -> "共 $segmentCount 段"
-        }
-    }
-
-    fun videoAdvancedTitle(): String {
-        return when (this) {
-            englishText -> "Advanced video"
-            simplifiedChineseText -> "视频高级处理"
-            else -> "影片進階處理"
-        }
-    }
-
-    fun videoAdvancedNote(): String {
-        return when (this) {
-            englishText -> "Short reverse, fade, mirror, rotate, and frame shape"
-            simplifiedChineseText -> "短视频倒放、淡入淡出、镜像、旋转、画幅"
-            else -> "短影片倒放、淡入淡出、鏡像、旋轉、畫幅"
-        }
-    }
-
-    fun audioAdvancedTitle(): String {
-        return when (this) {
-            englishText -> "Advanced audio"
-            simplifiedChineseText -> "音频高级处理"
-            else -> "音訊進階處理"
-        }
-    }
-
-    fun audioAdvancedNote(): String {
-        return when (this) {
-            englishText -> "Reverse, denoise, fade, volume, mute, and echo"
-            simplifiedChineseText -> "倒放、降噪、淡入淡出、音量、静音、回音"
-            else -> "倒放、降噪、淡入淡出、音量、靜音、回音"
-        }
-    }
-
-    fun reverseLabel(): String {
-        return when (this) {
-            englishText -> "Reverse playback"
-            simplifiedChineseText -> "倒放"
-            else -> "倒放"
-        }
-    }
-
-    fun fadeInLabel(): String {
-        return when (this) {
-            englishText -> "Fade in"
-            simplifiedChineseText -> "淡入"
-            else -> "淡入"
-        }
-    }
-
-    fun fadeOutLabel(): String {
-        return when (this) {
-            englishText -> "Fade out"
-            simplifiedChineseText -> "淡出"
-            else -> "淡出"
-        }
-    }
-
-    fun mirrorLabel(): String {
-        return when (this) {
-            englishText -> "Mirror"
-            simplifiedChineseText -> "镜像"
-            else -> "鏡像"
-        }
-    }
-
-    fun rotationLabel(): String {
-        return when (this) {
-            englishText -> "Rotate"
-            simplifiedChineseText -> "旋转"
-            else -> "旋轉"
-        }
-    }
-
-    fun aspectRatioLabel(): String {
-        return when (this) {
-            englishText -> "Frame"
-            simplifiedChineseText -> "画幅"
-            else -> "畫幅"
-        }
-    }
-
-    fun volumeLabel(): String {
-        return when (this) {
-            englishText -> "Volume"
-            simplifiedChineseText -> "音量"
-            else -> "音量"
-        }
-    }
-
-    fun echoLabel(): String {
-        return when (this) {
-            englishText -> "Echo"
-            simplifiedChineseText -> "回音"
-            else -> "回音"
-        }
-    }
-
-    fun noiseReductionLabel(): String {
-        return when (this) {
-            englishText -> "Noise reduction"
-            simplifiedChineseText -> "声音降噪"
-            else -> "聲音降噪"
-        }
-    }
-
-    fun metadataKindLabel(kind: MetadataTargetKind): String {
-        return when (kind) {
-            MetadataTargetKind.Image -> when (this) {
-                englishText -> "Image"
-                simplifiedChineseText -> "图片"
-                else -> "圖片"
-            }
-            MetadataTargetKind.Video -> when (this) {
-                englishText -> "Video"
-                simplifiedChineseText -> "视频"
-                else -> "影片"
-            }
-        }
-    }
-
-    fun metadataSupportLabel(inspection: MetadataInspection): String {
-        return when {
-            inspection.kind == MetadataTargetKind.Video -> when (this) {
-                englishText -> "View only"
-                simplifiedChineseText -> "仅查看"
-                else -> "僅查看"
-            }
-            !inspection.editable -> when (this) {
-                englishText -> "Unsupported cleanup"
-                simplifiedChineseText -> "暂不支持清理"
-                else -> "暫不支援清理"
-            }
-            !inspection.canWrite -> when (this) {
-                englishText -> "Read only"
-                simplifiedChineseText -> "只读"
-                else -> "唯讀"
-            }
-            inspection.hasRemovableMetadata -> when (this) {
-                englishText -> "Metadata found"
-                simplifiedChineseText -> "发现元数据"
-                else -> "發現元資料"
-            }
-            else -> when (this) {
-                englishText -> "Clean"
-                simplifiedChineseText -> "已干净"
-                else -> "已乾淨"
-            }
-        }
-    }
-
-    fun metadataLabel(value: String): String {
-        return when (value) {
-            "Format" -> when (this) {
-                englishText -> "Format"
-                simplifiedChineseText -> "格式"
-                else -> "格式"
-            }
-            "Size" -> when (this) {
-                englishText -> "Size"
-                simplifiedChineseText -> "体积"
-                else -> "大小"
-            }
-            "Dimensions" -> when (this) {
-                englishText -> "Dimensions"
-                simplifiedChineseText -> "尺寸"
-                else -> "尺寸"
-            }
-            "Duration" -> when (this) {
-                englishText -> "Duration"
-                simplifiedChineseText -> "时长"
-                else -> "時長"
-            }
-            "Frame rate" -> frameRate
-            "Overall bitrate" -> when (this) {
-                englishText -> "Overall bitrate"
-                simplifiedChineseText -> "总码率"
-                else -> "總位元率"
-            }
-            "GPS" -> metadataGps
-            "Captured" -> when (this) {
-                englishText -> "Captured"
-                simplifiedChineseText -> "拍摄时间"
-                else -> "拍攝時間"
-            }
-            "Camera" -> when (this) {
-                englishText -> "Camera"
-                simplifiedChineseText -> "设备"
-                else -> "裝置"
-            }
-            "Software" -> when (this) {
-                englishText -> "Software"
-                simplifiedChineseText -> "软件"
-                else -> "軟體"
-            }
-            "Orientation" -> when (this) {
-                englishText -> "Orientation"
-                simplifiedChineseText -> "方向"
-                else -> "方向"
-            }
-            "Description" -> when (this) {
-                englishText -> "Description"
-                simplifiedChineseText -> "描述"
-                else -> "描述"
-            }
-            "Artist" -> when (this) {
-                englishText -> "Artist"
-                simplifiedChineseText -> "作者"
-                else -> "作者"
-            }
-            "Copyright" -> when (this) {
-                englishText -> "Copyright"
-                simplifiedChineseText -> "版权"
-                else -> "版權"
-            }
-            "EXIF" -> "EXIF"
-            "XMP" -> "XMP"
-            "IPTC" -> "IPTC"
-            "Comment" -> when (this) {
-                englishText -> "Comment"
-                simplifiedChineseText -> "注释"
-                else -> "註解"
-            }
-            "Removable" -> when (this) {
-                englishText -> "Removable"
-                simplifiedChineseText -> "可清理"
-                else -> "可清理"
-            }
-            "Backups" -> when (this) {
-                englishText -> "Backups"
-                simplifiedChineseText -> "备份"
-                else -> "備份"
-            }
-            "Core hash" -> when (this) {
-                englishText -> "Core hash"
-                simplifiedChineseText -> "图像指纹"
-                else -> "影像指紋"
-            }
-            "Support" -> when (this) {
-                englishText -> "Support"
-                simplifiedChineseText -> "支持"
-                else -> "支援"
-            }
-            else -> value
-        }
-    }
-
-    fun yesNo(value: Boolean): String {
-        return when (this) {
-            englishText -> if (value) "Yes" else "No"
-            simplifiedChineseText -> if (value) "有" else "无"
-            else -> if (value) "有" else "無"
-        }
-    }
-
-    fun yesNoLabel(value: Boolean, label: String): String {
-        return "$label: ${yesNo(value)}"
-    }
-
-    fun metadataBackupCountLabel(count: Int): String {
-        return when (this) {
-            englishText -> if (count == 1) "1 backup" else "$count backups"
-            simplifiedChineseText -> "$count 个备份"
-            else -> "$count 個備份"
-        }
-    }
-
-    fun metadataSegmentCountLabel(count: Int): String {
-        return when (this) {
-            englishText -> if (count == 1) "1 segment" else "$count segments"
-            simplifiedChineseText -> "$count 段"
-            else -> "$count 段"
-        }
-    }
-
-    fun metadataMessage(message: MetadataStatusMessage): String {
-        val base = when (message.key) {
-            MetadataMessageKey.Cleaned -> when (this) {
-                englishText -> "Metadata cleaned and backed up"
-                simplifiedChineseText -> "元数据已清理并备份"
-                else -> "元資料已清理並備份"
-            }
-            MetadataMessageKey.Restored -> when (this) {
-                englishText -> "Metadata restored"
-                simplifiedChineseText -> "元数据已恢复"
-                else -> "元資料已恢復"
-            }
-            MetadataMessageKey.NoRemovableMetadata -> when (this) {
-                englishText -> "No removable metadata was found"
-                simplifiedChineseText -> "未发现可清理元数据"
-                else -> "未發現可清理元資料"
-            }
-            MetadataMessageKey.UnsupportedImageFormat -> when (this) {
-                englishText -> "Lossless cleanup currently supports JPG/JPEG/JFIF only"
-                simplifiedChineseText -> "无损清理暂时只支持 JPG/JPEG/JFIF"
-                else -> "無損清理暫時只支援 JPG/JPEG/JFIF"
-            }
-            MetadataMessageKey.WritePermissionNeeded -> when (this) {
-                englishText -> "This file did not grant write access"
-                simplifiedChineseText -> "这个文件未授予写入权限"
-                else -> "這個檔案未授予寫入權限"
-            }
-            MetadataMessageKey.CouldNotRead -> when (this) {
-                englishText -> "Could not read metadata"
-                simplifiedChineseText -> "无法读取元数据"
-                else -> "無法讀取元資料"
-            }
-            MetadataMessageKey.CouldNotWrite -> when (this) {
-                englishText -> "Could not write metadata changes"
-                simplifiedChineseText -> "无法写入元数据变更"
-                else -> "無法寫入元資料變更"
-            }
-            MetadataMessageKey.BackupMissing -> when (this) {
-                englishText -> "Metadata backup was not found"
-                simplifiedChineseText -> "未找到元数据备份"
-                else -> "未找到元資料備份"
-            }
-            MetadataMessageKey.BackupDoesNotMatch -> when (this) {
-                englishText -> "This backup does not match the selected image"
-                simplifiedChineseText -> "这个备份与当前图片不匹配"
-                else -> "這個備份與目前圖片不匹配"
-            }
-            MetadataMessageKey.InvalidJpeg -> when (this) {
-                englishText -> "This JPEG file could not be parsed safely"
-                simplifiedChineseText -> "无法安全解析这个 JPEG 文件"
-                else -> "無法安全解析這個 JPEG 檔案"
-            }
-        }
-        return if (message.detail.isNullOrBlank()) base else "$base: ${message.detail}"
-    }
-
-    fun metadataOrientationLabel(value: Int?): String {
-        return when (value) {
-            ExifInterface.ORIENTATION_NORMAL -> when (this) {
-                englishText -> "Normal"
-                simplifiedChineseText -> "正常"
-                else -> "正常"
-            }
-            ExifInterface.ORIENTATION_ROTATE_90 -> when (this) {
-                englishText -> "Rotate 90°"
-                simplifiedChineseText -> "旋转 90°"
-                else -> "旋轉 90°"
-            }
-            ExifInterface.ORIENTATION_ROTATE_180 -> when (this) {
-                englishText -> "Rotate 180°"
-                simplifiedChineseText -> "旋转 180°"
-                else -> "旋轉 180°"
-            }
-            ExifInterface.ORIENTATION_ROTATE_270 -> when (this) {
-                englishText -> "Rotate 270°"
-                simplifiedChineseText -> "旋转 270°"
-                else -> "旋轉 270°"
-            }
-            ExifInterface.ORIENTATION_FLIP_HORIZONTAL,
-            ExifInterface.ORIENTATION_FLIP_VERTICAL,
-            ExifInterface.ORIENTATION_TRANSPOSE,
-            ExifInterface.ORIENTATION_TRANSVERSE -> when (this) {
-                englishText -> "Flipped"
-                simplifiedChineseText -> "翻转"
-                else -> "翻轉"
-            }
-            else -> unknownType
-        }
-    }
-
-    fun metadataBackupLabel(
-        backup: MetadataBackupInfo,
-        recommended: Boolean
-    ): String {
-        val time = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
-            .format(Date(backup.createdAtMillis))
-        val size = formatBytes(backup.segmentBytes, this)
-        val suffix = if (recommended) {
-            when (this) {
-                englishText -> " · latest"
-                simplifiedChineseText -> " · 最新"
-                else -> " · 最新"
-            }
-        } else {
-            ""
-        }
-        return "$time · ${metadataSegmentCountLabel(backup.segmentCount)} · $size$suffix"
-    }
-
-    fun qrCodeFor(value: String): String {
-        return when (this) {
-            englishText -> "QR code for $value"
-            simplifiedChineseText -> "$value 的二维码"
-            else -> "$value 的 QR Code"
-        }
-    }
-
-    fun pdfPasswordMessage(fileName: String): String {
-        return when (this) {
-            englishText -> "$fileName is password-protected. Enter the password to add it."
-            simplifiedChineseText -> "$fileName 受密码保护。输入密码后再加入队列。"
-            else -> "$fileName 受密碼保護。輸入密碼後再加入佇列。"
-        }
-    }
-
-    fun pdfOutputPasswordMessage(fileCount: Int): String {
-        return when (this) {
-            englishText -> {
-                val label = if (fileCount == 1) "this PDF" else "$fileCount PDFs"
-                "Set the password required to open $label after export."
-            }
-            simplifiedChineseText ->
-                "设置导出后打开这 $fileCount 个 PDF 所需的密码。"
-            else ->
-                "設定匯出後開啟這 $fileCount 個 PDF 所需的密碼。"
-        }
-    }
-
-    fun summaryMessage(value: String): String {
-        return when (value) {
-            "Processing", "Compatibility processing" -> runningKeepAwakeMessage(processing)
-            "Saving" -> runningKeepAwakeMessage(
-                when (this) {
-                    englishText -> "Saving"
-                    simplifiedChineseText -> "保存中"
-                    else -> "儲存中"
-                }
-            )
-            else -> taskMessage(value)
-        }
-    }
-
-    private fun runningKeepAwakeMessage(action: String): String {
-        return when (this) {
-            englishText -> "$action · Keeping the screen on; keep ZenConverter in the foreground"
-            simplifiedChineseText -> "$action · 已保持屏幕常亮，请让 ZenConverter 留在前台"
-            else -> "$action · 已保持螢幕常亮，請讓 ZenConverter 留在前台"
-        }
-    }
-
-    fun taskMessage(value: String): String {
-        return when (value) {
-            "Processing", "Saving", "Compatibility processing" -> processing
-            "Flow complete" -> flowComplete
-            "Flow complete, no files created" -> flowCompleteNoFiles
-            "Conversion complete" -> flowComplete
-            "Conversion failed" -> failed
-            "Choose output folder first" -> chooseFolderBeforeConversion
-            "Only MP4 video is connected" -> failed
-            "Only video MP4 and audio M4A are connected" -> failed
-            "Only video MP4, audio M4A, and JPG/PNG/WEBP images are connected" -> failed
-            "Only video MP4, audio MP3/M4A/WAV/FLAC/WMA, and JPG/PNG/WEBP images are connected" -> failed
-            "Only connected video, audio, image, and PDF targets can run" -> failed
-            "Only connected video, audio, image, PDF, and document targets can run" -> failed
-            "Password-protected PDFs need Android 15 or PDF extension 13" -> when (this) {
-                englishText -> "Password-protected PDFs need Android 15 or PDF extension 13"
-                simplifiedChineseText -> "受密码保护的 PDF 需要 Android 15 或 PDF 扩展 13"
-                else -> "受密碼保護的 PDF 需要 Android 15 或 PDF 擴充 13"
-            }
-            "Password-protected PDF was skipped" -> when (this) {
-                englishText -> "Password-protected PDF was skipped"
-                simplifiedChineseText -> "已跳过受密码保护的 PDF"
-                else -> "已略過受密碼保護的 PDF"
-            }
-            "PDF encryption was skipped" -> when (this) {
-                englishText -> "PDF encryption was skipped"
-                simplifiedChineseText -> "已跳过 PDF 加密"
-                else -> "已略過 PDF 加密"
-            }
-            "PDF password was empty" -> when (this) {
-                englishText -> "PDF password was empty"
-                simplifiedChineseText -> "PDF 密码不能为空"
-                else -> "PDF 密碼不能為空"
-            }
-            "PDF password was incorrect or unsupported" -> when (this) {
-                englishText -> "PDF password was incorrect or unsupported"
-                simplifiedChineseText -> "PDF 密码不正确，或该保护方式不受支持"
-                else -> "PDF 密碼不正確，或該保護方式不受支援"
-            }
-            "Password-protected or unsupported PDF security" -> when (this) {
-                englishText -> "Password-protected or unsupported PDF security"
-                simplifiedChineseText -> "PDF 受密码保护，或使用了不受支持的安全方式"
-                else -> "PDF 受密碼保護，或使用了不受支援的安全方式"
-            }
-            "PDF has no pages" -> when (this) {
-                englishText -> "PDF has no pages"
-                simplifiedChineseText -> "PDF 没有可渲染页面"
-                else -> "PDF 沒有可渲染頁面"
-            }
-            "Not enough cache space for this PDF" -> when (this) {
-                englishText -> "Not enough cache space for this PDF"
-                simplifiedChineseText -> "缓存空间不足，无法处理这个 PDF"
-                else -> "快取空間不足，無法處理這個 PDF"
-            }
-            "Select at least two files to merge" -> when (this) {
-                englishText -> "Select at least two files to merge"
-                simplifiedChineseText -> "至少选择两个文件才能合并"
-                else -> "至少選擇兩個檔案才能合併"
-            }
-            "Select at least two PDFs to merge" -> when (this) {
-                englishText -> "Select at least two PDFs to merge"
-                simplifiedChineseText -> "请选择至少两个 PDF 来合并"
-                else -> "請選擇至少兩個 PDF 來合併"
-            }
-            "PDF has no selectable text; OCR is not included" -> when (this) {
-                englishText -> "PDF has no selectable text; OCR is not included"
-                simplifiedChineseText -> "PDF 没有可选择文本；当前不包含 OCR"
-                else -> "PDF 沒有可選取文字；目前不包含 OCR"
-            }
-            "PDF merge failed" -> when (this) {
-                englishText -> "PDF merge failed"
-                simplifiedChineseText -> "PDF 合并失败"
-                else -> "PDF 合併失敗"
-            }
-            "PDF text extraction failed" -> when (this) {
-                englishText -> "PDF text extraction failed"
-                simplifiedChineseText -> "PDF 文本提取失败"
-                else -> "PDF 文字提取失敗"
-            }
-            "PDF markdown export failed" -> when (this) {
-                englishText -> "PDF markdown export failed"
-                simplifiedChineseText -> "PDF Markdown 导出失败"
-                else -> "PDF Markdown 匯出失敗"
-            }
-            "PDF encryption failed" -> when (this) {
-                englishText -> "PDF encryption failed"
-                simplifiedChineseText -> "PDF 加密失败"
-                else -> "PDF 加密失敗"
-            }
-            "PDF decryption failed" -> when (this) {
-                englishText -> "PDF decryption failed"
-                simplifiedChineseText -> "PDF 解密失败"
-                else -> "PDF 解密失敗"
-            }
-            "PDF conversion failed" -> when (this) {
-                englishText -> "PDF conversion failed"
-                simplifiedChineseText -> "PDF 转换失败"
-                else -> "PDF 轉換失敗"
-            }
-            "Unsupported Office document" -> when (this) {
-                englishText -> "Unsupported Office document"
-                simplifiedChineseText -> "不支持这个 Office 文档"
-                else -> "不支援這個 Office 文件"
-            }
-            "Input file is empty" -> when (this) {
-                englishText -> "Input file is empty"
-                simplifiedChineseText -> "输入文件为空"
-                else -> "輸入檔案為空"
-            }
-            "Office converter is only available on arm64-v8a devices" -> when (this) {
-                englishText -> "Office converter is only available on arm64-v8a devices"
-                simplifiedChineseText -> "Office 转 PDF 暂时仅支持 arm64-v8a 设备"
-                else -> "Office 轉 PDF 暫時僅支援 arm64-v8a 裝置"
-            }
-            "Office converter could not start on this device" -> when (this) {
-                englishText -> "Office converter could not start on this device"
-                simplifiedChineseText -> "Office 转 PDF 引擎无法在此设备启动"
-                else -> "Office 轉 PDF 引擎無法在此裝置啟動"
-            }
-            "Office file is too large for this experimental converter" -> when (this) {
-                englishText -> "Office file is too large for this experimental converter"
-                simplifiedChineseText -> "Office 文件过大，超过当前实验转换上限"
-                else -> "Office 檔案過大，超過目前實驗轉換上限"
-            }
-            "Office conversion failed" -> when (this) {
-                englishText -> "Office conversion failed"
-                simplifiedChineseText -> "Office 转 PDF 失败"
-                else -> "Office 轉 PDF 失敗"
-            }
-            "Could not open this PDF" -> when (this) {
-                englishText -> "Could not open this PDF"
-                simplifiedChineseText -> "无法打开这个 PDF"
-                else -> "無法開啟這個 PDF"
-            }
-            "Could not read this PDF" -> when (this) {
-                englishText -> "Could not read this PDF"
-                simplifiedChineseText -> "无法读取这个 PDF"
-                else -> "無法讀取這個 PDF"
-            }
-            "Default output needs storage permission on this Android version" -> storagePermissionRequired
-            "Gallery import needs storage permission" -> when (this) {
-                englishText -> "Gallery import needs storage permission"
-                simplifiedChineseText -> "从相册导入需要存储权限"
-                else -> "從相簿匯入需要儲存權限"
-            }
-            "No gallery app found" -> when (this) {
-                englishText -> "No gallery app found"
-                simplifiedChineseText -> "没有找到图库应用"
-                else -> "沒有找到圖庫應用程式"
-            }
-            "Input file could not be opened" -> when (this) {
-                englishText -> "Input file could not be opened"
-                simplifiedChineseText -> "无法打开输入文件"
-                else -> "無法開啟輸入檔案"
-            }
-            "Input file permission was lost" -> when (this) {
-                englishText -> "Input file permission was lost"
-                simplifiedChineseText -> "输入文件权限已失效"
-                else -> "輸入檔案權限已失效"
-            }
-            "Custom output folder was unavailable; saved to default directory" -> when (this) {
-                englishText -> "Custom output folder was unavailable; saved to default directory"
-                simplifiedChineseText -> "自定义输出目录不可用，已保存至默认目录"
-                else -> "自訂輸出目錄不可用，已儲存至預設目錄"
-            }
-            "Custom output folder no longer exists; reset to default directory" -> when (this) {
-                englishText -> "Custom output folder no longer exists; reset to default directory"
-                simplifiedChineseText -> "自定义输出目录不存在，已重置为默认目录"
-                else -> "自訂輸出目錄不存在，已重設為預設目錄"
-            }
-            "Could not save output file" -> when (this) {
-                englishText -> "Could not save output file"
-                simplifiedChineseText -> "无法保存输出文件"
-                else -> "無法儲存輸出檔案"
-            }
-            "Compatibility engine failed before export" -> when (this) {
-                englishText -> "Compatibility engine failed before export"
-                simplifiedChineseText -> "兼容引擎启动导出前失败"
-                else -> "相容引擎啟動匯出前失敗"
-            }
-            "Compatibility engine could not open SAF input" -> when (this) {
-                englishText -> "Compatibility engine could not open SAF input"
-                simplifiedChineseText -> "兼容引擎无法打开 SAF 输入文件"
-                else -> "相容引擎無法開啟 SAF 輸入檔案"
-            }
-            "Compatibility engine could not transcode this file to MP4" -> when (this) {
-                englishText -> "Compatibility engine could not transcode this file to MP4"
-                simplifiedChineseText -> "兼容引擎无法把这个文件转码为 MP4"
-                else -> "相容引擎無法把這個檔案轉碼為 MP4"
-            }
-            "Compatibility engine could not transcode this file to MKV" -> when (this) {
-                englishText -> "Compatibility engine could not transcode this file to MKV"
-                simplifiedChineseText -> "兼容引擎无法把这个文件转码为 MKV"
-                else -> "相容引擎無法把這個檔案轉碼為 MKV"
-            }
-            "Compatibility engine could not transcode this file to MOV" -> when (this) {
-                englishText -> "Compatibility engine could not transcode this file to MOV"
-                simplifiedChineseText -> "兼容引擎无法把这个文件转码为 MOV"
-                else -> "相容引擎無法把這個檔案轉碼為 MOV"
-            }
-            "Compatibility engine could not extract AAC M4A audio" -> when (this) {
-                englishText -> "Compatibility engine could not extract AAC M4A audio"
-                simplifiedChineseText -> "兼容引擎无法提取 AAC/M4A 音频"
-                else -> "相容引擎無法提取 AAC/M4A 音訊"
-            }
-            "Compatibility engine could not convert this audio" -> when (this) {
-                englishText -> "Compatibility engine could not convert this audio"
-                simplifiedChineseText -> "兼容引擎无法转换这段音频"
-                else -> "相容引擎無法轉換這段音訊"
-            }
-            "Compatibility engine cannot encode this audio format yet" -> when (this) {
-                englishText -> "Compatibility engine cannot encode this audio format yet"
-                simplifiedChineseText -> "当前兼容包暂时不能编码这个音频格式"
-                else -> "目前相容包暫時不能編碼這個音訊格式"
-            }
-            "Compatibility engine cannot encode this video format yet" -> when (this) {
-                englishText -> "Compatibility engine cannot encode this video format yet"
-                simplifiedChineseText -> "当前兼容包暂时不能编码这个视频格式"
-                else -> "目前相容包暫時不能編碼這個影片格式"
-            }
-            "Compatibility engine needs an MP3-capable FFmpeg package" -> when (this) {
-                englishText -> "Compatibility engine needs an MP3-capable FFmpeg package"
-                simplifiedChineseText -> "当前兼容包不包含 MP3 编码器"
-                else -> "目前相容包不包含 MP3 編碼器"
-            }
-            "Compatibility engine needs an H.264-capable FFmpeg package" -> when (this) {
-                englishText -> "Compatibility engine needs an H.264-capable FFmpeg package"
-                simplifiedChineseText -> "当前兼容包不包含 H.264 编码器"
-                else -> "目前相容包不包含 H.264 編碼器"
-            }
-            "Compatibility engine needs an H.265-capable FFmpeg package" -> when (this) {
-                englishText -> "Compatibility engine needs an H.265-capable FFmpeg package"
-                simplifiedChineseText -> "当前兼容包不包含 H.265 编码器"
-                else -> "目前相容包不包含 H.265 編碼器"
-            }
-            "Compatibility engine needs an AAC-capable FFmpeg package" -> when (this) {
-                englishText -> "Compatibility engine needs an AAC-capable FFmpeg package"
-                simplifiedChineseText -> "当前兼容包不包含 AAC 编码器"
-                else -> "目前相容包不包含 AAC 編碼器"
-            }
-            "Compatibility engine needs a PCM WAV-capable FFmpeg package" -> when (this) {
-                englishText -> "Compatibility engine needs a PCM WAV-capable FFmpeg package"
-                simplifiedChineseText -> "当前兼容包不包含 PCM WAV 编码器"
-                else -> "目前相容包不包含 PCM WAV 編碼器"
-            }
-            "Compatibility engine needs a FLAC-capable FFmpeg package" -> when (this) {
-                englishText -> "Compatibility engine needs a FLAC-capable FFmpeg package"
-                simplifiedChineseText -> "当前兼容包不包含 FLAC 编码器"
-                else -> "目前相容包不包含 FLAC 編碼器"
-            }
-            "Compatibility engine needs a WMA-capable FFmpeg package" -> when (this) {
-                englishText -> "Compatibility engine needs a WMA-capable FFmpeg package"
-                simplifiedChineseText -> "当前兼容包不包含 WMA 编码器"
-                else -> "目前相容包不包含 WMA 編碼器"
-            }
-            "Compatibility engine needs an Opus-capable FFmpeg package" -> when (this) {
-                englishText -> "Compatibility engine needs an Opus-capable FFmpeg package"
-                simplifiedChineseText -> "当前兼容包不包含 Opus 编码器"
-                else -> "目前相容包不包含 Opus 編碼器"
-            }
-            "Compatibility engine needs a GIF-capable FFmpeg package" -> when (this) {
-                englishText -> "Compatibility engine needs a GIF-capable FFmpeg package"
-                simplifiedChineseText -> "当前兼容包不包含 GIF 编码器"
-                else -> "目前相容包不包含 GIF 編碼器"
-            }
-            "Compatibility engine needs duration metadata for fade out" -> when (this) {
-                englishText -> "Compatibility engine needs duration metadata for fade out"
-                simplifiedChineseText -> "淡出需要读取文件时长"
-                else -> "淡出需要讀取檔案時長"
-            }
-            "Compatibility engine needs duration metadata for reverse playback" -> when (this) {
-                englishText -> "Compatibility engine needs duration metadata for reverse playback"
-                simplifiedChineseText -> "倒放需要读取文件时长"
-                else -> "倒放需要讀取檔案時長"
-            }
-            "Compatibility engine needs duration metadata for trimming" -> when (this) {
-                englishText -> "Trimming needs readable media duration"
-                simplifiedChineseText -> "裁剪需要读取文件时长"
-                else -> "裁剪需要讀取檔案時長"
-            }
-            "Trim start must be zero or greater" -> when (this) {
-                englishText -> "Trim start must be zero or greater"
-                simplifiedChineseText -> "起始秒不能小于 0"
-                else -> "起始秒不能小於 0"
-            }
-            "Trim range is too large" -> trimRangeTooLarge
-            "Trim start must be before media duration" -> trimStartBeforeDuration
-            "Trim end must be greater than trim start" -> trimEndAfterStart
-            "Trim end must not exceed media duration" -> trimEndWithinDuration
-            "Compatibility engine supports reverse video up to 60 seconds" -> when (this) {
-                englishText -> "Reverse video supports files up to 60 seconds"
-                simplifiedChineseText -> "视频倒放暂时只支持 60 秒以内"
-                else -> "影片倒放暫時只支援 60 秒以內"
-            }
-            "Compatibility engine needs video size metadata for reverse playback" -> when (this) {
-                englishText -> "Reverse video needs readable video size metadata"
-                simplifiedChineseText -> "视频倒放需要读取画面尺寸"
-                else -> "影片倒放需要讀取畫面尺寸"
-            }
-            "Reverse video is only safe for very short low-resolution clips" -> when (this) {
-                englishText -> "Reverse video only supports very short low-resolution clips"
-                simplifiedChineseText -> "视频倒放只适合很短的低分辨率片段"
-                else -> "影片倒放只適合很短的低解析度片段"
-            }
-            "Compatibility engine needs reverse filters" -> when (this) {
-                englishText -> "Compatibility engine needs reverse filters"
-                simplifiedChineseText -> "当前兼容包缺少倒放滤镜"
-                else -> "目前相容包缺少倒放濾鏡"
-            }
-            "Compatibility engine needs the audio denoise filter" -> when (this) {
-                englishText -> "Compatibility engine needs the audio denoise filter"
-                simplifiedChineseText -> "当前兼容包缺少声音降噪滤镜"
-                else -> "目前相容包缺少聲音降噪濾鏡"
-            }
-            "Advanced video settings produced an unsupported frame size" -> when (this) {
-                englishText -> "Advanced video settings produced an unsupported frame size"
-                simplifiedChineseText -> "高级画面设置生成了不支持的尺寸"
-                else -> "進階畫面設定產生了不支援的尺寸"
-            }
-            "Compatibility engine is missing an advanced filter" -> when (this) {
-                englishText -> "Compatibility engine is missing an advanced filter"
-                simplifiedChineseText -> "当前兼容包缺少所选高级处理滤镜"
-                else -> "目前相容包缺少所選進階處理濾鏡"
-            }
-            "Compatibility engine could not create this GIF" -> when (this) {
-                englishText -> "Compatibility engine could not create this GIF"
-                simplifiedChineseText -> "兼容引擎无法生成这个 GIF"
-                else -> "相容引擎無法產生這個 GIF"
-            }
-            "Selected sample rate is not supported by this audio format" -> when (this) {
-                englishText -> "Selected sample rate is not supported by this audio format"
-                simplifiedChineseText -> "所选采样率不受该音频格式支持"
-                else -> "所選取樣率不被該音訊格式支援"
-            }
-            "Compatibility engine could not write this audio container" -> when (this) {
-                englishText -> "Compatibility engine could not write this audio container"
-                simplifiedChineseText -> "兼容引擎无法写出这个音频容器"
-                else -> "相容引擎無法寫出這個音訊容器"
-            }
-            "Compatibility engine could not write this video container" -> when (this) {
-                englishText -> "Compatibility engine could not write this video container"
-                simplifiedChineseText -> "兼容引擎无法写出这个视频容器"
-                else -> "相容引擎無法寫出這個影片容器"
-            }
-            "Compatibility engine is not connected for images" -> failed
-            "Compatibility engine is not connected for subtitles" -> failed
-            "Compatibility engine needs subtitle support" -> when (this) {
-                englishText -> "Compatibility engine needs subtitle support"
-                simplifiedChineseText -> "当前兼容包不包含字幕组件"
-                else -> "目前相容包不包含字幕組件"
-            }
-            "Compatibility engine could not convert this subtitle" -> when (this) {
-                englishText -> "Compatibility engine could not convert this subtitle"
-                simplifiedChineseText -> "兼容引擎无法转换这个字幕"
-                else -> "相容引擎無法轉換這個字幕"
-            }
-            "Subtitle conversion failed" -> when (this) {
-                englishText -> "Subtitle conversion failed"
-                simplifiedChineseText -> "字幕转换失败"
-                else -> "字幕轉換失敗"
-            }
-            "Unsupported subtitle format" -> when (this) {
-                englishText -> "Unsupported subtitle format"
-                simplifiedChineseText -> "不支持这个字幕格式"
-                else -> "不支援這個字幕格式"
-            }
-            "Subtitle file is empty" -> when (this) {
-                englishText -> "Subtitle file is empty"
-                simplifiedChineseText -> "字幕文件为空"
-                else -> "字幕檔案為空"
-            }
-            "Subtitle file is too large" -> when (this) {
-                englishText -> "Subtitle file is too large"
-                simplifiedChineseText -> "字幕文件过大"
-                else -> "字幕檔案過大"
-            }
-            "Could not parse subtitle file (SRT)" -> when (this) {
-                englishText -> "Could not parse subtitle file (SRT)"
-                simplifiedChineseText -> "无法解析 SRT 字幕文件"
-                else -> "無法解析 SRT 字幕檔案"
-            }
-            "Could not parse lyrics file (LRC)" -> when (this) {
-                englishText -> "Could not parse lyrics file (LRC)"
-                simplifiedChineseText -> "无法解析 LRC 歌词文件"
-                else -> "無法解析 LRC 歌詞檔案"
-            }
-            "Image conversion failed" -> when (this) {
-                englishText -> "Image conversion failed"
-                simplifiedChineseText -> "图片转换失败"
-                else -> "圖片轉換失敗"
-            }
-            "Image engine could not decode this input" -> when (this) {
-                englishText -> "Image engine could not decode this input"
-                simplifiedChineseText -> "无法解码这张图片"
-                else -> "無法解碼這張圖片"
-            }
-            "Image engine could not split GIF frames" -> when (this) {
-                englishText -> "Image engine could not split GIF frames"
-                simplifiedChineseText -> "无法拆分这个 GIF 的帧"
-                else -> "無法拆分這個 GIF 的幀"
-            }
-            "Image engine could not decode this ICO input" -> when (this) {
-                englishText -> "Image engine could not decode this ICO input"
-                simplifiedChineseText -> "无法解码这个 ICO 文件"
-                else -> "無法解碼這個 ICO 檔案"
-            }
-            "Image engine only supports PNG-in-ICO input" -> when (this) {
-                englishText -> "Image engine only supports PNG-in-ICO input"
-                simplifiedChineseText -> "当前只支持 PNG-in-ICO 输入"
-                else -> "目前只支援 PNG-in-ICO 輸入"
-            }
-            "Image engine could not write this output" -> when (this) {
-                englishText -> "Image engine could not write this output"
-                simplifiedChineseText -> "无法写出这个图片格式"
-                else -> "無法寫出這個圖片格式"
-            }
-            "Image engine could not super-resolve this image (output too large)" -> when (this) {
-                englishText -> "Image is too large to super-resolve at this scale; try a smaller scale"
-                simplifiedChineseText -> "图片尺寸过大，无法按此倍数超分，请尝试更小的倍数"
-                else -> "圖片尺寸過大，無法按此倍數超分，請嘗試更小的倍數"
-            }
-            "Image engine could not allocate memory for super-resolution" -> when (this) {
-                englishText -> "Not enough memory to super-resolve this image"
-                simplifiedChineseText -> "内存不足，无法超分这张图片"
-                else -> "記憶體不足，無法超分這張圖片"
-            }
-            "Cancelled" -> cancelled
-            "Queued" -> waiting
-            else -> value
-        }
-    }
-
-    fun progressLabel(progress: TaskProgress?): String {
-        if (progress == null) return waiting
-        return when (progress.status) {
-            TaskProgressStatus.Queued -> waiting
-            TaskProgressStatus.Running -> "${processing} ${(progress.progress * 100).toInt()}%"
-            TaskProgressStatus.Completed -> flowComplete
-            TaskProgressStatus.Cancelled -> cancelled
-            TaskProgressStatus.Failed -> failed
-        }
-    }
-
-    fun categoryLabel(category: FileCategory): String {
-        return when (category) {
-            FileCategory.Video -> optionValue("Video")
-            FileCategory.Audio -> optionValue("Audio")
-            FileCategory.Image -> optionValue("Image")
-            FileCategory.Pdf -> optionValue("PDF")
-            FileCategory.Document -> optionValue("Document")
-            FileCategory.Font -> optionValue("Font")
-            FileCategory.Subtitle -> optionValue("Subtitle")
-        }
-    }
-
-    fun toFormat(format: String): String = "$toPrefix $format"
-
-    fun accentLabel(option: AccentColorOption): String = optionValue(option.englishLabel)
-
-    fun themeModeLabel(option: ThemeModeOption): String {
-        return when (option) {
-            ThemeModeOption.System -> when (this) {
-                englishText -> "Follow system"
-                simplifiedChineseText -> "跟随系统"
-                else -> "跟隨系統"
-            }
-            ThemeModeOption.Light -> when (this) {
-                englishText -> "Light"
-                simplifiedChineseText -> "日间"
-                else -> "日間"
-            }
-            ThemeModeOption.Dark -> when (this) {
-                englishText -> "Dark"
-                simplifiedChineseText -> "夜间"
-                else -> "夜間"
-            }
-            ThemeModeOption.OledDark -> when (this) {
-                englishText -> "OLED Dark"
-                simplifiedChineseText -> "OLED 夜间"
-                else -> "OLED 夜間"
-            }
-        }
-    }
-
-    fun languageLabel(option: LanguageOption): String {
-        return when (option) {
-            LanguageOption.System -> when (this) {
-                englishText -> "System"
-                simplifiedChineseText -> "跟随系统"
-                else -> "跟隨系統"
-            }
-            LanguageOption.English -> "English"
-            LanguageOption.SimplifiedChinese -> "简体中文"
-            LanguageOption.TraditionalChinese -> "繁體中文"
-        }
-    }
-
-    fun updateChannelLabel(channel: UpdateChannel): String {
-        return when (channel) {
-            UpdateChannel.Stable -> stableUpdateChannel
-            UpdateChannel.Preview -> previewUpdateChannel
-        }
-    }
-
-    fun currentIsLatest(channel: UpdateChannel): String {
-        return when (this) {
-            englishText -> "No ${updateChannelLabel(channel).lowercase(Locale.US)} update found"
-            simplifiedChineseText -> "当前已是${updateChannelLabel(channel)}最新版本"
-            else -> "目前已是${updateChannelLabel(channel)}最新版本"
-        }
-    }
-
-    fun updateAvailableMessage(release: UpdateRelease): String {
-        return when (this) {
-            englishText -> "Update ${release.versionName} is available"
-            simplifiedChineseText -> "发现新版本 ${release.versionName}"
-            else -> "發現新版本 ${release.versionName}"
-        }
-    }
-
-    fun releaseDetail(release: UpdateRelease): String {
-        return when (this) {
-            englishText -> "${release.assetName} · ${formatBytes(release.sizeBytes, this)}"
-            simplifiedChineseText -> "${release.assetName} · ${formatBytes(release.sizeBytes, this)}"
-            else -> "${release.assetName} · ${formatBytes(release.sizeBytes, this)}"
-        }
-    }
-
-    fun downloadProgressMessage(progress: DownloadProgress): String {
-        val downloaded = formatBytes(progress.bytesDownloaded, this)
-        val total = progress.totalBytes
-        return if (total == null) {
-            downloaded
-        } else {
-            "$downloaded / ${formatBytes(total, this)}"
-        }
-    }
-
-    fun downloadFailureMessage(detail: String?): String {
-        return if (detail.isNullOrBlank()) {
-            downloadFailed
-        } else {
-            "$downloadFailed: $detail"
-        }
-    }
-
-    fun updateFailureMessage(reason: UpdateFailureReason, detail: String?): String {
-        val base = when (reason) {
-            UpdateFailureReason.Network -> when (this) {
-                englishText -> "Could not connect to GitHub"
-                simplifiedChineseText -> "无法连接 GitHub"
-                else -> "無法連接 GitHub"
-            }
-            UpdateFailureReason.NoRelease -> when (this) {
-                englishText -> "No release found for this channel"
-                simplifiedChineseText -> "这个通道还没有发布版本"
-                else -> "這個通道尚未發布版本"
-            }
-            UpdateFailureReason.NoApkAsset -> when (this) {
-                englishText -> "The release has no Android APK"
-                simplifiedChineseText -> "这个发布里没有 Android APK"
-                else -> "這個發布裡沒有 Android APK"
-            }
-            UpdateFailureReason.MissingVersionMetadata -> when (this) {
-                englishText -> "The release is missing Android version metadata"
-                simplifiedChineseText -> "这个发布缺少 Android 版本信息"
-                else -> "這個發布缺少 Android 版本資訊"
-            }
-            UpdateFailureReason.InvalidResponse -> when (this) {
-                englishText -> "GitHub returned an unreadable response"
-                simplifiedChineseText -> "GitHub 返回的内容无法识别"
-                else -> "GitHub 返回的內容無法識別"
-            }
-        }
-        return if (detail.isNullOrBlank()) base else "$base: $detail"
-    }
-
-    fun optionValue(value: String): String {
-        return when (value) {
-            "Video" -> when (this) {
-                englishText -> "Video"
-                simplifiedChineseText -> "视频"
-                else -> "影片"
-            }
-            "Close" -> when (this) {
-                englishText -> "Close"
-                simplifiedChineseText -> "关闭"
-                else -> "關閉"
-            }
-            "Audio" -> when (this) {
-                englishText -> "Audio"
-                simplifiedChineseText -> "音频"
-                else -> "音訊"
-            }
-            "Image" -> when (this) {
-                englishText -> "Image"
-                simplifiedChineseText -> "图片"
-                else -> "圖片"
-            }
-            "Document" -> when (this) {
-                englishText -> "Document"
-                simplifiedChineseText -> "文档"
-                else -> "文件"
-            }
-            "Compatibility" -> when (this) {
-                englishText -> "Multi-format"
-                simplifiedChineseText -> "多格式兼容"
-                else -> "多格式相容"
-            }
-            "Re-encode" -> when (this) {
-                englishText -> "Re-encode"
-                simplifiedChineseText -> "重新编码"
-                else -> "重新編碼"
-            }
-            "30s GIF" -> when (this) {
-                englishText -> "Up to 30s GIF"
-                simplifiedChineseText -> "上限 30 秒 GIF"
-                else -> "上限 30 秒 GIF"
-            }
-            "Summary Sheet" -> when (this) {
-                englishText -> "Summary Sheet"
-                simplifiedChineseText -> "概览长图"
-                else -> "概覽長圖"
-            }
-            "概览拼图 · JPG", "概览拼图▪JPG", "概览拼图 (JPG)" -> when (this) {
-                englishText -> "Contact Sheet · JPG"
-                simplifiedChineseText -> "概览拼图 · JPG"
-                else -> "概覽拼圖 · JPG"
-            }
-            "概览拼图 · PNG", "概览拼图▪PNG", "概览拼图 (PNG)" -> when (this) {
-                englishText -> "Contact Sheet · PNG"
-                simplifiedChineseText -> "概览拼图 · PNG"
-                else -> "概覽拼圖 · PNG"
-            }
-            "3 × 4 (12)" -> when (this) {
-                englishText -> "3 × 4 (12 frames)"
-                simplifiedChineseText -> "3 × 4 (12 帧)"
-                else -> "3 × 4 (12 幀)"
-            }
-            "3 × 3 (9)" -> when (this) {
-                englishText -> "3 × 3 (9 frames)"
-                simplifiedChineseText -> "3 × 3 (9 帧)"
-                else -> "3 × 3 (9 幀)"
-            }
-            "4 × 4 (16)" -> when (this) {
-                englishText -> "4 × 4 (16 frames)"
-                simplifiedChineseText -> "4 × 4 (16 帧)"
-                else -> "4 × 4 (16 幀)"
-            }
-            "5 × 5 (25)" -> when (this) {
-                englishText -> "5 × 5 (25 frames)"
-                simplifiedChineseText -> "5 × 5 (25 帧)"
-                else -> "5 × 5 (25 幀)"
-            }
-            "Auto engine" -> when (this) {
-                englishText -> "Native or compatibility"
-                simplifiedChineseText -> "原生或兼容引擎"
-                else -> "原生或相容引擎"
-            }
-            "PDF" -> "PDF"
-            "TXT" -> "TXT"
-            "MD" -> "MD"
-            "Page rasterization" -> when (this) {
-                englishText -> "Page rasterization"
-                simplifiedChineseText -> "页面栅格化"
-                else -> "頁面柵格化"
-            }
-            "Merge PDFs" -> when (this) {
-                englishText -> "Merge PDFs"
-                simplifiedChineseText -> "合并 PDF"
-                else -> "合併 PDF"
-            }
-            "Text layer" -> when (this) {
-                englishText -> "Text layer"
-                simplifiedChineseText -> "文本层提取"
-                else -> "文字層提取"
-            }
-            "Markdown" -> when (this) {
-                englishText -> "Markdown"
-                simplifiedChineseText -> "Markdown"
-                else -> "Markdown"
-            }
-            "Encrypt PDF" -> when (this) {
-                englishText -> "Encrypt PDF"
-                simplifiedChineseText -> "加密 PDF"
-                else -> "加密 PDF"
-            }
-            "Decrypt PDF" -> when (this) {
-                englishText -> "Decrypt PDF"
-                simplifiedChineseText -> "解密 PDF"
-                else -> "解密 PDF"
-            }
-            "Compress PDF" -> when (this) {
-                englishText -> "Compress PDF"
-                simplifiedChineseText -> "压缩 PDF"
-                else -> "壓縮 PDF"
-            }
-            "Reduce file size" -> when (this) {
-                englishText -> "Reduce file size"
-                simplifiedChineseText -> "缩减文件体积"
-                else -> "縮減檔案體積"
-            }
-            "High quality" -> when (this) {
-                englishText -> "High quality"
-                simplifiedChineseText -> "高画质"
-                else -> "高畫質"
-            }
-            "Small file" -> when (this) {
-                englishText -> "Small file"
-                simplifiedChineseText -> "小体积"
-                else -> "小體積"
-            }
-            "Password protect" -> when (this) {
-                englishText -> "Password protect"
-                simplifiedChineseText -> "密码保护"
-                else -> "密碼保護"
-            }
-            "Remove password" -> when (this) {
-                englishText -> "Remove password"
-                simplifiedChineseText -> "移除密码"
-                else -> "移除密碼"
-            }
-            "Office to PDF" -> when (this) {
-                englishText -> "Office to PDF"
-                simplifiedChineseText -> "Office 转 PDF"
-                else -> "Office 轉 PDF"
-            }
-            "Batch" -> when (this) {
-                englishText -> "Batch processing"
-                simplifiedChineseText -> "批量处理"
-                else -> "批次處理"
-            }
-            "Supports transparency" -> when (this) {
-                englishText -> "Supports transparency"
-                simplifiedChineseText -> "支持透明度"
-                else -> "支援透明度"
-            }
-            "Lossless output" -> when (this) {
-                englishText -> "Lossless output"
-                simplifiedChineseText -> "无损输出"
-                else -> "無損輸出"
-            }
-            BATCH_MIXED_OPTION -> when (this) {
-                englishText -> "Mixed"
-                simplifiedChineseText -> "混合"
-                else -> "混合"
-            }
-            "High" -> when (this) {
-                englishText -> "High"
-                simplifiedChineseText -> "高质量"
-                else -> "高品質"
-            }
-            "Balanced" -> when (this) {
-                englishText -> "Balanced"
-                simplifiedChineseText -> "均衡"
-                else -> "均衡"
-            }
-            "Small" -> when (this) {
-                englishText -> "Small"
-                simplifiedChineseText -> "小体积"
-                else -> "小體積"
-            }
-            "Original" -> when (this) {
-                englishText -> "Original"
-                simplifiedChineseText -> "原始"
-                else -> "原始"
-            }
-            ADVANCED_FADE_OFF -> when (this) {
-                englishText -> "Off"
-                simplifiedChineseText -> "关闭"
-                else -> "關閉"
-            }
-            ADVANCED_FADE_HALF_SECOND,
-            ADVANCED_FADE_ONE_SECOND,
-            ADVANCED_FADE_TWO_SECONDS,
-            AUDIO_VOLUME_50,
-            AUDIO_VOLUME_100,
-            AUDIO_VOLUME_150,
-            AUDIO_VOLUME_200 -> value
-            VIDEO_MIRROR_OFF -> when (this) {
-                englishText -> "Off"
-                simplifiedChineseText -> "关闭"
-                else -> "關閉"
-            }
-            VIDEO_MIRROR_HORIZONTAL -> when (this) {
-                englishText -> "Horizontal"
-                simplifiedChineseText -> "左右镜像"
-                else -> "左右鏡像"
-            }
-            VIDEO_MIRROR_VERTICAL -> when (this) {
-                englishText -> "Vertical"
-                simplifiedChineseText -> "上下镜像"
-                else -> "上下鏡像"
-            }
-            VIDEO_MIRROR_BOTH -> when (this) {
-                englishText -> "Both"
-                simplifiedChineseText -> "上下左右"
-                else -> "上下左右"
-            }
-            VIDEO_ROTATION_NONE -> when (this) {
-                englishText -> "None"
-                simplifiedChineseText -> "不旋转"
-                else -> "不旋轉"
-            }
-            VIDEO_ROTATION_90_CW -> when (this) {
-                englishText -> "90° clockwise"
-                simplifiedChineseText -> "顺时针 90°"
-                else -> "順時針 90°"
-            }
-            VIDEO_ROTATION_90_CCW -> when (this) {
-                englishText -> "90° counterclockwise"
-                simplifiedChineseText -> "逆时针 90°"
-                else -> "逆時針 90°"
-            }
-            VIDEO_ROTATION_180 -> when (this) {
-                englishText -> "180°"
-                simplifiedChineseText -> "180°"
-                else -> "180°"
-            }
-            VIDEO_ASPECT_KEEP -> when (this) {
-                englishText -> "Keep"
-                simplifiedChineseText -> "保持"
-                else -> "保持"
-            }
-            VIDEO_ASPECT_FIT_16_9 -> when (this) {
-                englishText -> "Fit 16:9"
-                simplifiedChineseText -> "适配 16:9"
-                else -> "適配 16:9"
-            }
-            VIDEO_ASPECT_FIT_9_16 -> when (this) {
-                englishText -> "Fit 9:16"
-                simplifiedChineseText -> "适配 9:16"
-                else -> "適配 9:16"
-            }
-            VIDEO_ASPECT_FIT_1_1 -> when (this) {
-                englishText -> "Fit 1:1"
-                simplifiedChineseText -> "适配 1:1"
-                else -> "適配 1:1"
-            }
-            VIDEO_ASPECT_CROP_16_9 -> when (this) {
-                englishText -> "Crop 16:9"
-                simplifiedChineseText -> "裁剪 16:9"
-                else -> "裁剪 16:9"
-            }
-            VIDEO_ASPECT_CROP_9_16 -> when (this) {
-                englishText -> "Crop 9:16"
-                simplifiedChineseText -> "裁剪 9:16"
-                else -> "裁剪 9:16"
-            }
-            VIDEO_ASPECT_CROP_1_1 -> when (this) {
-                englishText -> "Crop 1:1"
-                simplifiedChineseText -> "裁剪 1:1"
-                else -> "裁剪 1:1"
-            }
-            AUDIO_VOLUME_MUTE -> when (this) {
-                englishText -> "Mute"
-                simplifiedChineseText -> "静音"
-                else -> "靜音"
-            }
-            AUDIO_ECHO_OFF -> when (this) {
-                englishText -> "Off"
-                simplifiedChineseText -> "关闭"
-                else -> "關閉"
-            }
-            AUDIO_ECHO_LIGHT -> when (this) {
-                englishText -> "Light"
-                simplifiedChineseText -> "轻微"
-                else -> "輕微"
-            }
-            AUDIO_ECHO_ROOM -> when (this) {
-                englishText -> "Room"
-                simplifiedChineseText -> "房间"
-                else -> "房間"
-            }
-            AUDIO_DENOISE_OFF -> when (this) {
-                englishText -> "Off"
-                simplifiedChineseText -> "关闭"
-                else -> "關閉"
-            }
-            AUDIO_DENOISE_LIGHT -> when (this) {
-                englishText -> "Light"
-                simplifiedChineseText -> "轻度"
-                else -> "輕度"
-            }
-            AUDIO_DENOISE_STANDARD -> when (this) {
-                englishText -> "Standard"
-                simplifiedChineseText -> "标准"
-                else -> "標準"
-            }
-            VIDEO_COMPRESSION_STANDARD -> when (this) {
-                englishText -> "Off (manual)"
-                simplifiedChineseText -> "关闭（手动）"
-                else -> "關閉（手動）"
-            }
-            VIDEO_INTERPOLATION_OFF -> when (this) {
-                englishText -> "Off"
-                simplifiedChineseText -> "关闭"
-                else -> "關閉"
-            }
-            VIDEO_INTERPOLATION_RIFE_2X -> when (this) {
-                englishText -> "RIFE 2× Interpolation"
-                simplifiedChineseText -> "RIFE 2× 补帧"
-                else -> "RIFE 2× 補幀"
-            }
-            VIDEO_COMPRESSION_VISUAL_LOSSLESS -> when (this) {
-                englishText -> "Visual lossless"
-                simplifiedChineseText -> "视觉无损"
-                else -> "視覺無損"
-            }
-            VIDEO_COMPRESSION_BALANCED -> when (this) {
-                englishText -> "Balanced shrink"
-                simplifiedChineseText -> "均衡压缩"
-                else -> "均衡壓縮"
-            }
-            VIDEO_COMPRESSION_SMALL -> when (this) {
-                englishText -> "Small file"
-                simplifiedChineseText -> "小体积"
-                else -> "小體積"
-            }
-            IMAGE_SUPER_RESOLUTION_OFF -> when (this) {
-                englishText -> "Off"
-                simplifiedChineseText -> "关闭"
-                else -> "關閉"
-            }
-            IMAGE_SUPER_RESOLUTION_2X -> when (this) {
-                englishText -> "2× Bilinear"
-                simplifiedChineseText -> "2× 双线性"
-                else -> "2× 雙線性"
-            }
-            IMAGE_SUPER_RESOLUTION_3X -> when (this) {
-                englishText -> "3× Bilinear"
-                simplifiedChineseText -> "3× 双线性"
-                else -> "3× 雙線性"
-            }
-            IMAGE_SUPER_RESOLUTION_4X -> when (this) {
-                englishText -> "4× Bilinear"
-                simplifiedChineseText -> "4× 双线性"
-                else -> "4× 雙線性"
-            }
-            IMAGE_SUPER_RESOLUTION_AI_ANIME -> when (this) {
-                englishText -> "Real-ESRGAN Anime 4× (AI)"
-                simplifiedChineseText -> "Real-ESRGAN Anime 4×（AI 动漫）"
-                else -> "Real-ESRGAN Anime 4×（AI 動漫）"
-            }
-            IMAGE_SUPER_RESOLUTION_AI -> when (this) {
-                englishText -> "Real-ESRGAN 4× (AI)"
-                simplifiedChineseText -> "Real-ESRGAN 4×（AI）"
-                else -> "Real-ESRGAN 4×（AI）"
-            }
-            "Auto bitrate" -> when (this) {
-                englishText -> "Auto (recommended)"
-                simplifiedChineseText -> "自动（推荐）"
-                else -> "自動（推薦）"
-            }
-            "Auto audio bitrate" -> when (this) {
-                englishText -> "Auto (encoder default)"
-                simplifiedChineseText -> "自动（编码器默认）"
-                else -> "自動（編碼器預設）"
-            }
-            "Recommended audio bitrate" -> when (this) {
-                englishText -> "Recommended (192 kbps)"
-                simplifiedChineseText -> "推荐（192 kbps）"
-                else -> "建議（192 kbps）"
-            }
-            "High audio bitrate" -> when (this) {
-                englishText -> "High (256 kbps)"
-                simplifiedChineseText -> "高（256 kbps）"
-                else -> "高（256 kbps）"
-            }
-            "Compact audio bitrate" -> when (this) {
-                englishText -> "Compact (128 kbps)"
-                simplifiedChineseText -> "小体积（128 kbps）"
-                else -> "小體積（128 kbps）"
-            }
-            "Voice audio bitrate" -> when (this) {
-                englishText -> "Voice (96 kbps)"
-                simplifiedChineseText -> "语音（96 kbps）"
-                else -> "語音（96 kbps）"
-            }
-            "Recommended sample rate" -> when (this) {
-                englishText -> "Recommended (48 kHz)"
-                simplifiedChineseText -> "推荐（48 kHz）"
-                else -> "建議（48 kHz）"
-            }
-            "Low bitrate" -> when (this) {
-                englishText -> "Low (1 Mbps)"
-                simplifiedChineseText -> "低（1 Mbps）"
-                else -> "低（1 Mbps）"
-            }
-            "Medium bitrate" -> when (this) {
-                englishText -> "Medium (2.5 Mbps)"
-                simplifiedChineseText -> "中（2.5 Mbps）"
-                else -> "中（2.5 Mbps）"
-            }
-            "High bitrate" -> when (this) {
-                englishText -> "High (5 Mbps)"
-                simplifiedChineseText -> "高（5 Mbps）"
-                else -> "高（5 Mbps）"
-            }
-            "Very high bitrate" -> when (this) {
-                englishText -> "Very high (8 Mbps)"
-                simplifiedChineseText -> "极高（8 Mbps）"
-                else -> "極高（8 Mbps）"
-            }
-            "Ultra bitrate" -> when (this) {
-                englishText -> "Ultra (16 Mbps)"
-                simplifiedChineseText -> "超高（16 Mbps）"
-                else -> "超高（16 Mbps）"
-            }
-            "H.264", "H.265" -> value
-            "Frame rate 25" -> when (this) {
-                englishText -> "Max 25 fps"
-                simplifiedChineseText -> "最高 25fps"
-                else -> "最高 25fps"
-            }
-            "Frame rate 30" -> when (this) {
-                englishText -> "Max 30 fps"
-                simplifiedChineseText -> "最高 30fps"
-                else -> "最高 30fps"
-            }
-            "Frame rate 60" -> when (this) {
-                englishText -> "Max 60 fps"
-                simplifiedChineseText -> "最高 60fps"
-                else -> "最高 60fps"
-            }
-            "Auto" -> when (this) {
-                englishText -> "Auto"
-                simplifiedChineseText -> "自动"
-                else -> "自動"
-            }
-            "Keep original picture" -> when (this) {
-                englishText -> "Keep original picture"
-                simplifiedChineseText -> "保持原画"
-                else -> "保留原畫"
-            }
-            "Auto allocation" -> when (this) {
-                englishText -> "Auto allocation"
-                simplifiedChineseText -> "自动分配"
-                else -> "自動分配"
-            }
-            "Medium" -> when (this) {
-                englishText -> "Medium"
-                simplifiedChineseText -> "中等"
-                else -> "中等"
-            }
-            "Low" -> when (this) {
-                englishText -> "Low"
-                simplifiedChineseText -> "低"
-                else -> "低"
-            }
-            "Stereo" -> when (this) {
-                englishText -> "Stereo"
-                simplifiedChineseText -> "立体声"
-                else -> "立體聲"
-            }
-            "Mono" -> when (this) {
-                englishText -> "Mono"
-                simplifiedChineseText -> "单声道"
-                else -> "單聲道"
-            }
-            "Keep if possible" -> when (this) {
-                englishText -> "Keep if possible"
-                simplifiedChineseText -> "尽量保留"
-                else -> "盡量保留"
-            }
-            "Flatten" -> when (this) {
-                englishText -> "Flatten"
-                simplifiedChineseText -> "平铺背景"
-                else -> "平鋪背景"
-            }
-            "One file per input" -> when (this) {
-                englishText -> "One file per input"
-                simplifiedChineseText -> "每个输入单独输出"
-                else -> "每個輸入單獨輸出"
-            }
-            "Single PDF" -> when (this) {
-                englishText -> "Single PDF"
-                simplifiedChineseText -> "合并为 PDF"
-                else -> "合併為 PDF"
-            }
-            "One PDF per image" -> when (this) {
-                englishText -> "One PDF per image"
-                simplifiedChineseText -> "每张图一个 PDF"
-                else -> "每張圖一個 PDF"
-            }
-            "First frame" -> when (this) {
-                englishText -> "First frame"
-                simplifiedChineseText -> "只转首帧"
-                else -> "只轉首幀"
-            }
-            "Split frames" -> when (this) {
-                englishText -> "Split frames"
-                simplifiedChineseText -> "拆帧输出"
-                else -> "拆幀輸出"
-            }
-            "All frames in one PDF" -> when (this) {
-                englishText -> "All frames in one PDF"
-                simplifiedChineseText -> "全部帧进一个 PDF"
-                else -> "全部幀進一個 PDF"
-            }
-            "One PDF per frame" -> when (this) {
-                englishText -> "One PDF per frame"
-                simplifiedChineseText -> "一帧一个 PDF"
-                else -> "一幀一個 PDF"
-            }
-            "A4 fit" -> when (this) {
-                englishText -> "A4 fit"
-                simplifiedChineseText -> "适配 A4"
-                else -> "適配 A4"
-            }
-            "Original ratio" -> when (this) {
-                englishText -> "Original ratio"
-                simplifiedChineseText -> "原图比例"
-                else -> "原圖比例"
-            }
-            "Low resolution" -> when (this) {
-                englishText -> "Low resolution"
-                simplifiedChineseText -> "低分辨率"
-                else -> "低解析度"
-            }
-            "High detail" -> when (this) {
-                englishText -> "High detail"
-                simplifiedChineseText -> "高清细节"
-                else -> "高清細節"
-            }
-            "Material You" -> when (this) {
-                englishText -> "Material You"
-                simplifiedChineseText -> "动态取色"
-                else -> "動態取色"
-            }
-            "Charcoal" -> when (this) {
-                englishText -> "Charcoal"
-                simplifiedChineseText -> "炭黑"
-                else -> "炭黑"
-            }
-            "Deep Navy" -> when (this) {
-                englishText -> "Deep Navy"
-                simplifiedChineseText -> "深海蓝"
-                else -> "深海藍"
-            }
-            "Forest Green" -> when (this) {
-                englishText -> "Forest Green"
-                simplifiedChineseText -> "森林绿"
-                else -> "森林綠"
-            }
-            "Steel Blue" -> when (this) {
-                englishText -> "Steel Blue"
-                simplifiedChineseText -> "钢蓝"
-                else -> "鋼藍"
-            }
-            "Dusty Rose" -> when (this) {
-                englishText -> "Dusty Rose"
-                simplifiedChineseText -> "灰玫瑰"
-                else -> "灰玫瑰"
-            }
-            "Mustard" -> when (this) {
-                englishText -> "Mustard"
-                simplifiedChineseText -> "芥末"
-                else -> "芥末"
-            }
-            "Burnt Orange" -> when (this) {
-                englishText -> "Burnt Orange"
-                simplifiedChineseText -> "暖橙"
-                else -> "暖橙"
-            }
-            "Electric Blue" -> when (this) {
-                englishText -> "Electric Blue"
-                simplifiedChineseText -> "电蓝"
-                else -> "電藍"
-            }
-            "Fern Green" -> when (this) {
-                englishText -> "Fern Green"
-                simplifiedChineseText -> "蕨绿"
-                else -> "蕨綠"
-            }
-            "Deep Purple" -> when (this) {
-                englishText -> "Deep Purple"
-                simplifiedChineseText -> "深紫"
-                else -> "深紫"
-            }
-            "Font" -> when (this) {
-                englishText -> "Font"
-                simplifiedChineseText -> "字体"
-                else -> "字型"
-            }
-            "Web font" -> when (this) {
-                englishText -> "Web font"
-                simplifiedChineseText -> "网页字体"
-                else -> "網頁字型"
-            }
-            "Uncompressed" -> when (this) {
-                englishText -> "Uncompressed"
-                simplifiedChineseText -> "未压缩"
-                else -> "未壓縮"
-            }
-            "Subtitle" -> when (this) {
-                englishText -> "Subtitle"
-                simplifiedChineseText -> "字幕/歌词"
-                else -> "字幕/歌詞"
-            }
-            "SRT" -> "SRT"
-            "VTT" -> "VTT"
-            "LRC" -> "LRC"
-            "ASS" -> "ASS"
-            "Lyrics" -> when (this) {
-                englishText -> "Lyrics"
-                simplifiedChineseText -> "歌词"
-                else -> "歌詞"
-            }
-            "Styled subtitle" -> when (this) {
-                englishText -> "Styled subtitle"
-                simplifiedChineseText -> "带样式字幕"
-                else -> "帶樣式字幕"
-            }
-            else -> value
-        }
-    }
-}
-
-private val englishPrivacyPolicy = PrivacyPolicyText(
-    title = "Privacy policy",
-    back = "Back",
-    updated = "Last updated: 2026-08-11",
-    intro = "ZenConverter processes files on your device. Files you select, their contents, and PDF passwords are not uploaded to servers controlled by the developer. The app has no account system, ads, usage analytics, or crash reporting.",
-    sections = listOf(
-        PrivacyPolicySection(
-            title = "File processing",
-            paragraphs = listOf(
-                "The app reads only files you provide through Android's file picker, Share, or Open with. If a file provider cannot be used directly, the app creates a temporary cached copy. Results go to the system default directory or a folder you choose.",
-                "The app attempts to remove temporary files when a task ends. A copy may remain in cache after an unexpected app or device interruption."
-            )
-        ),
-        PrivacyPolicySection(
-            title = "Metadata safety",
-            paragraphs = listOf(
-                "Metadata inspection applies only to files you select. Image inspection may show location, capture time, camera, software, description, and similar information already stored in a photo. Video inspection currently shows basic technical details only.",
-                "Cleaning a JPEG modifies the selected file in place. Removed metadata is kept in app-private storage together with the original file name, dimensions, a matching SHA-256 hash, and backup time so it can be restored. Restoring does not delete the backup, and the current version has no separate delete control."
-            )
-        ),
-        PrivacyPolicySection(
-            title = "PDF passwords",
-            paragraphs = listOf(
-                "A password is used only to open, encrypt, or decrypt a PDF you selected. It is not written to app settings or task history, and it is not sent over the network. It remains briefly in memory while needed and is then removed from task data."
-            )
-        ),
-        PrivacyPolicySection(
-            title = "Network access and external services",
-            paragraphs = listOf(
-                "The app does not check for updates in the background. Builds that include Check for updates connect to GitHub only after you tap it, and connect to GitHub's download service if you choose to download an update.",
-                "Like any website, GitHub receives connection data such as your IP address and User-Agent under its own privacy policy. GitHub does not receive your selected files, metadata, or PDF passwords. Repository, sponsorship, and download links open in your system browser; those sites and your browser apply their own privacy terms."
-            )
-        ),
-        PrivacyPolicySection(
-            title = "Permissions and other apps",
-            paragraphs = listOf(
-                "File access is used to read selected inputs, save results, or clean a JPEG in place. Older Android versions may also request storage permission. Notifications and the media-processing foreground service show progress for long-running work.",
-                "The GitHub-distributed build uses permission to request package installation only when you choose to install a downloaded update. The app does not request location, camera, microphone, contacts, or all-files access. When you choose to share or open a result, Android gives the selected app access to that file."
-            )
-        ),
-        PrivacyPolicySection(
-            title = "Retention, deletion, and Android backup",
-            paragraphs = listOf(
-                "Language, accent color, whether a custom output location is used, and the selected folder's URI and display name are stored in private app settings. You manage source files and converted results in the file system; clearing app data does not remove files in shared folders.",
-                "Clearing app data or uninstalling removes on-device settings, cache, and private metadata backups. Android system backup is currently enabled. Depending on your device, Android version, and account settings, a system backup may include app settings and private metadata backups. Manage any system copy through your device's backup settings.",
-                "The app has no online account and stores no converted files on a server controlled by the developer."
-            )
-        ),
-        PrivacyPolicySection(
-            title = "Contact",
-            paragraphs = listOf(
-                "For privacy questions, use the current contact method listed on the project or distribution page. Do not attach files, passwords, or sensitive metadata to a public report."
-            )
-        )
-    ),
-    projectPage = "Open project page"
-)
-
-private val simplifiedChinesePrivacyPolicy = PrivacyPolicyText(
-    title = "隐私政策",
-    back = "返回",
-    updated = "最后更新：2026-08-11",
-    intro = "ZenConverter 在设备上处理文件。你选择的文件、文件内容和 PDF 密码不会上传到开发者控制的服务器。应用没有账号、广告、使用行为分析或崩溃上报。",
-    sections = listOf(
-        PrivacyPolicySection(
-            title = "文件处理",
-            paragraphs = listOf(
-                "应用只读取你通过 Android 文件选择器、分享或“打开方式”交给它的文件。文件提供方无法直接处理时，应用会在缓存中创建临时副本。结果保存在系统默认目录或你选择的文件夹。",
-                "任务结束时，应用会尝试删除临时文件。如果应用或设备意外中断，缓存中可能暂时留下副本。"
-            )
-        ),
-        PrivacyPolicySection(
-            title = "元数据安全",
-            paragraphs = listOf(
-                "元数据检查只针对你选中的文件。图片检查可能显示照片中已有的位置、拍摄时间、相机、软件、说明等信息；视频检查目前只显示基础技术信息。",
-                "清理 JPEG 会直接修改所选文件。为了支持恢复，被移除的元数据会连同原文件名、尺寸、匹配用的 SHA-256 哈希和备份时间保存在应用私有目录。恢复后不会自动删除备份，当前版本也没有单独的删除按钮。"
-            )
-        ),
-        PrivacyPolicySection(
-            title = "PDF 密码",
-            paragraphs = listOf(
-                "密码只用于打开、加密或解密你选择的 PDF。应用不会把密码写入设置或任务历史，也不会发送到网络。任务执行期间，密码会短暂保存在内存中，随后从任务数据中清除。"
-            )
-        ),
-        PrivacyPolicySection(
-            title = "联网与外部服务",
-            paragraphs = listOf(
-                "应用不会在后台检查更新。带有“检查更新”功能的版本只会在你点击后连接 GitHub；如果你选择下载更新，还会连接 GitHub 的下载服务。",
-                "和普通网站一样，GitHub 会按其隐私政策收到 IP 地址、User-Agent 等连接信息，但不会收到你选择的文件、元数据或 PDF 密码。仓库、赞助和下载链接会交给系统浏览器打开，相关网站和浏览器各自的隐私规则适用。"
-            )
-        ),
-        PrivacyPolicySection(
-            title = "权限与其他应用",
-            paragraphs = listOf(
-                "文件权限只用于读取你选择的输入、保存结果或原地清理 JPEG；旧版 Android 可能额外请求存储权限。通知和媒体处理前台服务用于显示长任务进度。",
-                "GitHub 分发版只在你选择安装已下载的更新时使用请求安装应用权限。应用不申请位置、相机、麦克风、联系人或所有文件访问权限。你主动分享或打开结果时，Android 会把相应文件交给你选择的应用。"
-            )
-        ),
-        PrivacyPolicySection(
-            title = "保留、删除与 Android 备份",
-            paragraphs = listOf(
-                "语言、主题色、是否使用自定义输出位置，以及所选文件夹的 URI 和显示名称，会保存在应用私有设置中。源文件和转换结果由你在文件系统中管理；清除应用数据不会删除共享目录里的文件。",
-                "清除应用数据或卸载应用，会删除设备上的设置、缓存和应用私有元数据备份。当前应用允许 Android 系统备份；是否备份以及备份到哪里，由设备、Android 版本和账号设置决定，系统备份中可能包含应用设置和私有元数据备份。系统中的备份副本需在设备备份设置里管理。",
-                "应用没有在线账号，也没有保存在开发者服务器上的转换文件可供删除。"
-            )
-        ),
-        PrivacyPolicySection(
-            title = "联系",
-            paragraphs = listOf(
-                "如有隐私问题，请使用项目页或应用分发页列出的当前联系方式。不要在公开反馈中附上文件、密码或敏感元数据。"
-            )
-        )
-    ),
-    projectPage = "打开项目页面"
-)
-
-private val traditionalChinesePrivacyPolicy = PrivacyPolicyText(
-    title = "隱私政策",
-    back = "返回",
-    updated = "最後更新：2026-08-11",
-    intro = "ZenConverter 在裝置上處理檔案。你選取的檔案、檔案內容和 PDF 密碼不會傳送到開發者控制的伺服器。應用程式沒有帳戶、廣告、使用行為分析或當機回報。",
-    sections = listOf(
-        PrivacyPolicySection(
-            title = "檔案處理",
-            paragraphs = listOf(
-                "應用程式只會讀取你透過 Android 檔案選擇器、分享或「開啟方式」交給它的檔案。檔案提供者無法直接處理時，應用程式會在快取中建立暫存副本。結果會存到系統預設目錄或你選擇的資料夾。",
-                "工作結束時，應用程式會嘗試刪除暫存檔。如果應用程式或裝置意外中斷，快取中可能暫時留下副本。"
-            )
-        ),
-        PrivacyPolicySection(
-            title = "中繼資料安全",
-            paragraphs = listOf(
-                "中繼資料檢查只針對你選取的檔案。圖片檢查可能顯示照片原有的位置、拍攝時間、相機、軟體、說明等資料；影片檢查目前只顯示基本技術資料。",
-                "清理 JPEG 會直接修改所選檔案。為了支援復原，被移除的中繼資料會連同原檔名、尺寸、比對用的 SHA-256 雜湊和備份時間存到應用程式私有目錄。復原後不會自動刪除備份，目前版本也沒有個別刪除按鈕。"
-            )
-        ),
-        PrivacyPolicySection(
-            title = "PDF 密碼",
-            paragraphs = listOf(
-                "密碼只用來開啟、加密或解密你選擇的 PDF。應用程式不會把密碼寫入設定或工作記錄，也不會傳送到網路。工作執行期間，密碼會短暫留在記憶體中，之後從工作資料移除。"
-            )
-        ),
-        PrivacyPolicySection(
-            title = "網路連線與外部服務",
-            paragraphs = listOf(
-                "應用程式不會在背景檢查更新。提供「檢查更新」功能的版本只會在你點選後連線到 GitHub；如果你選擇下載更新，也會連線到 GitHub 的下載服務。",
-                "和一般網站一樣，GitHub 會依其隱私政策收到 IP 位址、User-Agent 等連線資料，但不會收到你選取的檔案、中繼資料或 PDF 密碼。程式碼倉庫、贊助和下載連結會交給系統瀏覽器開啟，相關網站和瀏覽器各自的隱私規則適用。"
-            )
-        ),
-        PrivacyPolicySection(
-            title = "權限與其他應用程式",
-            paragraphs = listOf(
-                "檔案權限只用於讀取你選取的輸入、儲存結果或直接清理 JPEG；舊版 Android 可能另外要求儲存空間權限。通知及媒體處理前景服務用來顯示長時間工作的進度。",
-                "GitHub 發行版只在你選擇安裝已下載的更新時使用要求安裝應用程式權限。應用程式不會要求位置、相機、麥克風、聯絡人或所有檔案存取權。當你主動分享或開啟結果時，Android 會把相應檔案交給你選擇的應用程式。"
-            )
-        ),
-        PrivacyPolicySection(
-            title = "保留、刪除與 Android 備份",
-            paragraphs = listOf(
-                "語言、主題色、是否使用自訂輸出位置，以及所選資料夾的 URI 和顯示名稱，會存放在應用程式私有設定中。來源檔案和轉換結果由你在檔案系統中管理；清除應用程式資料不會刪除共享目錄內的檔案。",
-                "清除應用程式資料或解除安裝，會刪除裝置上的設定、快取和應用程式私有中繼資料備份。目前應用程式允許 Android 系統備份；是否備份以及備份到哪裡，由裝置、Android 版本和帳戶設定決定，系統備份中可能包含應用程式設定和私有中繼資料備份。系統中的備份副本需在裝置備份設定內管理。",
-                "應用程式沒有線上帳戶，也沒有存放在開發者伺服器上的轉換檔案可供刪除。"
-            )
-        ),
-        PrivacyPolicySection(
-            title = "聯絡",
-            paragraphs = listOf(
-                "如有隱私問題，請使用專案頁面或應用程式發行頁面列出的目前聯絡方式。請勿在公開回報中附上檔案、密碼或敏感中繼資料。"
-            )
-        )
-    ),
-    projectPage = "開啟專案頁面"
-)
-
-private val englishHelpGuide = HelpGuideCopy(
-    title = "What ZenConverter can do",
-    body = "Choose a file, pick a target, and let the conversion run locally.",
-    back = "Back",
-    videoTitle = "Video",
-    videoBody = "Convert common video formats, AI 2× frame rate interpolation (Experimental), merge multiple videos, trim & split segments, or extract audio tracks.",
-    videoFormats = "MP4 · MKV · MOV · GIF  →  Merge · MP4 · MKV · MOV · GIF",
-    audioTitle = "Audio",
-    audioBody = "Convert audio files, trim range, and apply audio filters.",
-    audioFormats = "MP3 · M4A · WAV · FLAC · WMA · OPUS",
-    imageTitle = "Images & Super-Resolution",
-    imageBody = "Convert images, AI 4× upscaling, split GIF frames, or combine into a PDF.",
-    imageFormats = "JPG · PNG · JFIF · WEBP · ICO  →  JPG · PNG · WEBP · ICO · PDF",
-    documentTitle = "Documents and PDF",
-    documentBody = "Turn Office files into readable documents, merge PDFs, compress PDF size, render PDFs to images/text, or protect with passwords.",
-    documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  Merge · Compress · PNG · JPG · WEBP · TXT · MD",
-    fontTitle = "Fonts",
-    fontBody = "Convert fonts between desktop and web formats.",
-    fontFormats = "TTF · OTF  →  WOFF2 · WOFF  |  WOFF2 · WOFF  →  TTF · OTF",
-    subtitleTitle = "Subtitles and Lyrics",
-    subtitleBody = "Convert between subtitle and lyrics formats with timing preserved.",
-    subtitleFormats = "SRT · VTT · LRC · ASS",
-    flowInput = "Choose",
-    flowProcess = "Convert",
-    flowOutput = "Use result",
-    help = "Help"
-)
-
-private val simplifiedChineseHelpGuide = HelpGuideCopy(
-    title = "ZenConverter 能做什么",
-    body = "选择文件、指定目标格式，转换过程默认在本机完成。",
-    back = "返回",
-    videoTitle = "视频",
-    videoBody = "转换常见视频格式，支持 AI 2× 深度学习视频插帧（实验性）、多视频拼接合并、时间轴裁剪与多段分割，也可提取音频。",
-    videoFormats = "MP4 · MKV · MOV · GIF  →  合并 · MP4 · MKV · MOV · GIF",
-    audioTitle = "音频",
-    audioBody = "在常用音频格式之间互相转换，支持剪辑、降噪与高级音效。",
-    audioFormats = "MP3 · M4A · WAV · FLAC · WMA · OPUS",
-    imageTitle = "图片与超分",
-    imageBody = "转换图片、AI 深度学习 4× 高清放大、拆分 GIF 帧或合并为 PDF。",
-    imageFormats = "JPG · PNG · JFIF · WEBP · ICO  →  JPG · PNG · WEBP · ICO · PDF",
-    documentTitle = "文档与 PDF",
-    documentBody = "Office 文档转为可读文件，合并多个 PDF，智能压缩瘦身，转图片/文本或添加密码保护。",
-    documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  合并 · 压缩 · PNG · JPG · WEBP · TXT · MD",
-    fontTitle = "字体",
-    fontBody = "在桌面字体与网页字体之间互相转换。",
-    fontFormats = "TTF · OTF  →  WOFF2 · WOFF  |  WOFF2 · WOFF  →  TTF · OTF",
-    subtitleTitle = "字幕与歌词",
-    subtitleBody = "在常用字幕与歌词格式之间互相转换，保留时序与时间轴。",
-    subtitleFormats = "SRT · VTT · LRC · ASS",
-    flowInput = "选择文件",
-    flowProcess = "本地处理",
-    flowOutput = "使用结果",
-    help = "帮助"
-)
-
-private val traditionalChineseHelpGuide = HelpGuideCopy(
-    title = "ZenConverter 可以做什麼",
-    body = "選擇檔案、指定目標格式，轉換過程預設在本機完成。",
-    back = "返回",
-    videoTitle = "影片",
-    videoBody = "轉換常見影片格式，支援 AI 2× 深度學習影片補幀（實驗性）、多影片拼接合併、時間軸裁剪與多段分割，也可擷取音訊。",
-    videoFormats = "MP4 · MKV · MOV · GIF  →  合併 · MP4 · MKV · MOV · GIF",
-    audioTitle = "音訊",
-    audioBody = "在常用音訊格式之間互相轉換，支援剪輯、降噪與進階音效。",
-    audioFormats = "MP3 · M4A · WAV · FLAC · WMA · OPUS",
-    imageTitle = "圖片與超高解析度",
-    imageBody = "轉換圖片、AI 深度學習 4× 高畫質放大、拆分 GIF 影格或合併為 PDF。",
-    imageFormats = "JPG · PNG · JFIF · WEBP · ICO  →  JPG · PNG · WEBP · ICO · PDF",
-    documentTitle = "文件與 PDF",
-    documentBody = "Office 文件轉為可讀檔案，合併多個 PDF，智慧壓縮瘦身，轉圖片/文字或新增密碼保護。",
-    documentFormats = "PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  合併 · 壓縮 · PNG · JPG · WEBP · TXT · MD",
-    fontTitle = "字型",
-    fontBody = "在桌面字型與網頁字型之間互相轉換。",
-    fontFormats = "TTF · OTF  →  WOFF2 · WOFF  |  WOFF2 · WOFF  →  TTF · OTF",
-    subtitleTitle = "字幕與歌詞",
-    subtitleBody = "在常用字幕與歌詞格式之間互相轉換，保留時序與時間軸。",
-    subtitleFormats = "SRT · VTT · LRC · ASS",
-    flowInput = "選擇檔案",
-    flowProcess = "本機處理",
-    flowOutput = "使用結果",
-    help = "說明"
-)
-
-private val englishText = UiText(
-    moreHeaderActions = "More actions",
-    tagline = "Files stay on this device",
-    openMetadataSecurity = "Open privacy tools",
-    closeMetadataSecurity = "Close privacy tools",
-    openAbout = "Open about",
-    closeAbout = "Close about",
-    openSettings = "Open settings",
-    closeSettings = "Close settings",
-    appLogo = "ZenConverter logo",
-    appVersion = "Version",
-    appLicense = "AGPL-3.0-or-later",
-    aboutDescription = "A local all-in-one format converter for Android. Works offline, with no ads or fees.",
-    githubRepository = "GitHub repository",
-    privacyPolicy = englishPrivacyPolicy,
-    helpGuide = englishHelpGuide,
-    checkUpdates = "Check for updates",
-    stableUpdateChannel = "Stable",
-    previewUpdateChannel = "Preview",
-    checkingUpdates = "Checking GitHub...",
-    appDownload = "Download in app",
-    browserDownload = "Browser download",
-    downloadComplete = "Download complete",
-    openDownloadedApk = "Open APK",
-    downloadFailed = "Download failed",
-    cancelDownload = "Cancel download",
-    downloadCancelled = "Download cancelled",
-    installPermissionRequired = "Allow APK installs, then open the APK again",
-    apkOpenFailed = "Could not open APK",
-    supportDevelopment = "Sponsor development",
-    sponsorTitle = "Sponsor ZenConverter",
-    sponsorIntro = "Sponsor to help ZenConverter stay maintained, open-source, free, and ad-free.",
-    sponsorNoBenefits = "Sponsorship does not unlock any additional services or features.",
-    openLink = "Open link",
-    copy = "Copy",
-    copied = "Copied",
-    linkUnavailable = "No app can open this link",
-    modelDownload = "Model download",
-    modelDownloadNote = "Keep the app in the foreground while downloading — avoid switching screens.",
-    modelPurpose = "Deep-learning image upscaler (4×, general high quality)",
-    modelPurposeAnime = "Deep-learning image upscaler (4×, anime & illustrations)",
-    modelSource = "Source:",
-    modelDownloadAction = "Download",
-    modelDownloaded = "Downloaded",
-    modelRedownload = "Re-download",
-    officeFontTitle = "Office CJK fonts",
-    officeFontSystemReady = "Device system fonts active",
-    officeFontSystemNote = "Document text rendering uses built-in system fonts by default (0 MB download, 100% offline).",
-    officeFontEnhancementNote = "Download high-fidelity Noto CJK fonts for enhanced Songti / Serif and Microsoft YaHei fallback typography.",
-    officeFontSource = "Source:",
-    metadataSecurityTitle = "Metadata safety",
-    metadataSecurityNote = "Inspect metadata locally. JPG/JPEG/JFIF can be cleaned in place without re-encoding.",
-    metadataBackupNote = "Metadata backups stay in app data. Clearing app data or uninstalling may remove them.",
-    pickMetadataImage = "Image",
-    pickMetadataVideo = "Video",
-    metadataEmpty = "Choose an image or video to inspect metadata.",
-    metadataDetails = "Details",
-    metadataCleanAndBackup = "Clean",
-    metadataRestore = "Restore metadata",
-    metadataRestoreTitle = "Choose backup",
-    metadataGps = "GPS",
-    accentColor = "Accent color",
-    themeMode = "Dark mode",
-    language = "Language",
-    addFilesTitle = "Add files",
-    addFilesNote = "Choose files first, then set targets and options in the task list.",
-    addFiles = "Add files",
-    importSourceTitle = "Import",
-    importAlbumTitle = "From album",
-    importAlbumNote = "Open the gallery app to choose photos or videos",
-    importAlbumDialogNote = "Choose a media type to import",
-    importAlbumImagesTitle = "Images",
-    importAlbumVideosTitle = "Videos",
-    importFolderTitle = "Import folder",
-    importFolderNote = "Add supported files inside a folder",
-    importFilesTitle = "From files",
-    importFilesNote = "Browse the system file picker",
-    batchSettings = "Batch settings",
-    batchSettingsNote = "Tap a target to apply it to files with the same source type.",
-    batchOptions = "Batch options",
-    batchOptionsNote = "Changing an option applies only that option to all files of this type.",
-    batchMixedTarget = "This group has mixed targets. Choose one target to unify it.",
-    adjustOptions = "Options",
-    pdfMergeTitle = "PDF merge",
-    pdfMergeNote = "Create a visible merge task only when files should become one PDF.",
-    createImagePdfMerge = "Image PDF merge",
-    createPdfMerge = "PDF merge",
-    pdfMergeMember = "In PDF merge",
-    videoMergeTitle = "Video merge",
-    videoMergeNote = "Merge multiple videos in sequence into one video.",
-    createVideoMerge = "Video merge",
-    videoMergeMember = "In video merge",
-    addToMerge = "Add to merge",
-    removeMergeGroup = "Remove merge",
-    target = "Target",
-    output = "Save location",
-    choose = "Choose",
-    chooseDirectory = "Choose folder",
-    chooseFolderBeforeConversion = "Choose where to save results",
-    defaultOutputLocation = "Default folder",
-    defaultOutputNote = "System folders / ZenConverter",
-    customOutputLocation = "Custom folder",
-    storagePermissionRequired = "Allow storage permission or choose a folder",
-    folderPermissionSaved = "Folder permission saved",
-    folderSelectedForSession = "Folder selected for this session",
-    start = "Start",
-    cancel = "Cancel",
-    cancelOrClearTasks = "Cancel / Clear tasks",
-    queue = "Conversion tasks",
-    selectedSuffix = "selected",
-    unknownType = "Unknown type",
-    unknownSize = "Unknown size",
-    remove = "Remove",
-    shareOutput = "Share output",
-    openOutputLocation = "Open output location",
-    outputUnavailable = "Output file is unavailable",
-    shareOutputFailed = "No app can share this output",
-    openOutputFailed = "No app can open this output",
-    waiting = "Waiting",
-    processing = "Processing",
-    flowComplete = "Flow complete",
-    flowCompleteNoFiles = "Flow checked, no files created",
-    cancelled = "Cancelled",
-    failed = "Failed",
-    quality = "Quality",
-    pageSize = "Page size",
-    renderQuality = "Render quality",
-    compressionPreset = "Compression preset",
-    resolution = "Resolution",
-    superResolution = "Super resolution",
-    videoCompressionMode = "Compression preset",
-    videoFrameInterpolation = "AI Frame Interpolation (Experimental)",
-    videoInterpolationSummary = "Enable 2× AI interpolation (Experimental) to double video frame rate (e.g. 30fps -> 60fps) for smoother motion. Performance and memory vary by device GPU drivers.",
-    rifeModelPurpose = "Deep-learning optical flow frame interpolator (2× FPS enhancement, Experimental)",
-    bitrate = "Bitrate",
-    codec = "Codec",
-    frameRate = "Frame rate",
-    sampleRate = "Sample rate",
-    opusSampleRateHint = "Opus natively operates at 48 kHz (RFC 6716 / RFC 7845). Non-Opus rates like 44.1 kHz are automatically resampled to 48 kHz.",
-    channels = "Channels",
-    trimRange = "Trim & split",
-    trimQuick = "Quick",
-    trimPrecise = "Precise",
-    trimStartSeconds = "Start (s)",
-    trimEndSeconds = "End (s)",
-    trimSplitPoints = "Cut point",
-    trimAddSplitPoint = "Add cut point",
-    trimSplitPointsOrder = "Cut points must be in ascending order between start and end",
-    trimSplitPointsWithinDuration = "Cut points must not exceed end time or duration",
-    trimDurationUnknown = "Duration unknown",
-    trimRangeTooLarge = "Trim range is too large",
-    trimStartBeforeDuration = "Start must be before the media duration",
-    trimEndAfterStart = "End must be greater than start",
-    trimEndWithinDuration = "End must not exceed the media duration",
-    gifFrameMode = "GIF frames",
-    password = "Password",
-    skip = "Skip",
-    pdfPasswordTitle = "PDF password",
-    pdfOutputPasswordTitle = "Set PDF password",
-    toPrefix = "to",
-    contactSheetGridLabel = "Grid Layout",
-    contactSheetIncludeHeader = "Include Metadata Header",
-    contactSheetIncludeTimestamp = "Include Timestamps"
-)
-
-private val simplifiedChineseText = UiText(
-    moreHeaderActions = "更多操作",
-    tagline = "本机转换，文件不上云",
-    openMetadataSecurity = "打开隐私工具",
-    closeMetadataSecurity = "关闭隐私工具",
-    openAbout = "打开关于",
-    closeAbout = "关闭关于",
-    openSettings = "打开设置",
-    closeSettings = "关闭设置",
-    appLogo = "ZenConverter 标志",
-    appVersion = "版本",
-    appLicense = "AGPL-3.0-or-later",
-    aboutDescription = "面向 Android 的本地综合格式转换工具，不联网，无广告、不收费",
-    githubRepository = "GitHub 仓库",
-    privacyPolicy = simplifiedChinesePrivacyPolicy,
-    helpGuide = simplifiedChineseHelpGuide,
-    checkUpdates = "检查更新",
-    stableUpdateChannel = "正式版",
-    previewUpdateChannel = "预览版",
-    checkingUpdates = "正在检查 GitHub...",
-    appDownload = "App 内下载",
-    browserDownload = "浏览器下载",
-    downloadComplete = "下载完成",
-    openDownloadedApk = "打开安装包",
-    downloadFailed = "下载失败",
-    cancelDownload = "取消下载",
-    downloadCancelled = "下载已取消",
-    installPermissionRequired = "允许安装 APK 后，再次打开安装包",
-    apkOpenFailed = "无法打开安装包",
-    supportDevelopment = "赞助开发",
-    sponsorTitle = "赞助 ZenConverter",
-    sponsorIntro = "赞助以支持 ZenConverter 始终保持维护，坚持开源免费无广告",
-    sponsorNoBenefits = "赞助不会带来任何额外服务或功能。",
-    openLink = "打开链接",
-    copy = "复制",
-    copied = "已复制",
-    linkUnavailable = "没有可打开此链接的应用",
-    modelDownload = "模型下载",
-    modelDownloadNote = "下载期间请保持应用在前台，不要切换页面。",
-    modelPurpose = "深度学习通用图片放大（4× 高画质）",
-    modelPurposeAnime = "深度学习动漫/插画放大（4× 动漫专用）",
-    modelSource = "来源：",
-    modelDownloadAction = "下载",
-    modelDownloaded = "已下载",
-    modelRedownload = "重新下载",
-    officeFontTitle = "Office 排版字库",
-    officeFontSystemReady = "系统字库已就绪",
-    officeFontSystemNote = "默认使用设备系统内置中文字库，基础文档转换 100% 离线可用（0 MB 下载）。",
-    officeFontEnhancementNote = "可自选下载高保真 Noto CJK 字体包，增强宋体、仿宋等衬线排版与微软雅黑回退效果。",
-    officeFontSource = "来源：",
-    metadataSecurityTitle = "元数据安全",
-    metadataSecurityNote = "本地查看元数据。JPG/JPEG/JFIF 可不重编码原地清理。",
-    metadataBackupNote = "元数据备份保存在应用数据目录，清理应用数据或卸载后可能丢失。",
-    pickMetadataImage = "图片",
-    pickMetadataVideo = "视频",
-    metadataEmpty = "选择图片或视频后查看元数据。",
-    metadataDetails = "查看详情",
-    metadataCleanAndBackup = "清理",
-    metadataRestore = "恢复元数据",
-    metadataRestoreTitle = "选择备份",
-    metadataGps = "GPS",
-    accentColor = "重点色",
-    themeMode = "深色模式",
-    language = "语言",
-    addFilesTitle = "添加文件",
-    addFilesNote = "先选择文件，再在任务列表里设置目标格式和选项。",
-    addFiles = "添加文件",
-    importSourceTitle = "导入文件",
-    importAlbumTitle = "从相册导入",
-    importAlbumNote = "打开图库选择图片或视频",
-    importAlbumDialogNote = "选择要导入的媒体类型",
-    importAlbumImagesTitle = "图片",
-    importAlbumVideosTitle = "视频",
-    importFolderTitle = "导入文件夹",
-    importFolderNote = "添加文件夹内支持的格式",
-    importFilesTitle = "从文件导入",
-    importFilesNote = "通过系统文件选择器浏览",
-    batchSettings = "批量设置",
-    batchSettingsNote = "点一个目标，就会立即应用到同一来源类型的文件。",
-    batchOptions = "批量选项",
-    batchOptionsNote = "改动哪个选项，就只把该选项应用到全部同类文件。",
-    batchMixedTarget = "这一组目标不一致。选择一个目标即可统一。",
-    adjustOptions = "选项",
-    pdfMergeTitle = "PDF 合并",
-    pdfMergeNote = "只有需要合成一个 PDF 时，才新建可见的合并任务。",
-    createImagePdfMerge = "图片 PDF 合并",
-    createPdfMerge = "PDF 合并",
-    pdfMergeMember = "在 PDF 合并中",
-    videoMergeTitle = "视频合并",
-    videoMergeNote = "按顺序将多个视频拼接为一个完整视频。",
-    createVideoMerge = "视频合并",
-    videoMergeMember = "在视频合并中",
-    addToMerge = "加入合并",
-    removeMergeGroup = "移除合并",
-    target = "目标",
-    output = "保存位置",
-    choose = "选择",
-    chooseDirectory = "选择目录",
-    chooseFolderBeforeConversion = "选择处理后文件的保存位置",
-    defaultOutputLocation = "默认文件夹",
-    defaultOutputNote = "系统文件夹 / ZenConverter",
-    customOutputLocation = "自定义文件夹",
-    storagePermissionRequired = "请允许存储权限，或改选自定义文件夹",
-    folderPermissionSaved = "文件夹权限已保存",
-    folderSelectedForSession = "本次已选择文件夹",
-    start = "开始",
-    cancel = "取消",
-    cancelOrClearTasks = "取消/清空任务列表",
-    queue = "转换任务",
-    selectedSuffix = "个已选",
-    unknownType = "未知类型",
-    unknownSize = "未知大小",
-    remove = "移除",
-    shareOutput = "分享输出",
-    openOutputLocation = "打开输出位置",
-    outputUnavailable = "输出文件不可用",
-    shareOutputFailed = "没有可分享此输出的应用",
-    openOutputFailed = "没有可打开此输出的应用",
-    waiting = "等待中",
-    processing = "处理中",
-    flowComplete = "流程完成",
-    flowCompleteNoFiles = "流程已跑通，暂未生成文件",
-    cancelled = "已取消",
-    failed = "失败",
-    quality = "质量",
-    pageSize = "页面尺寸",
-    renderQuality = "渲染质量",
-    compressionPreset = "压缩预设",
-    resolution = "分辨率",
-    superResolution = "超分",
-    videoCompressionMode = "压缩预设",
-    videoFrameInterpolation = "AI 视频插帧（实验性）",
-    videoInterpolationSummary = "开启 2× AI 补帧（实验性），将视频帧率提升 1 倍 (如 30fps -> 60fps)，使画面更丝滑。受移动端 GPU 驱动与显存调度影响，当前处于实验阶段",
-    rifeModelPurpose = "深度学习光流补帧（2× 帧率翻倍，提升运动流畅度，实验性）",
-    bitrate = "码率",
-    codec = "编码",
-    frameRate = "帧率",
-    sampleRate = "采样率",
-    opusSampleRateHint = "Opus 规范标准原生采用 48 kHz（RFC 6716 / RFC 7845），非标准采样率（如 44.1 kHz）会自动重采样为 48 kHz。",
-    channels = "声道",
-    trimRange = "裁剪与分割",
-    trimQuick = "快速",
-    trimPrecise = "精准",
-    trimStartSeconds = "起始秒",
-    trimEndSeconds = "结束秒",
-    trimSplitPoints = "分割点",
-    trimAddSplitPoint = "添加分割点",
-    trimSplitPointsOrder = "分割点必须在起止时间之间且依次递增",
-    trimSplitPointsWithinDuration = "分割点不能超出结束时间或文件时长",
-    trimDurationUnknown = "时长未知",
-    trimRangeTooLarge = "裁剪范围过大",
-    trimStartBeforeDuration = "起始秒必须早于文件时长",
-    trimEndAfterStart = "结束秒必须大于起始秒",
-    trimEndWithinDuration = "结束秒不能超过文件时长",
-    gifFrameMode = "GIF 帧",
-    password = "密码",
-    skip = "跳过",
-    pdfPasswordTitle = "PDF 密码",
-    pdfOutputPasswordTitle = "设置 PDF 密码",
-    toPrefix = "转为",
-    contactSheetGridLabel = "网格规格",
-    contactSheetIncludeHeader = "顶部信息与水印",
-    contactSheetIncludeTimestamp = "缩略图时间戳"
-)
-
-private val traditionalChineseText = UiText(
-    moreHeaderActions = "更多操作",
-    tagline = "本機轉換，檔案不上雲",
-    openMetadataSecurity = "開啟隱私工具",
-    closeMetadataSecurity = "關閉隱私工具",
-    openAbout = "開啟關於",
-    closeAbout = "關閉關於",
-    openSettings = "開啟設定",
-    closeSettings = "關閉設定",
-    appLogo = "ZenConverter 標誌",
-    appVersion = "版本",
-    appLicense = "AGPL-3.0-or-later",
-    aboutDescription = "面向 Android 的本地綜合格式轉換工具，不聯網，無廣告、不收費",
-    githubRepository = "GitHub 倉庫",
-    privacyPolicy = traditionalChinesePrivacyPolicy,
-    helpGuide = traditionalChineseHelpGuide,
-    checkUpdates = "檢查更新",
-    stableUpdateChannel = "正式版",
-    previewUpdateChannel = "預覽版",
-    checkingUpdates = "正在檢查 GitHub...",
-    appDownload = "App 內下載",
-    browserDownload = "瀏覽器下載",
-    downloadComplete = "下載完成",
-    openDownloadedApk = "開啟安裝包",
-    downloadFailed = "下載失敗",
-    cancelDownload = "取消下載",
-    downloadCancelled = "下載已取消",
-    installPermissionRequired = "允許安裝 APK 後，再次開啟安裝包",
-    apkOpenFailed = "無法開啟安裝包",
-    supportDevelopment = "贊助開發",
-    sponsorTitle = "贊助 ZenConverter",
-    sponsorIntro = "贊助以支持 ZenConverter 始終保持維護，堅持開源免費無廣告",
-    sponsorNoBenefits = "贊助不會帶來任何額外服務或功能。",
-    openLink = "開啟連結",
-    copy = "複製",
-    copied = "已複製",
-    linkUnavailable = "沒有可開啟此連結的應用",
-    modelDownload = "模型下載",
-    modelDownloadNote = "下載期間請保持應用在前台，不要切換頁面。",
-    modelPurpose = "深度學習通用圖片放大（4× 高畫質）",
-    modelPurposeAnime = "深度學習動漫/插畫放大（4× 動漫專用）",
-    modelSource = "來源：",
-    modelDownloadAction = "下載",
-    modelDownloaded = "已下載",
-    modelRedownload = "重新下載",
-    officeFontTitle = "Office 排版字庫",
-    officeFontSystemReady = "系統字庫已就緒",
-    officeFontSystemNote = "預設使用裝置系統內建中文字庫，基礎文件轉換 100% 離線可用（0 MB 下載）。",
-    officeFontEnhancementNote = "可自選下載高保真 Noto CJK 字體包，增強宋體、仿宋等襯線排版與微軟雅黑回退效果。",
-    officeFontSource = "來源：",
-    metadataSecurityTitle = "元資料安全",
-    metadataSecurityNote = "本地查看元資料。JPG/JPEG/JFIF 可不重新編碼原地清理。",
-    metadataBackupNote = "元資料備份保存在應用資料目錄，清理應用資料或卸載後可能遺失。",
-    pickMetadataImage = "圖片",
-    pickMetadataVideo = "影片",
-    metadataEmpty = "選擇圖片或影片後查看元資料。",
-    metadataDetails = "查看詳情",
-    metadataCleanAndBackup = "清理",
-    metadataRestore = "恢復元資料",
-    metadataRestoreTitle = "選擇備份",
-    metadataGps = "GPS",
-    accentColor = "重點色",
-    themeMode = "深色模式",
-    language = "語言",
-    addFilesTitle = "新增檔案",
-    addFilesNote = "先選擇檔案，再在任務列表裡設定目標格式和選項。",
-    addFiles = "新增檔案",
-    importSourceTitle = "匯入檔案",
-    importAlbumTitle = "從相簿匯入",
-    importAlbumNote = "開啟圖庫選擇圖片或影片",
-    importAlbumDialogNote = "選擇要匯入的媒體類型",
-    importAlbumImagesTitle = "圖片",
-    importAlbumVideosTitle = "影片",
-    importFolderTitle = "匯入資料夾",
-    importFolderNote = "加入資料夾內支援的格式",
-    importFilesTitle = "從檔案匯入",
-    importFilesNote = "透過系統檔案選擇器瀏覽",
-    batchSettings = "批次設定",
-    batchSettingsNote = "點一個目標，就會立即套用到同一來源類型的檔案。",
-    batchOptions = "批次選項",
-    batchOptionsNote = "變更哪個選項，就只把該選項套用到全部同類檔案。",
-    batchMixedTarget = "這一組目標不一致。選擇一個目標即可統一。",
-    adjustOptions = "選項",
-    pdfMergeTitle = "PDF 合併",
-    pdfMergeNote = "只有需要合成一個 PDF 時，才新增可見的合併任務。",
-    createImagePdfMerge = "圖片 PDF 合併",
-    createPdfMerge = "PDF 合併",
-    pdfMergeMember = "在 PDF 合併中",
-    videoMergeTitle = "影片合併",
-    videoMergeNote = "按順序將多個影片拼接為一個完整影片。",
-    createVideoMerge = "影片合併",
-    videoMergeMember = "在影片合併中",
-    addToMerge = "加入合併",
-    removeMergeGroup = "移除合併",
-    target = "目標",
-    output = "儲存位置",
-    choose = "選擇",
-    chooseDirectory = "選擇資料夾",
-    chooseFolderBeforeConversion = "選擇處理後檔案的儲存位置",
-    defaultOutputLocation = "預設資料夾",
-    defaultOutputNote = "系統資料夾 / ZenConverter",
-    customOutputLocation = "自訂資料夾",
-    storagePermissionRequired = "請允許儲存權限，或改選自訂資料夾",
-    folderPermissionSaved = "資料夾權限已儲存",
-    folderSelectedForSession = "本次已選擇資料夾",
-    start = "開始",
-    cancel = "取消",
-    cancelOrClearTasks = "取消／清空任務列表",
-    queue = "轉換任務",
-    selectedSuffix = "個已選",
-    unknownType = "未知類型",
-    unknownSize = "未知大小",
-    remove = "移除",
-    shareOutput = "分享輸出",
-    openOutputLocation = "開啟輸出位置",
-    outputUnavailable = "輸出檔案不可用",
-    shareOutputFailed = "沒有可分享此輸出的應用",
-    openOutputFailed = "沒有可開啟此輸出的應用",
-    waiting = "等待中",
-    processing = "處理中",
-    flowComplete = "流程完成",
-    flowCompleteNoFiles = "流程已跑通，暫未產生檔案",
-    cancelled = "已取消",
-    failed = "失敗",
-    quality = "品質",
-    pageSize = "頁面尺寸",
-    renderQuality = "渲染品質",
-    compressionPreset = "壓縮預設",
-    resolution = "解析度",
-    superResolution = "超高解析度",
-    videoCompressionMode = "壓縮預設",
-    videoFrameInterpolation = "AI 影片補幀（實驗性）",
-    videoInterpolationSummary = "開啟 2× AI 補幀（實驗性），將影片幀率提升 1 倍 (如 30fps -> 60fps)，使畫面更絲滑。受行動端 GPU 驅動與顯存調度影響，目前處於實驗階段",
-    rifeModelPurpose = "深度學習光流補幀（2× 幀率翻倍，提升運動流暢度，實驗性）",
-    bitrate = "位元率",
-    codec = "編碼",
-    frameRate = "幀率",
-    sampleRate = "取樣率",
-    opusSampleRateHint = "Opus 規範標準原生採用 48 kHz（RFC 6716 / RFC 7845），非標準取樣率（如 44.1 kHz）會自動重新採樣為 48 kHz。",
-    channels = "聲道",
-    trimRange = "裁剪與分割",
-    trimQuick = "快速",
-    trimPrecise = "精準",
-    trimStartSeconds = "起始秒",
-    trimEndSeconds = "結束秒",
-    trimSplitPoints = "分割點",
-    trimAddSplitPoint = "新增分割點",
-    trimSplitPointsOrder = "分割點必須在起止時間之間且依序遞增",
-    trimSplitPointsWithinDuration = "分割點不能超出結束時間或檔案時長",
-    trimDurationUnknown = "時長未知",
-    trimRangeTooLarge = "裁剪範圍過大",
-    trimStartBeforeDuration = "起始秒必須早於檔案時長",
-    trimEndAfterStart = "結束秒必須大於起始秒",
-    trimEndWithinDuration = "結束秒不能超過檔案時長",
-    gifFrameMode = "GIF 幀",
-    password = "密碼",
-    skip = "略過",
-    pdfPasswordTitle = "PDF 密碼",
-    pdfOutputPasswordTitle = "設定 PDF 密碼",
-    toPrefix = "轉為",
-    contactSheetGridLabel = "網格規格",
-    contactSheetIncludeHeader = "頂部資訊與水印",
-    contactSheetIncludeTimestamp = "縮略圖時間戳"
-)
 
 private fun installedAppVersion(context: Context): InstalledAppVersion {
     return runCatching {
@@ -12403,7 +9612,7 @@ private fun openExternalLink(
     }
 }
 
-private fun shareOutput(
+internal fun shareOutput(
     context: Context,
     progress: TaskProgress,
     texts: UiText
@@ -12435,7 +9644,7 @@ private fun shareOutput(
     }
 }
 
-private fun openOutputLocation(
+internal fun openOutputLocation(
     context: Context,
     progress: TaskProgress,
     texts: UiText
@@ -12501,7 +9710,7 @@ private fun clipDataForUris(
     return clipData
 }
 
-private fun TaskProgress.outputUriList(): List<Uri> {
+internal fun TaskProgress.outputUriList(): List<Uri> {
     if (outputUris.isNotEmpty()) return outputUris
     return outputUri?.let { listOf(it) }.orEmpty()
 }
@@ -12546,10 +9755,10 @@ private fun metadataCompactRows(
                 add(texts.metadataLabel("Dimensions") to "${inspection.width}x${inspection.height}")
             }
             inspection.bitrateBitsPerSecond?.let {
-                add(texts.metadataLabel("Overall bitrate") to formatBitrate(it))
+                add(texts.metadataLabel("Overall bitrate") to formatBitrate(it, texts.locale))
             }
             inspection.frameRate?.let {
-                add(texts.metadataLabel("Frame rate") to formatFrameRate(it))
+                add(texts.metadataLabel("Frame rate") to formatFrameRate(it, texts.locale))
             }
             return@buildList
         }
@@ -12582,10 +9791,10 @@ private fun metadataDetailRows(
             add(texts.metadataLabel("Duration") to formatDurationMs(it, texts))
         }
         inspection.frameRate?.let {
-            add(texts.metadataLabel("Frame rate") to formatFrameRate(it))
+            add(texts.metadataLabel("Frame rate") to formatFrameRate(it, texts.locale))
         }
         inspection.bitrateBitsPerSecond?.let {
-            add(texts.metadataLabel("Overall bitrate") to formatBitrate(it))
+            add(texts.metadataLabel("Overall bitrate") to formatBitrate(it, texts.locale))
         }
         add(texts.metadataLabel("GPS") to texts.yesNo(inspection.hasGps))
         inspection.capturedAt?.let { add(texts.metadataLabel("Captured") to it) }
@@ -12615,9 +9824,9 @@ private fun metadataDetailRows(
     }
 }
 
-private fun formatBytes(sizeBytes: Long?, texts: UiText): String {
+internal fun formatBytes(sizeBytes: Long?, texts: UiText): String {
     if (sizeBytes == null) return texts.unknownSize
-    if (sizeBytes < 1024) return "$sizeBytes B"
+    if (sizeBytes < 1024) return String.format(texts.locale, "%d B", sizeBytes)
 
     val units = listOf("KB", "MB", "GB", "TB")
     var value = sizeBytes.toDouble() / 1024.0
@@ -12626,7 +9835,7 @@ private fun formatBytes(sizeBytes: Long?, texts: UiText): String {
         value /= 1024.0
         unitIndex++
     }
-    return String.format(Locale.US, "%.1f %s", value, units[unitIndex])
+    return String.format(texts.locale, "%.1f %s", value, units[unitIndex])
 }
 
 private fun formatFileInfoLine(
@@ -12699,8 +9908,8 @@ private fun fileInfoParts(
         if (info.width != null && info.height != null) {
             add("${info.width}x${info.height}")
         }
-        info.frameRate?.let { add(texts.frameRateLabel(formatFrameRate(it))) }
-        info.bitrateBitsPerSecond?.let { add(texts.bitrateLabel(formatBitrate(it))) }
+        info.frameRate?.let { add(texts.frameRateLabel(formatFrameRate(it, texts.locale))) }
+        info.bitrateBitsPerSecond?.let { add(texts.bitrateLabel(formatBitrate(it, texts.locale))) }
         info.pageCount?.let { add(texts.pageCountLabel(it)) }
         val sizePart = sizeOverride ?: info.sizeBytes?.let { formatBytes(it, texts) }
         sizePart?.let { add(it) }
@@ -12729,40 +9938,36 @@ private fun formatSizeChangeLabel(
     val outputSize = formatBytes(outputSizeBytes, texts)
     val inputSize = inputSizeBytes?.takeIf { it > 0L } ?: return outputSize
     val percent = ((outputSizeBytes - inputSize).toDouble() / inputSize.toDouble()) * 100.0
-    return "$outputSize (${String.format(Locale.US, "%+.0f%%", percent)})"
+    return texts.text(R.string.format_detail_parenthesized, outputSize, String.format(texts.locale, "%+.0f%%", percent))
 }
 
 private fun formatDurationMs(durationMs: Long, texts: UiText): String {
     if (durationMs < 60_000L) {
-        return if (texts === englishText) {
-            String.format(Locale.US, "%.1fs", durationMs.toDouble() / 1000.0)
-        } else {
-            String.format(Locale.US, "%.1f秒", durationMs.toDouble() / 1000.0)
-        }
+        return texts.text(R.string.format_seconds, durationMs.toDouble() / 1000.0)
     }
     val totalSeconds = (durationMs / 1000L).coerceAtLeast(0L)
     val seconds = totalSeconds % 60L
     val minutes = (totalSeconds / 60L) % 60L
     val hours = totalSeconds / 3600L
     return if (hours > 0L) {
-        String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
+        String.format(texts.locale, "%d:%02d:%02d", hours, minutes, seconds)
     } else {
-        String.format(Locale.US, "%d:%02d", minutes, seconds)
+        String.format(texts.locale, "%d:%02d", minutes, seconds)
     }
 }
 
-private fun formatFrameRate(frameRate: Float): String {
+private fun formatFrameRate(frameRate: Float, locale: Locale): String {
     return if (frameRate >= 10f) {
-        String.format(Locale.US, "%.0f fps", frameRate)
+        String.format(locale, "%.0f fps", frameRate)
     } else {
-        String.format(Locale.US, "%.1f fps", frameRate)
+        String.format(locale, "%.1f fps", frameRate)
     }
 }
 
-private fun formatBitrate(bitsPerSecond: Long): String {
+private fun formatBitrate(bitsPerSecond: Long, locale: Locale): String {
     return if (bitsPerSecond >= 1_000_000L) {
-        String.format(Locale.US, "%.1f Mbps", bitsPerSecond.toDouble() / 1_000_000.0)
+        String.format(locale, "%.1f Mbps", bitsPerSecond.toDouble() / 1_000_000.0)
     } else {
-        String.format(Locale.US, "%.0f kbps", bitsPerSecond.toDouble() / 1_000.0)
+        String.format(locale, "%.0f kbps", bitsPerSecond.toDouble() / 1_000.0)
     }
 }

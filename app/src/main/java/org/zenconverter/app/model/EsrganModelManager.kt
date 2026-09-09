@@ -1,4 +1,9 @@
 package org.zenconverter.app.model
+import org.zenconverter.app.R
+import org.zenconverter.app.i18n.LocalizedText
+import org.zenconverter.app.i18n.localizedText
+import org.zenconverter.app.i18n.LocalizedFailure
+
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
@@ -25,7 +30,6 @@ data class EsrganModelSpec(
     val displayName: String,
     val paramFile: ModelFileEntry,
     val binFile: ModelFileEntry,
-    val sizeDisplay: String,
     val sourceUrl: String = "https://github.com/xinntao/Real-ESRGAN"
 ) {
     val totalSizeBytes: Long get() = paramFile.sizeBytes + binFile.sizeBytes
@@ -51,7 +55,6 @@ object EsrganModelManager {
             sizeBytes = 8_943_500L,
             sha256 = "fe01c269cfd10cdef8e018ab66ebe750cf79c7af4d1f9c16c737e1295229bacc"
         ),
-        sizeDisplay = "8.97 MB"
     )
 
     val MODEL_X4PLUS = EsrganModelSpec(
@@ -69,7 +72,6 @@ object EsrganModelManager {
             sizeBytes = 33_424_520L,
             sha256 = "713ee713b0353afaa27976f0563a64a5043bd70b9bd8936c2e26e25ebcdbcddf"
         ),
-        sizeDisplay = "33.5 MB"
     )
 
     val ALL_MODELS = listOf(MODEL_ANIME, MODEL_X4PLUS)
@@ -81,7 +83,7 @@ object EsrganModelManager {
     private fun modelDir(context: Context): File {
         val dir = File(context.applicationContext.filesDir, "models")
         if (!dir.exists() && !dir.mkdirs()) {
-            throw IOException("Could not create model folder")
+            throw LocalizedFailure(localizedText(R.string.message_could_not_create_model_folder))
         }
         return dir
     }
@@ -146,7 +148,7 @@ object EsrganModelManager {
         val tempFile = File(dir, "${entry.fileName}.part")
 
         if (tempFile.exists() && !tempFile.delete()) {
-            throw IOException("Could not reset previous model download: ${tempFile.name}")
+            throw LocalizedFailure(localizedText(R.string.message_could_not_reset_previous_model_download_1_s, tempFile.name))
         }
 
         val progressContext = currentCoroutineContext()
@@ -176,16 +178,16 @@ object EsrganModelManager {
         val actualSha256 = digest.digest().toHexString()
         if (!actualSha256.equals(entry.sha256, ignoreCase = true)) {
             tempFile.delete()
-            throw IOException("Downloaded ${entry.fileName} checksum mismatch (expected ${entry.sha256}, got $actualSha256)")
+            throw LocalizedFailure(localizedText(R.string.message_downloaded_1_s_checksum_mismatch_expected_2_s_got_3_s, entry.fileName, entry.sha256, actualSha256))
         }
         if (tempFile.length() != entry.sizeBytes) {
             tempFile.delete()
-            throw IOException("Downloaded ${entry.fileName} size mismatch (expected ${entry.sizeBytes}, got ${tempFile.length()})")
+            throw LocalizedFailure(localizedText(R.string.message_downloaded_1_s_size_mismatch_expected_2_s_got_3_s, entry.fileName, entry.sizeBytes, tempFile.length()))
         }
 
         if (targetFile.exists() && !targetFile.delete()) {
             tempFile.delete()
-            throw IOException("Could not replace previous model file: ${targetFile.name}")
+            throw LocalizedFailure(localizedText(R.string.message_could_not_replace_previous_model_file_1_s, targetFile.name))
         }
         if (!tempFile.renameTo(targetFile)) {
             tempFile.copyTo(targetFile, overwrite = true)
@@ -207,7 +209,7 @@ object EsrganModelManager {
         val responseCode = connection.responseCode
         if (responseCode !in 200..299) {
             connection.disconnect()
-            throw IOException("Download server returned HTTP $responseCode")
+            throw LocalizedFailure(localizedText(R.string.message_download_server_returned_http_1_s, responseCode))
         }
         return connection
     }
@@ -233,5 +235,5 @@ sealed interface EsrganModelUiState {
     object NotDownloaded : EsrganModelUiState
     data class Downloading(val progress: Float) : EsrganModelUiState
     object Downloaded : EsrganModelUiState
-    data class Failed(val message: String?) : EsrganModelUiState
+    data class Failed(val message: LocalizedText?) : EsrganModelUiState
 }

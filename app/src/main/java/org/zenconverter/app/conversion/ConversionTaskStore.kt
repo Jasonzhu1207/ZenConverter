@@ -1,4 +1,8 @@
 package org.zenconverter.app.conversion
+import org.zenconverter.app.R
+import org.zenconverter.app.i18n.LocalizedText
+import org.zenconverter.app.i18n.localizedText
+
 
 import android.net.Uri
 import androidx.compose.runtime.mutableStateListOf
@@ -250,7 +254,7 @@ data class ConversionTaskState(
     val targetFormat: String,
     val status: ConversionTaskStatus,
     val progress: Float,
-    val message: String,
+    val message: LocalizedText,
     val outputUri: Uri? = null,
     val outputUris: List<Uri> = emptyList(),
     val outputDirectoryUri: Uri? = null,
@@ -268,7 +272,7 @@ enum class ConversionTaskStatus {
 
 object ConversionTaskStore {
     val tasks = mutableStateListOf<ConversionTaskState>()
-    val summaryMessage = mutableStateOf<String?>(null)
+    val summaryMessage = mutableStateOf<LocalizedText?>(null)
     val isRunning = mutableStateOf(false)
 
     private val inputs = mutableListOf<ConversionTaskInput>()
@@ -279,7 +283,7 @@ object ConversionTaskStore {
         inputs.clear()
         inputs.addAll(nextInputs)
         isRunning.value = nextInputs.isNotEmpty()
-        summaryMessage.value = if (nextInputs.isEmpty()) null else "Processing"
+        summaryMessage.value = if (nextInputs.isEmpty()) null else localizedText(R.string.task_processing)
         tasks.clear()
         tasks.addAll(
             nextInputs.map { input ->
@@ -289,13 +293,13 @@ object ConversionTaskStore {
                     targetFormat = input.targetFormat,
                     status = ConversionTaskStatus.Queued,
                     progress = 0f,
-                    message = "Queued"
+                    message = localizedText(R.string.ui_waiting)
                 )
             }
         )
     }
 
-    fun showMessage(message: String) {
+    fun showMessage(message: LocalizedText) {
         summaryMessage.value = message
     }
 
@@ -310,10 +314,10 @@ object ConversionTaskStore {
             task.copy(
                 status = ConversionTaskStatus.Running,
                 progress = 0f,
-                message = "Processing"
+                message = localizedText(R.string.task_processing)
             )
         }
-        summaryMessage.value = "Processing"
+        summaryMessage.value = localizedText(R.string.task_processing)
         isRunning.value = true
     }
 
@@ -322,10 +326,10 @@ object ConversionTaskStore {
             task.copy(
                 status = ConversionTaskStatus.Running,
                 progress = task.progress.coerceAtLeast(0.98f),
-                message = "Saving"
+                message = localizedText(R.string.task_saving)
             )
         }
-        summaryMessage.value = "Saving"
+        summaryMessage.value = localizedText(R.string.task_saving)
         isRunning.value = true
     }
 
@@ -334,7 +338,7 @@ object ConversionTaskStore {
             task.copy(
                 status = ConversionTaskStatus.Running,
                 progress = progress.coerceIn(0f, 1f),
-                message = "Processing"
+                message = localizedText(R.string.task_processing)
             )
         }
     }
@@ -351,7 +355,7 @@ object ConversionTaskStore {
             task.copy(
                 status = ConversionTaskStatus.Completed,
                 progress = 1f,
-                message = "Conversion complete",
+                message = localizedText(R.string.ui_flow_complete),
                 outputUri = outputUri,
                 outputUris = outputUris,
                 outputDirectoryUri = outputDirectoryUri,
@@ -361,7 +365,7 @@ object ConversionTaskStore {
         }
     }
 
-    fun markFailed(index: Int, message: String) {
+    fun markFailed(index: Int, message: LocalizedText) {
         updateTask(index) { task ->
             task.copy(
                 status = ConversionTaskStatus.Failed,
@@ -371,31 +375,31 @@ object ConversionTaskStore {
         summaryMessage.value = message
     }
 
-    fun markRunFinished(customSummary: String? = null) {
+    fun markRunFinished(customSummary: LocalizedText? = null) {
         isRunning.value = false
         summaryMessage.value = customSummary
             ?: tasks.lastOrNull { it.status == ConversionTaskStatus.Failed }?.message
-            ?: "Conversion complete"
+            ?: localizedText(R.string.ui_flow_complete)
         clearSensitiveInputs()
     }
 
     fun cancelAll() {
         cancelled = true
         isRunning.value = false
-        summaryMessage.value = "Cancelled"
+        summaryMessage.value = localizedText(R.string.ui_cancelled)
         for (index in tasks.indices) {
             val task = tasks[index]
             if (task.status == ConversionTaskStatus.Queued || task.status == ConversionTaskStatus.Running) {
                 tasks[index] = task.copy(
                     status = ConversionTaskStatus.Cancelled,
-                    message = "Cancelled"
+                    message = localizedText(R.string.ui_cancelled)
                 )
             }
         }
         clearSensitiveInputs()
     }
 
-    fun failRunning(message: String) {
+    fun failRunning(message: LocalizedText) {
         isRunning.value = false
         summaryMessage.value = message
         val index = tasks.indexOfFirst { it.status == ConversionTaskStatus.Running }

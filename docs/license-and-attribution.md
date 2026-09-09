@@ -23,6 +23,17 @@ Before a dependency becomes core:
 
 ## Current AndroidX Dependencies
 
+- AndroidX AppCompat is pinned to `androidx.appcompat:appcompat:1.7.1` for
+  backward-compatible per-app locale handling. This maintained official AndroidX
+  project is deliberately pinned, not asserted to be the latest release. Its
+  Google Maven POM declares Apache-2.0, compatible with inclusion alongside the
+  app's AGPL-3.0-or-later source while preserving the separate third-party notice.
+  Framework APIs alone do not cover every supported Android version. Its normal
+  AndroidX resource/Fragment transitives are included; native inputs do not change.
+  Device acceptance is tracked in `docs/testing-localization.md`.
+  Upstream: `https://developer.android.com/jetpack/androidx/releases/appcompat`;
+  source: `https://android.googlesource.com/platform/frameworks/support/`.
+
 - AndroidX Compose and AndroidX Material Icons Extended are Apache-2.0
   dependencies used for the native Android UI.
 

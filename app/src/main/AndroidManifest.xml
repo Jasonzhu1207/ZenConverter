@@ -16,6 +16,8 @@
         android:maxSdkVersion="28" />
 
     <application
+        android:localeConfig="@xml/locales_config"
+        android:supportsRtl="true"
         android:allowBackup="true"
         android:icon="@drawable/zenconverter"
         android:label="@string/app_name"
@@ -25,7 +27,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:configChanges="keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize">
+            android:configChanges="keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|locale|layoutDirection">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -120,5 +122,11 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <service
+            android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+            android:enabled="false"
+            android:exported="false">
+            <meta-data android:name="autoStoreLocales" android:value="true" />
+        </service>
     </application>
 </manifest>

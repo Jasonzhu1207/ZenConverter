@@ -1,4 +1,13 @@
 package org.zenconverter.app.conversion
+import org.zenconverter.app.R
+import org.zenconverter.app.i18n.LocalizedText
+import org.zenconverter.app.i18n.localizedText
+import org.zenconverter.app.i18n.LocalizedFailure
+import org.zenconverter.app.i18n.localizedFailure
+import org.zenconverter.app.i18n.AppLanguages
+import android.content.res.Configuration
+import kotlinx.coroutines.flow.drop
+
 
 import android.app.ActivityManager
 import android.app.Notification
@@ -67,7 +76,6 @@ import com.tom_roush.pdfbox.pdmodel.graphics.image.JPEGFactory
 import com.tom_roush.pdfbox.pdmodel.graphics.image.PDImageXObject
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import org.zenconverter.app.MainActivity
-import org.zenconverter.app.R
 import org.zenconverter.app.office.Office2PdfNative
 import org.zenconverter.app.office.Office2PdfUnavailableException
 import org.zenconverter.app.office.Office2PdfUnsupportedAbiException
@@ -106,6 +114,9 @@ class ConversionService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private var taskIndex = 0
+    private var notificationActive = false
+    private var notificationTitle: LocalizedText = localizedText(R.string.message_preparing)
+    private var notificationProgress = 0
     private var activeFfmpegSession: FFmpegSession? = null
     private var activeTempFile: File? = null
     private var copyThread: Thread? = null
@@ -120,6 +131,22 @@ class ConversionService : Service() {
     override fun onCreate() {
         super.onCreate()
         ensureNotificationChannel()
+        serviceScope.launch {
+            AppLanguages.revision.drop(1).collect {
+                refreshNotificationLanguage()
+            }
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        refreshNotificationLanguage()
+    }
+
+    private fun refreshNotificationLanguage() {
+        if (!notificationActive) return
+        ensureNotificationChannel()
+        updateNotification(notificationTitle, notificationProgress)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -134,21 +161,22 @@ class ConversionService : Service() {
                     return START_NOT_STICKY
                 }
                 handler.removeCallbacksAndMessages(null)
+                notificationActive = true
                 // mediaProcessing only exists on Android 15 (API 35)+. On Android 14
                 // (API 34) it is unrecognized and would crash with
                 // "Starting FGS with type unknown", so fall back to dataSync there.
                 when {
                     Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM -> startForeground(
                         NOTIFICATION_ID,
-                        buildNotification("Preparing", 0),
+                        buildNotification(localizedText(R.string.message_preparing), 0),
                         ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
                     )
                     Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> startForeground(
                         NOTIFICATION_ID,
-                        buildNotification("Preparing", 0),
+                        buildNotification(localizedText(R.string.message_preparing), 0),
                         ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
                     )
-                    else -> startForeground(NOTIFICATION_ID, buildNotification("Preparing", 0))
+                    else -> startForeground(NOTIFICATION_ID, buildNotification(localizedText(R.string.message_preparing), 0))
                 }
                 taskIndex = 0
                 customOutputFallbackOccurred = false
@@ -182,13 +210,13 @@ class ConversionService : Service() {
 
         val input = ConversionTaskStore.inputAt(taskIndex)
         if (input == null) {
-            failCurrentTask("Conversion failed")
+            failCurrentTask(localizedText(R.string.ui_failed))
             return
         }
 
         val outputProfile = outputProfileFor(input)
         if (outputProfile == null) {
-            failCurrentTask("Only connected video, audio, image, PDF, document, and font targets can run")
+            failCurrentTask(localizedText(R.string.message_only_connected_video_audio_image_pdf_document_and_font_targets_can_run))
             return
         }
 
@@ -214,7 +242,7 @@ class ConversionService : Service() {
         val tempFile = createTempFileFor(input, outputProfile.extension)
         activeTempFile = tempFile
         ConversionTaskStore.markRunning(taskIndex)
-        updateNotification("Processing", (ConversionTaskStore.aggregateProgress() * 100).toInt())
+        updateNotification(localizedText(R.string.task_processing), (ConversionTaskStore.aggregateProgress() * 100).toInt())
 
         if (input.category == ConversionMediaCategory.Image) {
             startImageExport(input, tempFile, outputProfile)
@@ -261,7 +289,7 @@ class ConversionService : Service() {
 
         tempFile.delete()
         activeTempFile = null
-        failCurrentTask("Only connected video, audio, image, PDF, document, font, and subtitle targets can run")
+        failCurrentTask(localizedText(R.string.message_only_connected_video_audio_image_pdf_document_font_and_subtitle_targets_can_run))
     }
 
     private fun startVideoContactSheetExport(
@@ -288,7 +316,7 @@ class ConversionService : Service() {
                     return@onFailure
                 }
                 Log.w(TAG, "Could not create video contact sheet", exception)
-                failCurrentTask("Video contact sheet failed: ${exception.message ?: "Unknown error"}")
+                failCurrentTask(exception.localizedFailure(R.string.message_video_contact_sheet_failed))
             }
         }
     }
@@ -298,6 +326,7 @@ class ConversionService : Service() {
         tempFile: File,
         outputProfile: OutputProfile
     ) {
+        val displayLocale = AppLanguages.localizedContext(this).resources.configuration.locales[0]
         val pfd = runCatching { contentResolver.openFileDescriptor(input.inputUri, "r") }.getOrNull()
         val retriever = MediaMetadataRetriever()
         try {
@@ -327,7 +356,7 @@ class ConversionService : Service() {
             val totalBitrateBps = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)?.toLongOrNull()
                 ?: input.inputInfo?.bitrateBitsPerSecond
 
-            var videoCodecName = "Unknown"
+            var videoCodecName = localizedText(R.string.contact_sheet_unknown_codec).resolve(this)
             var videoProfile = ""
             var videoPixFmt = ""
             var videoBitrateKbps: Long? = null
@@ -357,11 +386,16 @@ class ConversionService : Service() {
                             if (aStream != null) {
                                 audioCodecName = aStream.getCodec().orEmpty()
                                 audioSampleRate = aStream.getSampleRate().orEmpty().let { rate ->
-                                    rate.toIntOrNull()?.let { String.format(Locale.US, "%.1f kHz", it / 1000.0) } ?: rate
+                                    rate.toIntOrNull()?.let { String.format(displayLocale, "%.1f kHz", it / 1000.0) } ?: rate
                                 }
                                 val chCount = aStream.getNumberProperty("channels") ?: 2L
                                 val chLayout = aStream.getChannelLayout().orEmpty()
-                                audioChannels = if (chLayout.isNotBlank()) "${chCount}ch ($chLayout)" else "${chCount}ch"
+                                val channelCount = LocalizedText.Quantity(
+                                    R.plurals.contact_sheet_audio_channel_count, chCount.toInt(), listOf(chCount)
+                                )
+                                audioChannels = if (chLayout.isNotBlank()) {
+                                    localizedText(R.string.format_detail_parenthesized, channelCount, chLayout).resolve(this)
+                                } else channelCount.resolve(this)
                                 audioBitrateKbps = aStream.getBitrate()?.toLongOrNull()?.let { it / 1000 }
                             }
                         }
@@ -374,7 +408,7 @@ class ConversionService : Service() {
             if (audioCodecName.isBlank()) {
                 val hasAudio = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO)
                 if (hasAudio != null) {
-                    audioCodecName = "Audio Stream"
+                    audioCodecName = localizedText(R.string.contact_sheet_audio_stream).resolve(this)
                 }
             }
 
@@ -505,7 +539,7 @@ class ConversionService : Service() {
                 var curY = headerPaddingY + labelTextSize
 
                 drawSegments(listOf(
-                    "文件名: " to labelPaint,
+                    localizedText(R.string.contact_sheet_file).resolve(this@ConversionService) to labelPaint,
                     input.displayName to valuePaint
                 ), headerPaddingX, curY)
                 curY += lineLeading
@@ -513,65 +547,65 @@ class ConversionService : Service() {
                 val fileSizeStr = formatFileSize(input.inputInfo?.sizeBytes ?: pfd?.statSize ?: 0L)
                 val durationStr = formatDuration(durationMs)
                 drawSegments(listOf(
-                    "文件大小: " to labelPaint,
+                    localizedText(R.string.contact_sheet_size).resolve(this@ConversionService) to labelPaint,
                     fileSizeStr to valuePaint,
                     "  |  " to separatorPaint,
-                    "时长: " to labelPaint,
+                    localizedText(R.string.contact_sheet_duration).resolve(this@ConversionService) to labelPaint,
                     durationStr to accentPaint
                 ), headerPaddingX, curY)
                 curY += lineLeading
 
                 val codecLabel = if (videoProfile.isNotBlank()) "$videoCodecName ($videoProfile)" else videoCodecName
-                val fpsStr = if (captureFps != null && captureFps > 0) String.format(Locale.US, "%.2f fps", captureFps) else "30.00 fps"
-                val vBitrateStr = videoBitrateKbps?.let { "${it} kbps" }
-                    ?: totalBitrateBps?.let { String.format(Locale.US, "%.2f Mbps", it / 1_000_000.0) }
-                    ?: "Auto"
-                val resStr = "${displayWidth}x${displayHeight}"
+                val fpsStr = if (captureFps != null && captureFps > 0) String.format(displayLocale, "%.2f fps", captureFps) else String.format(displayLocale, "%.2f fps", 30.0)
+                val vBitrateStr = videoBitrateKbps?.let { String.format(displayLocale, "%d kbps", it) }
+                    ?: totalBitrateBps?.let { String.format(displayLocale, "%.2f Mbps", it / 1_000_000.0) }
+                    ?: localizedText(R.string.text_option_value_auto).resolve(this)
+                val resStr = String.format(displayLocale, "%dx%d", displayWidth, displayHeight)
                 val line3Segments = mutableListOf(
-                    "视频: " to labelPaint,
+                    localizedText(R.string.contact_sheet_video).resolve(this@ConversionService) to labelPaint,
                     codecLabel to valuePaint,
                     "  |  " to separatorPaint,
-                    "分辨率: " to labelPaint,
+                    localizedText(R.string.contact_sheet_resolution).resolve(this@ConversionService) to labelPaint,
                     resStr to accentPaint,
                     "  |  " to separatorPaint,
-                    "帧率: " to labelPaint,
+                    localizedText(R.string.contact_sheet_frame_rate).resolve(this@ConversionService) to labelPaint,
                     fpsStr to valuePaint
                 )
                 if (videoPixFmt.isNotBlank()) {
                     line3Segments.add("  |  " to separatorPaint)
-                    line3Segments.add("色深: " to labelPaint)
+                    line3Segments.add(localizedText(R.string.contact_sheet_bit_depth).resolve(this@ConversionService) to labelPaint)
                     line3Segments.add(videoPixFmt to valuePaint)
                 }
                 line3Segments.add("  |  " to separatorPaint)
-                line3Segments.add("码率: " to labelPaint)
+                line3Segments.add(localizedText(R.string.contact_sheet_bitrate).resolve(this@ConversionService) to labelPaint)
                 line3Segments.add(vBitrateStr to valuePaint)
                 drawSegments(line3Segments, headerPaddingX, curY)
                 curY += lineLeading
 
                 if (audioCodecName.isNotBlank()) {
                     val line4Segments = mutableListOf(
-                        "音频: " to labelPaint,
+                        localizedText(R.string.contact_sheet_audio).resolve(this@ConversionService) to labelPaint,
                         audioCodecName to valuePaint
                     )
                     if (audioSampleRate.isNotBlank()) {
                         line4Segments.add("  |  " to separatorPaint)
-                        line4Segments.add("采样率: " to labelPaint)
+                        line4Segments.add(localizedText(R.string.contact_sheet_sample_rate).resolve(this@ConversionService) to labelPaint)
                         line4Segments.add(audioSampleRate to valuePaint)
                     }
                     if (audioChannels.isNotBlank()) {
                         line4Segments.add("  |  " to separatorPaint)
-                        line4Segments.add("声道: " to labelPaint)
+                        line4Segments.add(localizedText(R.string.contact_sheet_channels).resolve(this@ConversionService) to labelPaint)
                         line4Segments.add(audioChannels to valuePaint)
                     }
                     if (audioBitrateKbps != null) {
                         line4Segments.add("  |  " to separatorPaint)
-                        line4Segments.add("码率: " to labelPaint)
-                        line4Segments.add("${audioBitrateKbps} kbps" to valuePaint)
+                        line4Segments.add(localizedText(R.string.contact_sheet_bitrate).resolve(this@ConversionService) to labelPaint)
+                        line4Segments.add(String.format(displayLocale, "%d kbps", audioBitrateKbps) to valuePaint)
                     }
                     drawSegments(line4Segments, headerPaddingX, curY)
                 }
 
-                val wmText = "Generated by Jasonzhu1207/ZenConverter"
+                val wmText = localizedText(R.string.contact_sheet_generated_by, getString(R.string.project_identifier)).resolve(this)
                 val wmPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     color = Color.parseColor("#94A3B8")
                     typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
@@ -695,34 +729,37 @@ class ConversionService : Service() {
     }
 
     private fun formatFileSize(bytes: Long): String {
-        if (bytes <= 0) return "0 B"
+        val displayLocale = AppLanguages.localizedContext(this).resources.configuration.locales[0]
+        if (bytes <= 0) return String.format(displayLocale, "%d B", 0)
         val units = arrayOf("B", "KB", "MB", "GB", "TB")
         val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt().coerceIn(0, units.size - 1)
-        return String.format(Locale.US, "%.2f %s", bytes / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
+        return String.format(displayLocale, "%.2f %s", bytes / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
     }
 
     private fun formatDuration(durationMs: Long): String {
+        val displayLocale = AppLanguages.localizedContext(this).resources.configuration.locales[0]
         val totalSeconds = (durationMs / 1000).coerceAtLeast(0)
         val hours = totalSeconds / 3600
         val minutes = (totalSeconds % 3600) / 60
         val seconds = totalSeconds % 60
         return if (hours > 0) {
-            String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
+            String.format(displayLocale, "%02d:%02d:%02d", hours, minutes, seconds)
         } else {
-            String.format(Locale.US, "%02d:%02d", minutes, seconds)
+            String.format(displayLocale, "%02d:%02d", minutes, seconds)
         }
     }
 
     private fun formatTimestamp(timestampMs: Long): String {
+        val displayLocale = AppLanguages.localizedContext(this).resources.configuration.locales[0]
         val totalSeconds = (timestampMs / 1000).coerceAtLeast(0)
         val hours = totalSeconds / 3600
         val minutes = (totalSeconds % 3600) / 60
         val seconds = totalSeconds % 60
         val hundredths = ((timestampMs % 1000) / 10).coerceIn(0, 99)
         return if (hours > 0) {
-            String.format(Locale.US, "%02d:%02d:%02d.%02d", hours, minutes, seconds, hundredths)
+            String.format(displayLocale, "%02d:%02d:%02d.%02d", hours, minutes, seconds, hundredths)
         } else {
-            String.format(Locale.US, "%02d:%02d.%02d", minutes, seconds, hundredths)
+            String.format(displayLocale, "%02d:%02d.%02d", minutes, seconds, hundredths)
         }
     }
 
@@ -893,13 +930,13 @@ class ConversionService : Service() {
                 title = markdownTitleFor(input),
                 format = TextDocumentFormat.Markdown
             )
-            else -> error("Office conversion failed")
+            else -> throw LocalizedFailure(localizedText(R.string.text_task_message_office_conversion_failed))
         }
     }
 
     private fun convertOfficeInputToPdfBytes(input: ConversionTaskInput): ByteArray {
         val extension = officeInputExtensionFor(input)
-            ?: error("Unsupported Office document")
+            ?: throw LocalizedFailure(localizedText(R.string.text_task_message_unsupported_office_document))
 
         throwIfConversionCancelled()
         val inputBytes = readOfficeInputBytes(input)
@@ -910,7 +947,7 @@ class ConversionService : Service() {
         throwIfConversionCancelled()
 
         if (!looksLikePdf(pdfBytes)) {
-            error("Office engine did not return a PDF")
+            throw LocalizedFailure(localizedText(R.string.message_office_engine_did_not_return_a_pdf))
         }
         throwIfConversionCancelled()
         updateImageProgress(0.55f)
@@ -962,28 +999,28 @@ class ConversionService : Service() {
 
         throwIfConversionCancelled()
         val sourceFormat = FontFormatDetector.detect(inputBytes)
-            ?: error("Unsupported font file")
+            ?: throw LocalizedFailure(localizedText(R.string.message_unsupported_font_file))
 
         val targetExtension = outputProfile.extension.lowercase(Locale.US)
         val outputBytes = when (targetExtension) {
             "woff2" -> {
                 if (sourceFormat != FontFormat.Sfnt) {
-                    error("WOFF2 output requires a TTF or OTF input")
+                    throw LocalizedFailure(localizedText(R.string.message_woff2_output_requires_a_ttf_or_otf_input))
                 }
                 Woff2Native.compressSfnt(inputBytes)
             }
             "woff" -> {
                 if (sourceFormat != FontFormat.Sfnt) {
-                    error("WOFF output requires a TTF or OTF input")
+                    throw LocalizedFailure(localizedText(R.string.message_woff_output_requires_a_ttf_or_otf_input))
                 }
                 WoffCodec.encode(inputBytes)
             }
             "ttf" -> when (sourceFormat) {
                 FontFormat.Woff2 -> Woff2Native.decompressToSfnt(inputBytes)
                 FontFormat.Woff -> WoffCodec.decode(inputBytes)
-                FontFormat.Sfnt -> error("Input is already an uncompressed font")
+                FontFormat.Sfnt -> throw LocalizedFailure(localizedText(R.string.message_input_is_already_an_uncompressed_font))
             }
-            else -> error("Unsupported font output format")
+            else -> throw LocalizedFailure(localizedText(R.string.message_unsupported_font_output_format))
         }
 
         throwIfConversionCancelled()
@@ -1009,7 +1046,7 @@ class ConversionService : Service() {
         val sourceSize = queryOpenableSize(input.inputUri)
         sourceSize?.let { sizeBytes ->
             if (sizeBytes > FONT_MAX_INPUT_BYTES) {
-                error("Font file is too large")
+                throw LocalizedFailure(localizedText(R.string.message_font_file_is_too_large))
             }
         }
 
@@ -1028,13 +1065,13 @@ class ConversionService : Service() {
                 if (read == -1) break
                 totalBytes += read.toLong()
                 if (totalBytes > FONT_MAX_INPUT_BYTES) {
-                    error("Font file is too large")
+                    throw LocalizedFailure(localizedText(R.string.message_font_file_is_too_large))
                 }
                 output.write(buffer, 0, read)
             }
-        } ?: error("Input file could not be opened")
+        } ?: throw LocalizedFailure(localizedText(R.string.text_task_message_input_file_could_not_be_opened))
 
-        if (output.size() == 0) error("Input file is empty")
+        if (output.size() == 0) throw LocalizedFailure(localizedText(R.string.text_task_message_input_file_is_empty))
         return output.toByteArray()
     }
 
@@ -1048,37 +1085,11 @@ class ConversionService : Service() {
         }
     }
 
-    private fun fontFailureMessageFor(exception: Throwable): String {
-        val message = exception.message.orEmpty()
-        return when {
-            exception is Woff2UnsupportedAbiException ->
-                "Font converter is only available on arm64-v8a devices"
-            exception is Woff2UnavailableException ->
-                "Font converter could not start on this device"
-            exception is UnsatisfiedLinkError ->
-                "Font converter could not start on this device"
-            message == "Unsupported font file" -> "Unsupported font file"
-            message == "Input file is empty" -> "Input file is empty"
-            message == "Input file could not be opened" -> "Input file could not be opened"
-            message == "Font file is too large" -> "Font file is too large"
-            message == "WOFF2 output requires a TTF or OTF input" ->
-                "WOFF2 output requires a TTF or OTF input"
-            message == "WOFF output requires a TTF or OTF input" ->
-                "WOFF output requires a TTF or OTF input"
-            message == "Input is already an uncompressed font" ->
-                "Input is already an uncompressed font (TTF/OTF)"
-            message == "Input is not a WOFF font" -> "Input is not a WOFF font"
-            message == "WOFF table is corrupt" -> "WOFF font data is corrupt"
-            message in setOf(
-                "Font input is too small",
-                "Font directory is truncated",
-                "Font table data is truncated",
-                "WOFF input is too small",
-                "WOFF directory is truncated",
-                "WOFF table data is truncated"
-            ) -> "Font file is corrupt or truncated"
-            message.startsWith("Font", ignoreCase = true) -> message
-            else -> "Font conversion failed"
+    private fun fontFailureMessageFor(exception: Throwable): LocalizedText {
+        return when (exception) {
+            is Woff2UnsupportedAbiException -> localizedText(R.string.message_font_converter_is_only_available_on_arm64_v8a_devices)
+            is Woff2UnavailableException, is UnsatisfiedLinkError -> localizedText(R.string.message_font_converter_could_not_start_on_this_device)
+            else -> exception.localizedFailure(R.string.message_font_conversion_failed)
         }
     }
 
@@ -1088,7 +1099,7 @@ class ConversionService : Service() {
         result: FontExportResult
     ) {
         ConversionTaskStore.markSaving(taskIndex)
-        updateNotification("Saving", (ConversionTaskStore.aggregateProgress() * 100).toInt())
+        updateNotification(localizedText(R.string.task_saving), (ConversionTaskStore.aggregateProgress() * 100).toInt())
 
         copyThread = Thread {
             var outputUri: Uri? = null
@@ -1142,7 +1153,7 @@ class ConversionService : Service() {
                 tempFile.delete()
                 handler.post {
                     activeTempFile = null
-                    failCurrentTask("Could not save output file")
+                    failCurrentTask(localizedText(R.string.text_task_message_could_not_save_output_file))
                 }
             }
         }.also { it.start() }
@@ -1153,7 +1164,7 @@ class ConversionService : Service() {
         outputFile: File,
         outputProfile: OutputProfile
     ) {
-        if (input.targetFormat.equals("Compress PDF", ignoreCase = true)) {
+        if (TargetId.fromKey(input.targetFormat) == TargetId.PdfCompress) {
             writeCompressedPdf(input, outputFile)
             return
         }
@@ -1174,7 +1185,7 @@ class ConversionService : Service() {
             "pdf" -> writeMergedPdf(input, outputFile)
             "txt" -> writePdfTextFile(input, outputFile, TextDocumentFormat.PlainText)
             "md" -> writePdfTextFile(input, outputFile, TextDocumentFormat.Markdown)
-            else -> error("PDF conversion failed")
+            else -> throw LocalizedFailure(localizedText(R.string.text_task_message_pdf_conversion_failed))
         }
     }
 
@@ -1183,7 +1194,7 @@ class ConversionService : Service() {
         outputFile: File
     ) {
         val inputUris = input.inputUris.ifEmpty { listOf(input.inputUri) }
-        if (inputUris.size != 1) error("Select one PDF to compress")
+        if (inputUris.size != 1) throw LocalizedFailure(localizedText(R.string.message_select_one_pdf_to_compress))
 
         throwIfConversionCancelled()
         ensurePdfBoxReady()
@@ -1193,7 +1204,7 @@ class ConversionService : Service() {
         try {
             document = loadPdfBoxDocument(cachedInputs.files.first(), input.pdfPasswordAt(0))
             val pageCount = document.numberOfPages
-            if (pageCount <= 0) error("PDF has no pages")
+            if (pageCount <= 0) throw LocalizedFailure(localizedText(R.string.text_task_message_pdf_has_no_pages))
             throwIfConversionCancelled()
 
             val preset = input.pdfOptions.compressionPreset
@@ -1335,7 +1346,7 @@ class ConversionService : Service() {
         outputFile: File
     ) {
         val inputUris = input.inputUris.ifEmpty { listOf(input.inputUri) }
-        if (inputUris.size < 2) error("Select at least two PDFs to merge")
+        if (inputUris.size < 2) throw LocalizedFailure(localizedText(R.string.text_task_message_select_at_least_two_pdfs_to_merge))
 
         throwIfConversionCancelled()
         ensurePdfBoxReady()
@@ -1351,7 +1362,7 @@ class ConversionService : Service() {
                     input.pdfPasswordAt(index)
                 )
                 try {
-                    if (source.numberOfPages <= 0) error("PDF has no pages")
+                    if (source.numberOfPages <= 0) throw LocalizedFailure(localizedText(R.string.text_task_message_pdf_has_no_pages))
                     merger.appendDocument(destination, source)
                     throwIfConversionCancelled()
                 } finally {
@@ -1381,7 +1392,7 @@ class ConversionService : Service() {
         format: TextDocumentFormat
     ) {
         val inputUris = input.inputUris.ifEmpty { listOf(input.inputUri) }
-        if (inputUris.size != 1) error("PDF text extraction failed")
+        if (inputUris.size != 1) throw LocalizedFailure(localizedText(R.string.text_task_message_pdf_text_extraction_failed))
 
         throwIfConversionCancelled()
         ensurePdfBoxReady()
@@ -1443,7 +1454,7 @@ class ConversionService : Service() {
         progressEnd: Float
     ) {
         val pageCount = document.numberOfPages
-        if (pageCount <= 0) error("PDF has no pages")
+        if (pageCount <= 0) throw LocalizedFailure(localizedText(R.string.text_task_message_pdf_has_no_pages))
 
         val stripper = PDFTextStripper()
         var hasSelectableText = false
@@ -1491,7 +1502,7 @@ class ConversionService : Service() {
 
         throwIfConversionCancelled()
         if (!hasSelectableText) {
-            error("PDF has no selectable text; OCR is not included")
+            throw LocalizedFailure(localizedText(R.string.text_task_message_pdf_has_no_selectable_text_ocr_is_not_included))
         }
         updateImageProgress(0.95f)
     }
@@ -1502,7 +1513,7 @@ class ConversionService : Service() {
         encrypt: Boolean
     ) {
         val inputUris = input.inputUris.ifEmpty { listOf(input.inputUri) }
-        if (inputUris.size != 1) error(if (encrypt) "PDF encryption failed" else "PDF decryption failed")
+        if (inputUris.size != 1) error(if (encrypt) localizedText(R.string.text_task_message_pdf_encryption_failed) else localizedText(R.string.text_task_message_pdf_decryption_failed))
 
         throwIfConversionCancelled()
         ensurePdfBoxReady()
@@ -1511,13 +1522,13 @@ class ConversionService : Service() {
 
         try {
             document = loadPdfBoxDocument(cachedInputs.files.first(), input.pdfPasswordAt(0))
-            if (document.numberOfPages <= 0) error("PDF has no pages")
+            if (document.numberOfPages <= 0) throw LocalizedFailure(localizedText(R.string.text_task_message_pdf_has_no_pages))
             throwIfConversionCancelled()
 
             if (encrypt) {
                 val password = input.pdfSecurityOptions.outputPassword
                     ?.takeIf { it.isNotBlank() }
-                    ?: error("PDF password was empty")
+                    ?: throw LocalizedFailure(localizedText(R.string.text_task_message_pdf_password_was_empty))
                 val policy = StandardProtectionPolicy(
                     password,
                     password,
@@ -1556,7 +1567,7 @@ class ConversionService : Service() {
         try {
             val renderer = rendererSource.renderer
             val pageCount = renderer.pageCount
-            if (pageCount <= 0) error("PDF has no pages")
+            if (pageCount <= 0) throw LocalizedFailure(localizedText(R.string.text_task_message_pdf_has_no_pages))
 
             val pageSizes = mutableListOf<PdfPageSize>()
             for (pageIndex in 0 until pageCount) {
@@ -1644,17 +1655,17 @@ class ConversionService : Service() {
     private fun openPdfRenderer(uri: Uri, password: String?): PdfRenderer {
         val descriptor = if (uri.scheme == URI_SCHEME_FILE) {
             ParcelFileDescriptor.open(
-                File(uri.path ?: throw IOException("Could not open PDF")),
+                File(uri.path ?: throw LocalizedFailure(localizedText(R.string.message_could_not_open_pdf))),
                 ParcelFileDescriptor.MODE_READ_ONLY
             )
         } else {
             contentResolver.openFileDescriptor(uri, "r")
-        } ?: throw IOException("Could not open PDF")
+        } ?: throw LocalizedFailure(localizedText(R.string.message_could_not_open_pdf))
 
         return try {
             if (password != null) {
                 if (!supportsPdfPassword()) {
-                    throw SecurityException("Password-protected PDFs need Android 15 or PDF extension 13")
+                    throw LocalizedFailure(localizedText(R.string.text_task_message))
                 }
                 PdfRenderer(
                     descriptor,
@@ -1679,10 +1690,10 @@ class ConversionService : Service() {
         if (inputSize != null) {
             val requiredBytes = inputSize + PDF_CACHE_HEADROOM_BYTES
             if (cacheDirectory.usableSpace < requiredBytes) {
-                error("Not enough cache space for this PDF")
+                throw LocalizedFailure(localizedText(R.string.text_task_message_not_enough_cache_space_for_this_pdf))
             }
         } else if (cacheDirectory.usableSpace < PDF_UNKNOWN_CACHE_MIN_FREE_BYTES) {
-            error("Not enough cache space for this PDF")
+            throw LocalizedFailure(localizedText(R.string.text_task_message_not_enough_cache_space_for_this_pdf))
         }
 
         val cachedPdf = File(cacheDirectory, "${input.fileId}.pdf").apply {
@@ -1700,7 +1711,7 @@ class ConversionService : Service() {
                     }
                     output.flush()
                 }
-            } ?: error("Could not open PDF")
+            } ?: throw LocalizedFailure(localizedText(R.string.message_could_not_open_pdf))
             return cachedPdf
         } catch (throwable: Throwable) {
             cachedPdf.delete()
@@ -1727,10 +1738,10 @@ class ConversionService : Service() {
                 if (inputSize != null) {
                     val requiredBytes = inputSize + PDF_CACHE_HEADROOM_BYTES
                     if (cacheDirectory.usableSpace < requiredBytes) {
-                        error("Not enough cache space for this PDF")
+                        throw LocalizedFailure(localizedText(R.string.text_task_message_not_enough_cache_space_for_this_pdf))
                     }
                 } else if (cacheDirectory.usableSpace < PDF_UNKNOWN_CACHE_MIN_FREE_BYTES) {
-                    error("Not enough cache space for this PDF")
+                    throw LocalizedFailure(localizedText(R.string.text_task_message_not_enough_cache_space_for_this_pdf))
                 }
 
                 val cachedPdf = File(
@@ -1764,7 +1775,7 @@ class ConversionService : Service() {
                     }
                     output.flush()
                 }
-            } ?: error("Could not open PDF")
+            } ?: throw LocalizedFailure(localizedText(R.string.message_could_not_open_pdf))
             throwIfConversionCancelled()
         } catch (throwable: Throwable) {
             cachedPdf.delete()
@@ -1893,7 +1904,7 @@ class ConversionService : Service() {
         val decodedBitmap = decodeImageBitmap(
             input.inputUri,
             maxLongSidePixels = null
-        ) ?: error("Image engine could not decode this input")
+        ) ?: throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_decode_this_input))
         throwIfConversionCancelled()
         if (input.imageOptions.superResolution == ImageSuperResolutionMode.Off) {
             updateImageProgress(0.55f)
@@ -1928,7 +1939,7 @@ class ConversionService : Service() {
         )
         val useWebpLossless = shouldUseWebpLossless(outputProfile, input.imageOptions)
         val compressFormat = imageCompressFormatFor(outputProfile.extension, useWebpLossless)
-            ?: error("Image engine could not write this output")
+            ?: throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_write_this_output))
         val requestedQuality = if (
             input.imageOptions.superResolution == ImageSuperResolutionMode.Off
         ) {
@@ -1946,7 +1957,7 @@ class ConversionService : Service() {
             throwIfConversionCancelled()
             outputFile.outputStream().use { output ->
                 if (!bitmapForOutput.compress(compressFormat, quality, output)) {
-                    error("Image engine could not write this output")
+                    throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_write_this_output))
                 }
                 output.flush()
             }
@@ -2058,14 +2069,14 @@ class ConversionService : Service() {
             flattenTransparency = false
         )
         val compressFormat = imageCompressFormatFor(outputProfile.extension, useWebpLossless)
-            ?: error("Image engine could not write this output")
+            ?: throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_write_this_output))
         val quality = imageQualityFor(outputProfile.extension, requestedQuality, useWebpLossless)
 
         try {
             throwIfConversionCancelled()
             outputFile.outputStream().use { output ->
                 if (!bitmapForOutput.compress(compressFormat, quality, output)) {
-                    error("Image engine could not write this output")
+                    throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_write_this_output))
                 }
                 output.flush()
             }
@@ -2122,7 +2133,7 @@ class ConversionService : Service() {
             Canvas(iconBitmap).drawBitmap(sourceBitmap, null, targetRect, ICON_BITMAP_PAINT)
             return ByteArrayOutputStream().use { output ->
                 if (!iconBitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) {
-                    error("Image engine could not write this output")
+                    throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_write_this_output))
                 }
                 output.toByteArray()
             }
@@ -2148,7 +2159,7 @@ class ConversionService : Service() {
         outputFile: File
     ) {
         val inputUris = input.inputUris.ifEmpty { listOf(input.inputUri) }
-        if (inputUris.isEmpty()) error("Image engine could not decode this input")
+        if (inputUris.isEmpty()) throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_decode_this_input))
 
         val pdfDocument = PdfDocument()
         var pageNumber = 1
@@ -2176,7 +2187,7 @@ class ConversionService : Service() {
                         uri,
                         maxLongSidePixels = PDF_IMAGE_MAX_LONG_SIDE_PIXELS,
                         maxPixels = PDF_IMAGE_MAX_PIXELS
-                    ) ?: error("Image engine could not decode this input")
+                    ) ?: throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_decode_this_input))
 
                     try {
                         throwIfConversionCancelled()
@@ -2189,7 +2200,7 @@ class ConversionService : Service() {
                 }
             }
 
-            if (pageNumber == 1) error("Image engine could not decode this input")
+            if (pageNumber == 1) throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_decode_this_input))
             throwIfConversionCancelled()
             outputFile.outputStream().use { output ->
                 pdfDocument.writeTo(output)
@@ -2326,13 +2337,13 @@ class ConversionService : Service() {
                 compareBy<IcoDirectoryEntry> { it.pixelArea }
                     .thenBy { it.bitCount }
                     .thenBy { it.imageSize }
-            ) ?: error("Image engine could not decode this ICO input")
+            ) ?: throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_decode_this_ico_input))
 
         val payload = readIcoPayload(uri, selectedEntry)
-            ?: error("Image engine could not decode this ICO input")
+            ?: throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_decode_this_ico_input))
         if (!payload.hasPngSignature()) {
             Log.w(TAG, "ICO input uses an unsupported non-PNG icon payload")
-            error("Image engine only supports PNG-in-ICO input")
+            throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_only_supports_png_in_ico_input))
         }
 
         val bounds = BitmapFactory.Options().apply {
@@ -2344,7 +2355,7 @@ class ConversionService : Service() {
         val height = bounds.outHeight
         if (width <= 0 || height <= 0) {
             Log.w(TAG, "ICO PNG payload bounds failed width=$width height=$height")
-            error("Image engine could not decode this ICO input")
+            throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_decode_this_ico_input))
         }
 
         val options = BitmapFactory.Options().apply {
@@ -2353,7 +2364,7 @@ class ConversionService : Service() {
         }
         val decoded = BitmapFactory.decodeByteArray(payload, 0, payload.size, options) ?: run {
             Log.w(TAG, "ICO PNG payload decode returned null")
-            error("Image engine could not decode this ICO input")
+            throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_decode_this_ico_input))
         }
         return scaleBitmapIfNeeded(decoded, maxLongSidePixels)
     }
@@ -2649,7 +2660,7 @@ class ConversionService : Service() {
             targetHeight > Int.MAX_VALUE ||
             targetWidth * targetHeight > superResolutionMaxPixels()
         ) {
-            error("Image engine could not super-resolve this image (output too large)")
+            throw LocalizedFailure(localizedText(R.string.text_task_message_image_is_too_large_to_super_resolve_at_this_scale_try_a_smaller_scale))
         }
 
         throwIfConversionCancelled()
@@ -2664,7 +2675,7 @@ class ConversionService : Service() {
         return try {
             Bitmap.createScaledBitmap(bitmap, targetWidth.toInt(), targetHeight.toInt(), true)
         } catch (oom: OutOfMemoryError) {
-            error("Image engine could not allocate memory for super-resolution")
+            throw LocalizedFailure(localizedText(R.string.text_task_message_not_enough_memory_to_super_resolve_this_image))
         }
     }
 
@@ -2673,7 +2684,7 @@ class ConversionService : Service() {
         spec: org.zenconverter.app.model.EsrganModelSpec
     ): Bitmap {
         if (!EsrganModelManager.isDownloaded(this, spec)) {
-            error("Image engine could not load the ${spec.displayName} model — download it in Settings")
+            throw LocalizedFailure(localizedText(R.string.message_image_engine_could_not_load_the_1_s_model_download_it_in_settings, spec.displayName))
         }
 
         val inferenceBitmap = if (bitmap.config == Bitmap.Config.ARGB_8888) {
@@ -2695,7 +2706,7 @@ class ConversionService : Service() {
                 }
             )
         } catch (oom: OutOfMemoryError) {
-            error("Image engine could not allocate memory for super-resolution")
+            throw LocalizedFailure(localizedText(R.string.text_task_message_not_enough_memory_to_super_resolve_this_image))
         } finally {
             if (inferenceBitmap !== bitmap) {
                 inferenceBitmap.recycle()
@@ -2824,7 +2835,7 @@ class ConversionService : Service() {
             if (ConversionTaskStore.isCancelled()) return@post
             ConversionTaskStore.updateProgress(taskIndex, progress.coerceIn(0f, PROGRESS_BEFORE_SAVE))
             updateNotification(
-                "Processing",
+                localizedText(R.string.task_processing),
                 (ConversionTaskStore.aggregateProgress() * 100).toInt()
             )
         }
@@ -2847,30 +2858,15 @@ class ConversionService : Service() {
         return start + (end - start) * completed
     }
 
-    private fun imageFailureMessageFor(exception: Throwable): String {
-        return exception.message?.takeIf {
-            it.startsWith("Image engine") || it.startsWith("Compatibility engine")
-        }
-            ?: "Image conversion failed"
+    private fun imageFailureMessageFor(exception: Throwable): LocalizedText {
+        return exception.localizedFailure(R.string.text_task_message_image_conversion_failed)
     }
 
-    private fun pdfFailureMessageFor(exception: Throwable): String {
-        return when {
-            exception is InvalidPasswordException -> "PDF password was incorrect or unsupported"
-            exception is SecurityException ->
-                exception.message?.takeIf { it.contains("Password-protected") }
-                    ?: "Password-protected or unsupported PDF security"
-            exception.message == "PDF has no pages" -> "PDF has no pages"
-            exception.message == "Not enough cache space for this PDF" ->
-                "Not enough cache space for this PDF"
-            exception.message == "Select at least two PDFs to merge" ->
-                "Select at least two PDFs to merge"
-            exception.message == "PDF has no selectable text; OCR is not included" ->
-                "PDF has no selectable text; OCR is not included"
-            exception.message == "Could not open PDF" -> "Input file could not be opened"
-            else -> exception.message?.takeIf {
-                it.startsWith("Image engine") || it.startsWith("PDF")
-            } ?: "PDF conversion failed"
+    private fun pdfFailureMessageFor(exception: Throwable): LocalizedText {
+        return when (exception) {
+            is InvalidPasswordException -> localizedText(R.string.text_task_message_pdf_password_was_incorrect_or_unsupported)
+            is SecurityException -> localizedText(R.string.text_task_message_password_protected_or_unsupported_pdf_security)
+            else -> exception.localizedFailure(R.string.text_task_message_pdf_conversion_failed)
         }
     }
 
@@ -2878,49 +2874,32 @@ class ConversionService : Service() {
         exception: Throwable,
         input: ConversionTaskInput,
         outputProfile: OutputProfile
-    ): String {
-        val message = pdfFailureMessageFor(exception)
-        if (message != "PDF conversion failed") return message
-        if (input.targetFormat.equals("Compress PDF", ignoreCase = true)) {
-            return "PDF compression failed"
+    ): LocalizedText {
+        if (exception is LocalizedFailure) return exception.description
+        if (exception is InvalidPasswordException || exception is SecurityException) {
+            return pdfFailureMessageFor(exception)
+        }
+        if (TargetId.fromKey(input.targetFormat) == TargetId.PdfCompress) {
+            return localizedText(R.string.message_pdf_compression_failed)
         }
         when (input.pdfSecurityOptions.mode) {
-            PdfSecurityMode.Encrypt -> return "PDF encryption failed"
-            PdfSecurityMode.Decrypt -> return "PDF decryption failed"
+            PdfSecurityMode.Encrypt -> return localizedText(R.string.text_task_message_pdf_encryption_failed)
+            PdfSecurityMode.Decrypt -> return localizedText(R.string.text_task_message_pdf_decryption_failed)
             PdfSecurityMode.None -> Unit
         }
         return when (outputProfile.extension.lowercase(Locale.US)) {
-            "pdf" -> "PDF merge failed"
-            "txt" -> "PDF text extraction failed"
-            "md" -> "PDF markdown export failed"
-            else -> message
+            "pdf" -> localizedText(R.string.text_task_message_pdf_merge_failed)
+            "txt" -> localizedText(R.string.text_task_message_pdf_text_extraction_failed)
+            "md" -> localizedText(R.string.text_task_message_pdf_markdown_export_failed)
+            else -> pdfFailureMessageFor(exception)
         }
     }
 
-    private fun officeFailureMessageFor(exception: Throwable): String {
-        val message = exception.message.orEmpty()
-        return when {
-            exception is Office2PdfUnsupportedAbiException ->
-                "Office converter is only available on arm64-v8a devices"
-            exception is Office2PdfUnavailableException ->
-                "Office converter could not start on this device"
-            exception is UnsatisfiedLinkError ->
-                "Office converter could not start on this device"
-            message == "Unsupported Office document" ->
-                "Unsupported Office document"
-            message == "Input file is empty" ->
-                "Input file is empty"
-            message == "Input file could not be opened" ->
-                "Input file could not be opened"
-            message == "Office file is too large for this experimental converter" ->
-                "Office file is too large for this experimental converter"
-            message == "Office engine did not return a PDF" ->
-                "Office conversion failed"
-            message.contains("unsupported Office format", ignoreCase = true) ->
-                "Unsupported Office document"
-            message.startsWith("Office", ignoreCase = true) ->
-                message
-            else -> "Office conversion failed"
+    private fun officeFailureMessageFor(exception: Throwable): LocalizedText {
+        return when (exception) {
+            is Office2PdfUnsupportedAbiException -> localizedText(R.string.text_task_message_office_converter_is_only_available_on_arm64_v8a_devices)
+            is Office2PdfUnavailableException, is UnsatisfiedLinkError -> localizedText(R.string.text_task_message_office_converter_could_not_start_on_this_device)
+            else -> exception.localizedFailure(R.string.text_task_message_office_conversion_failed)
         }
     }
 
@@ -2928,7 +2907,7 @@ class ConversionService : Service() {
         val sourceSize = queryOpenableSize(input.inputUri)
         sourceSize?.let { sizeBytes ->
             if (sizeBytes > OFFICE_MAX_INPUT_BYTES) {
-                error("Office file is too large for this experimental converter")
+                throw LocalizedFailure(localizedText(R.string.text_task_message_office_file_is_too_large_for_this_experimental_converter))
             }
         }
 
@@ -2947,13 +2926,13 @@ class ConversionService : Service() {
                 if (read == -1) break
                 totalBytes += read.toLong()
                 if (totalBytes > OFFICE_MAX_INPUT_BYTES) {
-                    error("Office file is too large for this experimental converter")
+                    throw LocalizedFailure(localizedText(R.string.text_task_message_office_file_is_too_large_for_this_experimental_converter))
                 }
                 output.write(buffer, 0, read)
             }
-        } ?: error("Input file could not be opened")
+        } ?: throw LocalizedFailure(localizedText(R.string.text_task_message_input_file_could_not_be_opened))
 
-        if (output.size() == 0) error("Input file is empty")
+        if (output.size() == 0) throw LocalizedFailure(localizedText(R.string.text_task_message_input_file_is_empty))
         return output.toByteArray()
     }
 
@@ -3002,10 +2981,10 @@ class ConversionService : Service() {
         tempFile: File
     ) {
         val sourceFormat = SubtitleFormat.fromExtension(input.extension)
-            ?: error("Unsupported subtitle format")
+            ?: throw LocalizedFailure(localizedText(R.string.text_task_message_unsupported_subtitle_format))
         val targetFormat = subtitleTargetFormatFor(input.targetFormat)
-            ?: error("Unsupported subtitle format")
-        if (sourceFormat == targetFormat) error("Unsupported subtitle format")
+            ?: throw LocalizedFailure(localizedText(R.string.text_task_message_unsupported_subtitle_format))
+        if (sourceFormat == targetFormat) throw LocalizedFailure(localizedText(R.string.text_task_message_unsupported_subtitle_format))
 
         throwIfConversionCancelled()
         updateImageProgress(0.05f)
@@ -3046,7 +3025,7 @@ class ConversionService : Service() {
                 val srtTemp = createSubtitleInterchangeFile(input, SubtitleFormat.SRT)
                 try {
                     val inputSource = openFfmpegInputSource(input.inputUri)
-                        ?: error("Compatibility engine could not open SAF input")
+                        ?: throw LocalizedFailure(localizedText(R.string.text_task_message_compatibility_engine_could_not_open_saf_input))
                     runSubtitleFfmpeg(
                         input = input,
                         inputPath = inputSource.path,
@@ -3069,7 +3048,7 @@ class ConversionService : Service() {
         }
 
         val inputSource = openFfmpegInputSource(input.inputUri)
-            ?: error("Compatibility engine could not open SAF input")
+            ?: throw LocalizedFailure(localizedText(R.string.text_task_message_compatibility_engine_could_not_open_saf_input))
         runSubtitleFfmpeg(
             input = input,
             inputPath = inputSource.path,
@@ -3149,7 +3128,7 @@ class ConversionService : Service() {
         val sourceSize = queryOpenableSize(input.inputUri)
         sourceSize?.let { sizeBytes ->
             if (sizeBytes > SUBTITLE_MAX_INPUT_BYTES) {
-                error("Subtitle file is too large")
+                throw LocalizedFailure(localizedText(R.string.text_task_message_subtitle_file_is_too_large))
             }
         }
 
@@ -3168,13 +3147,13 @@ class ConversionService : Service() {
                 if (read == -1) break
                 totalBytes += read.toLong()
                 if (totalBytes > SUBTITLE_MAX_INPUT_BYTES) {
-                    error("Subtitle file is too large")
+                    throw LocalizedFailure(localizedText(R.string.text_task_message_subtitle_file_is_too_large))
                 }
                 output.write(buffer, 0, read)
             }
-        } ?: error("Input file could not be opened")
+        } ?: throw LocalizedFailure(localizedText(R.string.text_task_message_input_file_could_not_be_opened))
 
-        if (output.size() == 0) error("Subtitle file is empty")
+        if (output.size() == 0) throw LocalizedFailure(localizedText(R.string.text_task_message_subtitle_file_is_empty))
         return output.toByteArray()
     }
 
@@ -3225,7 +3204,7 @@ class ConversionService : Service() {
             SubtitleFormat.SRT -> "srt"
             SubtitleFormat.VTT -> "webvtt"
             SubtitleFormat.ASS -> "ass"
-            SubtitleFormat.LRC -> error("Unsupported subtitle format")
+            SubtitleFormat.LRC -> throw LocalizedFailure(localizedText(R.string.text_task_message_unsupported_subtitle_format))
         }
     }
 
@@ -3234,7 +3213,7 @@ class ConversionService : Service() {
             SubtitleFormat.SRT -> "srt"
             SubtitleFormat.VTT -> "webvtt"
             SubtitleFormat.ASS -> "ass"
-            SubtitleFormat.LRC -> error("Unsupported subtitle format")
+            SubtitleFormat.LRC -> throw LocalizedFailure(localizedText(R.string.text_task_message_unsupported_subtitle_format))
         }
     }
 
@@ -3243,14 +3222,14 @@ class ConversionService : Service() {
             SubtitleFormat.SRT -> "subrip"
             SubtitleFormat.VTT -> "webvtt"
             SubtitleFormat.ASS -> "ass"
-            SubtitleFormat.LRC -> error("Unsupported subtitle format")
+            SubtitleFormat.LRC -> throw LocalizedFailure(localizedText(R.string.text_task_message_unsupported_subtitle_format))
         }
     }
 
     private fun subtitleMissingFfmpegSupportMessage(
         sourceFormat: SubtitleFormat,
         targetFormat: SubtitleFormat
-    ): String? {
+    ): LocalizedText? {
         val missing = listOf(
             subtitleDemuxerFor(sourceFormat),
             subtitleMuxerFor(targetFormat),
@@ -3264,7 +3243,7 @@ class ConversionService : Service() {
             "FFmpeg compatibility package is missing subtitle feature=$missing " +
                 "target=${targetFormat.extension}"
         )
-        return "Compatibility engine needs subtitle support"
+        return localizedText(R.string.text_task_message_compatibility_engine_needs_subtitle_support)
     }
 
     private fun ffmpegSubtitleFeatureAvailable(token: String): Boolean? {
@@ -3312,22 +3291,8 @@ class ConversionService : Service() {
             .toSet()
     }
 
-    private fun subtitleFailureMessageFor(exception: Throwable): String {
-        val message = exception.message.orEmpty()
-        return when {
-            message == "Unsupported subtitle format" -> "Unsupported subtitle format"
-            message == "Subtitle file is empty" -> "Subtitle file is empty"
-            message == "Subtitle file is too large" -> "Subtitle file is too large"
-            message == "Input file could not be opened" -> "Input file could not be opened"
-            message == "Could not parse subtitle file (SRT)" -> "Could not parse subtitle file (SRT)"
-            message == "Could not parse lyrics file (LRC)" -> "Could not parse lyrics file (LRC)"
-            message == "Compatibility engine needs subtitle support" ->
-                "Compatibility engine needs subtitle support"
-            message == "Compatibility engine could not convert this subtitle" ->
-                "Compatibility engine could not convert this subtitle"
-            message.startsWith("Compatibility engine", ignoreCase = true) -> message
-            else -> "Subtitle conversion failed"
-        }
+    private fun subtitleFailureMessageFor(exception: Throwable): LocalizedText {
+        return exception.localizedFailure(R.string.text_task_message_subtitle_conversion_failed)
     }
 
     private fun startCompatibilityExport(
@@ -3348,7 +3313,7 @@ class ConversionService : Service() {
                 if (result.success) {
                     if (result.segmentTempFiles.isNotEmpty()) {
                         tempFile.delete()
-                        val outputProfile = outputProfileFor(input) ?: error("Unsupported output format")
+                        val outputProfile = outputProfileFor(input) ?: throw LocalizedFailure(localizedText(R.string.message_unsupported_output_format))
                         saveCompletedExportFilesInFolder(
                             input = input,
                             tempFiles = result.segmentTempFiles,
@@ -3420,7 +3385,7 @@ class ConversionService : Service() {
                     ?: return@withContext FfmpegRunResult(
                         success = false,
                         cancelled = false,
-                        message = "Compatibility engine could not open SAF input"
+                        message = localizedText(R.string.text_task_message_compatibility_engine_could_not_open_saf_input)
                     )
                 try {
                     readFfmpegDurationMs(probeSource.path)
@@ -3475,7 +3440,7 @@ class ConversionService : Service() {
                 ?: return@withContext FfmpegRunResult(
                     success = false,
                     cancelled = false,
-                    message = "Compatibility engine could not open SAF input"
+                    message = localizedText(R.string.text_task_message_compatibility_engine_could_not_open_saf_input)
                 )
             return@withContext try {
                 runFfmpegVideoGifExport(
@@ -3495,7 +3460,7 @@ class ConversionService : Service() {
                 ?: return@withContext FfmpegRunResult(
                     success = false,
                     cancelled = false,
-                    message = "Unsupported output format"
+                    message = localizedText(R.string.message_unsupported_output_format)
                 )
             val segmentTempFiles = mutableListOf<File>()
             val segmentCount = trimWindow.segments.size
@@ -3516,7 +3481,7 @@ class ConversionService : Service() {
                         return@withContext FfmpegRunResult(
                             success = false,
                             cancelled = false,
-                            message = "Compatibility engine could not open SAF input"
+                            message = localizedText(R.string.text_task_message_compatibility_engine_could_not_open_saf_input)
                         )
                     }
                 val partResult = try {
@@ -3563,7 +3528,7 @@ class ConversionService : Service() {
             ?: return@withContext FfmpegRunResult(
                 success = false,
                 cancelled = false,
-                message = "Compatibility engine could not open SAF input"
+                message = localizedText(R.string.text_task_message_compatibility_engine_could_not_open_saf_input)
             )
         try {
             val arguments = ffmpegArgumentsFor(
@@ -3590,7 +3555,7 @@ class ConversionService : Service() {
             return@withContext FfmpegRunResult(
                 success = false,
                 cancelled = false,
-                message = "AI 插帧模型未就绪，请先在设置中下载 RIFE 模型"
+                message = localizedText(R.string.message_ai_rife)
             )
         }
 
@@ -3653,7 +3618,7 @@ class ConversionService : Service() {
                 ?: return@withContext FfmpegRunResult(
                     success = false,
                     cancelled = false,
-                    message = "Compatibility engine could not open SAF input"
+                    message = localizedText(R.string.text_task_message_compatibility_engine_could_not_open_saf_input)
                 )
 
             val extractResult = try {
@@ -3698,7 +3663,7 @@ class ConversionService : Service() {
                 return@withContext FfmpegRunResult(
                     success = false,
                     cancelled = false,
-                    message = "未能解析出视频帧"
+                    message = localizedText(R.string.message_run_ffmpeg_video_interpolation_export)
                 )
             }
 
@@ -3800,7 +3765,7 @@ class ConversionService : Service() {
             return FfmpegRunResult(
                 success = false,
                 cancelled = false,
-                message = "At least two videos are required for merge"
+                message = localizedText(R.string.message_at_least_two_videos_are_required_for_merge)
             )
         }
 
@@ -3808,7 +3773,7 @@ class ConversionService : Service() {
             ?: return FfmpegRunResult(
                 success = false,
                 cancelled = false,
-                message = "Unsupported video target ${input.targetFormat}"
+                message = localizedText(R.string.message_unsupported_video_target_1_s, input.targetFormat)
             )
 
         val inputSources = mutableListOf<FfmpegInputSource>()
@@ -3824,7 +3789,7 @@ class ConversionService : Service() {
                     ?: return FfmpegRunResult(
                         success = false,
                         cancelled = false,
-                        message = "Compatibility engine could not open SAF input"
+                        message = localizedText(R.string.text_task_message_compatibility_engine_could_not_open_saf_input)
                     )
                 inputSources.add(src)
                 val duration = readDurationMs(uri)
@@ -4027,14 +3992,14 @@ class ConversionService : Service() {
         }
 
         val frameSize = readGifLogicalScreenSize(uri)
-            ?: error("Image engine could not decode this input")
+            ?: throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_decode_this_input))
         validateGifFrameSize(frameSize, GIF_FRAME_MAX_PIXELS)
 
         val frameDirectory = createGifFrameTempDirectory(input)
         val inputSource = openFfmpegInputSource(uri)
         if (inputSource == null) {
             frameDirectory.deleteRecursively()
-            error("Compatibility engine could not open SAF input")
+            throw LocalizedFailure(localizedText(R.string.text_task_message_compatibility_engine_could_not_open_saf_input))
         }
 
         val logTail = mutableListOf<String>()
@@ -4077,19 +4042,19 @@ class ConversionService : Service() {
                     "GIF frame extraction failed displayName=${input.displayName} " +
                         "outputTail=${result.outputTail.orEmpty()}"
                 )
-                error("Image engine could not split GIF frames")
+                throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_split_gif_frames))
             }
 
             val frameByteCount = gifRawFrameByteCount(frameSize)
             val rawLength = rawFrameFile.length()
             if (rawLength <= 0L || rawLength % frameByteCount != 0L) {
                 Log.e(TAG, "GIF frame extraction produced no frames displayName=${input.displayName}")
-                error("Image engine could not split GIF frames")
+                throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_split_gif_frames))
             }
             val frameCountLong = rawLength / frameByteCount
             if (frameCountLong <= 0L || frameCountLong > Int.MAX_VALUE) {
                 Log.e(TAG, "GIF frame extraction produced no frames displayName=${input.displayName}")
-                error("Image engine could not split GIF frames")
+                throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_split_gif_frames))
             }
             val frameCount = frameCountLong.toInt()
             return GifFrameExtraction(
@@ -4127,7 +4092,7 @@ class ConversionService : Service() {
         val pixels = size.width.toLong() * size.height.toLong()
         if (pixels <= 0L || pixels > maxPixels) {
             Log.w(TAG, "GIF frame size is too large width=${size.width} height=${size.height}")
-            error("Image engine could not decode this input")
+            throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_decode_this_input))
         }
         gifRawFrameByteCount(size)
     }
@@ -4135,7 +4100,7 @@ class ConversionService : Service() {
     private fun gifRawFrameByteCount(size: ImageDecodeSize): Long {
         val byteCount = size.width.toLong() * size.height.toLong() * RGBA_BYTES_PER_PIXEL
         if (byteCount <= 0L || byteCount > Int.MAX_VALUE) {
-            error("Image engine could not decode this input")
+            throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_decode_this_input))
         }
         return byteCount
     }
@@ -4145,7 +4110,7 @@ class ConversionService : Service() {
         val tempRoot = File(cacheRoot, GIF_FRAME_TEMP_DIRECTORY).apply { mkdirs() }
         return File(tempRoot, "${input.fileId}_${System.nanoTime()}").apply {
             if (exists()) deleteRecursively()
-            if (!mkdirs()) error("Image engine could not split GIF frames")
+            if (!mkdirs()) throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_split_gif_frames))
         }
     }
 
@@ -4160,7 +4125,7 @@ class ConversionService : Service() {
             for (frameIndex in 0 until extraction.frameCount) {
                 throwIfConversionCancelled()
                 if (!input.readExactByteArray(frameBytes)) {
-                    error("Image engine could not split GIF frames")
+                    throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_split_gif_frames))
                 }
                 val bitmap = bitmapFromRgbaFrameBytes(
                     frameBytes,
@@ -4231,7 +4196,7 @@ class ConversionService : Service() {
             )
             ConversionMediaCategory.Audio -> buildList {
                 val audioProfile = ffmpegAudioProfileFor(input)
-                    ?: error("Unsupported audio target ${input.targetFormat}")
+                    ?: throw LocalizedFailure(localizedText(R.string.message_unsupported_audio_target_1_s, input.targetFormat))
                 add("-hide_banner")
                 add("-nostdin")
                 add("-y")
@@ -4254,11 +4219,11 @@ class ConversionService : Service() {
                 add(audioProfile.format)
                 add(outputFile.absolutePath)
             }
-            ConversionMediaCategory.Image -> error("Compatibility engine is not connected for images")
-            ConversionMediaCategory.Pdf -> error("Compatibility engine is not connected for PDFs")
-            ConversionMediaCategory.Document -> error("Compatibility engine is not connected for documents")
-            ConversionMediaCategory.Font -> error("Compatibility engine is not connected for fonts")
-            ConversionMediaCategory.Subtitle -> error("Compatibility engine is not connected for subtitles")
+            ConversionMediaCategory.Image -> throw LocalizedFailure(localizedText(R.string.ui_failed))
+            ConversionMediaCategory.Pdf -> throw LocalizedFailure(localizedText(R.string.message_compatibility_engine_is_not_connected_for_pdfs))
+            ConversionMediaCategory.Document -> throw LocalizedFailure(localizedText(R.string.message_compatibility_engine_is_not_connected_for_documents))
+            ConversionMediaCategory.Font -> throw LocalizedFailure(localizedText(R.string.message_compatibility_engine_is_not_connected_for_fonts))
+            ConversionMediaCategory.Subtitle -> throw LocalizedFailure(localizedText(R.string.ui_failed))
         }
     }
 
@@ -4270,7 +4235,7 @@ class ConversionService : Service() {
         trimWindow: FfmpegTrimWindow
     ): List<String> {
         val videoProfile = ffmpegVideoProfileFor(input)
-            ?: error("Unsupported video target ${input.targetFormat}")
+            ?: throw LocalizedFailure(localizedText(R.string.message_unsupported_video_target_1_s, input.targetFormat))
         val videoAudioOptions = ffmpegVideoAudioOptionsFor(
             compressionMode = input.videoOptions.compressionMode,
             manualAudioOptions = input.audioOptions
@@ -4872,7 +4837,7 @@ class ConversionService : Service() {
                 progress.coerceIn(0f, FFMPEG_MAX_PROGRESS_BEFORE_SAVE)
             )
             updateNotification(
-                "Compatibility processing",
+                localizedText(R.string.task_processing),
                 (ConversionTaskStore.aggregateProgress() * 100).toInt()
             )
         }
@@ -4944,7 +4909,7 @@ class ConversionService : Service() {
     private fun ffmpegMissingAdvancedMetadataMessageFor(
         input: ConversionTaskInput,
         durationMs: Long?
-    ): String? {
+    ): LocalizedText? {
         if (durationMs != null) return null
         val presetCompressionActive =
             input.category == ConversionMediaCategory.Video &&
@@ -4981,9 +4946,9 @@ class ConversionService : Service() {
         }
         return when {
             videoReverseApplies ->
-                "Compatibility engine needs duration metadata for reverse playback"
+                localizedText(R.string.text_task_message_compatibility_engine_needs_duration_metadata_for_reverse_playback)
             needsDuration ->
-                "Compatibility engine needs duration metadata for fade out"
+                localizedText(R.string.text_task_message_compatibility_engine_needs_duration_metadata_for_fade_out)
             else -> null
         }
     }
@@ -4991,7 +4956,7 @@ class ConversionService : Service() {
     private fun ffmpegUnsupportedAdvancedSelectionMessageFor(
         input: ConversionTaskInput,
         durationMs: Long?
-    ): String? {
+    ): LocalizedText? {
         if (
             input.category == ConversionMediaCategory.Video &&
             !isVideoGifOutput(input) &&
@@ -5007,17 +4972,17 @@ class ConversionService : Service() {
     private fun ffmpegUnsafeVideoReverseMessageFor(
         input: ConversionTaskInput,
         durationMs: Long?
-    ): String? {
+    ): LocalizedText? {
         if (durationMs == null) {
-            return "Compatibility engine needs duration metadata for reverse playback"
+            return localizedText(R.string.text_task_message_compatibility_engine_needs_duration_metadata_for_reverse_playback)
         }
         if (
             durationMs > FFMPEG_VIDEO_REVERSE_MAX_DURATION_MS
         ) {
-            return "Compatibility engine supports reverse video up to 60 seconds"
+            return localizedText(R.string.text_task_message_reverse_video_supports_files_up_to_60_seconds)
         }
         val reverseBufferSize = reverseBufferVideoSizeFor(input)
-            ?: return "Compatibility engine needs video size metadata for reverse playback"
+            ?: return localizedText(R.string.text_task_message_reverse_video_needs_readable_video_size_metadata)
         val frameRate = input.inputInfo
             ?.frameRate
             ?.takeIf { it > 0f }
@@ -5040,7 +5005,7 @@ class ConversionService : Service() {
                     "durationMs=$durationMs frameRate=$frameRate " +
                     "estimatedBufferBytes=$estimatedBufferBytes"
             )
-            "Reverse video is only safe for very short low-resolution clips"
+            localizedText(R.string.text_task_message_reverse_video_only_supports_very_short_low_resolution_clips)
         } else {
             null
         }
@@ -5069,7 +5034,7 @@ class ConversionService : Service() {
         }
     }
 
-    private fun ffmpegMissingFilterMessageFor(input: ConversionTaskInput): String? {
+    private fun ffmpegMissingFilterMessageFor(input: ConversionTaskInput): LocalizedText? {
         val missingFilter = requiredFfmpegFiltersFor(input).firstOrNull { filter ->
             ffmpegFilterAvailable(filter) == false
         } ?: return null
@@ -5081,12 +5046,12 @@ class ConversionService : Service() {
         return compatibilityMissingFilterMessageFor(missingFilter)
     }
 
-    private fun compatibilityMissingFilterMessageFor(filter: String): String {
+    private fun compatibilityMissingFilterMessageFor(filter: String): LocalizedText {
         return when (filter) {
             "reverse",
-            "areverse" -> "Compatibility engine needs reverse filters"
-            "afftdn" -> "Compatibility engine needs the audio denoise filter"
-            else -> "Compatibility engine is missing an advanced filter"
+            "areverse" -> localizedText(R.string.text_task_message_compatibility_engine_needs_reverse_filters)
+            "afftdn" -> localizedText(R.string.text_task_message_compatibility_engine_needs_the_audio_denoise_filter)
+            else -> localizedText(R.string.text_task_message_compatibility_engine_is_missing_an_advanced_filter)
         }
     }
 
@@ -5185,7 +5150,7 @@ class ConversionService : Service() {
         }
     }
 
-    private fun ffmpegMissingEncoderMessageFor(input: ConversionTaskInput): String? {
+    private fun ffmpegMissingEncoderMessageFor(input: ConversionTaskInput): LocalizedText? {
         val requiredEncoders = when (input.category) {
             ConversionMediaCategory.Video -> {
                 if (isVideoGifOutput(input)) {
@@ -5304,46 +5269,46 @@ class ConversionService : Service() {
     private fun compatibilityMissingEncoderMessageFor(
         input: ConversionTaskInput,
         encoder: String
-    ): String {
+    ): LocalizedText {
         return when {
             encoder == FFMPEG_MP3_ENCODER &&
                 audioTargetExtensionFor(input.targetFormat) == "mp3" ->
-                "Compatibility engine needs an MP3-capable FFmpeg package"
+                localizedText(R.string.text_task_message_compatibility_engine_needs_an_mp3_capable_ffmpeg_package)
             encoder == FFMPEG_VIDEO_ENCODER_H264 ->
-                "Compatibility engine needs an H.264-capable FFmpeg package"
+                localizedText(R.string.text_task_message_compatibility_engine_needs_an_h_264_capable_ffmpeg_package)
             encoder == FFMPEG_VIDEO_ENCODER_H265 ->
-                "Compatibility engine needs an H.265-capable FFmpeg package"
+                localizedText(R.string.text_task_message_compatibility_engine_needs_an_h_265_capable_ffmpeg_package)
             encoder == FFMPEG_AAC_ENCODER ->
-                "Compatibility engine needs an AAC-capable FFmpeg package"
+                localizedText(R.string.text_task_message_compatibility_engine_needs_an_aac_capable_ffmpeg_package)
             encoder == FFMPEG_WAV_ENCODER ->
-                "Compatibility engine needs a PCM WAV-capable FFmpeg package"
+                localizedText(R.string.text_task_message_compatibility_engine_needs_a_pcm_wav_capable_ffmpeg_package)
             encoder == FFMPEG_FLAC_ENCODER ->
-                "Compatibility engine needs a FLAC-capable FFmpeg package"
+                localizedText(R.string.text_task_message_compatibility_engine_needs_a_flac_capable_ffmpeg_package)
             encoder == FFMPEG_WMA_ENCODER ->
-                "Compatibility engine needs a WMA-capable FFmpeg package"
+                localizedText(R.string.text_task_message_compatibility_engine_needs_a_wma_capable_ffmpeg_package)
             encoder == FFMPEG_OPUS_ENCODER ->
-                "Compatibility engine needs an Opus-capable FFmpeg package"
+                localizedText(R.string.text_task_message_compatibility_engine_needs_an_opus_capable_ffmpeg_package)
             encoder == FFMPEG_GIF_ENCODER &&
                 isVideoGifOutput(input) ->
-                "Compatibility engine needs a GIF-capable FFmpeg package"
+                localizedText(R.string.text_task_message_compatibility_engine_needs_a_gif_capable_ffmpeg_package)
             input.category == ConversionMediaCategory.Video ->
-                "Compatibility engine cannot encode this video format yet"
+                localizedText(R.string.text_task_message_compatibility_engine_cannot_encode_this_video_format_yet)
             else ->
-                "Compatibility engine cannot encode this audio format yet"
+                localizedText(R.string.text_task_message_compatibility_engine_cannot_encode_this_audio_format_yet)
         }
     }
 
     private fun compatibilityFailureMessageFor(
         input: ConversionTaskInput,
         outputTail: String = ""
-    ): String {
+    ): LocalizedText {
         val normalizedTail = outputTail.lowercase(Locale.US)
         if (
             input.category == ConversionMediaCategory.Audio &&
             audioTargetExtensionFor(input.targetFormat) == "mp3" &&
             normalizedTail.contains(FFMPEG_MP3_ENCODER)
         ) {
-            return "Compatibility engine needs an MP3-capable FFmpeg package"
+            return localizedText(R.string.text_task_message_compatibility_engine_needs_an_mp3_capable_ffmpeg_package)
         }
         if (
             input.category == ConversionMediaCategory.Audio &&
@@ -5353,7 +5318,7 @@ class ConversionService : Service() {
                     normalizedTail.contains("invalid encoder")
             )
         ) {
-            return "Compatibility engine cannot encode this audio format yet"
+            return localizedText(R.string.text_task_message_compatibility_engine_cannot_encode_this_audio_format_yet)
         }
         if (
             input.category == ConversionMediaCategory.Audio &&
@@ -5363,7 +5328,7 @@ class ConversionService : Service() {
                     normalizedTail.contains("sample rate not supported")
             )
         ) {
-            return "Selected sample rate is not supported by this audio format"
+            return localizedText(R.string.text_task_message_selected_sample_rate_is_not_supported_by_this_audio_format)
         }
         if (
             input.category == ConversionMediaCategory.Audio &&
@@ -5373,7 +5338,7 @@ class ConversionService : Service() {
                     normalizedTail.contains("invalid argument")
             )
         ) {
-            return "Compatibility engine could not write this audio container"
+            return localizedText(R.string.text_task_message_compatibility_engine_could_not_write_this_audio_container)
         }
         if (
             isVideoGifOutput(input) &&
@@ -5383,10 +5348,10 @@ class ConversionService : Service() {
                     normalizedTail.contains("invalid encoder")
             )
         ) {
-            return "Compatibility engine needs a GIF-capable FFmpeg package"
+            return localizedText(R.string.text_task_message_compatibility_engine_needs_a_gif_capable_ffmpeg_package)
         }
         if (isVideoGifOutput(input)) {
-            return "Compatibility engine could not create this GIF"
+            return localizedText(R.string.text_task_message_compatibility_engine_could_not_create_this_gif)
         }
         if (
             input.category == ConversionMediaCategory.Video &&
@@ -5396,7 +5361,7 @@ class ConversionService : Service() {
                     normalizedTail.contains("height not divisible by")
             )
         ) {
-            return "Advanced video settings produced an unsupported frame size"
+            return localizedText(R.string.text_task_message_advanced_video_settings_produced_an_unsupported_frame_size)
         }
         if (
             input.category == ConversionMediaCategory.Video &&
@@ -5406,7 +5371,7 @@ class ConversionService : Service() {
                     normalizedTail.contains("invalid encoder")
             )
         ) {
-            return "Compatibility engine cannot encode this video format yet"
+            return localizedText(R.string.text_task_message_compatibility_engine_cannot_encode_this_video_format_yet)
         }
         if (
             input.category == ConversionMediaCategory.Video &&
@@ -5416,27 +5381,27 @@ class ConversionService : Service() {
                     normalizedTail.contains("invalid argument")
             )
         ) {
-            return "Compatibility engine could not write this video container"
+            return localizedText(R.string.text_task_message_compatibility_engine_could_not_write_this_video_container)
         }
         return when (input.category) {
             ConversionMediaCategory.Video -> when (videoTargetExtensionFor(input.targetFormat)) {
-                "mkv" -> "Compatibility engine could not transcode this file to MKV"
-                "mov" -> "Compatibility engine could not transcode this file to MOV"
-                "gif" -> "Compatibility engine could not create this GIF"
-                else -> "Compatibility engine could not transcode this file to MP4"
+                "mkv" -> localizedText(R.string.text_task_message_compatibility_engine_could_not_transcode_this_file_to_mkv)
+                "mov" -> localizedText(R.string.text_task_message_compatibility_engine_could_not_transcode_this_file_to_mov)
+                "gif" -> localizedText(R.string.text_task_message_compatibility_engine_could_not_create_this_gif)
+                else -> localizedText(R.string.text_task_message_compatibility_engine_could_not_transcode_this_file_to_mp4)
             }
             ConversionMediaCategory.Audio ->
-                "Compatibility engine could not convert this audio"
+                localizedText(R.string.text_task_message_compatibility_engine_could_not_convert_this_audio)
             ConversionMediaCategory.Image ->
-                "Compatibility engine is not connected for images"
+                localizedText(R.string.ui_failed)
             ConversionMediaCategory.Pdf ->
-                "Compatibility engine is not connected for PDFs"
+                localizedText(R.string.message_compatibility_engine_is_not_connected_for_pdfs)
             ConversionMediaCategory.Document ->
-                "Compatibility engine is not connected for documents"
+                localizedText(R.string.message_compatibility_engine_is_not_connected_for_documents)
             ConversionMediaCategory.Font ->
-                "Compatibility engine is not connected for fonts"
+                localizedText(R.string.message_compatibility_engine_is_not_connected_for_fonts)
             ConversionMediaCategory.Subtitle ->
-                "Compatibility engine could not convert this subtitle"
+                localizedText(R.string.text_task_message_compatibility_engine_could_not_convert_this_subtitle)
         }
     }
 
@@ -5459,11 +5424,11 @@ class ConversionService : Service() {
         )
     }
 
-    private fun compatibilityStartupFailureMessageFor(exception: Throwable): String {
+    private fun compatibilityStartupFailureMessageFor(exception: Throwable): LocalizedText {
         return if (isFfmpegKitStartupFailure(exception)) {
-            "Compatibility engine could not start on this device"
+            localizedText(R.string.message_compatibility_engine_could_not_start_on_this_device)
         } else {
-            "Compatibility engine failed before export"
+            localizedText(R.string.text_task_message_compatibility_engine_failed_before_export)
         }
     }
 
@@ -5523,25 +5488,25 @@ class ConversionService : Service() {
         if (!trimRange.isEnabled) return FfmpegTrimWindow()
 
         val sourceDuration = sourceDurationMs
-            ?: return FfmpegTrimWindow(errorMessage = "Compatibility engine needs duration metadata for trimming")
+            ?: return FfmpegTrimWindow(errorMessage = localizedText(R.string.text_task_message_trimming_needs_readable_media_duration))
         val startSeconds = trimRange.startSeconds ?: 0.0
         val endSeconds = trimRange.endSeconds
         if (startSeconds < 0.0) {
-            return FfmpegTrimWindow(errorMessage = "Trim start must be zero or greater")
+            return FfmpegTrimWindow(errorMessage = localizedText(R.string.text_task_message_trim_start_must_be_zero_or_greater))
         }
         val startMs = trimSecondsToMs(startSeconds)
-            ?: return FfmpegTrimWindow(errorMessage = "Trim range is too large")
+            ?: return FfmpegTrimWindow(errorMessage = localizedText(R.string.ui_trim_range_too_large))
         if (startMs >= sourceDuration) {
-            return FfmpegTrimWindow(errorMessage = "Trim start must be before media duration")
+            return FfmpegTrimWindow(errorMessage = localizedText(R.string.ui_trim_start_before_duration))
         }
         val effectiveDurationMs = if (endSeconds != null) {
             val endMs = trimSecondsToMs(endSeconds)
-                ?: return FfmpegTrimWindow(errorMessage = "Trim range is too large")
+                ?: return FfmpegTrimWindow(errorMessage = localizedText(R.string.ui_trim_range_too_large))
             when {
                 endMs <= startMs ->
-                    return FfmpegTrimWindow(errorMessage = "Trim end must be greater than trim start")
+                    return FfmpegTrimWindow(errorMessage = localizedText(R.string.ui_trim_end_after_start))
                 endMs > sourceDuration ->
-                    return FfmpegTrimWindow(errorMessage = "Trim end must not exceed media duration")
+                    return FfmpegTrimWindow(errorMessage = localizedText(R.string.ui_trim_end_within_duration))
             }
             endMs - startMs
         } else {
@@ -5558,21 +5523,21 @@ class ConversionService : Service() {
                 val p1 = cutPoints[i]
                 val p2 = cutPoints[i + 1]
                 if (p2 <= p1) {
-                    return FfmpegTrimWindow(errorMessage = "Split points must be in strictly increasing order")
+                    return FfmpegTrimWindow(errorMessage = localizedText(R.string.message_split_points_must_be_in_strictly_increasing_order))
                 }
                 if (p2 * 1_000.0 > sourceDuration) {
-                    return FfmpegTrimWindow(errorMessage = "Split points must not exceed media duration")
+                    return FfmpegTrimWindow(errorMessage = localizedText(R.string.message_split_points_must_not_exceed_media_duration))
                 }
             }
             val segments = mutableListOf<FfmpegTrimSegment>()
             for (i in 0 until cutPoints.size - 1) {
                 val p1 = cutPoints[i]
                 val p2 = cutPoints[i + 1]
-                val segEndMs = trimSecondsToMs(p2) ?: return FfmpegTrimWindow(errorMessage = "Trim range is too large")
-                val segStartMs = trimSecondsToMs(p1) ?: return FfmpegTrimWindow(errorMessage = "Trim range is too large")
+                val segEndMs = trimSecondsToMs(p2) ?: return FfmpegTrimWindow(errorMessage = localizedText(R.string.ui_trim_range_too_large))
+                val segStartMs = trimSecondsToMs(p1) ?: return FfmpegTrimWindow(errorMessage = localizedText(R.string.ui_trim_range_too_large))
                 val segDurationMs = segEndMs - segStartMs
                 if (segDurationMs <= 0L) {
-                    return FfmpegTrimWindow(errorMessage = "Split points must be distinct")
+                    return FfmpegTrimWindow(errorMessage = localizedText(R.string.message_split_points_must_be_distinct))
                 }
                 segments.add(
                     FfmpegTrimSegment(
@@ -5635,12 +5600,9 @@ class ConversionService : Service() {
         return durationMs
     }
 
-    private fun isVideoContactSheetOutput(input: ConversionTaskInput): Boolean {
-        return input.category == ConversionMediaCategory.Video &&
-            (input.targetFormat.startsWith("contact_sheet", ignoreCase = true) ||
-             input.targetFormat.contains("概览拼图", ignoreCase = true) ||
-             input.targetFormat.contains("Contact Sheet", ignoreCase = true))
-    }
+    private fun isVideoContactSheetOutput(input: ConversionTaskInput): Boolean =
+        input.category == ConversionMediaCategory.Video && TargetId.fromKey(input.targetFormat)?.isContactSheet == true
+
 
     private fun shouldUseCompatibilityEngine(input: ConversionTaskInput): Boolean {
         return when (input.category) {
@@ -5752,13 +5714,13 @@ class ConversionService : Service() {
         tempFile: File
     ) {
         ConversionTaskStore.markSaving(taskIndex)
-        updateNotification("Saving", (ConversionTaskStore.aggregateProgress() * 100).toInt())
+        updateNotification(localizedText(R.string.task_saving), (ConversionTaskStore.aggregateProgress() * 100).toInt())
 
         copyThread = Thread {
             var outputUri: Uri? = null
             try {
                 val outputProfile = outputProfileFor(input)
-                    ?: error("Unsupported output format")
+                    ?: throw LocalizedFailure(localizedText(R.string.message_unsupported_output_format))
                 val outputDisplayName = outputNameFor(input, outputProfile.extension)
                 val tempFileSizeBytes = tempFile.length().takeIf { it >= 0L }
                 val createdOutput = createOutput(
@@ -5807,7 +5769,7 @@ class ConversionService : Service() {
                 tempFile.delete()
                 handler.post {
                     activeTempFile = null
-                    failCurrentTask("Could not save output file")
+                    failCurrentTask(localizedText(R.string.text_task_message_could_not_save_output_file))
                 }
             }
         }.also { it.start() }
@@ -5819,7 +5781,7 @@ class ConversionService : Service() {
         outputProfile: OutputProfile
     ) {
         ConversionTaskStore.markSaving(taskIndex)
-        updateNotification("Saving", (ConversionTaskStore.aggregateProgress() * 100).toInt())
+        updateNotification(localizedText(R.string.task_saving), (ConversionTaskStore.aggregateProgress() * 100).toInt())
 
         copyThread = Thread {
             val outputUris = mutableListOf<Uri>()
@@ -5876,7 +5838,7 @@ class ConversionService : Service() {
                 tempFiles.forEach { it.delete() }
                 handler.post {
                     activeTempFile = null
-                    failCurrentTask("Could not save output file")
+                    failCurrentTask(localizedText(R.string.text_task_message_could_not_save_output_file))
                 }
             }
         }.also { it.start() }
@@ -5892,7 +5854,7 @@ class ConversionService : Service() {
         }
     ) {
         ConversionTaskStore.markSaving(taskIndex)
-        updateNotification("Saving", (ConversionTaskStore.aggregateProgress() * 100).toInt())
+        updateNotification(localizedText(R.string.task_saving), (ConversionTaskStore.aggregateProgress() * 100).toInt())
 
         copyThread = Thread {
             val outputUris = mutableListOf<Uri>()
@@ -5948,13 +5910,13 @@ class ConversionService : Service() {
                 tempFiles.forEach { it.delete() }
                 handler.post {
                     activeTempFile = null
-                    failCurrentTask("Could not save output file")
+                    failCurrentTask(localizedText(R.string.text_task_message_could_not_save_output_file))
                 }
             }
         }.also { it.start() }
     }
 
-    private fun failCurrentTask(message: String) {
+    private fun failCurrentTask(message: LocalizedText) {
         val input = ConversionTaskStore.inputAt(taskIndex)
         Log.e(
             TAG,
@@ -5975,12 +5937,12 @@ class ConversionService : Service() {
         activeFfmpegSession = null
         activeTempFile = null
         if (customOutputFallbackOccurred && ConversionTaskStore.tasks.none { it.status == ConversionTaskStatus.Failed }) {
-            ConversionTaskStore.markRunFinished("Custom output folder was unavailable; saved to default directory")
+            ConversionTaskStore.markRunFinished(localizedText(R.string.text_task_message_custom_output_folder_was_unavailable_saved_to_default_directory))
         } else {
             ConversionTaskStore.markRunFinished()
         }
         updateNotification(
-            ConversionTaskStore.summaryMessage.value ?: "Conversion complete",
+            ConversionTaskStore.summaryMessage.value ?: localizedText(R.string.ui_flow_complete),
             (ConversionTaskStore.aggregateProgress() * 100).toInt()
         )
         detachForeground()
@@ -5994,7 +5956,7 @@ class ConversionService : Service() {
         activeTempFile?.delete()
         activeTempFile = null
         ConversionTaskStore.cancelAll()
-        updateNotification("Cancelled", (ConversionTaskStore.aggregateProgress() * 100).toInt())
+        updateNotification(localizedText(R.string.ui_cancelled), (ConversionTaskStore.aggregateProgress() * 100).toInt())
         detachForeground()
         stopSelf()
     }
@@ -6071,7 +6033,7 @@ class ConversionService : Service() {
         customOutputFallbackOccurred = true
         AppPreferences.clearOutputDirectory(this)
         AppPreferences.setUsesCustomOutput(this, false)
-        ConversionTaskStore.showMessage("Custom output folder was unavailable; saved to default directory")
+        ConversionTaskStore.showMessage(localizedText(R.string.text_task_message_custom_output_folder_was_unavailable_saved_to_default_directory))
     }
 
     private fun createOutputFolder(
@@ -6109,7 +6071,7 @@ class ConversionService : Service() {
             )
             val folder = File(File(publicDirectory, DEFAULT_OUTPUT_DIRECTORY), folderName)
             if (!folder.exists() && !folder.mkdirs()) {
-                error("Could not create output directory")
+                throw LocalizedFailure(localizedText(R.string.message_could_not_create_output_directory))
             }
             OutputFolder(
                 fileDirectory = folder,
@@ -6172,12 +6134,12 @@ class ConversionService : Service() {
                 directoryUri,
                 outputProfile.mimeType,
                 displayName
-            ) ?: error("Could not create output file")
+            ) ?: throw LocalizedFailure(localizedText(R.string.message_could_not_create_output_file))
         }
         folder.defaultRelativeSubdirectory?.let { subdirectory ->
             return createDefaultOutput(displayName, outputProfile, subdirectory)
         }
-        error("Could not create output directory")
+        throw LocalizedFailure(localizedText(R.string.message_could_not_create_output_directory))
     }
 
     private fun createDefaultOutput(
@@ -6205,7 +6167,7 @@ class ConversionService : Service() {
             put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
         return contentResolver.insert(defaultCollectionFor(outputProfile), values)
-            ?: error("Could not create output file")
+            ?: throw LocalizedFailure(localizedText(R.string.message_could_not_create_output_file))
     }
 
     @Suppress("DEPRECATION")
@@ -6223,7 +6185,7 @@ class ConversionService : Service() {
             File(File(publicDirectory, DEFAULT_OUTPUT_DIRECTORY), relativeSubdirectory)
         }
         if (!outputDirectory.exists() && !outputDirectory.mkdirs()) {
-            error("Could not create output directory")
+            throw LocalizedFailure(localizedText(R.string.message_could_not_create_output_directory))
         }
         return Uri.fromFile(File(outputDirectory, displayName))
     }
@@ -6265,7 +6227,7 @@ class ConversionService : Service() {
             parentUri,
             mimeType,
             displayName
-        ) ?: error("Could not create output file")
+        ) ?: throw LocalizedFailure(localizedText(R.string.message_could_not_create_output_file))
     }
 
     private fun createOutputDirectoryDocument(
@@ -6282,12 +6244,12 @@ class ConversionService : Service() {
             parentUri,
             DocumentsContract.Document.MIME_TYPE_DIR,
             displayName
-        ) ?: error("Could not create output directory")
+        ) ?: throw LocalizedFailure(localizedText(R.string.message_could_not_create_output_directory))
     }
 
     private fun copyFileToOutput(source: File, outputUri: Uri) {
         if (outputUri.scheme == URI_SCHEME_FILE) {
-            val path = outputUri.path ?: error("Could not open output file")
+            val path = outputUri.path ?: throw LocalizedFailure(localizedText(R.string.message_could_not_open_output_file))
             copyFileToFile(source, File(path))
             return
         }
@@ -6308,7 +6270,7 @@ class ConversionService : Service() {
                 }
                 output.flush()
             }
-        } ?: error("Could not open output file")
+        } ?: throw LocalizedFailure(localizedText(R.string.message_could_not_open_output_file))
     }
 
     private fun copyFileToFile(source: File, outputFile: File) {
@@ -6429,9 +6391,9 @@ class ConversionService : Service() {
                         OutputProfile(extension = "txt", mimeType = MIME_TYPE_TEXT, kind = OutputMediaKind.Document)
                     input.targetFormat.equals("MD", ignoreCase = true) ->
                         OutputProfile(extension = "md", mimeType = MIME_TYPE_MARKDOWN, kind = OutputMediaKind.Document)
-                    input.targetFormat.equals("Encrypt PDF", ignoreCase = true) ||
-                        input.targetFormat.equals("Decrypt PDF", ignoreCase = true) ||
-                        input.targetFormat.equals("Compress PDF", ignoreCase = true) ->
+                    TargetId.fromKey(input.targetFormat) == TargetId.PdfEncrypt ||
+                        TargetId.fromKey(input.targetFormat) == TargetId.PdfDecrypt ||
+                        TargetId.fromKey(input.targetFormat) == TargetId.PdfCompress ->
                         OutputProfile(extension = "pdf", mimeType = MIME_TYPE_PDF, kind = OutputMediaKind.Document)
                     else -> null
                 }
@@ -6486,8 +6448,8 @@ class ConversionService : Service() {
     private fun videoTargetExtensionFor(targetFormat: String): String? {
         val normalized = targetFormat.lowercase(Locale.US)
         return when {
-            normalized.contains("contact_sheet_png") || (normalized.contains("contact_sheet") && normalized.contains("png")) || (normalized.contains("概览拼图") && normalized.contains("png")) || (normalized.contains("contact sheet") && normalized.contains("png")) -> "png"
-            normalized.contains("contact_sheet_jpg") || (normalized.contains("contact_sheet") && normalized.contains("jpg")) || (normalized.contains("概览拼图") && normalized.contains("jpg")) || (normalized.contains("contact sheet") && normalized.contains("jpg")) -> "jpg"
+            normalized == "contact_sheet_png" -> "png"
+            normalized == "contact_sheet_jpg" -> "jpg"
             normalized.contains("mp4") -> "mp4"
             normalized.contains("mkv") -> "mkv"
             normalized.contains("mov") -> "mov"
@@ -6569,7 +6531,7 @@ class ConversionService : Service() {
     private data class FfmpegRunResult(
         val success: Boolean,
         val cancelled: Boolean,
-        val message: String? = null,
+        val message: LocalizedText? = null,
         val outputTail: String? = null,
         val segmentTempFiles: List<File> = emptyList()
     )
@@ -6592,7 +6554,7 @@ class ConversionService : Service() {
 
     private data class FfmpegTrimWindow(
         val segments: List<FfmpegTrimSegment> = listOf(FfmpegTrimSegment()),
-        val errorMessage: String? = null
+        val errorMessage: LocalizedText? = null
     ) {
         val startSeconds: Double get() = segments.firstOrNull()?.startSeconds ?: 0.0
         val durationLimitMs: Long? get() = segments.firstOrNull()?.durationLimitMs
@@ -6768,12 +6730,14 @@ class ConversionService : Service() {
             .ifBlank { "ZenConverter" }
     }
 
-    private fun updateNotification(title: String, progress: Int) {
+    private fun updateNotification(title: LocalizedText, progress: Int) {
         val manager = getSystemService(NotificationManager::class.java)
         manager.notify(NOTIFICATION_ID, buildNotification(title, progress.coerceIn(0, 100)))
     }
 
-    private fun buildNotification(title: String, progress: Int): Notification {
+    private fun buildNotification(title: LocalizedText, progress: Int): Notification {
+        notificationTitle = title
+        notificationProgress = progress
         val openIntent = Intent(this, MainActivity::class.java)
         val openPendingIntent = PendingIntent.getActivity(
             this,
@@ -6793,13 +6757,13 @@ class ConversionService : Service() {
 
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_zenconverter)
-            .setContentTitle("ZenConverter")
-            .setContentText(title)
+            .setContentTitle(getString(R.string.app_name))
+            .setContentText(title.resolve(this))
             .setContentIntent(openPendingIntent)
             .setOngoing(ConversionTaskStore.isRunning.value)
             .setOnlyAlertOnce(true)
             .setProgress(100, progress, false)
-            .addAction(R.drawable.ic_stat_zenconverter, "Cancel", cancelPendingIntent)
+            .addAction(R.drawable.ic_stat_zenconverter, localizedText(R.string.notification_cancel).resolve(this), cancelPendingIntent)
             .build()
     }
 
@@ -6817,10 +6781,10 @@ class ConversionService : Service() {
         val manager = getSystemService(NotificationManager::class.java)
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Conversion progress",
+            localizedText(R.string.notification_channel_name).resolve(this),
             NotificationManager.IMPORTANCE_LOW
         ).apply {
-            description = "Shows local conversion progress"
+            description = localizedText(R.string.notification_channel_description).resolve(this@ConversionService)
         }
         manager.createNotificationChannel(channel)
     }

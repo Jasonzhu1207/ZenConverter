@@ -1,5 +1,13 @@
 package org.zenconverter.app
 
+import org.zenconverter.app.conversion.TargetId
+import org.zenconverter.app.R
+import org.zenconverter.app.i18n.LocalizedText
+import org.zenconverter.app.i18n.localizedText
+import org.zenconverter.app.i18n.LocalizedFailure
+import org.zenconverter.app.i18n.localizedFailure
+
+
 import android.Manifest
 import android.app.Activity
 import android.content.ActivityNotFoundException
@@ -15,7 +23,9 @@ import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.util.Log
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
+import android.content.res.Configuration
+import org.zenconverter.app.i18n.AppLanguages
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -87,7 +97,11 @@ import java.util.ArrayDeque
 import java.util.Locale
 import java.util.UUID
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        AppLanguages.configurationChanged()
+    }
     private val queuedFiles = mutableStateListOf<QueuedFile>()
     private val pdfMergeGroups = mutableStateListOf<PdfMergeGroup>()
     private val videoMergeGroups = mutableStateListOf<VideoMergeGroup>()
@@ -130,7 +144,7 @@ class MainActivity : ComponentActivity() {
         if (granted) {
             startConversion()
         } else {
-            ConversionTaskStore.showMessage("Default output needs storage permission on this Android version")
+            ConversionTaskStore.showMessage(localizedText(R.string.ui_storage_permission_required))
         }
     }
 
@@ -168,7 +182,7 @@ class MainActivity : ComponentActivity() {
         if (granted) {
             openGalleryPicker(kind)
         } else {
-            ConversionTaskStore.showMessage("Gallery import needs storage permission")
+            ConversionTaskStore.showMessage(localizedText(R.string.text_task_message_gallery_import_needs_storage_permission))
         }
     }
 
@@ -187,7 +201,7 @@ class MainActivity : ComponentActivity() {
                 emptyList()
             }
             if (documents.isEmpty()) {
-                ConversionTaskStore.showMessage("No supported files were added")
+                ConversionTaskStore.showMessage(localizedText(R.string.message_no_supported_files_were_added))
             } else {
                 enqueueUnifiedDocuments(documents)
             }
@@ -296,6 +310,7 @@ class MainActivity : ComponentActivity() {
             )
         )
         super.onCreate(savedInstanceState)
+        AppLanguages.migrate(this)
         restoreOutputLocationPreference()
         refreshEsrganModelState()
         refreshRifeModelState()
@@ -314,7 +329,7 @@ class MainActivity : ComponentActivity() {
                         if (current != null && !AppPreferences.isOutputDirectoryAccessible(this, current.uri)) {
                             outputDirectory.value = null
                             AppPreferences.clearOutputDirectory(this)
-                            ConversionTaskStore.showMessage("Custom output folder no longer exists; reset to default directory")
+                            ConversionTaskStore.showMessage(localizedText(R.string.text_task_message_custom_output_folder_no_longer_exists_reset_to_default_directory))
                         }
                     }
                     outputLocationMode.value = mode
@@ -440,7 +455,7 @@ class MainActivity : ComponentActivity() {
                         retryQueuedPdfWithPassword(queuedPrompt, password)
                     } else {
                         pdfPasswordPrompt.value = null
-                        ConversionTaskStore.showMessage("Password-protected PDF was skipped")
+                        ConversionTaskStore.showMessage(localizedText(R.string.text_task_message_password_protected_pdf_was_skipped))
                     }
                 },
                 onCancelPdfPassword = {
@@ -449,11 +464,11 @@ class MainActivity : ComponentActivity() {
                         pdfPasswordPrompt.value = null
                         activeQueuedPdfPasswordSelection = null
                         queuedFiles.removeAll { it.id == queuedPrompt.fileId }
-                        ConversionTaskStore.showMessage("Password-protected PDF was skipped")
+                        ConversionTaskStore.showMessage(localizedText(R.string.text_task_message_password_protected_pdf_was_skipped))
                         processNextQueuedPdfSelection()
                     } else {
                         pdfPasswordPrompt.value = null
-                        ConversionTaskStore.showMessage("Password-protected PDF was skipped")
+                        ConversionTaskStore.showMessage(localizedText(R.string.text_task_message_password_protected_pdf_was_skipped))
                     }
                 },
                 onSubmitPdfOutputPassword = { password ->
@@ -462,7 +477,7 @@ class MainActivity : ComponentActivity() {
                         pendingPdfOutputPasswordQueuedFileIds = emptyList()
                         pdfOutputPasswordPrompt.value = null
                         if (password.isBlank()) {
-                            ConversionTaskStore.showMessage("PDF password was empty")
+                            ConversionTaskStore.showMessage(localizedText(R.string.text_task_message_pdf_password_was_empty))
                         } else {
                             updateQueuedFilesById(queuedEncryptIds.toSet()) { file ->
                                 file.copy(
@@ -480,10 +495,10 @@ class MainActivity : ComponentActivity() {
                     if (pendingPdfOutputPasswordQueuedFileIds.isNotEmpty()) {
                         pendingPdfOutputPasswordQueuedFileIds = emptyList()
                         pdfOutputPasswordPrompt.value = null
-                        ConversionTaskStore.showMessage("PDF encryption was skipped")
+                        ConversionTaskStore.showMessage(localizedText(R.string.text_task_message_pdf_encryption_was_skipped))
                     } else {
                         pdfOutputPasswordPrompt.value = null
-                        ConversionTaskStore.showMessage("PDF encryption was skipped")
+                        ConversionTaskStore.showMessage(localizedText(R.string.text_task_message_pdf_encryption_was_skipped))
                     }
                 },
                 onStartConversion = {
@@ -505,6 +520,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        AppLanguages.configurationChanged()
         validateCustomOutputLocation()
     }
 
@@ -515,7 +531,7 @@ class MainActivity : ComponentActivity() {
             outputLocationMode.value = OutputLocationMode.Default
             AppPreferences.clearOutputDirectory(this)
             AppPreferences.setUsesCustomOutput(this, false)
-            ConversionTaskStore.showMessage("Custom output folder no longer exists; reset to default directory")
+            ConversionTaskStore.showMessage(localizedText(R.string.text_task_message_custom_output_folder_no_longer_exists_reset_to_default_directory))
         }
     }
 
@@ -543,7 +559,7 @@ class MainActivity : ComponentActivity() {
                 throw cancelled
             } catch (throwable: Throwable) {
                 esrganModelStates[spec.id] = EsrganModelUiState.Failed(
-                    throwable.message ?: "Model download failed"
+                    throwable.localizedFailure(R.string.ui_download_failed)
                 )
             }
         }
@@ -579,7 +595,7 @@ class MainActivity : ComponentActivity() {
                 throw cancelled
             } catch (throwable: Throwable) {
                 rifeModelStates[spec.id] = RifeModelUiState.Failed(
-                    throwable.message ?: "Model download failed"
+                    throwable.localizedFailure(R.string.ui_download_failed)
                 )
             }
         }
@@ -615,7 +631,7 @@ class MainActivity : ComponentActivity() {
                 throw cancelled
             } catch (throwable: Throwable) {
                 officeFontStates[spec.id] = OfficeFontUiState.Failed(
-                    throwable.message ?: "Font download failed"
+                    throwable.localizedFailure(R.string.ui_download_failed)
                 )
             }
         }
@@ -670,7 +686,7 @@ class MainActivity : ComponentActivity() {
                     outputLocationMode.value = OutputLocationMode.Default
                     AppPreferences.clearOutputDirectory(this)
                     AppPreferences.setUsesCustomOutput(this, false)
-                    ConversionTaskStore.showMessage("Custom output folder no longer exists; reset to default directory")
+                    ConversionTaskStore.showMessage(localizedText(R.string.text_task_message_custom_output_folder_no_longer_exists_reset_to_default_directory))
                     return
                 }
                 OutputDestination.CustomDirectory(outputUri)
@@ -678,12 +694,12 @@ class MainActivity : ComponentActivity() {
         }
 
         if (needsLegacyWritePermission()) {
-            ConversionTaskStore.showMessage("Default output needs storage permission on this Android version")
+            ConversionTaskStore.showMessage(localizedText(R.string.ui_storage_permission_required))
             return
         }
 
         if (queuedFiles.any { !it.hasConnectedNativeTarget() }) {
-            ConversionTaskStore.showMessage("Only connected video, audio, image, PDF, and document targets can run")
+            ConversionTaskStore.showMessage(localizedText(R.string.ui_failed))
             return
         }
 
@@ -693,7 +709,7 @@ class MainActivity : ComponentActivity() {
         }
 
         if (outputLocationMode.value == OutputLocationMode.Custom && outputDirectory.value == null) {
-            ConversionTaskStore.showMessage("Choose output folder first")
+            ConversionTaskStore.showMessage(localizedText(R.string.ui_choose_folder_before_conversion))
             return
         }
 
@@ -779,7 +795,7 @@ class MainActivity : ComponentActivity() {
 
     private fun retryQueuedPdfWithPassword(selection: PendingQueuedPdfSelection, password: String) {
         if (password.isBlank()) {
-            ConversionTaskStore.showMessage("PDF password was empty")
+            ConversionTaskStore.showMessage(localizedText(R.string.text_task_message_pdf_password_was_empty))
             queuedFiles.removeAll { it.id == selection.fileId }
             processNextQueuedPdfSelection()
             return
@@ -800,7 +816,7 @@ class MainActivity : ComponentActivity() {
                 when (result) {
                     PdfProbeResult.Opened -> markQueuedPdfPassword(file.id, password)
                     PdfProbeResult.PasswordRequired -> {
-                        ConversionTaskStore.showMessage("PDF password was incorrect or unsupported")
+                        ConversionTaskStore.showMessage(localizedText(R.string.text_task_message_pdf_password_was_incorrect_or_unsupported))
                         queuedFiles.removeAll { it.id == file.id }
                     }
                     is PdfProbeResult.Failed -> {
@@ -847,7 +863,7 @@ class MainActivity : ComponentActivity() {
         sanitizePdfMergeGroups()
     }
 
-    private fun firstQueuedTrimValidationMessage(): String? {
+    private fun firstQueuedTrimValidationMessage(): LocalizedText? {
         return queuedFiles.firstNotNullOfOrNull { file ->
             trimValidationMessageFor(file.trimRangeForCurrentTarget(), file.inputInfo?.durationMs)
         }
@@ -856,32 +872,32 @@ class MainActivity : ComponentActivity() {
     private fun trimValidationMessageFor(
         trimRange: MediaTrimRange,
         durationMs: Long?
-    ): String? {
+    ): LocalizedText? {
         if (!trimRange.isEnabled) return null
         val startSeconds = trimRange.startSeconds ?: 0.0
         val endSeconds = trimRange.endSeconds
-        if (startSeconds < 0.0) return "Trim start must be zero or greater"
-        val startMs = trimSecondsToMs(startSeconds) ?: return "Trim range is too large"
+        if (startSeconds < 0.0) return localizedText(R.string.text_task_message_trim_start_must_be_zero_or_greater)
+        val startMs = trimSecondsToMs(startSeconds) ?: return localizedText(R.string.ui_trim_range_too_large)
         if (endSeconds != null) {
-            val endMs = trimSecondsToMs(endSeconds) ?: return "Trim range is too large"
-            if (endMs <= startMs) return "Trim end must be greater than trim start"
+            val endMs = trimSecondsToMs(endSeconds) ?: return localizedText(R.string.ui_trim_range_too_large)
+            if (endMs <= startMs) return localizedText(R.string.ui_trim_end_after_start)
             if (durationMs != null && endMs > durationMs) {
-                return "Trim end must not exceed media duration"
+                return localizedText(R.string.ui_trim_end_within_duration)
             }
         }
         if (durationMs != null && startMs >= durationMs) {
-            return "Trim start must be before media duration"
+            return localizedText(R.string.ui_trim_start_before_duration)
         }
         if (trimRange.splitPoints.isNotEmpty()) {
             var lastSeconds = startSeconds
             val maxLimitSeconds = endSeconds ?: durationMs?.let { it.toDouble() / 1_000.0 }
             for (splitPoint in trimRange.splitPoints) {
-                if (!splitPoint.isFinite() || splitPoint < 0.0) return "Invalid split point"
+                if (!splitPoint.isFinite() || splitPoint < 0.0) return localizedText(R.string.message_invalid_split_point)
                 if (splitPoint <= lastSeconds) {
-                    return "Split points must be in strictly increasing order after start"
+                    return localizedText(R.string.message_split_points_must_be_in_strictly_increasing_order_after_start)
                 }
                 if (maxLimitSeconds != null && splitPoint >= maxLimitSeconds) {
-                    return "Split points must be before end or media duration"
+                    return localizedText(R.string.message_split_points_must_be_before_end_or_media_duration)
                 }
                 lastSeconds = splitPoint
             }
@@ -904,7 +920,7 @@ class MainActivity : ComponentActivity() {
         val memberIds = mergeablePdfFiles(type)
             .map { it.id }
         if (memberIds.size < 2) {
-            ConversionTaskStore.showMessage("Select at least two files to merge")
+            ConversionTaskStore.showMessage(localizedText(R.string.text_task_message_select_at_least_two_files_to_merge))
             return
         }
         pdfMergeGroups.add(
@@ -986,7 +1002,7 @@ class MainActivity : ComponentActivity() {
     private fun createVideoMergeGroup() {
         val memberIds = mergeableVideoFiles().map { it.id }
         if (memberIds.size < 2) {
-            ConversionTaskStore.showMessage("Select at least two videos to merge")
+            ConversionTaskStore.showMessage(localizedText(R.string.message_select_at_least_two_videos_to_merge))
             return
         }
         videoMergeGroups.add(
@@ -1124,7 +1140,7 @@ class MainActivity : ComponentActivity() {
             }
             if (generation != externalImportGeneration) return@launch
             if (items.isEmpty()) {
-                ConversionTaskStore.showMessage("No shared files were found")
+                ConversionTaskStore.showMessage(localizedText(R.string.message_no_shared_files_were_found))
                 return@launch
             }
             enqueuePreparedDocuments(items)
@@ -1165,7 +1181,7 @@ class MainActivity : ComponentActivity() {
         try {
             openImportAlbum.launch(intent)
         } catch (_: ActivityNotFoundException) {
-            ConversionTaskStore.showMessage("No gallery app found")
+            ConversionTaskStore.showMessage(localizedText(R.string.text_task_message_no_gallery_app_found))
         }
     }
 
@@ -1247,9 +1263,9 @@ class MainActivity : ComponentActivity() {
         val skippedCount = prepared.size - nextFiles.size
         when {
             nextFiles.isEmpty() && prepared.isNotEmpty() ->
-                ConversionTaskStore.showMessage("No supported files were added")
+                ConversionTaskStore.showMessage(localizedText(R.string.message_no_supported_files_were_added))
             skippedCount > 0 ->
-                ConversionTaskStore.showMessage("$skippedCount unsupported file(s) skipped")
+                ConversionTaskStore.showMessage(LocalizedText.Quantity(R.plurals.count_unsupported_files_skipped, skippedCount, listOf(skippedCount)))
         }
     }
 
@@ -1378,7 +1394,7 @@ class MainActivity : ComponentActivity() {
                 ExternalImportTarget(FileCategory.Image, it)
             }
             FileCategory.Pdf -> FileCategory.Pdf.formats
-                .filter { pdfCount > 1 || !it.label.equals("PDF", ignoreCase = true) }
+                .filter { pdfCount > 1 || it.id != TargetId.Pdf }
                 .map { ExternalImportTarget(FileCategory.Pdf, it) }
             FileCategory.Document -> FileCategory.Document.formats.map {
                 ExternalImportTarget(FileCategory.Document, it)
@@ -1409,7 +1425,7 @@ class MainActivity : ComponentActivity() {
             null -> null
         }
         return targets.firstOrNull { target ->
-            target.targetFormat.label.equals(preferredLabel, ignoreCase = true) &&
+            target.targetFormat.key.equals(preferredLabel, ignoreCase = true) &&
                 target.category == category
         } ?: targets.firstOrNull()
     }
@@ -1685,7 +1701,7 @@ class MainActivity : ComponentActivity() {
             ?.substringAfterLast('/')
             ?.takeIf { it.isNotBlank() }
             ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
-            ?: "Selected file"
+            ?: uri.toString()
 
         return OpenableMetadata(
             displayName = displayName?.takeIf { it.isNotBlank() } ?: fallbackName,
@@ -1843,9 +1859,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun describeTreeUri(uri: Uri): String {
-        val segment = uri.lastPathSegment ?: return "Selected folder"
-        val label = segment.substringAfter(':', segment).ifBlank { "Device storage" }
-        return label
+        val segment = uri.lastPathSegment ?: return ""
+        return segment.substringAfter(':', segment)
     }
 
     private fun restoreOutputLocationPreference() {
@@ -1874,7 +1889,7 @@ class MainActivity : ComponentActivity() {
 
         outputDirectory.value = OutputDirectory(
             uri = savedDirectory.uri,
-            label = savedDirectory.label,
+            label = describeTreeUri(savedDirectory.uri),
             persistablePermissionSaved = true
         )
         if (AppPreferences.usesCustomOutput(this)) {
@@ -1899,10 +1914,10 @@ class MainActivity : ComponentActivity() {
         } catch (exception: IllegalArgumentException) {
             PdfProbeResult.Opened
         } catch (exception: IOException) {
-            PdfProbeResult.Failed("Could not open this PDF")
+            PdfProbeResult.Failed(localizedText(R.string.text_task_message_could_not_open_this_pdf))
         } catch (exception: Throwable) {
             Log.w(TAG, "PDF probe failed", exception)
-            PdfProbeResult.Failed("Could not read this PDF")
+            PdfProbeResult.Failed(localizedText(R.string.text_task_message_could_not_read_this_pdf))
         }
     }
 
@@ -1918,25 +1933,25 @@ class MainActivity : ComponentActivity() {
                 }
                 document.use {
                     if (document.numberOfPages <= 0) {
-                        PdfProbeResult.Failed("PDF has no pages")
+                        PdfProbeResult.Failed(localizedText(R.string.text_task_message_pdf_has_no_pages))
                     } else {
                         PdfProbeResult.Opened
                     }
                 }
-            } ?: PdfProbeResult.Failed("Could not open this PDF")
+            } ?: PdfProbeResult.Failed(localizedText(R.string.text_task_message_could_not_open_this_pdf))
         } catch (exception: InvalidPasswordException) {
             PdfProbeResult.PasswordRequired
         } catch (exception: IOException) {
-            PdfProbeResult.Failed("Could not open this PDF")
+            PdfProbeResult.Failed(localizedText(R.string.text_task_message_could_not_open_this_pdf))
         } catch (exception: Throwable) {
             Log.w(TAG, "PDFBox probe failed", exception)
-            PdfProbeResult.Failed("Could not read this PDF")
+            PdfProbeResult.Failed(localizedText(R.string.text_task_message_could_not_read_this_pdf))
         }
     }
 
     private fun openPdfRenderer(uri: Uri, password: String?): PdfRenderer {
         val descriptor = contentResolver.openFileDescriptor(uri, "r")
-            ?: throw IOException("Could not open PDF")
+            ?: throw LocalizedFailure(localizedText(R.string.message_could_not_open_pdf))
         return try {
             if (password != null && supportsPdfPassword()) {
                 PdfRenderer(
@@ -2055,7 +2070,7 @@ private data class FolderChildDocument(
 private sealed interface PdfProbeResult {
     object Opened : PdfProbeResult
     object PasswordRequired : PdfProbeResult
-    data class Failed(val message: String) : PdfProbeResult
+    data class Failed(val message: LocalizedText) : PdfProbeResult
 }
 
 private fun SelectedDocument.toQueuedFile(
@@ -2075,7 +2090,7 @@ private fun SelectedDocument.toQueuedFile(
         category = request.category,
         sourceCategory = sourceCategory,
         targetOptions = targetOptions,
-        targetFormat = request.targetFormat.label,
+        targetFormat = request.targetFormat.key,
         videoOptions = defaultVideoOptionsFor(request.targetFormat),
         audioOptions = AudioExportOptions(),
         imageOptions = ImageExportOptions(quality = 85),
@@ -2121,15 +2136,9 @@ private fun QueuedFile.trimRangeForCurrentTarget(): MediaTrimRange {
     }
 }
 
-private fun QueuedFile.targetFormatObject(): TargetFormat {
-    return category.formats.firstOrNull {
-        it.label.equals(targetFormat, ignoreCase = true)
-    } ?: TargetFormat(
-        label = targetFormat,
-        extension = targetFormat.lowercase(Locale.US),
-        modeHint = ""
-    )
-}
+private fun QueuedFile.targetFormatObject(): TargetFormat =
+    category.formats.first { it.id == TargetId.fromKey(targetFormat) }
+
 
 private fun QueuedFile.toSelectedDocument(): SelectedDocument {
     return SelectedDocument(
@@ -2313,68 +2322,28 @@ private fun SelectedDocument.isGifInput(): Boolean {
         displayName.lowercase(Locale.US).endsWith(".gif")
 }
 
-private fun QueuedFile.hasConnectedNativeTarget(): Boolean {
-    return when (category) {
-        FileCategory.Video -> targetFormat.equals("MP4", ignoreCase = true) ||
-            targetFormat.equals("MKV", ignoreCase = true) ||
-            targetFormat.equals("MOV", ignoreCase = true) ||
-            targetFormat.equals("GIF", ignoreCase = true) ||
-            targetFormat.equals("概览拼图 · JPG", ignoreCase = true) ||
-            targetFormat.equals("概览拼图 · PNG", ignoreCase = true) ||
-            targetFormat.equals("概览拼图▪JPG", ignoreCase = true) ||
-            targetFormat.equals("概览拼图▪PNG", ignoreCase = true) ||
-            targetFormat.equals("概览拼图 (JPG)", ignoreCase = true) ||
-            targetFormat.equals("概览拼图 (PNG)", ignoreCase = true) ||
-            targetFormat.contains("概览拼图", ignoreCase = true) ||
-            targetFormat.contains("contact_sheet", ignoreCase = true) ||
-            targetFormat.contains("contact sheet", ignoreCase = true)
-        FileCategory.Audio -> audioTargetExtensionFor(targetFormat) in CONNECTED_AUDIO_TARGETS
-        FileCategory.Image -> targetFormat.equals("JPG", ignoreCase = true) ||
-            targetFormat.equals("JFIF", ignoreCase = true) ||
-            targetFormat.equals("PNG", ignoreCase = true) ||
-            targetFormat.equals("WEBP", ignoreCase = true) ||
-            targetFormat.equals("ICO", ignoreCase = true) ||
-            targetFormat.equals("PDF", ignoreCase = true)
-        FileCategory.Pdf -> targetFormat.equals("JPG", ignoreCase = true) ||
-            targetFormat.equals("PNG", ignoreCase = true) ||
-            targetFormat.equals("WEBP", ignoreCase = true) ||
-            targetFormat.equals("PDF", ignoreCase = true) ||
-            targetFormat.equals("TXT", ignoreCase = true) ||
-            targetFormat.equals("MD", ignoreCase = true) ||
-            targetFormat.equals("Encrypt PDF", ignoreCase = true) ||
-            targetFormat.equals("Decrypt PDF", ignoreCase = true) ||
-            targetFormat.equals("Compress PDF", ignoreCase = true)
-        FileCategory.Document -> targetFormat.equals("PDF", ignoreCase = true) ||
-            targetFormat.equals("TXT", ignoreCase = true) ||
-            targetFormat.equals("MD", ignoreCase = true)
-        FileCategory.Font -> targetFormat.equals("WOFF2", ignoreCase = true) ||
-            targetFormat.equals("WOFF", ignoreCase = true) ||
-            targetFormat.equals("TTF/OTF", ignoreCase = true)
-        FileCategory.Subtitle -> targetFormat.equals("SRT", ignoreCase = true) ||
-            targetFormat.equals("VTT", ignoreCase = true) ||
-            targetFormat.equals("ASS", ignoreCase = true) ||
-            targetFormat.equals("LRC", ignoreCase = true)
-    }
-}
+private fun QueuedFile.hasConnectedNativeTarget(): Boolean =
+    category.formats.any { it.id == TargetId.fromKey(targetFormat) }
+
 
 private fun PendingSelection.isPdfMergeTarget(): Boolean {
     return category == FileCategory.Pdf &&
-        targetFormat.label.equals("PDF", ignoreCase = true)
+        targetFormat.key.equals("PDF", ignoreCase = true)
 }
 
 private fun PendingSelection.isPdfEncryptTarget(): Boolean {
     return category == FileCategory.Pdf &&
-        targetFormat.label.equals("Encrypt PDF", ignoreCase = true)
+        targetFormat.id == TargetId.PdfEncrypt
 }
 
 private fun PendingSelection.isPdfDecryptTarget(): Boolean {
     return category == FileCategory.Pdf &&
-        targetFormat.label.equals("Decrypt PDF", ignoreCase = true)
+        targetFormat.id == TargetId.PdfDecrypt
 }
 
 private fun PendingSelection.isPdfCompressTarget(): Boolean {
     return category == FileCategory.Pdf &&
-        targetFormat.label.equals("Compress PDF", ignoreCase = true)
+        targetFormat.id == TargetId.PdfCompress
 }
 
 private fun PendingSelection.usesPdfBoxTarget(): Boolean {

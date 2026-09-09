@@ -1,4 +1,9 @@
 package org.zenconverter.app.font
+import org.zenconverter.app.R
+import org.zenconverter.app.i18n.LocalizedText
+import org.zenconverter.app.i18n.localizedText
+import org.zenconverter.app.i18n.LocalizedFailure
+
 
 import android.os.Build
 
@@ -66,20 +71,19 @@ object Woff2Native {
 }
 
 open class Woff2UnavailableException(
-    message: String,
+    message: LocalizedText,
     cause: Throwable? = null
-) : RuntimeException(message, cause)
+) : LocalizedFailure(message, cause)
 
 class Woff2UnsupportedAbiException(
     supportedAbis: List<String>
 ) : Woff2UnavailableException(
-    "Font converter is only available with the bundled arm64-v8a native library; device ABIs: " +
-        supportedAbis.ifEmpty { listOf("unknown") }.joinToString()
+    localizedText(R.string.message_native_abi_required, supportedAbis.joinToString())
 )
 
 class Woff2StartupException(
     cause: Throwable
 ) : Woff2UnavailableException(
-    "Font converter could not start on this device",
+    localizedText(R.string.message_font_converter_could_not_start_on_this_device),
     cause
 )

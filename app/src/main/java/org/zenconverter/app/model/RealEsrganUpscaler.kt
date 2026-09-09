@@ -1,4 +1,8 @@
 package org.zenconverter.app.model
+import org.zenconverter.app.R
+import org.zenconverter.app.i18n.localizedText
+import org.zenconverter.app.i18n.LocalizedFailure
+
 
 import android.graphics.Bitmap
 import android.util.Log
@@ -26,7 +30,7 @@ object RealEsrganUpscaler {
         isCancelled: () -> Boolean = { false }
     ): Bitmap {
         if (!NcnnNative.ensureLoaded()) {
-            throw IllegalStateException("NCNN native library could not be loaded on this device")
+            throw LocalizedFailure(localizedText(R.string.message_ncnn_native_library_could_not_be_loaded_on_this_device))
         }
 
         val inputW = source.width
@@ -81,7 +85,7 @@ object RealEsrganUpscaler {
                 }
                 else -> {
                     outputBitmap.recycle()
-                    throw IllegalStateException("NCNN Real-ESRGAN inference failed with error code $result")
+                    throw LocalizedFailure(localizedText(R.string.message_ncnn_real_esrgan_inference_failed_with_error_code_1_s, result))
                 }
             }
         } finally {

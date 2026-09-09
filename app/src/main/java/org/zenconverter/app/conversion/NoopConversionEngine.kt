@@ -1,4 +1,7 @@
 package org.zenconverter.app.conversion
+import org.zenconverter.app.R
+import org.zenconverter.app.i18n.localizedText
+
 
 class NoopConversionEngine : ConversionEngine {
     override val id: String = "noop"
@@ -15,7 +18,7 @@ class NoopConversionEngine : ConversionEngine {
             ConversionEvent.Progress(
                 requestId = request.id,
                 fraction = 1f,
-                message = "No-op conversion completed."
+                message = localizedText(R.string.message_no_op_conversion_completed)
             )
         )
         emit(

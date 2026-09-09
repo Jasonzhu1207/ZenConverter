@@ -17,6 +17,7 @@ on:
       - "build.gradle.kts"
       - "settings.gradle.kts"
       - "gradle.properties"
+      - "scripts/check_translations.py"
       - ".github/workflows/release.yml"
 
 permissions:
@@ -56,6 +57,9 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+
+      - name: Check translations
+        run: python3 scripts/check_translations.py
 
       - name: Verify self-built FFmpegKitNext AAR
         run: |

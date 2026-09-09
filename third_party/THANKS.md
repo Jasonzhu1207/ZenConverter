@@ -5,6 +5,7 @@ learns from. Add entries before a dependency becomes part of the build.
 
 | Project | Use | License | Status | Notes |
 | --- | --- | --- | --- | --- |
+| AndroidX AppCompat | Per-app languages on supported Android versions | Apache-2.0 | Maintained official AndroidX project; selected version 1.7.1 | `androidx.appcompat:appcompat:1.7.1` is a deliberate compatibility pin, not a latest-version claim. Framework-only language APIs do not cover older supported versions. Device acceptance: `docs/testing-localization.md`. |
 | AndroidX Compose | Planned UI toolkit | Apache-2.0 | Planned | Declared in Gradle skeleton. |
 | AndroidX Material Icons Extended | App action/category icons | Apache-2.0 | Active | Official Compose icon set used for UI clarity. |
 | PDFBox-Android | True PDF merge and selectable PDF text extraction | Apache-2.0 | Low-frequency maintenance | Local Maven Central AAR at `app/libs/pdfbox-android-2.0.27.0.aar`, SHA-256 `30277f879cfd571db2a137582c95516a0d4ea6778e945519bc58ca93d57d88c7`. Chosen because Android platform APIs do not provide broad loss-preserving PDF merge, and platform PDF text extraction is only available on newer API/extension levels. |

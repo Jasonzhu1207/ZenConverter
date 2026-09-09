@@ -1,4 +1,9 @@
 package org.zenconverter.app.model
+import org.zenconverter.app.R
+import org.zenconverter.app.i18n.LocalizedText
+import org.zenconverter.app.i18n.localizedText
+import org.zenconverter.app.i18n.LocalizedFailure
+
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
@@ -18,7 +23,6 @@ data class RifeModelSpec(
     val displayName: String,
     val paramFile: ModelFileEntry,
     val binFile: ModelFileEntry,
-    val sizeDisplay: String,
     val sourceUrl: String = "https://github.com/nihui/rife-ncnn-vulkan"
 ) {
     val totalSizeBytes: Long get() = paramFile.sizeBytes + binFile.sizeBytes
@@ -44,7 +48,6 @@ object RifeModelManager {
             sizeBytes = 10_614_320L,
             sha256 = "f334ed2260149ce0188a6dcf049844e8b0cdd912e01cbcfb63553157d2508958"
         ),
-        sizeDisplay = "10.6 MB"
     )
 
     val ALL_MODELS = listOf(MODEL_RIFE)
@@ -56,7 +59,7 @@ object RifeModelManager {
     private fun modelDir(context: Context): File {
         val dir = File(context.applicationContext.filesDir, "models")
         if (!dir.exists() && !dir.mkdirs()) {
-            throw IOException("Could not create model folder")
+            throw LocalizedFailure(localizedText(R.string.message_could_not_create_model_folder))
         }
         return dir
     }
@@ -125,7 +128,7 @@ object RifeModelManager {
         val tempFile = File(dir, "${entry.fileName}.part")
 
         if (tempFile.exists() && !tempFile.delete()) {
-            throw IOException("Could not reset previous model download: ${tempFile.name}")
+            throw LocalizedFailure(localizedText(R.string.message_could_not_reset_previous_model_download_1_s, tempFile.name))
         }
 
         val progressContext = currentCoroutineContext()
@@ -157,14 +160,14 @@ object RifeModelManager {
             if (!actualSha256.equals(entry.sha256, ignoreCase = true)) {
                 if (entry.sizeBytes > 0 && tempFile.length() != entry.sizeBytes) {
                     tempFile.delete()
-                    throw IOException("Downloaded ${entry.fileName} checksum mismatch (expected ${entry.sha256}, got $actualSha256)")
+                    throw LocalizedFailure(localizedText(R.string.message_downloaded_1_s_checksum_mismatch_expected_2_s_got_3_s, entry.fileName, entry.sha256, actualSha256))
                 }
             }
         }
 
         if (targetFile.exists() && !targetFile.delete()) {
             tempFile.delete()
-            throw IOException("Could not replace previous model file: ${targetFile.name}")
+            throw LocalizedFailure(localizedText(R.string.message_could_not_replace_previous_model_file_1_s, targetFile.name))
         }
         if (!tempFile.renameTo(targetFile)) {
             tempFile.copyTo(targetFile, overwrite = true)
@@ -186,7 +189,7 @@ object RifeModelManager {
         val responseCode = connection.responseCode
         if (responseCode !in 200..299) {
             connection.disconnect()
-            throw IOException("Download server returned HTTP $responseCode")
+            throw LocalizedFailure(localizedText(R.string.message_download_server_returned_http_1_s, responseCode))
         }
         return connection
     }
@@ -212,5 +215,5 @@ sealed interface RifeModelUiState {
     object NotDownloaded : RifeModelUiState
     data class Downloading(val progress: Float) : RifeModelUiState
     object Downloaded : RifeModelUiState
-    data class Failed(val message: String?) : RifeModelUiState
+    data class Failed(val message: LocalizedText?) : RifeModelUiState
 }

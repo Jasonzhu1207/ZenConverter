@@ -1,6 +1,7 @@
 package org.zenconverter.app.updates
 
 import java.io.File
+import org.zenconverter.app.i18n.LocalizedText
 
 enum class UpdateChannel {
     Stable,
@@ -31,7 +32,7 @@ sealed interface UpdateCheckResult {
     data class UpToDate(val latest: UpdateRelease) : UpdateCheckResult
     data class Failed(
         val reason: UpdateFailureReason,
-        val detail: String? = null
+        val detail: LocalizedText? = null
     ) : UpdateCheckResult
 }
 

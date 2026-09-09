@@ -1,4 +1,8 @@
 package org.zenconverter.app.subtitle
+import org.zenconverter.app.R
+import org.zenconverter.app.i18n.localizedText
+import org.zenconverter.app.i18n.LocalizedFailure
+
 
 import java.util.Locale
 
@@ -61,7 +65,7 @@ object LrcCodec {
             }
         }
 
-        if (cues.isEmpty()) error("Could not parse lyrics file (LRC)")
+        if (cues.isEmpty()) throw LocalizedFailure(localizedText(R.string.text_task_message_could_not_parse_lyrics_file_lrc))
         val sorted = cues.sortedBy { it.startMs }
         return SubtitleDocument(title = title, cues = sorted)
     }

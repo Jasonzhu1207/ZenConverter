@@ -1,4 +1,8 @@
 package org.zenconverter.app.model
+import org.zenconverter.app.R
+import org.zenconverter.app.i18n.localizedText
+import org.zenconverter.app.i18n.LocalizedFailure
+
 
 import android.graphics.Bitmap
 import android.util.Log
@@ -42,7 +46,7 @@ object RifeInterpolator {
         isCancelled: () -> Boolean = { false }
     ): Bitmap {
         if (!NcnnNative.ensureLoaded()) {
-            throw IllegalStateException("NCNN native library could not be loaded on this device")
+            throw LocalizedFailure(localizedText(R.string.message_ncnn_native_library_could_not_be_loaded_on_this_device))
         }
 
         val w = frame0.width
@@ -74,7 +78,7 @@ object RifeInterpolator {
                 }
                 else -> {
                     outputBitmap.recycle()
-                    throw IllegalStateException("NCNN RIFE inference failed with error code $result")
+                    throw LocalizedFailure(localizedText(R.string.message_ncnn_rife_inference_failed_with_error_code_1_s, result))
                 }
             }
         } finally {

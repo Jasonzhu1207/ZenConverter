@@ -1,4 +1,9 @@
 package org.zenconverter.app.metadata
+import org.zenconverter.app.R
+import org.zenconverter.app.i18n.LocalizedText
+import org.zenconverter.app.i18n.localizedText
+import org.zenconverter.app.i18n.LocalizedFailure
+
 
 import android.content.Context
 import android.content.ContentUris
@@ -44,7 +49,7 @@ enum class MetadataMessageKey {
 
 data class MetadataStatusMessage(
     val key: MetadataMessageKey,
-    val detail: String? = null
+    val detail: LocalizedText? = null
 )
 
 sealed interface MetadataToolState {
@@ -772,7 +777,7 @@ object MetadataPrivacyManager {
             } ?: throw MetadataOperationException(
                 MetadataStatusMessage(
                     MetadataMessageKey.WritePermissionNeeded,
-                    "openFileDescriptor(rw) returned null"
+                    localizedText(R.string.message_provider_descriptor_unavailable, "rw")
                 )
             )
         }
@@ -796,7 +801,7 @@ object MetadataPrivacyManager {
                 } ?: throw MetadataOperationException(
                     MetadataStatusMessage(
                         MetadataMessageKey.WritePermissionNeeded,
-                        "openOutputStream($mode) returned null"
+                        localizedText(R.string.message_provider_output_unavailable, mode)
                     )
                 )
             }
@@ -821,7 +826,7 @@ object MetadataPrivacyManager {
             } ?: throw MetadataOperationException(
                 MetadataStatusMessage(
                     MetadataMessageKey.WritePermissionNeeded,
-                    "openFileDescriptor(rwt) returned null"
+                    localizedText(R.string.message_provider_descriptor_unavailable, "rwt")
                 )
             )
         }
@@ -992,7 +997,7 @@ object MetadataPrivacyManager {
             for (index in 0 until result.removedSegmentCount) {
                 val source = File(stagingBackupDir, segmentFileName(index))
                 if (!source.isFile) {
-                    throw IOException("Missing staged metadata segment ${source.name}")
+                    throw LocalizedFailure(localizedText(R.string.message_missing_staged_metadata_segment_1_s, source.name))
                 }
                 source.copyTo(File(backupDir, segmentFileName(index)), overwrite = true)
             }
@@ -1135,14 +1140,15 @@ object MetadataPrivacyManager {
         return getAttribute(tag)?.trim()?.takeIf { it.isNotBlank() }
     }
 
-    private fun Throwable.safeDetail(): String {
+    private fun Throwable.safeDetail(): LocalizedText {
+        if (this is LocalizedFailure) return description
         val type = javaClass.simpleName.takeIf { it.isNotBlank() } ?: "Error"
         val text = localizedMessage
             ?.trim()
             ?.takeIf { it.isNotBlank() }
             ?.replace(Regex("\\s+"), " ")
             ?.take(160)
-        return if (text == null) type else "$type: $text"
+        return LocalizedText.ExternalDetail(if (text == null) type else "$type: $text")
     }
 
     private fun Throwable.anyInChain(predicate: (Throwable) -> Boolean): Boolean {

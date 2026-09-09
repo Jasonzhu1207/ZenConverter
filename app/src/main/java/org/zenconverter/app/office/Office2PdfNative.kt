@@ -1,4 +1,9 @@
 package org.zenconverter.app.office
+import org.zenconverter.app.R
+import org.zenconverter.app.i18n.LocalizedText
+import org.zenconverter.app.i18n.localizedText
+import org.zenconverter.app.i18n.LocalizedFailure
+
 
 import android.content.Context
 import android.os.Build
@@ -83,20 +88,19 @@ object Office2PdfNative {
 }
 
 open class Office2PdfUnavailableException(
-    message: String,
+    message: LocalizedText,
     cause: Throwable? = null
-) : RuntimeException(message, cause)
+) : LocalizedFailure(message, cause)
 
 class Office2PdfUnsupportedAbiException(
     supportedAbis: List<String>
 ) : Office2PdfUnavailableException(
-    "Office converter is only available with the bundled arm64-v8a native library; device ABIs: " +
-        supportedAbis.ifEmpty { listOf("unknown") }.joinToString()
+    localizedText(R.string.message_native_abi_required, supportedAbis.joinToString())
 )
 
 class Office2PdfStartupException(
     cause: Throwable
 ) : Office2PdfUnavailableException(
-    "Office converter could not start on this device",
+    localizedText(R.string.text_task_message_office_converter_could_not_start_on_this_device),
     cause
 )

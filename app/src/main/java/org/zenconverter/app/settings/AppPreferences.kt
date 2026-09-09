@@ -39,13 +39,13 @@ object AppPreferences {
             .apply()
     }
 
-    fun language(context: Context): String? =
+    fun legacyLanguage(context: Context): String? =
         preferences(context).getString(KEY_LANGUAGE, null)
 
-    fun setLanguage(context: Context, language: String) {
+    fun clearLegacyLanguage(context: Context) {
         preferences(context)
             .edit()
-            .putString(KEY_LANGUAGE, language)
+            .remove(KEY_LANGUAGE)
             .apply()
     }
 
@@ -64,9 +64,7 @@ object AppPreferences {
         val uriValue = preferences.getString(KEY_OUTPUT_DIRECTORY_URI, null)
             ?.takeIf { it.isNotBlank() }
             ?: return null
-        val label = preferences.getString(KEY_OUTPUT_DIRECTORY_LABEL, null)
-            ?.takeIf { it.isNotBlank() }
-            ?: return null
+        val label = preferences.getString(KEY_OUTPUT_DIRECTORY_LABEL, "").orEmpty()
 
         return runCatching {
             SavedOutputDirectory(uri = Uri.parse(uriValue), label = label)

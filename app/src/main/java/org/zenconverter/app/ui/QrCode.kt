@@ -1,4 +1,8 @@
 package org.zenconverter.app.ui
+import org.zenconverter.app.R
+import org.zenconverter.app.i18n.localizedText
+import org.zenconverter.app.i18n.LocalizedFailure
+
 
 internal class QrCode(
     val size: Int,
@@ -12,7 +16,7 @@ internal class QrCode(
             val version = versions.firstOrNull { version ->
                 val requiredBits = 4 + 8 + bytes.size * 8
                 requiredBits <= version.dataCodewords * 8
-            } ?: error("QR payload is too long")
+            } ?: throw LocalizedFailure(localizedText(R.string.message_qr_payload_is_too_long))
 
             val buffer = BitBuffer()
             buffer.append(0b0100, 4)

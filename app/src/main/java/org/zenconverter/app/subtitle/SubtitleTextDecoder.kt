@@ -1,4 +1,8 @@
 package org.zenconverter.app.subtitle
+import org.zenconverter.app.R
+import org.zenconverter.app.i18n.localizedText
+import org.zenconverter.app.i18n.LocalizedFailure
+
 
 import java.nio.charset.Charset
 
@@ -15,11 +19,11 @@ object SubtitleTextDecoder {
     private const val REPLACEMENT_CHAR = '\uFFFD'
 
     fun decode(bytes: ByteArray): String {
-        if (bytes.isEmpty()) error("Subtitle file is empty")
+        if (bytes.isEmpty()) throw LocalizedFailure(localizedText(R.string.text_task_message_subtitle_file_is_empty))
 
         val offset = if (bytes.startsWithUtf8Bom()) UTF8_BOM.size else 0
         val length = bytes.size - offset
-        if (length <= 0) error("Subtitle file is empty")
+        if (length <= 0) throw LocalizedFailure(localizedText(R.string.text_task_message_subtitle_file_is_empty))
 
         val utf8 = String(bytes, offset, length, Charsets.UTF_8)
         if (!utf8.contains(REPLACEMENT_CHAR)) return utf8

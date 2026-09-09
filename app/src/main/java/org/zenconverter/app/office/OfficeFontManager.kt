@@ -1,4 +1,9 @@
 package org.zenconverter.app.office
+import org.zenconverter.app.R
+import org.zenconverter.app.i18n.LocalizedText
+import org.zenconverter.app.i18n.localizedText
+import org.zenconverter.app.i18n.LocalizedFailure
+
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
@@ -15,13 +20,12 @@ import java.util.Locale
 
 data class OfficeFontSpec(
     val id: String,
-    val displayName: String,
+    val displayName: LocalizedText,
     val fileName: String,
     val url: String,
     val sizeBytes: Long,
-    val sizeDisplay: String,
     val sha256: String,
-    val description: String = ""
+    val description: LocalizedText
 )
 
 /**
@@ -31,24 +35,22 @@ data class OfficeFontSpec(
 object OfficeFontManager {
     val FONT_NOTO_SANS_CJK = OfficeFontSpec(
         id = "noto-sans-cjk",
-        displayName = "Noto Sans CJK (黑体 / 无衬线)",
+        displayName = localizedText(R.string.font_noto_sans_cjk_name),
         fileName = "NotoSansCJK-Regular.ttc",
         url = "https://assets.xlab.my/models/NotoSansCJK-Regular.ttc",
         sizeBytes = 32_355_424L,
-        sizeDisplay = "30.8 MB",
         sha256 = "3e7e5afaac2c6d872592d76abedac03a51c6f0fc42d11e311ff2816a6c368afe",
-        description = "增强简体/繁体/日韩无衬线字体与微软雅黑回退渲染"
+        description = localizedText(R.string.font_noto_sans_cjk_description)
     )
 
     val FONT_NOTO_SERIF_CJK = OfficeFontSpec(
         id = "noto-serif-cjk",
-        displayName = "Noto Serif CJK (宋体 / 明朝体)",
+        displayName = localizedText(R.string.font_noto_serif_cjk_name),
         fileName = "NotoSerifCJK-Regular.ttc",
         url = "https://assets.xlab.my/models/NotoSerifCJK-Regular.ttc",
         sizeBytes = 26_273_008L,
-        sizeDisplay = "25.0 MB",
         sha256 = "5dec6bbce13a3bbf1487a022392c23e571abd0696a102f3715697420dd94b47a",
-        description = "增强宋体、仿宋等衬线排版与 SimSun 回退渲染"
+        description = localizedText(R.string.font_noto_serif_cjk_description)
     )
 
     val ALL_FONTS = listOf(FONT_NOTO_SANS_CJK, FONT_NOTO_SERIF_CJK)
@@ -70,7 +72,7 @@ object OfficeFontManager {
         val appContext = context.applicationContext
         val dir = File(appContext.filesDir, "fonts")
         if (!dir.exists() && !dir.mkdirs()) {
-            throw IOException("Could not create font folder")
+            throw LocalizedFailure(localizedText(R.string.message_could_not_create_font_folder))
         }
         return dir
     }
@@ -133,7 +135,7 @@ object OfficeFontManager {
         return withContext(Dispatchers.IO) {
             val tempFile = File(targetFile.parentFile, "${spec.fileName}.part")
             if (tempFile.exists() && !tempFile.delete()) {
-                throw IOException("Could not reset previous font download")
+                throw LocalizedFailure(localizedText(R.string.message_could_not_reset_previous_font_download))
             }
 
             val progressContext = currentCoroutineContext()
@@ -171,16 +173,16 @@ object OfficeFontManager {
             val actualSha256 = digest.digest().toHexString()
             if (!actualSha256.equals(spec.sha256, ignoreCase = true)) {
                 tempFile.delete()
-                throw IOException("Downloaded font checksum did not match")
+                throw LocalizedFailure(localizedText(R.string.message_downloaded_font_checksum_did_not_match))
             }
             if (tempFile.length() != spec.sizeBytes) {
                 tempFile.delete()
-                throw IOException("Downloaded font size did not match")
+                throw LocalizedFailure(localizedText(R.string.message_downloaded_font_size_did_not_match))
             }
 
             if (targetFile.exists() && !targetFile.delete()) {
                 tempFile.delete()
-                throw IOException("Could not replace previous font file")
+                throw LocalizedFailure(localizedText(R.string.message_could_not_replace_previous_font_file))
             }
             if (!tempFile.renameTo(targetFile)) {
                 tempFile.copyTo(targetFile, overwrite = true)
@@ -203,7 +205,7 @@ object OfficeFontManager {
         val responseCode = connection.responseCode
         if (responseCode !in 200..299) {
             connection.disconnect()
-            throw IOException("Download server returned HTTP $responseCode")
+            throw LocalizedFailure(localizedText(R.string.message_download_server_returned_http_1_s, responseCode))
         }
         return connection
     }
@@ -229,5 +231,5 @@ sealed interface OfficeFontUiState {
     object NotDownloaded : OfficeFontUiState
     data class Downloading(val progress: Float) : OfficeFontUiState
     object Downloaded : OfficeFontUiState
-    data class Failed(val message: String?) : OfficeFontUiState
+    data class Failed(val message: LocalizedText?) : OfficeFontUiState
 }

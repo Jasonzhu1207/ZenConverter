@@ -1,5 +1,7 @@
 <h1 align="center">ZenConverter</h1>
 
+**Help translate ZenConverter:** [English source and translation guide](docs/translating.md).
+
 <p align="center">
   <strong>Private, local-first file conversion for Android.</strong>
 </p>

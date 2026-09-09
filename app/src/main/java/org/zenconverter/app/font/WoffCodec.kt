@@ -1,4 +1,8 @@
 package org.zenconverter.app.font
+import org.zenconverter.app.R
+import org.zenconverter.app.i18n.localizedText
+import org.zenconverter.app.i18n.LocalizedFailure
+
 
 import java.io.ByteArrayOutputStream
 import java.util.zip.DataFormatException
@@ -20,10 +24,10 @@ object WoffCodec {
     private const val WOFF_DIRECTORY_ENTRY_BYTES = 20
 
     fun encode(sfnt: ByteArray): ByteArray {
-        if (sfnt.size < 12) error("Font input is too small")
+        if (sfnt.size < 12) throw LocalizedFailure(localizedText(R.string.message_font_input_is_too_small))
         val numTables = readUInt16BE(sfnt, 4)
         val directoryBytes = 12 + numTables * 16
-        if (sfnt.size < directoryBytes) error("Font directory is truncated")
+        if (sfnt.size < directoryBytes) throw LocalizedFailure(localizedText(R.string.message_font_directory_is_truncated))
 
         data class SourceTable(
             val tag: Long,
@@ -37,7 +41,7 @@ object WoffCodec {
             val offset = readUInt32BE(sfnt, base + 8).toInt()
             val length = readUInt32BE(sfnt, base + 12).toInt()
             if (offset < 0 || length < 0 || offset.toLong() + length > sfnt.size) {
-                error("Font table data is truncated")
+                throw LocalizedFailure(localizedText(R.string.message_font_table_data_is_truncated))
             }
             SourceTable(
                 tag = readUInt32BE(sfnt, base),
@@ -109,13 +113,13 @@ object WoffCodec {
     }
 
     fun decode(woff: ByteArray): ByteArray {
-        if (woff.size < WOFF_HEADER_BYTES) error("WOFF input is too small")
-        if (readUInt32BE(woff, 0) != WOFF_SIGNATURE) error("Input is not a WOFF font")
+        if (woff.size < WOFF_HEADER_BYTES) throw LocalizedFailure(localizedText(R.string.message_woff_input_is_too_small))
+        if (readUInt32BE(woff, 0) != WOFF_SIGNATURE) throw LocalizedFailure(localizedText(R.string.message_input_is_not_a_woff_font))
 
         val flavor = readUInt32BE(woff, 4)
         val numTables = readUInt16BE(woff, 12)
         val directoryBytes = WOFF_HEADER_BYTES + numTables * WOFF_DIRECTORY_ENTRY_BYTES
-        if (woff.size < directoryBytes) error("WOFF directory is truncated")
+        if (woff.size < directoryBytes) throw LocalizedFailure(localizedText(R.string.message_woff_directory_is_truncated))
 
         data class WoffTable(
             val tag: Long,
@@ -134,7 +138,7 @@ object WoffCodec {
                 offset < 0 || compLength < 0 || origLength < 0 ||
                 offset.toLong() + compLength > woff.size
             ) {
-                error("WOFF table data is truncated")
+                throw LocalizedFailure(localizedText(R.string.message_woff_table_data_is_truncated))
             }
             WoffTable(
                 tag = readUInt32BE(woff, base),
@@ -222,7 +226,7 @@ object WoffCodec {
             }
             output.toByteArray()
         } catch (exception: DataFormatException) {
-            error("WOFF table is corrupt")
+            throw LocalizedFailure(localizedText(R.string.message_woff_table_is_corrupt))
         } finally {
             inflater.end()
         }

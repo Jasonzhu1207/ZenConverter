@@ -1,5 +1,13 @@
 # Development Setup
 
+## Translation-Only Changes
+
+Run `python scripts/check_translations.py` with Python 3.8 or newer. It uses only
+the standard library and needs no SDK, Gradle, emulator, or NDK. See
+`docs/translating.md`. AppCompat 1.7.1 resolves during normal Android Studio sync;
+do not run command-line builds for this migration. The device acceptance matrix
+is in `docs/testing-localization.md`.
+
 The preferred development setup is VS Code plus Codex, backed by the shared
 Android toolchain in `E:\AndroidDev`. Android Studio is installed and can be
 used for Logcat, profiling, layout inspection, and SDK management, but it is not

@@ -1,5 +1,7 @@
 # ZenConverter
 
+**参与多语言翻译：** [英文底稿与翻译贡献指南](docs/translating.md)。无需了解 Kotlin 或安装 Android Studio。
+
 <p align="center">
   <a href="README.md">English</a> |
   中文

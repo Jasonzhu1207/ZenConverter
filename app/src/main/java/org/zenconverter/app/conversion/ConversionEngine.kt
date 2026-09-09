@@ -1,6 +1,7 @@
 package org.zenconverter.app.conversion
 
 import android.net.Uri
+import org.zenconverter.app.i18n.LocalizedText
 
 interface ConversionEngine {
     val id: String
@@ -17,7 +18,7 @@ sealed interface ConversionEvent {
     data class Progress(
         val requestId: String,
         val fraction: Float,
-        val message: String
+        val message: LocalizedText
     ) : ConversionEvent
 
     data class Completed(
@@ -27,7 +28,7 @@ sealed interface ConversionEvent {
 
     data class Failed(
         val requestId: String,
-        val message: String,
+        val message: LocalizedText,
         val cause: Throwable? = null
     ) : ConversionEvent
 }

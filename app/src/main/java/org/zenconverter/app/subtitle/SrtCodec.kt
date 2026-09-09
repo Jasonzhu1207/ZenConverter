@@ -1,4 +1,8 @@
 package org.zenconverter.app.subtitle
+import org.zenconverter.app.R
+import org.zenconverter.app.i18n.localizedText
+import org.zenconverter.app.i18n.LocalizedFailure
+
 
 import java.util.Locale
 
@@ -52,7 +56,7 @@ object SrtCodec {
             )
         }
 
-        if (cues.isEmpty()) error("Could not parse subtitle file (SRT)")
+        if (cues.isEmpty()) throw LocalizedFailure(localizedText(R.string.text_task_message_could_not_parse_subtitle_file_srt))
         return SubtitleDocument(cues = sortAndDedupe(cues))
     }
 

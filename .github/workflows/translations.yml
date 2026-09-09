@@ -1,0 +1,25 @@
+name: Translation resources
+
+on:
+  pull_request:
+    paths:
+      - 'app/src/**'
+      - 'scripts/check_translations.py'
+      - '.github/workflows/translations.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'app/src/**'
+      - 'scripts/check_translations.py'
+      - '.github/workflows/translations.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check translations
+        run: python3 scripts/check_translations.py

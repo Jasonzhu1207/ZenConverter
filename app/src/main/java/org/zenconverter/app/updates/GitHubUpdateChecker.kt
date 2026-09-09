@@ -9,6 +9,10 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
+import org.zenconverter.app.R
+import org.zenconverter.app.i18n.LocalizedText
+import org.zenconverter.app.i18n.LocalizedFailure
+import org.zenconverter.app.i18n.localizedText
 
 object GitHubUpdateChecker {
     private const val RELEASES_BASE_URL =
@@ -32,11 +36,13 @@ object GitHubUpdateChecker {
                     UpdateCheckResult.UpToDate(release)
                 }
             } catch (exception: UpdateCheckException) {
-                UpdateCheckResult.Failed(exception.reason, exception.message)
+                UpdateCheckResult.Failed(exception.reason)
+            } catch (exception: LocalizedFailure) {
+                UpdateCheckResult.Failed(UpdateFailureReason.Network, exception.description)
             } catch (exception: IOException) {
-                UpdateCheckResult.Failed(UpdateFailureReason.Network, exception.message)
+                UpdateCheckResult.Failed(UpdateFailureReason.Network, exception.message?.let(LocalizedText::ExternalDetail))
             } catch (exception: JSONException) {
-                UpdateCheckResult.Failed(UpdateFailureReason.InvalidResponse, exception.message)
+                UpdateCheckResult.Failed(UpdateFailureReason.InvalidResponse, exception.message?.let(LocalizedText::ExternalDetail))
             }
         }
     }
@@ -63,7 +69,7 @@ object GitHubUpdateChecker {
                 throw UpdateCheckException(UpdateFailureReason.NoRelease)
             }
             if (responseCode !in 200..299) {
-                throw IOException("GitHub returned HTTP $responseCode")
+                throw LocalizedFailure(localizedText(R.string.message_update_http_status, responseCode))
             }
             val body = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
             JSONObject(body)
