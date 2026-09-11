@@ -14,6 +14,7 @@ object AppPreferences {
     private const val PREFERENCES_NAME = "zenconverter_preferences"
     private const val KEY_ACCENT_COLOR = "accent_color"
     private const val KEY_THEME_MODE = "theme_mode"
+    private const val KEY_OLED_DARK_MODE = "oled_dark_mode"
     private const val KEY_LANGUAGE = "language"
     private const val KEY_USE_CUSTOM_OUTPUT = "use_custom_output"
     private const val KEY_OUTPUT_DIRECTORY_URI = "output_directory_uri"
@@ -36,6 +37,21 @@ object AppPreferences {
         preferences(context)
             .edit()
             .putString(KEY_THEME_MODE, themeMode)
+            .apply()
+    }
+
+    fun isOledDarkMode(context: Context): Boolean {
+        val prefs = preferences(context)
+        if (prefs.contains(KEY_OLED_DARK_MODE)) {
+            return prefs.getBoolean(KEY_OLED_DARK_MODE, false)
+        }
+        return prefs.getString(KEY_THEME_MODE, null) == "OledDark"
+    }
+
+    fun setOledDarkMode(context: Context, enabled: Boolean) {
+        preferences(context)
+            .edit()
+            .putBoolean(KEY_OLED_DARK_MODE, enabled)
             .apply()
     }
 

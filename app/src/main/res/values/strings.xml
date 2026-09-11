@@ -459,7 +459,7 @@
     <string name="text_theme_mode_label">Follow system</string>
     <string name="text_theme_mode_label_dark">Dark</string>
     <string name="text_theme_mode_label_light">Light</string>
-    <string name="text_theme_mode_label_oled_dark">OLED Dark</string>
+    <string name="text_use_pure_black_theme">Use pure black dark theme</string>
     <string name="text_trim_duration_hint">Duration %1$s</string>
     <string name="text_update_available_message">Update %1$s is available</string>
     <string name="text_update_failure_message">Could not connect to GitHub</string>

@@ -943,9 +943,10 @@ internal class UiText(private val context: Context) {
             ThemeModeOption.System -> text(R.string.text_theme_mode_label)
             ThemeModeOption.Light -> text(R.string.text_theme_mode_label_light)
             ThemeModeOption.Dark -> text(R.string.text_theme_mode_label_dark)
-            ThemeModeOption.OledDark -> text(R.string.text_theme_mode_label_oled_dark)
         }
     }
+
+    val usePureBlackTheme: String get() = text(R.string.text_use_pure_black_theme)
 
     fun languageLabel(option: LanguageOption): String =
         if (option.tag.isEmpty()) text(R.string.language_follow_system) else option.nativeName

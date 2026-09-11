@@ -445,7 +445,7 @@
     <string name="text_theme_mode_label">跟隨系統</string>
     <string name="text_theme_mode_label_dark">夜間</string>
     <string name="text_theme_mode_label_light">日間</string>
-    <string name="text_theme_mode_label_oled_dark">OLED 夜間</string>
+    <string name="text_use_pure_black_theme">使用純黑夜間模式 (OLED)</string>
     <string name="text_trim_duration_hint">時長 %1$s</string>
     <string name="text_update_available_message">發現新版本 %1$s</string>
     <string name="text_update_failure_message">無法連接 GitHub</string>

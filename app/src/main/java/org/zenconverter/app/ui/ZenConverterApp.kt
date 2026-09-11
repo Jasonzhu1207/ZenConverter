@@ -564,8 +564,7 @@ internal enum class AccentColorOption(
 internal enum class ThemeModeOption {
     System,
     Light,
-    Dark,
-    OledDark
+    Dark
 }
 
 
@@ -924,18 +923,21 @@ fun ZenConverterApp(
     var themeModeOption by remember(context) {
         mutableStateOf(themeModeFromPreference(AppPreferences.themeMode(context)))
     }
+    var isOledDark by remember(context) {
+        mutableStateOf(AppPreferences.isOledDarkMode(context))
+    }
     val languageOption = AppLanguages.selectedOption(context, configuration)
     val resourceContext = remember(context, configuration, languageRevision) { AppLanguages.localizedContext(context) }
     val texts = remember(resourceContext) { UiText(resourceContext) }
     val rootView = LocalView.current
     val isSystemDark = isSystemInDarkTheme()
 
-    val (isDark, isOled) = when (themeModeOption) {
-        ThemeModeOption.System -> Pair(isSystemDark, false)
-        ThemeModeOption.Light -> Pair(false, false)
-        ThemeModeOption.Dark -> Pair(true, false)
-        ThemeModeOption.OledDark -> Pair(true, true)
+    val isDark = when (themeModeOption) {
+        ThemeModeOption.System -> isSystemDark
+        ThemeModeOption.Light -> false
+        ThemeModeOption.Dark -> true
     }
+    val isOled = isDark && isOledDark
 
     DisposableEffect(rootView, isConversionRunning) {
         val previousKeepScreenOn = rootView.keepScreenOn
@@ -974,6 +976,7 @@ fun ZenConverterApp(
                 ZenConverterContent(
                     accent = accent,
                     themeModeOption = themeModeOption,
+                    isOledDark = isOledDark,
                     languageOption = languageOption,
                     texts = texts,
                     queuedFiles = queuedFiles,
@@ -996,6 +999,10 @@ fun ZenConverterApp(
                     onThemeModeSelected = {
                         themeModeOption = it
                         AppPreferences.setThemeMode(context, it.name)
+                    },
+                    onOledDarkChange = { enabled ->
+                        isOledDark = enabled
+                        AppPreferences.setOledDarkMode(context, enabled)
                     },
                     onLanguageSelected = {
                         AppLanguages.select(it)
@@ -1059,6 +1066,7 @@ fun ZenConverterApp(
 private fun ZenConverterContent(
     accent: AccentColorOption,
     themeModeOption: ThemeModeOption,
+    isOledDark: Boolean,
     languageOption: LanguageOption,
     texts: UiText,
     queuedFiles: List<QueuedFile>,
@@ -1076,6 +1084,7 @@ private fun ZenConverterContent(
     officeFontStates: Map<String, OfficeFontUiState>,
     onAccentSelected: (AccentColorOption) -> Unit,
     onThemeModeSelected: (ThemeModeOption) -> Unit,
+    onOledDarkChange: (Boolean) -> Unit,
     onLanguageSelected: (LanguageOption) -> Unit,
     onOutputLocationModeChange: (OutputLocationMode) -> Unit,
     onPickFiles: () -> Unit,
@@ -1282,6 +1291,7 @@ private fun ZenConverterContent(
                                                 texts = texts,
                                                 selectedAccent = accent,
                                                 selectedThemeMode = themeModeOption,
+                                                isOledDark = isOledDark,
                                                 selectedLanguage = languageOption,
                                                 outputLocationMode = outputLocationMode,
                                                 outputDirectory = outputDirectory,
@@ -1290,6 +1300,7 @@ private fun ZenConverterContent(
                                                 officeFontStates = officeFontStates,
                                                 onAccentSelected = onAccentSelected,
                                                 onThemeModeSelected = onThemeModeSelected,
+                                                onOledDarkChange = onOledDarkChange,
                                                 onLanguageSelected = onLanguageSelected,
                                                 onOutputLocationModeChange = onOutputLocationModeChange,
                                                 onPickOutputDirectory = onPickOutputDirectory,
@@ -2185,6 +2196,7 @@ private fun SettingsPanel(
     texts: UiText,
     selectedAccent: AccentColorOption,
     selectedThemeMode: ThemeModeOption,
+    isOledDark: Boolean,
     selectedLanguage: LanguageOption,
     outputLocationMode: OutputLocationMode,
     outputDirectory: OutputDirectory?,
@@ -2193,6 +2205,7 @@ private fun SettingsPanel(
     officeFontStates: Map<String, OfficeFontUiState>,
     onAccentSelected: (AccentColorOption) -> Unit,
     onThemeModeSelected: (ThemeModeOption) -> Unit,
+    onOledDarkChange: (Boolean) -> Unit,
     onLanguageSelected: (LanguageOption) -> Unit,
     onOutputLocationModeChange: (OutputLocationMode) -> Unit,
     onPickOutputDirectory: () -> Unit,
@@ -2263,7 +2276,6 @@ private fun SettingsPanel(
                     ThemeModeOption.System -> Icons.Rounded.BrightnessAuto
                     ThemeModeOption.Light -> Icons.Rounded.LightMode
                     ThemeModeOption.Dark -> Icons.Rounded.DarkMode
-                    ThemeModeOption.OledDark -> Icons.Rounded.Contrast
                 }
                 if (selected) {
                     Button(
@@ -2292,6 +2304,21 @@ private fun SettingsPanel(
                         Text(texts.themeModeLabel(option))
                     }
                 }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = selectedThemeMode != ThemeModeOption.Light,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            Column {
+                Spacer(modifier = Modifier.height(10.dp))
+                AdvancedSwitchRow(
+                    label = texts.usePureBlackTheme,
+                    checked = isOledDark,
+                    onCheckedChange = onOledDarkChange
+                )
             }
         }
 
@@ -8828,6 +8855,7 @@ private fun accentColorFromPreference(value: String?): AccentColorOption {
 }
 
 private fun themeModeFromPreference(value: String?): ThemeModeOption {
+    if (value == "OledDark") return ThemeModeOption.Dark
     return ThemeModeOption.entries.firstOrNull { it.name == value }
         ?: ThemeModeOption.System
 }
