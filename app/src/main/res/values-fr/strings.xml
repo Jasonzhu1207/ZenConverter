@@ -196,7 +196,7 @@
     <string name="text_audio_bitrate_label">Débit binaire audio</string>
     <string name="text_bitrate_label">Débit binaire global %1$s</string>
     <string name="text_compression_preset_summary">H.265 préféré · Résolution d\'origine · Fréquence d\'images d\'origine · AAC 192 kbps</string>
-    <string name="text_compression_preset_summary_h_265_preferred_short_side_1080p_original_frame_rate_aac_160_kbps">H.265 préféré · Résolution minimale : Résolution minimale : 1080p · Fréquence d\'images d\'origine · AAC 160 kbps</string>
+    <string name="text_compression_preset_summary_h_265_preferred_short_side_1080p_original_frame_rate_aac_160_kbps">H.265 préféré · Résolution minimale : 1080p · Fréquence d\'images d\'origine · AAC 160 kbps</string>
     <string name="text_compression_preset_summary_h_265_preferred_short_side_720p_max_30_fps_aac_128_kbps">H.265 préféré · Résolution minimale : 720p · 30 ips maximum · AAC 128 kbps</string>
     <string name="text_current_is_latest">Aucune mise à jour de %1$s trouvée</string>
     <string name="text_echo_label">Écho</string>
@@ -566,7 +566,7 @@
     <string name="ui_open_output_location">Ouvrir l\'emplacement de sortie</string>
     <string name="ui_open_settings">Ouvrir les paramètres</string>
     <string name="ui_opus_sample_rate_hint">Opus fonctionne nativement à 48 kHz (RFC 6716 / RFC 7845). Les fréquences d\'échantillonnage non compatibles avec Opus, telles que 44,1 kHz, sont automatiquement rééchantillonnées à 48 kHz.</string>
-    <string name="ui_output">Enregistrer l\'emplacement</string>
+    <string name="ui_output">Emplacement de sauvegarde</string>
     <string name="ui_output_unavailable">Le fichier de sortie n\'est pas disponible</string>
     <string name="ui_page_size">Taille de la page</string>
     <string name="ui_password">Mot de passe</string>

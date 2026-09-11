@@ -16,7 +16,9 @@ import java.util.Locale
 
 internal data class LanguageOption(val tag: String) {
     val nativeName: String
-        get() = Locale.forLanguageTag(tag).let { it.getDisplayName(it) }
+        get() = Locale.forLanguageTag(tag).let { loc ->
+            loc.getDisplayName(loc).replaceFirstChar { if (it.isLowerCase()) it.titlecase(loc) else it.toString() }
+        }
 }
 
 object AppLanguages {
