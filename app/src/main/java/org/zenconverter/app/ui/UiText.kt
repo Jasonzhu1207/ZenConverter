@@ -122,7 +122,7 @@ internal class UiText(private val context: Context) {
         get() = PrivacyPolicyText(
             title = text(R.string.privacy_title_privacy_policy),
             back = text(R.string.privacy_back_back),
-            updated = text(R.string.privacy_updated_last_updated_2026_08_11),
+            updated = text(R.string.privacy_updated_last_updated),
             intro = text(R.string.privacy_intro_zenconverter_processes_files_on_your_device_files),
             sections = listOf(
                 PrivacyPolicySection(

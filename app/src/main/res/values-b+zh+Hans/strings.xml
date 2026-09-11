@@ -176,7 +176,7 @@
     <string name="privacy_title_permissions_and_other_apps">权限与其他应用</string>
     <string name="privacy_title_privacy_policy">隐私政策</string>
     <string name="privacy_title_retention_deletion_and_android_backup">保留、删除与 Android 备份</string>
-    <string name="privacy_updated_last_updated_2026_08_11">最后更新：2026-08-11</string>
+    <string name="privacy_updated_last_updated">最后更新：2026-08-11</string>
     <string name="task_processing">处理中</string>
     <string name="task_saving">保存中</string>
     <string name="text_ai_super_resolution_summary">AI 放大 4× · Real-ESRGAN · 较慢 · 不保留透明</string>

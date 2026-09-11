@@ -190,7 +190,7 @@
     <string name="privacy_title_permissions_and_other_apps">Permissions and other apps</string>
     <string name="privacy_title_privacy_policy">Privacy policy</string>
     <string name="privacy_title_retention_deletion_and_android_backup">Retention, deletion, and Android backup</string>
-    <string name="privacy_updated_last_updated_2026_08_11">Last updated: 2026-08-11</string>
+    <string name="privacy_updated_last_updated">Last updated: 2026-08-11</string>
     <string name="task_processing">Processing</string>
     <string name="task_saving">Saving</string>
     <string name="text_ai_super_resolution_summary">AI upscale 4× · Real-ESRGAN · Slower · Transparency not kept</string>
