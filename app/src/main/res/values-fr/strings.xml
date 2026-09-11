@@ -454,7 +454,7 @@
     <string name="text_theme_mode_label">Système</string>
     <string name="text_theme_mode_label_dark">Sombre</string>
     <string name="text_theme_mode_label_light">Clair</string>
-    <string name="text_theme_mode_label_oled_dark">Noir</string>
+    <string name="text_use_pure_black_theme">Utiliser le thème noir pur (OLED)</string>
     <string name="text_trim_duration_hint">Durée %1$s</string>
     <string name="text_update_available_message">Mise à jour de %1$s disponible</string>
     <string name="text_update_failure_message">Impossible de se connecter à GitHub.</string>
