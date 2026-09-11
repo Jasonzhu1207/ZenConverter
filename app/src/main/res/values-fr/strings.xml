@@ -566,7 +566,7 @@
     <string name="ui_open_output_location">Ouvrir l\'emplacement de sortie</string>
     <string name="ui_open_settings">Ouvrir les paramètres</string>
     <string name="ui_opus_sample_rate_hint">Opus fonctionne nativement à 48 kHz (RFC 6716 / RFC 7845). Les fréquences d\'échantillonnage non compatibles avec Opus, telles que 44,1 kHz, sont automatiquement rééchantillonnées à 48 kHz.</string>
-    <string name="ui_output">Enregistrer l\'emplacement</string>
+    <string name="ui_output">Emplacement de sauvegarde</string>
     <string name="ui_output_unavailable">Le fichier de sortie n\'est pas disponible</string>
     <string name="ui_page_size">Taille de la page</string>
     <string name="ui_password">Mot de passe</string>
