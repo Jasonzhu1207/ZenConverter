@@ -185,7 +185,7 @@
     <string name="privacy_title_permissions_and_other_apps">Autorisations et autres applications</string>
     <string name="privacy_title_privacy_policy">Politique de confidentialité</string>
     <string name="privacy_title_retention_deletion_and_android_backup">Conservation, suppression et sauvegarde sur Android</string>
-    <string name="privacy_updated_last_updated_2026_08_11">Dernière mise à jour : 11/08/2026</string>
+    <string name="privacy_updated_last_updated">Dernière mise à jour : 11/08/2026</string>
     <string name="task_processing">Traitement</string>
     <string name="task_saving">Enregistrement</string>
     <string name="text_ai_super_resolution_summary">Agrandissement par IA 4× · Real-ESRGAN · Plus lent · La transparence n\'est pas conservée</string>
