@@ -244,6 +244,7 @@
     <string name="text_metadata_support_label_read_only">Lecture seule</string>
     <string name="text_metadata_support_label_unsupported_cleanup">Nettoyage non pris en charge</string>
     <string name="text_mirror_label">Miroir</string>
+    <string name="text_motion_blur_label">Flou de mouvement</string>
     <string name="text_noise_reduction_label">Réduction du bruit</string>
     <string name="text_option_value">Vidéo</string>
     <string name="text_option_value_180">180°</string>
@@ -292,6 +293,7 @@
     <string name="text_option_value_flatten">Aplatir</string>
     <string name="text_option_value_font">Police</string>
     <string name="text_option_value_forest_green">Vert forêt</string>
+    <string name="text_option_value_heavy_motion_blur">Prononcé (7 images)</string>
     <string name="text_option_value_high">Élevé</string>
     <string name="text_option_value_high_256_kbps">Élevé (256 kbps)</string>
     <string name="text_option_value_high_5_mbps">Élevé (5 Mbps)</string>
@@ -349,9 +351,11 @@
     <string name="text_option_value_small_file">Fichier de petite taille</string>
     <string name="text_option_value_split_frames">Scinder l\'image</string>
     <string name="text_option_value_standard">Standard</string>
+    <string name="text_option_value_standard_motion_blur">Standard (5 images)</string>
     <string name="text_option_value_steel_blue">Bleu ardoise</string>
     <string name="text_option_value_stereo">Stéréo</string>
     <string name="text_option_value_styled_subtitle">Sous-titres stylisés</string>
+    <string name="text_option_value_subtle_motion_blur">Léger (3 images)</string>
     <string name="text_option_value_subtitle">Sous-titres</string>
     <string name="text_option_value_summary_sheet">Fiche récapitulative</string>
     <string name="text_option_value_supports_transparency">Prend en charge la transparence</string>
@@ -399,6 +403,7 @@
     <string name="text_task_message_compatibility_engine_needs_an_opus_capable_ffmpeg_package">Nécessite un paquet FFmpeg compatible Opus.</string>
     <string name="text_task_message_compatibility_engine_needs_duration_metadata_for_fade_out">Métadonnée de durée requise pour le fondu en sortie.</string>
     <string name="text_task_message_compatibility_engine_needs_duration_metadata_for_reverse_playback">Métadonnée de durée requise pour la lecture inversée.</string>
+    <string name="text_task_message_compatibility_engine_needs_motion_blur_filter">Le moteur de compatibilité requiert le filtre de flou de mouvement</string>
     <string name="text_task_message_compatibility_engine_needs_reverse_filters">Filtres d\'inversion requis</string>
     <string name="text_task_message_compatibility_engine_needs_subtitle_support">Prise en charge des sous-titres requis</string>
     <string name="text_task_message_compatibility_engine_needs_the_audio_denoise_filter">Filtre de réduction de bruit requis</string>

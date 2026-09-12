@@ -212,6 +212,7 @@ import org.zenconverter.app.conversion.VideoCompressionMode
 import org.zenconverter.app.conversion.VideoExportOptions
 import org.zenconverter.app.conversion.VideoFrameInterpolationMode
 import org.zenconverter.app.conversion.VideoMirrorMode
+import org.zenconverter.app.conversion.VideoMotionBlurMode
 import org.zenconverter.app.conversion.VideoRotationMode
 import org.zenconverter.app.conversion.ContactSheetGrid
 import org.zenconverter.app.conversion.VideoContactSheetOptions
@@ -498,7 +499,8 @@ private data class VideoAdvancedUiState(
     val fadeOut: String,
     val mirror: String,
     val rotation: String,
-    val aspectRatio: String
+    val aspectRatio: String,
+    val motionBlur: String
 )
 
 private data class AudioAdvancedUiState(
@@ -762,6 +764,17 @@ private val VIDEO_ASPECT_OPTIONS = listOf(
     VIDEO_ASPECT_CROP_16_9,
     VIDEO_ASPECT_CROP_9_16,
     VIDEO_ASPECT_CROP_1_1
+)
+
+internal const val VIDEO_MOTION_BLUR_OFF = "Motion blur off"
+internal const val VIDEO_MOTION_BLUR_SUBTLE = "Subtle"
+internal const val VIDEO_MOTION_BLUR_STANDARD = "Standard"
+internal const val VIDEO_MOTION_BLUR_HEAVY = "Heavy"
+private val VIDEO_MOTION_BLUR_OPTIONS = listOf(
+    VIDEO_MOTION_BLUR_OFF,
+    VIDEO_MOTION_BLUR_SUBTLE,
+    VIDEO_MOTION_BLUR_STANDARD,
+    VIDEO_MOTION_BLUR_HEAVY
 )
 
 internal const val AUDIO_VOLUME_MUTE = "Mute"
@@ -6350,6 +6363,7 @@ private fun VideoOptions(
     onVideoMirrorChange: (String) -> Unit,
     onVideoRotationChange: (String) -> Unit,
     onVideoAspectRatioChange: (String) -> Unit,
+    onVideoMotionBlurChange: (String) -> Unit = {},
     onAudioAdvancedExpandedChange: (Boolean) -> Unit,
     onAudioReverseChange: (Boolean) -> Unit,
     onAudioFadeInChange: (String) -> Unit,
@@ -6587,7 +6601,8 @@ private fun VideoOptions(
                 onFadeOutChange = onVideoFadeOutChange,
                 onMirrorChange = onVideoMirrorChange,
                 onRotationChange = onVideoRotationChange,
-                onAspectRatioChange = onVideoAspectRatioChange
+                onAspectRatioChange = onVideoAspectRatioChange,
+                onMotionBlurChange = onVideoMotionBlurChange
             )
             AudioAdvancedOptionsPanel(
                 texts = texts,
@@ -7362,7 +7377,8 @@ private fun VideoAdvancedOptionsPanel(
     onFadeOutChange: (String) -> Unit,
     onMirrorChange: (String) -> Unit,
     onRotationChange: (String) -> Unit,
-    onAspectRatioChange: (String) -> Unit
+    onAspectRatioChange: (String) -> Unit,
+    onMotionBlurChange: (String) -> Unit
 ) {
     AdvancedOptionsPanel(
         title = texts.videoAdvancedTitle(),
@@ -7424,6 +7440,16 @@ private fun VideoAdvancedOptionsPanel(
             openMenuId,
             onOpenMenuChange,
             onAspectRatioChange
+        )
+        OptionDropdown(
+            "${menuPrefix}video-advanced-motion-blur",
+            texts.motionBlurLabel(),
+            state.motionBlur,
+            VIDEO_MOTION_BLUR_OPTIONS,
+            texts,
+            openMenuId,
+            onOpenMenuChange,
+            onMotionBlurChange
         )
     }
 }
@@ -8342,6 +8368,9 @@ private fun QueuedFileOptionsPanel(
                 onVideoAspectRatioChange = { value ->
                     onUpdateFile(file.copy(videoOptions = file.videoOptions.copy(advanced = file.videoOptions.advanced.copy(aspectRatio = videoAspectRatioModeFor(value)))))
                 },
+                onVideoMotionBlurChange = { value ->
+                    onUpdateFile(file.copy(videoOptions = file.videoOptions.copy(advanced = file.videoOptions.advanced.copy(motionBlur = videoMotionBlurModeFor(value)))))
+                },
                 onAudioAdvancedExpandedChange = onAudioAdvancedExpandedChange,
                 onAudioReverseChange = { enabled ->
                     onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(advanced = file.audioOptions.advanced.copy(reverse = enabled))))
@@ -9238,7 +9267,8 @@ private fun videoAdvancedUiStateFor(
         fadeOut = fadeLabelFor(advanced.fadeOutSeconds),
         mirror = videoMirrorLabelFor(advanced.mirror),
         rotation = videoRotationLabelFor(advanced.rotation),
-        aspectRatio = videoAspectRatioLabelFor(advanced.aspectRatio)
+        aspectRatio = videoAspectRatioLabelFor(advanced.aspectRatio),
+        motionBlur = videoMotionBlurLabelFor(advanced.motionBlur)
     )
 }
 
@@ -9293,6 +9323,15 @@ private fun videoAspectRatioLabelFor(value: VideoAspectRatioMode): String {
         VideoAspectRatioMode.Crop9By16 -> VIDEO_ASPECT_CROP_9_16
         VideoAspectRatioMode.Crop1By1 -> VIDEO_ASPECT_CROP_1_1
         VideoAspectRatioMode.Keep -> VIDEO_ASPECT_KEEP
+    }
+}
+
+private fun videoMotionBlurLabelFor(value: VideoMotionBlurMode): String {
+    return when (value) {
+        VideoMotionBlurMode.Subtle -> VIDEO_MOTION_BLUR_SUBTLE
+        VideoMotionBlurMode.Standard -> VIDEO_MOTION_BLUR_STANDARD
+        VideoMotionBlurMode.Heavy -> VIDEO_MOTION_BLUR_HEAVY
+        VideoMotionBlurMode.Off -> VIDEO_MOTION_BLUR_OFF
     }
 }
 
@@ -9586,6 +9625,15 @@ private fun videoAspectRatioModeFor(value: String): VideoAspectRatioMode {
         VIDEO_ASPECT_CROP_9_16 -> VideoAspectRatioMode.Crop9By16
         VIDEO_ASPECT_CROP_1_1 -> VideoAspectRatioMode.Crop1By1
         else -> VideoAspectRatioMode.Keep
+    }
+}
+
+private fun videoMotionBlurModeFor(value: String): VideoMotionBlurMode {
+    return when (value) {
+        VIDEO_MOTION_BLUR_SUBTLE -> VideoMotionBlurMode.Subtle
+        VIDEO_MOTION_BLUR_STANDARD -> VideoMotionBlurMode.Standard
+        VIDEO_MOTION_BLUR_HEAVY -> VideoMotionBlurMode.Heavy
+        else -> VideoMotionBlurMode.Off
     }
 }
 

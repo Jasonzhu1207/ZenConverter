@@ -4563,6 +4563,7 @@ class ConversionService : Service() {
                 ffmpegVideoAspectFilterFor(advanced.aspectRatio)?.let { add(it) }
                 ffmpegVideoScaleFilterFor(input.videoOptions.maxShortSidePixels)?.let { add(it) }
                 if (advanced.reverse) add("reverse")
+                ffmpegVideoMotionBlurFilterFor(advanced.motionBlur)?.let { add(it) }
                 advanced.fadeInSeconds?.let { seconds ->
                     add("fade=t=in:st=0:d=${ffmpegSeconds(seconds.toDouble())}")
                 }
@@ -4628,6 +4629,15 @@ class ConversionService : Service() {
         val shortSide = targetShortSide?.takeIf { it > 0 } ?: return null
         return "scale=w='if(gte(iw\\,ih)\\,-2\\,min(iw\\,$shortSide))':" +
             "h='if(gte(iw\\,ih)\\,min(ih\\,$shortSide)\\,-2)':flags=lanczos"
+    }
+
+    private fun ffmpegVideoMotionBlurFilterFor(motionBlur: VideoMotionBlurMode): String? {
+        return when (motionBlur) {
+            VideoMotionBlurMode.Subtle -> "tmix=frames=3:weights='1 2 1'"
+            VideoMotionBlurMode.Standard -> "tmix=frames=5:weights='1 2 4 2 1'"
+            VideoMotionBlurMode.Heavy -> "tmix=frames=7:weights='1 1 2 4 2 1 1'"
+            VideoMotionBlurMode.Off -> null
+        }
     }
 
     private fun ffmpegAudioFilterFor(
@@ -5073,6 +5083,7 @@ class ConversionService : Service() {
             "reverse",
             "areverse" -> localizedText(R.string.text_task_message_compatibility_engine_needs_reverse_filters)
             "afftdn" -> localizedText(R.string.text_task_message_compatibility_engine_needs_the_audio_denoise_filter)
+            "tmix" -> localizedText(R.string.text_task_message_compatibility_engine_needs_motion_blur_filter)
             else -> localizedText(R.string.text_task_message_compatibility_engine_is_missing_an_advanced_filter)
         }
     }
@@ -5127,6 +5138,9 @@ class ConversionService : Service() {
                     videoAdvanced.fadeOutSeconds != null
                 ) {
                     add("fade")
+                }
+                if (videoAdvanced.motionBlur != VideoMotionBlurMode.Off) {
+                    add("tmix")
                 }
             }
 

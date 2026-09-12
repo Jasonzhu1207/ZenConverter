@@ -249,6 +249,7 @@
     <string name="text_metadata_support_label_read_only">Read only</string>
     <string name="text_metadata_support_label_unsupported_cleanup">Unsupported cleanup</string>
     <string name="text_mirror_label">Mirror</string>
+    <string name="text_motion_blur_label">Motion blur</string>
     <string name="text_noise_reduction_label">Noise reduction</string>
     <string name="text_option_value">Video</string>
     <string name="text_option_value_180">180°</string>
@@ -297,6 +298,7 @@
     <string name="text_option_value_flatten">Flatten</string>
     <string name="text_option_value_font">Font</string>
     <string name="text_option_value_forest_green">Forest Green</string>
+    <string name="text_option_value_heavy_motion_blur">Heavy (7 frames)</string>
     <string name="text_option_value_high">High</string>
     <string name="text_option_value_high_256_kbps">High (256 kbps)</string>
     <string name="text_option_value_high_5_mbps">High (5 Mbps)</string>
@@ -354,9 +356,11 @@
     <string name="text_option_value_small_file">Small file</string>
     <string name="text_option_value_split_frames">Split frames</string>
     <string name="text_option_value_standard">Standard</string>
+    <string name="text_option_value_standard_motion_blur">Standard (5 frames)</string>
     <string name="text_option_value_steel_blue">Steel Blue</string>
     <string name="text_option_value_stereo">Stereo</string>
     <string name="text_option_value_styled_subtitle">Styled subtitle</string>
+    <string name="text_option_value_subtle_motion_blur">Subtle (3 frames)</string>
     <string name="text_option_value_subtitle">Subtitle</string>
     <string name="text_option_value_summary_sheet">Summary Sheet</string>
     <string name="text_option_value_supports_transparency">Supports transparency</string>
@@ -404,6 +408,7 @@
     <string name="text_task_message_compatibility_engine_needs_an_opus_capable_ffmpeg_package">Compatibility engine needs an Opus-capable FFmpeg package</string>
     <string name="text_task_message_compatibility_engine_needs_duration_metadata_for_fade_out">Compatibility engine needs duration metadata for fade out</string>
     <string name="text_task_message_compatibility_engine_needs_duration_metadata_for_reverse_playback">Compatibility engine needs duration metadata for reverse playback</string>
+    <string name="text_task_message_compatibility_engine_needs_motion_blur_filter">Compatibility engine needs the motion blur filter</string>
     <string name="text_task_message_compatibility_engine_needs_reverse_filters">Compatibility engine needs reverse filters</string>
     <string name="text_task_message_compatibility_engine_needs_subtitle_support">Compatibility engine needs subtitle support</string>
     <string name="text_task_message_compatibility_engine_needs_the_audio_denoise_filter">Compatibility engine needs the audio denoise filter</string>

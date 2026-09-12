@@ -15,17 +15,17 @@ groups:
         to: mp4
         engine: ffmpeg-compatible
         status: stable
-        note: "FFmpeg re-encode path. Encodes the first video track with H.264/H.265 and writes AAC audio. Manual mode exposes video/audio controls and trim range; fixed compression presets own CRF/preset/resolution/frame-rate strategy and AAC audio bitrate while trim still applies. Video frame interpolation provides two modes: built-in offline Optical Flow 2× via FFmpeg minterpolate (MCI) and neural RIFE 2× via NCNN Vulkan. Manual-mode advanced filters apply where selected."
+        note: "FFmpeg re-encode path. Encodes the first video track with H.264/H.265 and writes AAC audio. Manual mode exposes video/audio controls and trim range; fixed compression presets own CRF/preset/resolution/frame-rate strategy and AAC audio bitrate while trim still applies. Video frame interpolation provides two modes: built-in offline Optical Flow 2× via FFmpeg minterpolate (MCI) and neural RIFE 2× via NCNN Vulkan. Manual-mode advanced filters (reverse, fade, mirror, rotate, aspect ratio, motion blur) apply where selected."
       - from: mp4
         to: mkv
         engine: ffmpeg-compatible
         status: stable
-        note: "FFmpeg re-encode path. Encodes the first video track with H.264/H.265 and writes AAC audio. Manual mode exposes video/audio controls; fixed compression presets own CRF/preset/resolution/frame-rate strategy and AAC audio bitrate. Manual-mode advanced filters apply. Subtitles, attachments, and extra tracks are not copied."
+        note: "FFmpeg re-encode path. Encodes the first video track with H.264/H.265 and writes AAC audio. Manual mode exposes video/audio controls; fixed compression presets own CRF/preset/resolution/frame-rate strategy and AAC audio bitrate. Manual-mode advanced filters (including temporal motion blur) apply. Subtitles, attachments, and extra tracks are not copied."
       - from: video
         to: mov
         engine: ffmpeg-compatible
         status: stable
-        note: "FFmpeg re-encode path for video inputs. Encodes the first video track with H.264/H.265 and writes AAC audio in a QuickTime MOV container. Fixed compression presets own CRF/preset/resolution/frame-rate strategy and AAC audio bitrate; manual-mode advanced filters apply."
+        note: "FFmpeg re-encode path for video inputs. Encodes the first video track with H.264/H.265 and writes AAC audio in a QuickTime MOV container. Fixed compression presets own CRF/preset/resolution/frame-rate strategy and AAC audio bitrate; manual-mode advanced filters (including temporal motion blur) apply."
       - from: multiple-videos
         to: mp4-mkv-mov
         engine: ffmpeg-compatible

@@ -769,6 +769,10 @@ internal class UiText(private val context: Context) {
         return text(R.string.text_aspect_ratio_label)
     }
 
+    fun motionBlurLabel(): String {
+        return text(R.string.text_motion_blur_label)
+    }
+
     fun volumeLabel(): String {
         return text(R.string.text_volume_label)
     }
@@ -1064,6 +1068,10 @@ internal class UiText(private val context: Context) {
             VIDEO_ASPECT_CROP_16_9 -> text(R.string.text_option_value_crop_16_9)
             VIDEO_ASPECT_CROP_9_16 -> text(R.string.text_option_value_crop_9_16)
             VIDEO_ASPECT_CROP_1_1 -> text(R.string.text_option_value_crop_1_1)
+            VIDEO_MOTION_BLUR_OFF -> text(R.string.text_option_value_off)
+            VIDEO_MOTION_BLUR_SUBTLE -> text(R.string.text_option_value_subtle_motion_blur)
+            VIDEO_MOTION_BLUR_STANDARD -> text(R.string.text_option_value_standard_motion_blur)
+            VIDEO_MOTION_BLUR_HEAVY -> text(R.string.text_option_value_heavy_motion_blur)
             AUDIO_VOLUME_MUTE -> text(R.string.text_option_value_mute)
             AUDIO_ECHO_OFF -> text(R.string.text_option_value_off)
             AUDIO_ECHO_LIGHT -> text(R.string.text_option_value_light)

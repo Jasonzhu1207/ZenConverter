@@ -235,6 +235,7 @@
     <string name="text_metadata_support_label_read_only">只读</string>
     <string name="text_metadata_support_label_unsupported_cleanup">暂不支持清理</string>
     <string name="text_mirror_label">镜像</string>
+    <string name="text_motion_blur_label">动态模糊</string>
     <string name="text_noise_reduction_label">声音降噪</string>
     <string name="text_option_value">视频</string>
     <string name="text_option_value_180">180°</string>
@@ -283,6 +284,7 @@
     <string name="text_option_value_flatten">平铺背景</string>
     <string name="text_option_value_font">字体</string>
     <string name="text_option_value_forest_green">森林绿</string>
+    <string name="text_option_value_heavy_motion_blur">强效 (7 帧混合)</string>
     <string name="text_option_value_high">高质量</string>
     <string name="text_option_value_high_256_kbps">高（256 kbps）</string>
     <string name="text_option_value_high_5_mbps">高（5 Mbps）</string>
@@ -340,9 +342,11 @@
     <string name="text_option_value_small_file">小体积</string>
     <string name="text_option_value_split_frames">拆帧输出</string>
     <string name="text_option_value_standard">标准</string>
+    <string name="text_option_value_standard_motion_blur">标准 (5 帧混合)</string>
     <string name="text_option_value_steel_blue">钢蓝</string>
     <string name="text_option_value_stereo">立体声</string>
     <string name="text_option_value_styled_subtitle">带样式字幕</string>
+    <string name="text_option_value_subtle_motion_blur">轻度 (3 帧混合)</string>
     <string name="text_option_value_subtitle">字幕/歌词</string>
     <string name="text_option_value_summary_sheet">概览长图</string>
     <string name="text_option_value_supports_transparency">支持透明度</string>
@@ -390,6 +394,7 @@
     <string name="text_task_message_compatibility_engine_needs_an_opus_capable_ffmpeg_package">当前兼容包不包含 Opus 编码器</string>
     <string name="text_task_message_compatibility_engine_needs_duration_metadata_for_fade_out">淡出需要读取文件时长</string>
     <string name="text_task_message_compatibility_engine_needs_duration_metadata_for_reverse_playback">倒放需要读取文件时长</string>
+    <string name="text_task_message_compatibility_engine_needs_motion_blur_filter">当前兼容包缺少动态模糊滤镜</string>
     <string name="text_task_message_compatibility_engine_needs_reverse_filters">当前兼容包缺少倒放滤镜</string>
     <string name="text_task_message_compatibility_engine_needs_subtitle_support">当前兼容包不包含字幕组件</string>
     <string name="text_task_message_compatibility_engine_needs_the_audio_denoise_filter">当前兼容包缺少声音降噪滤镜</string>

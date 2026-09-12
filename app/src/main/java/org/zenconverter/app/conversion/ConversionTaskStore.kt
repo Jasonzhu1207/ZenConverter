@@ -121,7 +121,8 @@ data class VideoAdvancedOptions(
     val fadeOutSeconds: Float? = null,
     val mirror: VideoMirrorMode = VideoMirrorMode.Off,
     val rotation: VideoRotationMode = VideoRotationMode.None,
-    val aspectRatio: VideoAspectRatioMode = VideoAspectRatioMode.Keep
+    val aspectRatio: VideoAspectRatioMode = VideoAspectRatioMode.Keep,
+    val motionBlur: VideoMotionBlurMode = VideoMotionBlurMode.Off
 ) {
     val hasEnabledEffects: Boolean
         get() = reverse ||
@@ -129,7 +130,8 @@ data class VideoAdvancedOptions(
             fadeOutSeconds != null ||
             mirror != VideoMirrorMode.Off ||
             rotation != VideoRotationMode.None ||
-            aspectRatio != VideoAspectRatioMode.Keep
+            aspectRatio != VideoAspectRatioMode.Keep ||
+            motionBlur != VideoMotionBlurMode.Off
 }
 
 data class AudioAdvancedOptions(
@@ -171,6 +173,13 @@ enum class VideoAspectRatioMode {
     Crop16By9,
     Crop9By16,
     Crop1By1
+}
+
+enum class VideoMotionBlurMode {
+    Off,
+    Subtle,
+    Standard,
+    Heavy
 }
 
 enum class AudioVolumeMode {

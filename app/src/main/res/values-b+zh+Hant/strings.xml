@@ -235,6 +235,7 @@
     <string name="text_metadata_support_label_read_only">唯讀</string>
     <string name="text_metadata_support_label_unsupported_cleanup">暫不支援清理</string>
     <string name="text_mirror_label">鏡像</string>
+    <string name="text_motion_blur_label">動態模糊</string>
     <string name="text_noise_reduction_label">聲音降噪</string>
     <string name="text_option_value">影片</string>
     <string name="text_option_value_180">180°</string>
@@ -283,6 +284,7 @@
     <string name="text_option_value_flatten">平鋪背景</string>
     <string name="text_option_value_font">字型</string>
     <string name="text_option_value_forest_green">森林綠</string>
+    <string name="text_option_value_heavy_motion_blur">強效 (7 幀混合)</string>
     <string name="text_option_value_high">高品質</string>
     <string name="text_option_value_high_256_kbps">高（256 kbps）</string>
     <string name="text_option_value_high_5_mbps">高（5 Mbps）</string>
@@ -340,9 +342,11 @@
     <string name="text_option_value_small_file">小體積</string>
     <string name="text_option_value_split_frames">拆幀輸出</string>
     <string name="text_option_value_standard">標準</string>
+    <string name="text_option_value_standard_motion_blur">標準 (5 幀混合)</string>
     <string name="text_option_value_steel_blue">鋼藍</string>
     <string name="text_option_value_stereo">立體聲</string>
     <string name="text_option_value_styled_subtitle">帶樣式字幕</string>
+    <string name="text_option_value_subtle_motion_blur">輕度 (3 幀混合)</string>
     <string name="text_option_value_subtitle">字幕/歌詞</string>
     <string name="text_option_value_summary_sheet">概覽長圖</string>
     <string name="text_option_value_supports_transparency">支援透明度</string>
@@ -390,6 +394,7 @@
     <string name="text_task_message_compatibility_engine_needs_an_opus_capable_ffmpeg_package">目前相容包不包含 Opus 編碼器</string>
     <string name="text_task_message_compatibility_engine_needs_duration_metadata_for_fade_out">淡出需要讀取檔案時長</string>
     <string name="text_task_message_compatibility_engine_needs_duration_metadata_for_reverse_playback">倒放需要讀取檔案時長</string>
+    <string name="text_task_message_compatibility_engine_needs_motion_blur_filter">目前相容包缺少動態模糊濾鏡</string>
     <string name="text_task_message_compatibility_engine_needs_reverse_filters">目前相容包缺少倒放濾鏡</string>
     <string name="text_task_message_compatibility_engine_needs_subtitle_support">目前相容包不包含字幕組件</string>
     <string name="text_task_message_compatibility_engine_needs_the_audio_denoise_filter">目前相容包缺少聲音降噪濾鏡</string>
