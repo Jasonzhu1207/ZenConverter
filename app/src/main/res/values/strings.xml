@@ -335,6 +335,7 @@
     <string name="text_option_value_one_file_per_input">One file per input</string>
     <string name="text_option_value_one_pdf_per_frame">One PDF per frame</string>
     <string name="text_option_value_one_pdf_per_image">One PDF per image</string>
+    <string name="text_option_value_optical_flow_2_interpolation">Optical Flow 2× (Fast, Offline)</string>
     <string name="text_option_value_original">Original</string>
     <string name="text_option_value_original_ratio">Original ratio</string>
     <string name="text_option_value_page_rasterization">Page rasterization</string>
@@ -626,7 +627,8 @@
     <string name="ui_unknown_size">Unknown size</string>
     <string name="ui_unknown_type">Unknown type</string>
     <string name="ui_video_compression_mode">Compression preset</string>
-    <string name="ui_video_frame_interpolation">AI Frame Interpolation (Experimental)</string>
+    <string name="ui_video_frame_interpolation">Frame Interpolation</string>
+    <string name="ui_video_interpolation_optical_flow_summary">Enable 2× fast optical flow frame interpolation (FFmpeg MCI). Fully offline with zero model download. Currently supports up to 1080p (2K/4K locked); 720p recommended.</string>
     <string name="ui_video_interpolation_summary">Enable 2× AI interpolation (Experimental) to double video frame rate (e.g. 30fps -&gt; 60fps) for smoother motion. Performance and memory vary by device GPU drivers.</string>
     <string name="ui_video_merge_member">In video merge</string>
     <string name="ui_video_merge_note">Merge multiple videos in sequence into one video.</string>

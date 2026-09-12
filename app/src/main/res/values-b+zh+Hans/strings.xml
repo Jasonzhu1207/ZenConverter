@@ -321,6 +321,7 @@
     <string name="text_option_value_one_file_per_input">每个输入单独输出</string>
     <string name="text_option_value_one_pdf_per_frame">一帧一个 PDF</string>
     <string name="text_option_value_one_pdf_per_image">每张图一个 PDF</string>
+    <string name="text_option_value_optical_flow_2_interpolation">光流 2× 补帧 (快速/离线)</string>
     <string name="text_option_value_original">原始</string>
     <string name="text_option_value_original_ratio">原图比例</string>
     <string name="text_option_value_page_rasterization">页面栅格化</string>
@@ -611,7 +612,8 @@
     <string name="ui_unknown_size">未知大小</string>
     <string name="ui_unknown_type">未知类型</string>
     <string name="ui_video_compression_mode">压缩预设</string>
-    <string name="ui_video_frame_interpolation">AI 视频插帧（实验性）</string>
+    <string name="ui_video_frame_interpolation">视频补帧</string>
+    <string name="ui_video_interpolation_optical_flow_summary">开启 2× 快速光流补帧 (基于 FFmpeg 运动补偿 MCI)。完全离线免下载模型。当前最高支持 1080p (2K/4K 已锁定)，推荐 720p 体验更佳。</string>
     <string name="ui_video_interpolation_summary">开启 2× AI 补帧（实验性），将视频帧率提升 1 倍 (如 30fps -&gt; 60fps)，使画面更丝滑。受移动端 GPU 驱动与显存调度影响，当前处于实验阶段</string>
     <string name="ui_video_merge_member">在视频合并中</string>
     <string name="ui_video_merge_note">按顺序将多个视频拼接为一个完整视频。</string>

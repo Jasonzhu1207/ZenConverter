@@ -129,18 +129,9 @@ as supported until it has a tested path, sample files, and failure behavior.
   frame-rate, audio options, and advanced controls. High-bitrate sources usually
   shrink substantially, but already efficient low-bitrate sources can become
   larger.
-- Video frame interpolation provides 2× deep-learning frame rate multiplication using
-  RIFE optical flow running through Tencent NCNN with Vulkan GPU compute acceleration
-  (`libzen_ncnn.so`). This feature is currently **Experimental**: due to mobile GPU driver,
-  Vulkan compute extensions, and dynamic memory allocator variance across chipsets, inference
-  runs with adaptive 1080p+ downscaling and lightmode memory deallocation.
-  The pipeline decodes frames via FFmpeg, applies sliding-window
-  RIFE inference ($N, N+1 \to N.5$), and re-encodes at 2× fps with high quality CRF 18
-  libx264 while remuxing original audio. While active, conflicting options (compression
-  presets, manual bitrate, manual codec, manual frame rate, and advanced video filters)
-  are locked/hidden, while video trimming remains available. The paired `.param` and `.bin`
-  RIFE model files are downloaded together from an R2 direct link into app-private storage
-  and SHA-256 verified before use.
+- Video frame interpolation provides two 2× frame rate multiplication paths:
+  - **Optical Flow 2× (Fast, Offline)**: Built-in in-engine motion compensated interpolation powered by FFmpeg's `minterpolate` filter (EPZS motion estimation + OBMC overlapped block motion compensation). Operates as a streaming pipeline with zero disk I/O, requires zero model downloads, and is 100% offline. The UI explicitly locks 2K (1440p), 4K (2160p), and "Original" (when source > 1080p) with lock indicators, and automatically clamps resolution to 1080p short-side to prevent extreme mobile CPU load and thermal throttling. Downscaling to 720p or 480p is supported for faster processing. Conflicting advanced options (rotation, mirror, aspect ratio, reverse, fade) and max frame rate caps are suppressed while video trimming remains available.
+  - **RIFE 2× (AI Neural)**: Deep-learning frame interpolation using RIFE optical flow running through Tencent NCNN with Vulkan GPU compute acceleration (`libzen_ncnn.so`). This feature is currently **Experimental**: due to mobile GPU driver, Vulkan compute extensions, and dynamic memory allocator variance across chipsets, inference runs with adaptive 1080p+ downscaling and lightmode memory deallocation. The pipeline decodes frames via FFmpeg, applies sliding-window RIFE inference ($N, N+1 \to N.5$), and re-encodes at 2× fps with high quality CRF 18 libx264 while remuxing original audio. While active, conflicting options (compression presets, manual bitrate, manual codec, manual frame rate, and advanced video filters) are locked/hidden, while video trimming remains available. The paired `.param` and `.bin` RIFE model files are downloaded together from an R2 direct link into app-private storage and SHA-256 verified before use.
 - Advanced filters are stable within their documented limits and only apply to MP4/MKV/MOV video outputs
   and audio outputs. Video outputs support reverse playback, fade, mirror,
   rotate, and fit/crop frame shape. Audio outputs and video-output audio tracks

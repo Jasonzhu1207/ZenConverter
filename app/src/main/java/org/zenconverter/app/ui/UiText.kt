@@ -557,6 +557,9 @@ internal class UiText(private val context: Context) {
     val videoInterpolationSummary: String
         get() = text(R.string.ui_video_interpolation_summary)
 
+    val videoInterpolationOpticalFlowSummary: String
+        get() = text(R.string.ui_video_interpolation_optical_flow_summary)
+
     val rifeModelPurpose: String
         get() = text(R.string.ui_rife_model_purpose)
 
@@ -1070,6 +1073,7 @@ internal class UiText(private val context: Context) {
             AUDIO_DENOISE_STANDARD -> text(R.string.text_option_value_standard)
             VIDEO_COMPRESSION_STANDARD -> text(R.string.text_option_value_off_manual)
             VIDEO_INTERPOLATION_OFF -> text(R.string.text_option_value_off)
+            VIDEO_INTERPOLATION_OPTICAL_FLOW_2X -> text(R.string.text_option_value_optical_flow_2_interpolation)
             VIDEO_INTERPOLATION_RIFE_2X -> text(R.string.text_option_value_rife_2_interpolation)
             VIDEO_COMPRESSION_VISUAL_LOSSLESS -> text(R.string.text_option_value_visual_lossless)
             VIDEO_COMPRESSION_BALANCED -> text(R.string.text_option_value_balanced_shrink)

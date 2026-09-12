@@ -88,6 +88,7 @@ enum class VideoCompressionMode {
 
 enum class VideoFrameInterpolationMode {
     Off,
+    OpticalFlow2x,
     Rife2x
 }
 

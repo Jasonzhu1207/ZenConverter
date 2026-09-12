@@ -33,6 +33,8 @@ import android.graphics.pdf.LoadParams
 import android.graphics.pdf.PdfDocument
 import android.graphics.pdf.PdfRenderer
 import android.media.ExifInterface
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.media.MediaScannerConnection
 import android.net.Uri
@@ -3565,17 +3567,8 @@ class ConversionService : Service() {
         val tempAudioFile = File(workDir, "audio.m4a")
 
         try {
-            val probeFps = input.inputInfo?.frameRate
-                ?: runCatching {
-                    val retriever = MediaMetadataRetriever()
-                    try {
-                        retriever.setDataSource(this@ConversionService, input.inputUri)
-                        retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)?.toFloatOrNull()?.takeIf { it > 0f }
-                    } finally {
-                        runCatching { retriever.release() }
-                    }
-                }.getOrNull() ?: 30.0f
-            val targetFps = probeFps * 2.0f
+            val probeFps = probeVideoFrameRate(input.inputUri, input.inputInfo?.frameRate)
+            val targetFps = (probeFps * 2.0f).coerceIn(24.0f, 120.0f)
 
             val hasAudio = probeHasAudio(input.inputUri)
             if (hasAudio) {
@@ -4277,12 +4270,16 @@ class ConversionService : Service() {
                 add("-vf")
                 add(filter)
             }
-            input.videoOptions.maxFrameRate
-                ?.takeIf { it > 0 }
-                ?.let { maxFrameRate ->
-                    add("-fpsmax")
-                    add(maxFrameRate.toString())
-                }
+            val isInterpolationActive =
+                input.videoOptions.frameInterpolation != VideoFrameInterpolationMode.Off
+            if (!isInterpolationActive) {
+                input.videoOptions.maxFrameRate
+                    ?.takeIf { it > 0 }
+                    ?.let { maxFrameRate ->
+                        add("-fpsmax")
+                        add(maxFrameRate.toString())
+                    }
+            }
             if (videoProfile.videoTag != null) {
                 add("-tag:v")
                 add(videoProfile.videoTag)
@@ -4295,6 +4292,7 @@ class ConversionService : Service() {
                     audioProfile = ffmpegAacAudioProfile(),
                     durationMs = durationMs,
                     forceReverse = input.videoOptions.compressionMode == VideoCompressionMode.Standard &&
+                        !isInterpolationActive &&
                         input.videoOptions.advanced.reverse
                 )
             }
@@ -4531,26 +4529,50 @@ class ConversionService : Service() {
         input: ConversionTaskInput,
         durationMs: Long?
     ): String? {
-        val advanced = if (input.videoOptions.compressionMode == VideoCompressionMode.Standard) {
+        val isOpticalFlowActive = input.category == ConversionMediaCategory.Video &&
+            !isVideoGifOutput(input) &&
+            input.videoOptions.frameInterpolation == VideoFrameInterpolationMode.OpticalFlow2x
+        val advanced = if (input.videoOptions.compressionMode == VideoCompressionMode.Standard && !isOpticalFlowActive) {
             input.videoOptions.advanced
         } else {
             VideoAdvancedOptions()
         }
         val filters = buildList {
-            addAll(ffmpegVideoRotationFiltersFor(advanced.rotation))
-            addAll(ffmpegVideoMirrorFiltersFor(advanced.mirror))
-            ffmpegVideoAspectFilterFor(advanced.aspectRatio)?.let { add(it) }
-            ffmpegVideoScaleFilterFor(input.videoOptions.maxShortSidePixels)?.let { add(it) }
-            if (advanced.reverse) add("reverse")
-            advanced.fadeInSeconds?.let { seconds ->
-                add("fade=t=in:st=0:d=${ffmpegSeconds(seconds.toDouble())}")
-            }
-            advanced.fadeOutSeconds?.let { seconds ->
-                durationMs?.let {
-                    add(
-                        "fade=t=out:st=${ffmpegFadeOutStartSeconds(it, seconds)}:" +
-                            "d=${ffmpegSeconds(seconds.toDouble())}"
-                    )
+            if (isOpticalFlowActive) {
+                val effectiveShortSide = input.videoOptions.maxShortSidePixels?.takeIf { it > 0 }
+                    ?: run {
+                        val sourceSize = input.inputInfo?.let { info ->
+                            val w = info.width ?: 0
+                            val h = info.height ?: 0
+                            if (w > 0 && h > 0) VideoSize(w, h) else null
+                        } ?: readVideoSize(input.inputUri)
+                        if (sourceSize == null || sourceSize.shortSide > 1080) 1080 else null
+                    }
+                ffmpegVideoScaleFilterFor(effectiveShortSide)?.let { add(it) }
+                val sourceFps = probeVideoFrameRate(input.inputUri, input.inputInfo?.frameRate)
+                val targetFps = (sourceFps * 2.0f).coerceIn(24.0f, 120.0f)
+                val targetFpsFormatted = if (targetFps % 1.0f == 0.0f) {
+                    targetFps.toInt().toString()
+                } else {
+                    String.format(Locale.US, "%.3f", targetFps).trimEnd('0').trimEnd('.')
+                }
+                add("minterpolate=fps=$targetFpsFormatted:mi_mode=mci:mc_mode=obmc:me_mode=bilat:me=epzs:mb_size=16:search_param=32:vsbmc=0:scd=fdiff:scd_threshold=10")
+            } else {
+                addAll(ffmpegVideoRotationFiltersFor(advanced.rotation))
+                addAll(ffmpegVideoMirrorFiltersFor(advanced.mirror))
+                ffmpegVideoAspectFilterFor(advanced.aspectRatio)?.let { add(it) }
+                ffmpegVideoScaleFilterFor(input.videoOptions.maxShortSidePixels)?.let { add(it) }
+                if (advanced.reverse) add("reverse")
+                advanced.fadeInSeconds?.let { seconds ->
+                    add("fade=t=in:st=0:d=${ffmpegSeconds(seconds.toDouble())}")
+                }
+                advanced.fadeOutSeconds?.let { seconds ->
+                    durationMs?.let {
+                        add(
+                            "fade=t=out:st=${ffmpegFadeOutStartSeconds(it, seconds)}:" +
+                                "d=${ffmpegSeconds(seconds.toDouble())}"
+                        )
+                    }
                 }
             }
         }
@@ -5061,8 +5083,15 @@ class ConversionService : Service() {
                 input.category == ConversionMediaCategory.Video &&
                     !isVideoGifOutput(input) &&
                     input.videoOptions.compressionMode != VideoCompressionMode.Standard
+            val interpolationActive =
+                input.category == ConversionMediaCategory.Video &&
+                    !isVideoGifOutput(input) &&
+                    input.videoOptions.frameInterpolation == VideoFrameInterpolationMode.OpticalFlow2x
             if (input.category == ConversionMediaCategory.Video && !isVideoGifOutput(input)) {
-                val videoAdvanced = if (presetCompressionActive) {
+                if (interpolationActive) {
+                    add("minterpolate")
+                }
+                val videoAdvanced = if (presetCompressionActive || interpolationActive) {
                     VideoAdvancedOptions()
                 } else {
                     input.videoOptions.advanced
@@ -5124,6 +5153,7 @@ class ConversionService : Service() {
                     (
                         input.category == ConversionMediaCategory.Video &&
                             input.videoOptions.compressionMode == VideoCompressionMode.Standard &&
+                            !interpolationActive &&
                             input.videoOptions.advanced.reverse
                         )
                 ) {
@@ -5677,6 +5707,71 @@ class ConversionService : Service() {
                 argument
             }
         }
+    }
+
+    private fun probeVideoFrameRate(
+        uri: Uri,
+        fallbackCaptureFps: Float? = null
+    ): Float {
+        val extractorFps = runCatching {
+            val extractor = MediaExtractor()
+            try {
+                extractor.setDataSource(this@ConversionService, uri, null)
+                for (i in 0 until extractor.trackCount) {
+                    val format = extractor.getTrackFormat(i)
+                    val mime = format.getString(MediaFormat.KEY_MIME) ?: ""
+                    if (mime.startsWith("video/")) {
+                        val fps = runCatching { format.getInteger(MediaFormat.KEY_FRAME_RATE).toFloat() }.getOrNull()
+                            ?: runCatching { format.getFloat(MediaFormat.KEY_FRAME_RATE) }.getOrNull()
+                        if (fps != null && fps in 1.0f..240.0f) {
+                            return@runCatching fps
+                        }
+                        extractor.selectTrack(i)
+                        val t0 = extractor.sampleTime
+                        if (t0 >= 0L && extractor.advance()) {
+                            val t1 = extractor.sampleTime
+                            val dtUs = t1 - t0
+                            if (dtUs in 4_000..100_000) {
+                                val calculatedFps = 1_000_000.0f / dtUs.toFloat()
+                                if (calculatedFps in 1.0f..240.0f) {
+                                    return@runCatching calculatedFps
+                                }
+                            }
+                        }
+                    }
+                }
+                null
+            } finally {
+                runCatching { extractor.release() }
+            }
+        }.getOrNull()
+        if (extractorFps != null && extractorFps in 1.0f..240.0f) {
+            Log.d(TAG, "MediaExtractor detected frameRate=$extractorFps from $uri")
+            return extractorFps
+        }
+
+        if (fallbackCaptureFps != null && fallbackCaptureFps in 1.0f..240.0f) {
+            Log.d(TAG, "Using cached capture frameRate=$fallbackCaptureFps for $uri")
+            return fallbackCaptureFps
+        }
+
+        val retrieverFps = runCatching {
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(this@ConversionService, uri)
+                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)
+                    ?.toFloatOrNull()
+                    ?.takeIf { it in 1.0f..240.0f }
+            } finally {
+                runCatching { retriever.release() }
+            }
+        }.getOrNull()
+        if (retrieverFps != null && retrieverFps in 1.0f..240.0f) {
+            Log.d(TAG, "MediaMetadataRetriever detected frameRate=$retrieverFps from $uri")
+            return retrieverFps
+        }
+
+        return 30.0f
     }
 
     private fun readVideoSize(uri: Uri): VideoSize? {

@@ -321,6 +321,7 @@
     <string name="text_option_value_one_file_per_input">每個輸入單獨輸出</string>
     <string name="text_option_value_one_pdf_per_frame">一幀一個 PDF</string>
     <string name="text_option_value_one_pdf_per_image">每張圖一個 PDF</string>
+    <string name="text_option_value_optical_flow_2_interpolation">光流 2× 補幀 (快速/離線)</string>
     <string name="text_option_value_original">原始</string>
     <string name="text_option_value_original_ratio">原圖比例</string>
     <string name="text_option_value_page_rasterization">頁面柵格化</string>
@@ -611,7 +612,8 @@
     <string name="ui_unknown_size">未知大小</string>
     <string name="ui_unknown_type">未知類型</string>
     <string name="ui_video_compression_mode">壓縮預設</string>
-    <string name="ui_video_frame_interpolation">AI 影片補幀（實驗性）</string>
+    <string name="ui_video_frame_interpolation">影片補幀</string>
+    <string name="ui_video_interpolation_optical_flow_summary">開啟 2× 快速光流補幀 (基於 FFmpeg 運動補償 MCI)。完全離線免下載模型。當前最高支援 1080p (2K/4K 已鎖定)，推薦 720p 體驗更佳。</string>
     <string name="ui_video_interpolation_summary">開啟 2× AI 補幀（實驗性），將影片幀率提升 1 倍 (如 30fps -&gt; 60fps)，使畫面更絲滑。受行動端 GPU 驅動與顯存調度影響，目前處於實驗階段</string>
     <string name="ui_video_merge_member">在影片合併中</string>
     <string name="ui_video_merge_note">按順序將多個影片拼接為一個完整影片。</string>

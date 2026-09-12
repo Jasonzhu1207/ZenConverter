@@ -330,6 +330,7 @@
     <string name="text_option_value_one_file_per_input">Un fichier par entrée</string>
     <string name="text_option_value_one_pdf_per_frame">Un PDF par image</string>
     <string name="text_option_value_one_pdf_per_image">Un PDF par image</string>
+    <string name="text_option_value_optical_flow_2_interpolation">Flux optique 2× (Rapide, Hors ligne)</string>
     <string name="text_option_value_original">Original</string>
     <string name="text_option_value_original_ratio">Format d\'origine</string>
     <string name="text_option_value_page_rasterization">Rastérisation de la page</string>
@@ -620,7 +621,8 @@
     <string name="ui_unknown_size">Taille inconnue</string>
     <string name="ui_unknown_type">Type inconnu</string>
     <string name="ui_video_compression_mode">Préréglage de compression</string>
-    <string name="ui_video_frame_interpolation">Interpolation d\'images par IA (fonctionnalité expérimentale)</string>
+    <string name="ui_video_frame_interpolation">Interpolation d\'images</string>
+    <string name="ui_video_interpolation_optical_flow_summary">Activez l\'interpolation 2× par flux optique rapide (FFmpeg MCI). Entièrement hors ligne. Prend actuellement en charge jusqu\'à 1080p (2K/4K verrouillés) ; 720p recommandé.</string>
     <string name="ui_video_interpolation_summary">Activez l\'interpolation 2× par IA (fonctionnalité expérimentale) pour doubler la fréquence d\'images vidéo (par exemple, de 30 images par seconde à 60 images par seconde) et obtenir des mouvements plus fluides. Les performances et la consommation de mémoire varient en fonction des pilotes GPU de l\'appareil.</string>
     <string name="ui_video_merge_member">Dans la fusion de vidéos</string>
     <string name="ui_video_merge_note">Fusionner plusieurs vidéos à la suite pour n\'en former qu\'une seule.</string>
