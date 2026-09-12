@@ -592,7 +592,7 @@
     <string name="ui_share_output_failed">Aucune application ne peut partager ce résultat</string>
     <string name="ui_skip">Ignorer</string>
     <string name="ui_sponsor_intro">Soutenez pour aider ZenConverter à rester maintenu, open source, gratuit et sans publicité.</string>
-    <string name="ui_sponsor_no_benefits">Le soutien ne donne accès à aucun service ni fonctionnalité supplémentaire.</string>
+    <string name="ui_sponsor_no_benefits">Soutenir ne donne accès à aucun service ni fonctionnalité supplémentaire.</string>
     <string name="ui_sponsor_title">Soutenir ZenConverter</string>
     <string name="ui_stable_update_channel">Stable</string>
     <string name="ui_start">Démarrer</string>
