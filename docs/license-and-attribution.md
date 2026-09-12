@@ -149,7 +149,7 @@ Transitive dependencies required when consuming the local AAR through
   `app/src/main/jniLibs/arm64-v8a/libzen_office2pdf.so` for `arm64-v8a` only.
 - Reproducible source: `native/office2pdf-jni`.
 - Upstream source dependency: `developer0hye/office2pdf` commit
-  `8f34766a1d1567b9d81d606e45ea690987a7c6ed`, release `v0.6.7`,
+  `e01828a5f07b52bebf4574859efaca4554b134d9`, release `v0.6.8`,
   Apache License 2.0. The local Apache text is at
   `third_party/licenses/office2pdf/Apache-2.0.txt`.
 - JNI binding dependency: `jni` version `0.21.1`, Apache-2.0 OR MIT.
@@ -159,8 +159,8 @@ Transitive dependencies required when consuming the local AAR through
 - Preferred native API: `convertBytesWithFontPaths`. It receives explicit font
   directories and assigns them to `office2pdf::config::ConvertOptions.font_paths`;
   this is required for Typst to search app-private CJK font files on Android.
-- Current binary: rebuilt on August 21, 2026, `32,823,808` bytes with SHA-256
-  `2b36e907b772514cf8b5840de338dc21ffd6100b5e3e8f0487b6cd77b2958d5b`.
+- Current binary: rebuilt on September 12, 2026, `34,550,576` bytes with SHA-256
+  `a0b842468887130ada81cdc782b4494e4cc921c9f805fd2e6805b7799f02da98`.
   It exports both `convertBytesWithFontPaths` and the legacy `convertBytes`
   entry. The legacy entry is retained only as a compatibility fallback for
   older local test binaries; it cannot use the bundled CJK font directory.
