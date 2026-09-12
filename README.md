@@ -71,16 +71,17 @@ work within the stated compatibility limits.
 
 | Area | Status | Notes |
 | --- | --- | --- |
-| Native Android shell | Done | Kotlin, Compose, Material 3, foreground service pipeline. |
+| Native Android shell | Done | Kotlin, Compose, Material 3, foreground service pipeline. Supports Material You dynamic colors, dark mode, an independent OLED black toggle, and in-app language switching (English, Simplified/Traditional Chinese, French). |
 | Task queue and results | Done | Direct share/open import, gallery and folder batch import, same-type batch option configuration, mixed-file routing, per-file target selection, file basics, per-task progress and failures, compact before/after conversion details, cancellation, output sharing, and best-effort opening of the result or its location. |
 | Video conversion & merge | Done | MP4 / MKV / MOV outputs use FFmpeg true video and audio re-encoding, including MP4-to-MP4. Video merge concatenates multiple video files with aspect-ratio normalization and audio stream handling. Codec, bitrate, resolution, frame rate, audio, draggable quick trimming & multi-point splitting, and advanced processing can be adjusted. Enabling a compression preset fixes the CRF, video quality/size strategy, and AAC audio bitrate. |
+| Video overview contact sheet | Done | Generates video contact sheets with 3×3, 3×4, 4×4, or 5×5 sample grids, with an optional metadata header and timestamp badges, exported as JPG or PNG. |
 | Video to animated GIF | Done | FFmpeg palette-based GIF export automatically uses at most the first 30 seconds, 30 fps, and 900 frames. The default short-side cap is 480 px, with 720 px and Original options. |
-| Audio extraction and conversion | Done | Video audio extraction and MP3 / M4A / WAV / FLAC / WMA targets all use FFmpeg true audio re-encoding. Applicable bitrate, sample-rate, channel, and encoder checks are wired. |
+| Audio extraction and conversion | Done | Video audio extraction and MP3 / M4A / WAV / FLAC / WMA / OPUS targets all use FFmpeg true audio re-encoding. Applicable bitrate, sample-rate, channel, and encoder checks are wired. OPUS automatically resamples to standard sample rates. |
 | Advanced audio/video processing | Stable | Video supports short reverse playback, fade, mirror, rotation, and frame fit/crop. Audio supports reverse playback, non-model `afftdn` noise reduction, fade, volume/mute, and echo. Reverse playback has conservative safety limits. |
 | Video frame interpolation | Experimental | 2× deep-learning frame multiplication via Tencent NCNN Vulkan and RIFE. Supports on-demand model download with SHA-256 verification and adaptive downscaling for 1080p+ inputs. Currently experimental due to mobile GPU driver and memory variance across chipsets. |
 | Image conversion | Stable / Beta | JPG / JPEG / JFIF / JPE, PNG, WEBP, GIF, HEIC / HEIF, and ICO inputs; JPG / JFIF / PNG / WEBP / ICO / PDF outputs. HEIC / HEIF remains device-decoder dependent. GIF can use its first frame or split frames into a folder. Metadata and animation timing are not copied. |
-| Image super-resolution | Stable | Bilinear algorithmic upscaling (2×, 3×, 4×) and Real-ESRGAN 4× deep-learning AI models (compact general, high-quality, and anime) via ONNX Runtime. Features on-demand model download with SHA-256 verification, tiled inference, and RAM-adaptive pixel budgets. |
-| Metadata safety | Stable | A separate privacy tool can inspect images/videos. JPG / JPEG / JFIF can be cleaned in place without re-encoding, with removed metadata backed up in app data for same-image restore. |
+| Image super-resolution | Stable | Bilinear algorithmic upscaling (2×, 3×, 4×) and Real-ESRGAN 4× deep-learning AI models (compact general, high-quality, and anime) via Tencent NCNN with Vulkan GPU acceleration. Features on-demand model download with SHA-256 verification, tiled inference, and RAM-adaptive pixel budgets. |
+| Metadata safety | Stable | A separate privacy tool can inspect images/videos (including JPG and HEIC/HEIF). JPG / JPEG / JFIF can be cleaned in place without re-encoding, with removed metadata backed up in app data for same-image restore. |
 | PDF tools | Stable | Image/PDF conversion, PDF merge, PDF compression with presets (High Quality, Balanced, Small File), selectable-text export to TXT / lightweight MD, plus password-based PDF encryption and decryption. No OCR or password cracking is included. |
 | Office conversion | Beta | DOCX / PPTX / XLSX can produce PDF, TXT, or lightweight MD locally. Chinese text renders with system CJK fonts or optional on-demand Noto CJK fonts, but layout fidelity is limited and source files are capped at 64 MiB. |
 | Font conversion | Stable | Mutual conversion between TTF, OTF, WOFF, and WOFF2 formats. WOFF2 compression/decompression uses bundled native Google woff2 (arm64); WOFF 1.0 uses pure Kotlin zlib. Automatically matches font flavors (.ttf / .otf). |
@@ -94,7 +95,7 @@ flowchart LR
     Configure["Configure each task"]
     Queue["Ready queue"]
     Service["Foreground service"]
-    Engine["FFmpeg / Native / Office / WOFF2 / ONNX"]
+    Engine["FFmpeg / Native / Office / WOFF2 / NCNN"]
     Output["Save output"]
 
     Pick --> Configure --> Queue --> Service --> Engine --> Output
@@ -107,7 +108,7 @@ the input, output, and selected mode:
 - `Native`: Android platform bitmap/PDF handling, PDFBox-Android (PDF merge/text/security), and pure-Kotlin engines (WOFF, LRC).
 - `Office`: Local first-pass Office rendering path for DOCX, PPTX, and XLSX.
 - `Font / WOFF2`: Native `google/woff2` engine for WOFF2 compression and decompression.
-- `AI Super-Resolution`: ONNX Runtime for local Real-ESRGAN neural network inference.
+- `AI Super-Resolution`: Tencent NCNN with Vulkan GPU acceleration for local Real-ESRGAN neural network inference.
 - `AI Frame Interpolation`: Tencent NCNN with Vulkan GPU compute acceleration for RIFE 2× video frame interpolation.
 - `SafeCache`: fallback for file providers that cannot provide usable descriptors.
 
