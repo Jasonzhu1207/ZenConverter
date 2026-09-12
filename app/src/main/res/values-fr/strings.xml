@@ -593,12 +593,12 @@
     <string name="ui_skip">Ignorer</string>
     <string name="ui_sponsor_intro">Soutenez pour aider ZenConverter à rester maintenu, open source, gratuit et sans publicité.</string>
     <string name="ui_sponsor_no_benefits">Le soutien ne donne accès à aucun service ni fonctionnalité supplémentaire.</string>
-    <string name="ui_sponsor_title">Soutener ZenConverter</string>
+    <string name="ui_sponsor_title">Soutenir ZenConverter</string>
     <string name="ui_stable_update_channel">Stable</string>
     <string name="ui_start">Démarrer</string>
     <string name="ui_storage_permission_required">Autorisez l\'accès au stockage ou choisissez un dossier.</string>
     <string name="ui_super_resolution">Super-résolution</string>
-    <string name="ui_support_development">Soutener le développement</string>
+    <string name="ui_support_development">Soutenir le développement</string>
     <string name="ui_tagline">Les fichiers restent sur cet appareil</string>
     <string name="ui_target">Format de sortie</string>
     <string name="ui_theme_mode">Mode sombre</string>
