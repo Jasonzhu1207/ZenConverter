@@ -1,6 +1,8 @@
-# ZenConverter
+<h1 align="center">ZenConverter</h1>
 
-**参与多语言翻译：** [英文底稿与翻译贡献指南](docs/translating.md)。无需了解 Kotlin 或安装 Android Studio。
+<p align="center">
+  <strong>私密、本地优先的 Android 文件转换器。</strong>
+</p>
 
 <p align="center">
   <a href="README.md">English</a> |
@@ -102,6 +104,10 @@ UI 不直接做转换。每个任务会根据输入、输出和所选模式选�
 [docs/technical-route.md](docs/technical-route.md)。
 
 开发环境说明见 [docs/development-setup.md](docs/development-setup.md)。
+
+## 多语言翻译
+
+欢迎参与 ZenConverter 的本地化与多语言翻译！无需了解 Kotlin 或安装 Android Studio。详情请参阅 [英文底稿与翻译贡献指南](docs/translating.md)。
 
 ## 许可证
 
