@@ -82,6 +82,9 @@ object ZenAnimations {
     const val HeroHeaderIconSize = 24f
     const val HeroCenterIconSize = 58f
 
+    const val SubpageEnterDuration = 180
+    const val SubpageExitDuration = 140
+
     // ── Helpers ─────────────────────────────────────────────────────
 
     /** Standard enter transition for inline panels (Settings, About, Metadata). */

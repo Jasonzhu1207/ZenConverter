@@ -637,4 +637,18 @@
     <plurals name="contact_sheet_audio_channel_count">
         <item quantity="other">%1$d 聲道</item>
     </plurals>
+    <string name="ui_settings_title">設定</string>
+    <string name="ui_settings_group_general">一般</string>
+    <string name="ui_settings_group_appearance">外觀與主題</string>
+    <string name="ui_settings_group_privacy_engines">工具與資源</string>
+    <string name="ui_settings_group_about_support">關於與支援</string>
+    <string name="ui_settings_language">應用語言</string>
+    <string name="ui_settings_offline_engines">模型與字型</string>
+    <string name="ui_settings_offline_engines_desc">管理影像與影片 AI 模型及文件字型</string>
+    <string name="ui_settings_metadata_security_desc">查看相片與影片中繼資料；清理和還原 JPEG 圖片中的敏感中繼資料</string>
+    <string name="ui_settings_check_updates">檢查版本更新</string>
+    <string name="ui_settings_quick_privacy_capsule">中繼資料工具</string>
+    <string name="ui_settings_back">返回</string>
+    <string name="ui_settings_release_notes">更新說明</string>
+    <string name="ui_settings_update_source">下載來源：GitHub Releases</string>
 </resources>

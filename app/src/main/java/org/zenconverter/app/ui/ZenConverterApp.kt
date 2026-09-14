@@ -8,7 +8,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.media.ExifInterface
 import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
@@ -20,7 +19,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -30,9 +28,15 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import org.zenconverter.app.ui.settings.SettingsScreen
+import org.zenconverter.app.ui.settings.OfflineEnginesScreen
+import org.zenconverter.app.ui.settings.MetadataSecurityScreen
+import org.zenconverter.app.ui.settings.SettingsPage
+import org.zenconverter.app.ui.settings.SubpageHost
+import org.zenconverter.app.ui.settings.MountedHome
+import org.zenconverter.app.ui.settings.UpdateStateHolder
+import org.zenconverter.app.ui.settings.InsetGroupCard
 import org.zenconverter.app.ui.theme.ZenAnimations
 import org.zenconverter.app.ui.theme.bounceClick
 import androidx.compose.foundation.BorderStroke
@@ -76,34 +80,22 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image as BrandImage
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AudioFile
-import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.BrightnessAuto
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
-import androidx.compose.material.icons.rounded.Contrast
-import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Description
-import androidx.compose.material.icons.rounded.Download
-import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FontDownload
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Image
-import androidx.compose.material.icons.rounded.Language
-import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.Lock
-import androidx.compose.material.icons.rounded.MoreHoriz
-import androidx.compose.material.icons.rounded.OpenInNew
-import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PictureAsPdf
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PrivacyTip
@@ -120,8 +112,6 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
@@ -140,7 +130,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -169,13 +158,14 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.Placeable
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
@@ -216,10 +206,7 @@ import org.zenconverter.app.conversion.VideoMotionBlurMode
 import org.zenconverter.app.conversion.VideoRotationMode
 import org.zenconverter.app.conversion.ContactSheetGrid
 import org.zenconverter.app.conversion.VideoContactSheetOptions
-import org.zenconverter.app.BuildConfig
-import org.zenconverter.app.metadata.MetadataBackupInfo
 import org.zenconverter.app.metadata.MetadataInspection
-import org.zenconverter.app.metadata.MetadataMessageKey
 import org.zenconverter.app.metadata.MetadataStatusMessage
 import org.zenconverter.app.metadata.MetadataTargetKind
 import org.zenconverter.app.metadata.MetadataToolState
@@ -229,31 +216,14 @@ import org.zenconverter.app.model.EsrganModelUiState
 import org.zenconverter.app.model.RifeModelManager
 import org.zenconverter.app.model.RifeModelSpec
 import org.zenconverter.app.model.RifeModelUiState
-import org.zenconverter.app.office.OfficeFontManager
 import org.zenconverter.app.office.OfficeFontSpec
 import org.zenconverter.app.office.OfficeFontUiState
 import org.zenconverter.app.settings.AppPreferences
-import org.zenconverter.app.updates.ApkInstaller
-import org.zenconverter.app.updates.ApkOpenResult
-import org.zenconverter.app.updates.ApkUpdateDownloader
-import org.zenconverter.app.updates.DownloadProgress
-import org.zenconverter.app.updates.DownloadedUpdate
-import org.zenconverter.app.updates.GitHubUpdateChecker
 import org.zenconverter.app.updates.InstalledAppVersion
-import org.zenconverter.app.updates.UpdateChannel
-import org.zenconverter.app.updates.UpdateCheckResult
-import org.zenconverter.app.updates.UpdateFailureReason
-import org.zenconverter.app.updates.UpdateRelease
 import org.zenconverter.app.R
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
-import java.text.DateFormat
-import java.util.Date
 import java.util.Locale
 import org.zenconverter.app.i18n.toLocalizedDoubleOrNull
 import org.zenconverter.app.i18n.LocalizedText
-import org.zenconverter.app.i18n.localizedFailure
 import org.zenconverter.app.i18n.AppLanguages
 import org.zenconverter.app.i18n.LanguageOption
 import androidx.compose.ui.platform.LocalConfiguration
@@ -474,23 +444,6 @@ private data class SupportTarget(
     val type: SupportTargetType
 )
 
-private sealed interface UpdateUiState {
-    object Idle : UpdateUiState
-    object Checking : UpdateUiState
-    data class Available(val release: UpdateRelease) : UpdateUiState
-    data class UpToDate(val latest: UpdateRelease) : UpdateUiState
-    data class Failed(
-        val reason: UpdateFailureReason,
-        val detail: LocalizedText?
-    ) : UpdateUiState
-}
-
-private sealed interface UpdateDownloadUiState {
-    object Idle : UpdateDownloadUiState
-    data class Downloading(val progress: DownloadProgress) : UpdateDownloadUiState
-    data class Completed(val downloadedUpdate: DownloadedUpdate) : UpdateDownloadUiState
-    data class Failed(val message: LocalizedText?) : UpdateDownloadUiState
-}
 
 private data class VideoAdvancedUiState(
     val expanded: Boolean,
@@ -513,7 +466,16 @@ private data class AudioAdvancedUiState(
     val noiseReduction: String
 )
 
-private const val ZENCONVERTER_REPOSITORY_URL = "https://github.com/Jasonzhu1207/ZenConverter"
+internal enum class AppScreen {
+    Home,
+    Settings,
+    OfflineEngines,
+    MetadataSecurity,
+    Help,
+    PrivacyPolicy
+}
+
+internal const val ZENCONVERTER_REPOSITORY_URL = "https://github.com/Jasonzhu1207/ZenConverter"
 private const val AFDIAN_URL = "https://afdian.com/a/Jason1207"
 private const val USDT_TRC20_ADDRESS = "TL88m9Wfdy4dAGhkLQ5jn9g8kZBTkRKrwf"
 private const val BTC_ADDRESS = "bc1p4s8e4pgwse4336vtwuqrxs58jdwkyaqcxtg0txg2xjzxpls07zjsjamy77"
@@ -523,12 +485,8 @@ private val HomeHorizontalPadding = 20.dp
 private val HomeTopPadding = 16.dp
 private val HomeBottomPadding = 16.dp
 private val HeaderContentGap = 12.dp
-private val HeaderActionSpacing = 6.dp
 private val HeaderButtonSize = 44.dp
 private val HeaderAddSlotWidth = 50.dp
-private val EmptyPanelEntryHeight = 360.dp
-private val EmptyHeroButtonOffsetY = (-36).dp
-private val EmptyHeroTextOffsetY = 82.dp
 
 private val supportTargets = listOf(
     SupportTarget("Afdian", AFDIAN_URL, SupportTargetType.Link),
@@ -1135,10 +1093,33 @@ private fun ZenConverterContent(
     onStartConversion: () -> Unit,
     onCancelConversion: () -> Unit
 ) {
-    var activeHeaderPanel by rememberSaveable { mutableStateOf<HeaderPanel?>(null) }
+    var screenStack by rememberSaveable { mutableStateOf(listOf(AppScreen.Home.name)) }
+    val currentScreen = remember(screenStack) {
+        AppScreen.entries.firstOrNull { it.name == screenStack.lastOrNull() } ?: AppScreen.Home
+    }
+
+    var returning by remember { mutableStateOf(false) }
+    val updateContext = LocalContext.current.applicationContext
+    val updateScope = rememberCoroutineScope()
+    val updateState = remember(updateContext, updateScope) {
+        UpdateStateHolder(updateContext, installedAppVersion(updateContext), updateScope)
+    }
+
+    fun navigateTo(screen: AppScreen) {
+        if (screenStack.lastOrNull() != screen.name) {
+            returning = false
+            screenStack = screenStack + screen.name
+        }
+    }
+
+    fun navigateBack() {
+        if (screenStack.size > 1) {
+            returning = true
+            screenStack = screenStack.dropLast(1)
+        }
+    }
+
     var showSupport by remember { mutableStateOf(false) }
-    var showPrivacyPolicy by rememberSaveable { mutableStateOf(false) }
-    var showHelpScreen by rememberSaveable { mutableStateOf(false) }
     var showImportSourceSheet by rememberSaveable { mutableStateOf(false) }
     var showAlbumSourceDialog by rememberSaveable { mutableStateOf(false) }
     var queueMessage by remember { mutableStateOf<LocalizedText?>(null) }
@@ -1172,476 +1153,379 @@ private fun ZenConverterContent(
 
     val statusMessage = conversionSummary ?: queueMessage
     var headerHeightPx by remember { mutableStateOf(0) }
-    var renderedHeaderPanel by remember { mutableStateOf<HeaderPanel?>(null) }
-    val headerPanelVisibleState = remember { MutableTransitionState(false) }
+    var homeTopInRoot by remember { mutableStateOf(0f) }
+    var emptyHeroTopInRoot by remember { mutableStateOf<Float?>(null) }
 
-    LaunchedEffect(activeHeaderPanel) {
-        if (activeHeaderPanel != null) {
-            renderedHeaderPanel = activeHeaderPanel
-            homeListState.scrollToItem(0)
-        }
-        headerPanelVisibleState.targetState = activeHeaderPanel != null
+    val isSystemDark = isSystemInDarkTheme()
+    val isDark = when (themeModeOption) {
+        ThemeModeOption.System -> isSystemDark
+        ThemeModeOption.Light -> false
+        ThemeModeOption.Dark -> true
     }
 
-    BackHandler(enabled = showPrivacyPolicy || showHelpScreen) {
-        showPrivacyPolicy = false
-        showHelpScreen = false
+    BackHandler(enabled = screenStack.size > 1) {
+        navigateBack()
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        NoOverscroll {
-            Scaffold(
-                containerColor = MaterialTheme.colorScheme.background,
-                contentWindowInsets = WindowInsets.safeDrawing
-            ) { contentPadding ->
-            BoxWithConstraints(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(contentPadding)
-                    .consumeWindowInsets(contentPadding)
-            ) {
-                val density = LocalDensity.current
-                val headerHeight = with(density) { headerHeightPx.toDp() }
-                val headerAvailableWidth = headerContentWidth(maxWidth)
-                val listTopPadding = HomeTopPadding + headerHeight + HeaderContentGap
-                val hasFiles = queuedFiles.isNotEmpty()
-                val keepPanelSlot = activeHeaderPanel != null ||
-                    headerPanelVisibleState.currentState ||
-                    headerPanelVisibleState.targetState
-                val availableEmptyEntryHeight = run {
-                    val available = maxHeight - listTopPadding - HomeBottomPadding
-                    if (available > 280.dp) available else 280.dp
-                }
-                val emptyEntryHeightTarget = if (!hasFiles && activeHeaderPanel != null) {
-                    EmptyPanelEntryHeight
-                } else {
-                    availableEmptyEntryHeight
-                }
-                val emptyLayoutSpring = if (activeHeaderPanel != null) {
-                    ZenAnimations.PanelEnterDpSpring
-                } else {
-                    ZenAnimations.PanelExitDpSpring
-                }
-                val emptyEntryHeight by animateDpAsState(
-                    targetValue = emptyEntryHeightTarget,
-                    animationSpec = emptyLayoutSpring,
-                    label = "emptyEntryHeight"
-                )
-
-                val morphProgress by animateFloatAsState(
-                    targetValue = if (hasFiles) 1f else 0f,
-                    animationSpec = ZenAnimations.HeroMorphSpring,
-                    label = "heroMorphProgress"
-                )
-                val showEmptyStateItem = queuedFiles.isEmpty() || morphProgress < 1f
-                val emptyPanelGap by animateDpAsState(
-                    targetValue = if (activeHeaderPanel != null) HeaderContentGap else 0.dp,
-                    animationSpec = emptyLayoutSpring,
-                    label = "emptyPanelGap"
-                )
-
-                LazyColumn(
-                    state = homeListState,
+        MountedHome(visible = currentScreen == AppScreen.Home) {
+            NoOverscroll {
+                Scaffold(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    contentWindowInsets = WindowInsets.safeDrawing,
+                    modifier = Modifier.fillMaxSize()
+                ) { contentPadding ->
+                BoxWithConstraints(
                     modifier = Modifier
-                        .fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = HomeHorizontalPadding,
-                        top = listTopPadding,
-                        end = HomeHorizontalPadding,
-                        bottom = HomeBottomPadding
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .fillMaxSize()
+                        .padding(contentPadding)
+                        .consumeWindowInsets(contentPadding)
+                        .onGloballyPositioned { homeTopInRoot = it.positionInRoot().y }
                 ) {
-                    if (keepPanelSlot || showEmptyStateItem) {
-                        item(key = "top-content") {
-                            Column {
-                                AnimatedVisibility(
-                                    visibleState = headerPanelVisibleState,
-                                    enter = ZenAnimations.PanelEnter,
-                                    exit = ZenAnimations.PanelExit
-                                ) {
-                                    AnimatedContent(
-                                        targetState = renderedHeaderPanel,
-                                        transitionSpec = {
-                                            (
-                                                slideInVertically(
-                                                    animationSpec = tween(
-                                                        durationMillis = ZenAnimations.PanelSwitchDuration,
-                                                        easing = ZenAnimations.StrongEaseInOut
-                                                    ),
-                                                    initialOffsetY = { fullHeight -> fullHeight / 12 }
-                                                ) + fadeIn(
-                                                    animationSpec = tween(
-                                                        durationMillis = ZenAnimations.ContentFadeDuration,
-                                                        easing = ZenAnimations.StrongEaseOut
-                                                    )
-                                                )
-                                            ) togetherWith (
-                                                slideOutVertically(
-                                                    animationSpec = tween(
-                                                        durationMillis = ZenAnimations.PanelSwitchDuration,
-                                                        easing = ZenAnimations.StrongEaseInOut
-                                                    ),
-                                                    targetOffsetY = { fullHeight -> -fullHeight / 12 }
-                                                ) + fadeOut(
-                                                    animationSpec = tween(
-                                                        durationMillis = ZenAnimations.ContentFadeOutDuration,
-                                                        easing = ZenAnimations.StrongEaseOut
-                                                    )
-                                                )
-                                            ) using SizeTransform(
-                                                clip = false,
-                                                sizeAnimationSpec = { _, _ ->
-                                                    tween(
-                                                        durationMillis = ZenAnimations.PanelSwitchDuration,
-                                                        easing = ZenAnimations.StrongEaseInOut
-                                                    )
-                                                }
-                                            )
-                                        },
-                                        label = "HeaderPanelSwitch"
-                                    ) { panel ->
-                                        when (panel) {
-                                            HeaderPanel.Settings -> SettingsPanel(
-                                                texts = texts,
-                                                selectedAccent = accent,
-                                                selectedThemeMode = themeModeOption,
-                                                isOledDark = isOledDark,
-                                                selectedLanguage = languageOption,
-                                                outputLocationMode = outputLocationMode,
-                                                outputDirectory = outputDirectory,
-                                                esrganModelStates = esrganModelStates,
-                                                rifeModelStates = rifeModelStates,
-                                                officeFontStates = officeFontStates,
-                                                onAccentSelected = onAccentSelected,
-                                                onThemeModeSelected = onThemeModeSelected,
-                                                onOledDarkChange = onOledDarkChange,
-                                                onLanguageSelected = onLanguageSelected,
-                                                onOutputLocationModeChange = onOutputLocationModeChange,
-                                                onPickOutputDirectory = onPickOutputDirectory,
-                                                onDownloadEsrganModel = onDownloadEsrganModel,
-                                                onCancelEsrganModelDownload = onCancelEsrganModelDownload,
-                                                onDownloadRifeModel = onDownloadRifeModel,
-                                                onCancelRifeModelDownload = onCancelRifeModelDownload,
-                                                onDownloadOfficeFont = onDownloadOfficeFont,
-                                                onCancelOfficeFontDownload = onCancelOfficeFontDownload,
-                                                onDeleteOfficeFont = onDeleteOfficeFont
-                                            )
-                                            HeaderPanel.About -> AboutPanel(
-                                                texts = texts,
-                                                onShowPrivacyPolicy = { showPrivacyPolicy = true },
-                                                onShowHelp = { showHelpScreen = true },
-                                                onShowSupport = { showSupport = true }
-                                            )
-                                            HeaderPanel.MetadataSecurity -> MetadataSecurityPanel(
-                                                texts = texts,
-                                                state = metadataToolState,
-                                                onPickImage = onPickMetadataImage,
-                                                onPickVideo = onPickMetadataVideo,
-                                                onClean = onCleanMetadata,
-                                                onRestore = onRestoreMetadata
-                                            )
-                                            null -> Unit
-                                        }
-                                    }
-                                }
-
-                                if (showEmptyStateItem) {
-                                    Spacer(modifier = Modifier.height(emptyPanelGap))
-                                    EmptyAddState(
-                                        texts = texts,
-                                        height = emptyEntryHeight,
-                                        showButton = queuedFiles.isEmpty(),
-                                        onPickFiles = {
-                                            openMenuId = null
-                                            queueMessage = null
-                                            showImportSourceSheet = true
-                                        },
-                                        modifier = Modifier.graphicsLayer {
-                                            alpha = 1f - morphProgress
-                                        }
-                                    )
-                                }
-                            }
-                        }
+                    val density = LocalDensity.current
+                    val headerHeight = with(density) { headerHeightPx.toDp() }
+                    val headerAvailableWidth = headerContentWidth(maxWidth)
+                    val listTopPadding = HomeTopPadding + headerHeight + HeaderContentGap
+                    val hasFiles = queuedFiles.isNotEmpty()
+                    val availableEmptyEntryHeight = run {
+                        val available = maxHeight - listTopPadding - HomeBottomPadding
+                        if (available > 280.dp) available else 280.dp
                     }
+                    val emptyEntryHeight = availableEmptyEntryHeight
 
-                    if (queuedFiles.isNotEmpty() && !isConversionRunning) {
-                        item(key = "batch-settings") {
-                            BatchSettingsPanel(
-                                texts = texts,
-                                files = queuedFiles,
-                                supportedVideoMimeTypes = supportedVideoMimeTypes,
-                                availableAiModels = availableAiModels,
-                                isRifeModelDownloaded = isRifeModelDownloaded,
-                                openMenuId = openMenuId,
-                                onOpenMenuChange = { openMenuId = it },
-                                onUpdateFiles = onUpdateQueuedFiles
-                            )
-                        }
-                    }
-                    if (queuedFiles.isNotEmpty()) {
-                        item(key = "pdf-merge-groups") {
-                            PdfMergeGroupsPanel(
-                                texts = texts,
-                                files = queuedFiles,
-                                groups = pdfMergeGroups,
-                                taskProgress = taskProgressById,
-                                canEdit = !isConversionRunning,
-                                openMenuId = openMenuId,
-                                onOpenMenuChange = { openMenuId = it },
-                                onCreateGroup = onCreatePdfMergeGroup,
-                                onUpdateGroup = onUpdatePdfMergeGroup,
-                                onRemoveGroup = onRemovePdfMergeGroup,
-                                onAddFileToGroup = onAddFileToPdfMergeGroup,
-                                onRemoveFileFromGroup = onRemoveFileFromPdfMergeGroup
-                            )
-                        }
-                        item(key = "video-merge-groups") {
-                            VideoMergeGroupsPanel(
-                                texts = texts,
-                                files = queuedFiles,
-                                groups = videoMergeGroups,
-                                taskProgress = taskProgressById,
-                                canEdit = !isConversionRunning,
-                                openMenuId = openMenuId,
-                                onOpenMenuChange = { openMenuId = it },
-                                onCreateGroup = onCreateVideoMergeGroup,
-                                onUpdateGroup = onUpdateVideoMergeGroup,
-                                onRemoveGroup = onRemoveVideoMergeGroup,
-                                onAddFileToGroup = onAddFileToVideoMergeGroup,
-                                onRemoveFileFromGroup = onRemoveFileFromVideoMergeGroup
-                            )
-                        }
-                    }
+                    val morphProgress by animateFloatAsState(
+                        targetValue = if (hasFiles) 1f else 0f,
+                        animationSpec = ZenAnimations.HeroMorphSpring,
+                        label = "heroMorphProgress"
+                    )
+                    val showEmptyStateItem = queuedFiles.isEmpty() || morphProgress < 1f
 
-                    if (queuedFiles.isNotEmpty()) {
-                        item(key = "queue-actions") {
-                            QueueActions(
-                                texts = texts,
-                                isRunning = isConversionRunning,
-                                onStart = {
-                                    openMenuId = null
-                                    queueMessage = null
-                                    onStartConversion()
-                                },
-                                onCancel = {
-                                    openMenuId = null
-                                    queueMessage = null
-                                    if (isConversionRunning) {
-                                        onCancelConversion()
-                                    } else {
-                                        onClearQueue()
-                                    }
-                                }
-                            )
-                        }
-
-                        item(key = "queue-header") {
-                            QueueHeader(
-                                texts = texts,
-                                fileCount = queuedFiles.size
-                            )
-                        }
-                    }
-
-                    statusMessage?.let { message ->
-                        item(key = "status-line") {
-                            StatusLine(text = texts.summaryMessage(message))
-                        }
-                    }
-
-                    if (queuedFiles.isNotEmpty()) {
-                        val pdfGroupByFileId = pdfMergeGroups.flatMap { group ->
-                            group.memberFileIds.map { id -> id to group }
-                        }.toMap()
-                        val videoGroupByFileId = videoMergeGroups.flatMap { group ->
-                            group.memberFileIds.map { id -> id to group }
-                        }.toMap()
-                        items(queuedFiles, key = { it.id }) { file ->
-                            val effectiveProgress = taskProgressById[file.id]
-                                ?: pdfGroupByFileId[file.id]?.let { taskProgressById[it.id] }
-                                ?: videoGroupByFileId[file.id]?.let { taskProgressById[it.id] }
-                            FileRow(
-                                modifier = Modifier.animateItem(),
-                                texts = texts,
-                                file = file,
-                                progress = effectiveProgress,
-                                canEdit = !isConversionRunning,
-                                supportedVideoMimeTypes = supportedVideoMimeTypes,
-                                availableAiModels = availableAiModels,
-                                isRifeModelDownloaded = isRifeModelDownloaded,
-                                openMenuId = openMenuId,
-                                optionsExpanded = expandedFileId == file.id,
-                                groupedInPdfMerge = file.id in pdfGroupedIds,
-                                groupedInVideoMerge = file.id in videoGroupedIds,
-                                onOpenMenuChange = { openMenuId = it },
-                                onUpdateFile = onUpdateQueuedFile,
-                                onOptionsExpandedChange = { expanded ->
-                                    expandedFileId = if (expanded) file.id else null
-                                    if (!expanded) openMenuId = null
-                                },
-                                onRemove = { onRemoveFile(file.id) }
-                            )
-                        }
-                    }
-                }
-
-                // Header stays outside the LazyColumn so it remains pinned while content scrolls.
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.background)
-                        .padding(
+                    LazyColumn(
+                        state = homeListState,
+                        modifier = Modifier
+                            .fillMaxSize(),
+                        contentPadding = PaddingValues(
                             start = HomeHorizontalPadding,
-                            top = HomeTopPadding,
+                            top = listTopPadding,
                             end = HomeHorizontalPadding,
-                            bottom = HeaderContentGap
-                        )
-                ) {
-                    Header(
-                        texts = texts,
-                        activeHeaderPanel = activeHeaderPanel,
-                        hasFiles = hasFiles,
-                        onTogglePanel = { panel ->
-                            openMenuId = null
-                            activeHeaderPanel = if (activeHeaderPanel == panel) null else panel
-                        },
-                        modifier = Modifier.onSizeChanged { size ->
-                            if (headerHeightPx != size.height) {
-                                headerHeightPx = size.height
+                            bottom = HomeBottomPadding
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        if (showEmptyStateItem) {
+                            item(key = "empty-state") {
+                                EmptyAddState(
+                                    texts = texts,
+                                    height = emptyEntryHeight,
+                                    showButton = queuedFiles.isEmpty() && morphProgress <= 0f,
+                                    onPickFiles = {
+                                        openMenuId = null
+                                        queueMessage = null
+                                        showImportSourceSheet = true
+                                    },
+                                    onOpenMetadataSecurity = {
+                                        navigateTo(AppScreen.MetadataSecurity)
+                                    },
+                                    onHeroTopChanged = { emptyHeroTopInRoot = it },
+                                    modifier = Modifier.graphicsLayer {
+                                        alpha = 1f - morphProgress
+                                    }
+                                )
                             }
                         }
+
+                        if (queuedFiles.isNotEmpty() && !isConversionRunning) {
+                            item(key = "batch-settings") {
+                                BatchSettingsPanel(
+                                    texts = texts,
+                                    files = queuedFiles,
+                                    supportedVideoMimeTypes = supportedVideoMimeTypes,
+                                    availableAiModels = availableAiModels,
+                                    isRifeModelDownloaded = isRifeModelDownloaded,
+                                    openMenuId = openMenuId,
+                                    onOpenMenuChange = { openMenuId = it },
+                                    onUpdateFiles = onUpdateQueuedFiles
+                                )
+                            }
+                        }
+                        if (queuedFiles.isNotEmpty()) {
+                            item(key = "pdf-merge-groups") {
+                                PdfMergeGroupsPanel(
+                                    texts = texts,
+                                    files = queuedFiles,
+                                    groups = pdfMergeGroups,
+                                    taskProgress = taskProgressById,
+                                    canEdit = !isConversionRunning,
+                                    openMenuId = openMenuId,
+                                    onOpenMenuChange = { openMenuId = it },
+                                    onCreateGroup = onCreatePdfMergeGroup,
+                                    onUpdateGroup = onUpdatePdfMergeGroup,
+                                    onRemoveGroup = onRemovePdfMergeGroup,
+                                    onAddFileToGroup = onAddFileToPdfMergeGroup,
+                                    onRemoveFileFromGroup = onRemoveFileFromPdfMergeGroup
+                                )
+                            }
+                            item(key = "video-merge-groups") {
+                                VideoMergeGroupsPanel(
+                                    texts = texts,
+                                    files = queuedFiles,
+                                    groups = videoMergeGroups,
+                                    taskProgress = taskProgressById,
+                                    canEdit = !isConversionRunning,
+                                    openMenuId = openMenuId,
+                                    onOpenMenuChange = { openMenuId = it },
+                                    onCreateGroup = onCreateVideoMergeGroup,
+                                    onUpdateGroup = onUpdateVideoMergeGroup,
+                                    onRemoveGroup = onRemoveVideoMergeGroup,
+                                    onAddFileToGroup = onAddFileToVideoMergeGroup,
+                                    onRemoveFileFromGroup = onRemoveFileFromVideoMergeGroup
+                                )
+                            }
+                        }
+
+                        if (queuedFiles.isNotEmpty()) {
+                            item(key = "queue-actions") {
+                                QueueActions(
+                                    texts = texts,
+                                    isRunning = isConversionRunning,
+                                    onStart = {
+                                        openMenuId = null
+                                        queueMessage = null
+                                        onStartConversion()
+                                    },
+                                    onCancel = {
+                                        openMenuId = null
+                                        queueMessage = null
+                                        if (isConversionRunning) {
+                                            onCancelConversion()
+                                        } else {
+                                            onClearQueue()
+                                        }
+                                    }
+                                )
+                            }
+
+                            item(key = "queue-header") {
+                                QueueHeader(
+                                    texts = texts,
+                                    fileCount = queuedFiles.size
+                                )
+                            }
+                        }
+
+                        statusMessage?.let { message ->
+                            item(key = "status-line") {
+                                StatusLine(text = texts.summaryMessage(message))
+                            }
+                        }
+
+                        if (queuedFiles.isNotEmpty()) {
+                            val pdfGroupByFileId = pdfMergeGroups.flatMap { group ->
+                                group.memberFileIds.map { id -> id to group }
+                            }.toMap()
+                            val videoGroupByFileId = videoMergeGroups.flatMap { group ->
+                                group.memberFileIds.map { id -> id to group }
+                            }.toMap()
+                            items(queuedFiles, key = { it.id }) { file ->
+                                val effectiveProgress = taskProgressById[file.id]
+                                    ?: pdfGroupByFileId[file.id]?.let { taskProgressById[it.id] }
+                                    ?: videoGroupByFileId[file.id]?.let { taskProgressById[it.id] }
+                                FileRow(
+                                    modifier = Modifier.animateItem(),
+                                    texts = texts,
+                                    file = file,
+                                    progress = effectiveProgress,
+                                    canEdit = !isConversionRunning,
+                                    supportedVideoMimeTypes = supportedVideoMimeTypes,
+                                    availableAiModels = availableAiModels,
+                                    isRifeModelDownloaded = isRifeModelDownloaded,
+                                    openMenuId = openMenuId,
+                                    optionsExpanded = expandedFileId == file.id,
+                                    groupedInPdfMerge = file.id in pdfGroupedIds,
+                                    groupedInVideoMerge = file.id in videoGroupedIds,
+                                    onOpenMenuChange = { openMenuId = it },
+                                    onUpdateFile = onUpdateQueuedFile,
+                                    onOptionsExpandedChange = { expanded ->
+                                        expandedFileId = if (expanded) file.id else null
+                                        if (!expanded) openMenuId = null
+                                    },
+                                    onRemove = { onRemoveFile(file.id) }
+                                )
+                            }
+                        }
+                    }
+
+                    // Header stays outside the LazyColumn so it remains pinned while content scrolls.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.background)
+                            .padding(
+                                start = HomeHorizontalPadding,
+                                top = HomeTopPadding,
+                                end = HomeHorizontalPadding,
+                                bottom = HeaderContentGap
+                            )
+                    ) {
+                        Header(
+                            texts = texts,
+                            hasFiles = hasFiles,
+                            isSettingsActive = currentScreen == AppScreen.Settings,
+                            onOpenSettings = {
+                                openMenuId = null
+                                if (currentScreen == AppScreen.Settings) {
+                                    navigateBack()
+                                } else {
+                                    navigateTo(AppScreen.Settings)
+                                }
+                            },
+                            modifier = Modifier.onSizeChanged { size ->
+                                if (headerHeightPx != size.height) {
+                                    headerHeightPx = size.height
+                                }
+                            }
+                        )
+                    }
+
+                    val rightGroupWidth = HeaderButtonSize
+
+                    val currentHeroSize = ZenAnimations.HeroCenterSize +
+                        (ZenAnimations.HeroHeaderSize - ZenAnimations.HeroCenterSize) * morphProgress
+
+                    val heroTargetX = HomeHorizontalPadding + headerAvailableWidth - rightGroupWidth - HeaderAddSlotWidth + (HeaderAddSlotWidth - HeaderButtonSize) / 2
+                    val heroX = androidx.compose.ui.unit.lerp(
+                        (maxWidth - currentHeroSize.dp) / 2,
+                        heroTargetX,
+                        morphProgress
                     )
-                }
 
-                val rightGroupWidth = headerActionsWidth(
-                    availableWidth = headerAvailableWidth,
-                    hasFiles = hasFiles
-                )
-
-                val currentHeroSize = ZenAnimations.HeroCenterSize +
-                    (ZenAnimations.HeroHeaderSize - ZenAnimations.HeroCenterSize) * morphProgress
-
-                val heroX = androidx.compose.ui.unit.lerp(
-                    (maxWidth - currentHeroSize.dp) / 2,
-                    HomeHorizontalPadding + headerAvailableWidth - rightGroupWidth - HeaderAddSlotWidth,
-                    morphProgress
-                )
-
-                val emptyCenterY = listTopPadding +
-                    (emptyEntryHeight - currentHeroSize.dp) / 2 - 36.dp
-                val heroY = androidx.compose.ui.unit.lerp(
-                    emptyCenterY,
-                    HomeTopPadding,
-                    morphProgress
-                )
-
-                if (hasFiles || morphProgress > 0f) {
-                    HeroAddButton(
-                        morphProgress = morphProgress,
-                        texts = texts,
-                        enabled = !isConversionRunning,
-                        onPickFiles = {
-                            openMenuId = null
-                            queueMessage = null
-                            showImportSourceSheet = true
-                        },
-                        modifier = Modifier.offset(x = heroX, y = heroY)
+                    val emptyCenterY = emptyHeroTopInRoot?.let { top ->
+                        with(density) { (top - homeTopInRoot).toDp() }
+                    } ?: (listTopPadding + (emptyEntryHeight - currentHeroSize.dp) / 2 - 36.dp)
+                    val heroY = androidx.compose.ui.unit.lerp(
+                        emptyCenterY,
+                        HomeTopPadding,
+                        morphProgress
                     )
+
+                    if (hasFiles || morphProgress > 0f) {
+                        HeroAddButton(
+                            morphProgress = morphProgress,
+                            texts = texts,
+                            enabled = !isConversionRunning,
+                            onPickFiles = {
+                                openMenuId = null
+                                queueMessage = null
+                                showImportSourceSheet = true
+                            },
+                            modifier = Modifier.offset(x = heroX, y = heroY)
+                        )
+                    }
                 }
+            }
+
+            if (showSupport) {
+                SupportDialog(
+                    texts = texts,
+                    onDismiss = { showSupport = false }
+                )
+            }
+
+            if (showImportSourceSheet) {
+                ImportSourceSheet(
+                    texts = texts,
+                    onDismiss = { showImportSourceSheet = false },
+                    onPickAlbum = {
+                        showImportSourceSheet = false
+                        showAlbumSourceDialog = true
+                    },
+                    onPickFolder = {
+                        showImportSourceSheet = false
+                        onPickFolder()
+                    },
+                    onPickFiles = {
+                        showImportSourceSheet = false
+                        onPickFiles()
+                    }
+                )
+            }
+
+            if (showAlbumSourceDialog) {
+                AlbumSourceDialog(
+                    texts = texts,
+                    onDismiss = { showAlbumSourceDialog = false },
+                    onPickImages = {
+                        showAlbumSourceDialog = false
+                        onPickAlbumImages()
+                    },
+                    onPickVideos = {
+                        showAlbumSourceDialog = false
+                        onPickAlbumVideos()
+                    }
+                )
+            }
             }
         }
 
-        if (showSupport) {
-            SupportDialog(
-                texts = texts,
-                onDismiss = { showSupport = false }
-            )
-        }
-
-        if (showImportSourceSheet) {
-            ImportSourceSheet(
-                texts = texts,
-                onDismiss = { showImportSourceSheet = false },
-                onPickAlbum = {
-                    showImportSourceSheet = false
-                    showAlbumSourceDialog = true
-                },
-                onPickFolder = {
-                    showImportSourceSheet = false
-                    onPickFolder()
-                },
-                onPickFiles = {
-                    showImportSourceSheet = false
-                    onPickFiles()
-                }
-            )
-        }
-
-        if (showAlbumSourceDialog) {
-            AlbumSourceDialog(
-                texts = texts,
-                onDismiss = { showAlbumSourceDialog = false },
-                onPickImages = {
-                    showAlbumSourceDialog = false
-                    onPickAlbumImages()
-                },
-                onPickVideos = {
-                    showAlbumSourceDialog = false
-                    onPickAlbumVideos()
-                }
-            )
-        }
-        }
-
-        AnimatedVisibility(
-            visible = showPrivacyPolicy,
-            modifier = Modifier.fillMaxSize(),
-            enter = slideInVertically(
-                animationSpec = tween(
-                    durationMillis = ZenAnimations.PageEnterDuration,
-                    easing = ZenAnimations.StrongEaseOut
-                ),
-                initialOffsetY = { fullHeight -> fullHeight / 12 }
-            ) + fadeIn(
-                animationSpec = tween(
-                    durationMillis = ZenAnimations.PageEnterDuration,
-                    easing = ZenAnimations.StrongEaseOut
+        SubpageHost(screen = currentScreen, returning = returning) { destination ->
+            when (destination) {
+                AppScreen.Settings -> SettingsScreen(
+                    texts = texts,
+                    selectedAccent = accent,
+                    selectedThemeMode = themeModeOption,
+                    isOledDark = isOledDark,
+                    selectedLanguage = languageOption,
+                    outputLocationMode = outputLocationMode,
+                    outputDirectory = outputDirectory,
+                    onAccentSelected = onAccentSelected,
+                    onThemeModeSelected = onThemeModeSelected,
+                    onOledDarkChange = onOledDarkChange,
+                    onLanguageSelected = onLanguageSelected,
+                    onOutputLocationModeChange = onOutputLocationModeChange,
+                    onPickOutputDirectory = onPickOutputDirectory,
+                    onNavigateToMetadataSecurity = { navigateTo(AppScreen.MetadataSecurity) },
+                    onNavigateToOfflineEngines = { navigateTo(AppScreen.OfflineEngines) },
+                    onShowHelp = { navigateTo(AppScreen.Help) },
+                    onShowPrivacyPolicy = { navigateTo(AppScreen.PrivacyPolicy) },
+                    onShowSupport = { showSupport = true },
+                    onBack = { navigateBack() },
+                    isDark = isDark,
+                    updateState = updateState
                 )
-            ),
-            exit = slideOutVertically(
-                animationSpec = tween(
-                    durationMillis = ZenAnimations.PageExitDuration,
-                    easing = ZenAnimations.StrongEaseOut
-                ),
-                targetOffsetY = { fullHeight -> fullHeight / 12 }
-            ) + fadeOut(
-                animationSpec = tween(
-                    durationMillis = ZenAnimations.PageExitDuration,
-                    easing = ZenAnimations.StrongEaseOut
+                AppScreen.OfflineEngines -> OfflineEnginesScreen(
+                    texts = texts,
+                    esrganModelStates = esrganModelStates,
+                    rifeModelStates = rifeModelStates,
+                    officeFontStates = officeFontStates,
+                    onDownloadEsrganModel = onDownloadEsrganModel,
+                    onCancelEsrganModelDownload = onCancelEsrganModelDownload,
+                    onDownloadRifeModel = onDownloadRifeModel,
+                    onCancelRifeModelDownload = onCancelRifeModelDownload,
+                    onDownloadOfficeFont = onDownloadOfficeFont,
+                    onCancelOfficeFontDownload = onCancelOfficeFontDownload,
+                    onDeleteOfficeFont = onDeleteOfficeFont,
+                    onBack = { navigateBack() },
                 )
-            )
-        ) {
-            PrivacyPolicyScreen(
-                policy = texts.privacyPolicy,
-                linkUnavailable = texts.linkUnavailable,
-                onBack = { showPrivacyPolicy = false }
-            )
-        }
-
-        AnimatedVisibility(
-            visible = showHelpScreen,
-            modifier = Modifier.fillMaxSize(),
-            enter = fadeIn(animationSpec = tween(ZenAnimations.PageEnterDuration)) +
-                slideInVertically(animationSpec = tween(ZenAnimations.PageEnterDuration), initialOffsetY = { it / 12 }),
-            exit = fadeOut(animationSpec = tween(ZenAnimations.PageExitDuration)) +
-                slideOutVertically(animationSpec = tween(ZenAnimations.PageExitDuration), targetOffsetY = { it / 12 })
-        ) {
-            HelpScreen(
-                copy = texts.helpGuide,
-                onBack = { showHelpScreen = false }
-            )
+                AppScreen.MetadataSecurity -> MetadataSecurityScreen(
+                    texts = texts,
+                    state = metadataToolState,
+                    onPickImage = onPickMetadataImage,
+                    onPickVideo = onPickMetadataVideo,
+                    onClean = onCleanMetadata,
+                    onRestore = onRestoreMetadata,
+                    onBack = { navigateBack() },
+                )
+                AppScreen.PrivacyPolicy -> PrivacyPolicyScreen(
+                    policy = texts.privacyPolicy,
+                    linkUnavailable = texts.linkUnavailable,
+                    onBack = { navigateBack() },
+                )
+                AppScreen.Help -> HelpScreen(
+                    copy = texts.helpGuide,
+                    onBack = { navigateBack() },
+                )
+                AppScreen.Home -> Unit
+            }
         }
     }
 }
@@ -1840,7 +1724,7 @@ private fun ExternalImportTargetChip(
 }
 
 @Composable
-private fun ZenPromptFrame(
+internal fun ZenPromptFrame(
     onDismissRequest: () -> Unit,
     content: @Composable ColumnScope.() -> Unit
 ) {
@@ -1931,134 +1815,70 @@ private fun ZenPromptActions(
 @Composable
 private fun Header(
     texts: UiText,
-    activeHeaderPanel: HeaderPanel?,
     hasFiles: Boolean,
-    onTogglePanel: (HeaderPanel) -> Unit,
+    isSettingsActive: Boolean,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val showMetadataSecurity = activeHeaderPanel == HeaderPanel.MetadataSecurity
-    val showAbout = activeHeaderPanel == HeaderPanel.About
-    val showSettings = activeHeaderPanel == HeaderPanel.Settings
-    val headerActions = listOf(
-        HeaderAction(
-            icon = if (showMetadataSecurity) Icons.Rounded.Close else Icons.Rounded.Security,
-            label = if (showMetadataSecurity) texts.closeMetadataSecurity else texts.openMetadataSecurity,
-            active = showMetadataSecurity,
-            onClick = { onTogglePanel(HeaderPanel.MetadataSecurity) }
-        ),
-        HeaderAction(
-            icon = if (showAbout) Icons.Rounded.Close else Icons.Rounded.ErrorOutline,
-            label = if (showAbout) texts.closeAbout else texts.openAbout,
-            active = showAbout,
-            onClick = { onTogglePanel(HeaderPanel.About) }
-        ),
-        HeaderAction(
-            icon = if (showSettings) Icons.Rounded.Close else Icons.Rounded.Settings,
-            label = if (showSettings) texts.closeSettings else texts.openSettings,
-            active = showSettings,
-            onClick = { onTogglePanel(HeaderPanel.Settings) }
-        )
-    )
-
     val spacerWidth by animateDpAsState(
         targetValue = if (hasFiles) HeaderAddSlotWidth else 0.dp,
         animationSpec = ZenAnimations.HeroMorphDpSpring,
         label = "headerSpacerWidth"
     )
 
-    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        val availableWidth = maxWidth
-        val actionMode = headerActionMode(availableWidth, hasFiles)
-        val secondaryActions = headerActions.take(2)
-        val settingsAction = headerActions.last()
-
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier
+                .weight(1f)
+                .semantics(mergeDescendants = true) {},
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
+            BrandImage(
+                painter = painterResource(id = R.drawable.zenconverter),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .weight(1f)
-                    .semantics(mergeDescendants = true) {},
-                verticalAlignment = Alignment.CenterVertically
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(8.dp))
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                BrandImage(
-                    painter = painterResource(id = R.drawable.zenconverter),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(8.dp))
+                Text(
+                    text = stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.app_name),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = texts.tagline,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Spacer(modifier = Modifier.width(spacerWidth))
-                
-                when {
-                    actionMode == HeaderActionMode.AllInline -> {
-                        HeaderActions(actions = headerActions)
-                    }
-                    actionMode == HeaderActionMode.SettingsInline -> {
-                        HeaderActions(actions = listOf(settingsAction))
-                        Spacer(modifier = Modifier.width(HeaderActionSpacing))
-                        HeaderOverflowActions(
-                            actions = secondaryActions,
-                            texts = texts
-                        )
-                    }
-                    else -> {
-                        HeaderOverflowActions(
-                            actions = headerActions,
-                            texts = texts
-                        )
-                    }
-                }
+                Text(
+                    text = texts.tagline,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Spacer(modifier = Modifier.width(spacerWidth))
+            HeaderIconButton(
+                onClick = onOpenSettings,
+                icon = Icons.Rounded.Settings,
+                contentDescription = texts.openSettings,
+                active = isSettingsActive
+            )
+        }
     }
-}
-
-private data class HeaderAction(
-    val icon: ImageVector,
-    val label: String,
-    val active: Boolean,
-    val onClick: () -> Unit
-)
-
-private enum class HeaderActionMode {
-    AllInline,
-    SettingsInline,
-    OverflowOnly
-}
-
-private enum class HeaderPanel {
-    Settings,
-    About,
-    MetadataSecurity
 }
 
 private fun headerContentWidth(containerWidth: Dp): Dp {
@@ -2067,93 +1887,6 @@ private fun headerContentWidth(containerWidth: Dp): Dp {
         containerWidth - horizontalPadding
     } else {
         0.dp
-    }
-}
-
-private fun headerActionMode(
-    availableWidth: Dp,
-    hasFiles: Boolean
-): HeaderActionMode {
-    val allInlineWidth = if (hasFiles) 430.dp else 380.dp
-    val settingsInlineWidth = if (hasFiles) 340.dp else 300.dp
-    return when {
-        availableWidth >= allInlineWidth -> HeaderActionMode.AllInline
-        availableWidth >= settingsInlineWidth -> HeaderActionMode.SettingsInline
-        else -> HeaderActionMode.OverflowOnly
-    }
-}
-
-private fun headerActionsWidth(
-    availableWidth: Dp,
-    hasFiles: Boolean
-): Dp {
-    return when (headerActionMode(availableWidth, hasFiles)) {
-        HeaderActionMode.AllInline ->
-            HeaderButtonSize + HeaderActionSpacing + HeaderButtonSize +
-                HeaderActionSpacing + HeaderButtonSize
-        HeaderActionMode.SettingsInline ->
-            HeaderButtonSize + HeaderActionSpacing + HeaderButtonSize
-        HeaderActionMode.OverflowOnly -> HeaderButtonSize
-    }
-}
-
-@Composable
-private fun HeaderOverflowActions(
-    actions: List<HeaderAction>,
-    texts: UiText
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Box {
-        HeaderIconButton(
-            onClick = { expanded = true },
-            icon = Icons.Rounded.MoreHoriz,
-            contentDescription = texts.moreHeaderActions,
-            active = actions.any { action -> action.active }
-        )
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            shape = RoundedCornerShape(8.dp),
-            containerColor = MaterialTheme.colorScheme.surface,
-            tonalElevation = 0.dp,
-            shadowElevation = 2.dp,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-        ) {
-            actions.forEach { action ->
-                DropdownMenuItem(
-                    text = { Text(action.label) },
-                    onClick = {
-                        expanded = false
-                        action.onClick()
-                    },
-                    leadingIcon = {
-                        AppIcon(
-                            icon = action.icon,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun HeaderActions(actions: List<HeaderAction>) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(HeaderActionSpacing)
-    ) {
-        actions.forEach { action ->
-            HeaderIconButton(
-                onClick = action.onClick,
-                icon = action.icon,
-                contentDescription = action.label,
-                active = action.active
-            )
-        }
     }
 }
 
@@ -2183,7 +1916,7 @@ private fun HeaderIconButton(
                 else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
                 CircleShape
             )
-            .bounceClick(onClick = onClick, scaleDown = 0.90f)
+            .clickable(role = Role.Button, onClick = onClick)
             .semantics {
                 this.contentDescription = contentDescription
                 role = Role.Button
@@ -2206,891 +1939,53 @@ private fun HeaderIconButton(
     }
 }
 
-@Composable
-private fun SettingsPanel(
-    texts: UiText,
-    selectedAccent: AccentColorOption,
-    selectedThemeMode: ThemeModeOption,
-    isOledDark: Boolean,
-    selectedLanguage: LanguageOption,
-    outputLocationMode: OutputLocationMode,
-    outputDirectory: OutputDirectory?,
-    esrganModelStates: Map<String, EsrganModelUiState>,
-    rifeModelStates: Map<String, RifeModelUiState>,
-    officeFontStates: Map<String, OfficeFontUiState>,
-    onAccentSelected: (AccentColorOption) -> Unit,
-    onThemeModeSelected: (ThemeModeOption) -> Unit,
-    onOledDarkChange: (Boolean) -> Unit,
-    onLanguageSelected: (LanguageOption) -> Unit,
-    onOutputLocationModeChange: (OutputLocationMode) -> Unit,
-    onPickOutputDirectory: () -> Unit,
-    onDownloadEsrganModel: (EsrganModelSpec) -> Unit,
-    onCancelEsrganModelDownload: (EsrganModelSpec) -> Unit,
-    onDownloadRifeModel: (RifeModelSpec) -> Unit,
-    onCancelRifeModelDownload: (RifeModelSpec) -> Unit,
-    onDownloadOfficeFont: (OfficeFontSpec) -> Unit,
-    onCancelOfficeFontDownload: (OfficeFontSpec) -> Unit,
-    onDeleteOfficeFont: (OfficeFontSpec) -> Unit
-) {
-    val isDark = MaterialTheme.colorScheme.background.red < 0.5f
 
-    QuietPanel {
-        SectionTitle(
-            icon = Icons.Rounded.FolderOpen,
-            title = texts.output
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        OutputLocationSection(
-            texts = texts,
-            outputLocationMode = outputLocationMode,
-            outputDirectory = outputDirectory,
-            onOutputLocationModeChange = onOutputLocationModeChange,
-            onPickOutputDirectory = onPickOutputDirectory
-        )
 
-        Spacer(modifier = Modifier.height(20.dp))
-        SectionTitle(
-            icon = Icons.Rounded.Palette,
-            title = texts.accentColor
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            val availableAccents = remember {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    AccentColorOption.entries
-                } else {
-                    AccentColorOption.entries.filter { it != AccentColorOption.Dynamic }
-                }
-            }
-            availableAccents.forEach { option ->
-                AccentSwatch(
-                    texts = texts,
-                    option = option,
-                    selected = option == selectedAccent,
-                    onSelected = { onAccentSelected(option) }
-                )
-            }
-        }
 
-        Spacer(modifier = Modifier.height(18.dp))
-        SectionTitle(
-            icon = Icons.Rounded.DarkMode,
-            title = texts.themeMode
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            ThemeModeOption.entries.forEach { option ->
-                val selected = option == selectedThemeMode
-                val optionIcon = when (option) {
-                    ThemeModeOption.System -> Icons.Rounded.BrightnessAuto
-                    ThemeModeOption.Light -> Icons.Rounded.LightMode
-                    ThemeModeOption.Dark -> Icons.Rounded.DarkMode
-                }
-                if (selected) {
-                    Button(
-                        onClick = { onThemeModeSelected(option) },
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
-                    ) {
-                        Icon(
-                            imageVector = optionIcon,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(texts.themeModeLabel(option))
-                    }
-                } else {
-                    OutlinedButton(
-                        onClick = { onThemeModeSelected(option) },
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
-                    ) {
-                        Icon(
-                            imageVector = optionIcon,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(texts.themeModeLabel(option))
-                    }
-                }
-            }
-        }
 
-        AnimatedVisibility(
-            visible = selectedThemeMode != ThemeModeOption.Light,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
-        ) {
-            Column {
-                Spacer(modifier = Modifier.height(10.dp))
-                AdvancedSwitchRow(
-                    label = texts.usePureBlackTheme,
-                    checked = isOledDark,
-                    onCheckedChange = onOledDarkChange
-                )
-            }
-        }
 
-        Spacer(modifier = Modifier.height(18.dp))
-        SectionTitle(
-            icon = Icons.Rounded.Language,
-            title = texts.language
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            AppLanguages.options(LocalContext.current).forEach { option ->
-                val selected = option == selectedLanguage
-                if (selected) {
-                    Button(
-                        onClick = { onLanguageSelected(option) },
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
-                    ) {
-                        Text(texts.languageLabel(option))
-                    }
-                } else {
-                    OutlinedButton(
-                        onClick = { onLanguageSelected(option) },
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
-                    ) {
-                        Text(texts.languageLabel(option))
-                    }
-                }
-            }
-        }
 
-        Spacer(modifier = Modifier.height(20.dp))
-        SectionTitle(
-            icon = Icons.Rounded.Download,
-            title = texts.modelDownload
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            EsrganModelManager.ALL_MODELS.forEach { spec ->
-                EsrganModelDownloadSection(
-                    texts = texts,
-                    spec = spec,
-                    state = esrganModelStates[spec.id] ?: EsrganModelUiState.NotDownloaded,
-                    onDownload = { onDownloadEsrganModel(spec) },
-                    onCancel = { onCancelEsrganModelDownload(spec) }
-                )
-            }
-            RifeModelManager.ALL_MODELS.forEach { spec ->
-                RifeModelDownloadSection(
-                    texts = texts,
-                    spec = spec,
-                    state = rifeModelStates[spec.id] ?: RifeModelUiState.NotDownloaded,
-                    onDownload = { onDownloadRifeModel(spec) },
-                    onCancel = { onCancelRifeModelDownload(spec) }
-                )
-            }
-        }
 
-        Spacer(modifier = Modifier.height(20.dp))
-        SectionTitle(
-            icon = Icons.Rounded.FontDownload,
-            title = texts.officeFontTitle
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
-            color = if (isDark) Color(0xFF064E3B).copy(alpha = 0.35f) else Color(0xFFF0FDF4),
-            border = BorderStroke(1.dp, if (isDark) Color(0xFF059669).copy(alpha = 0.45f) else Color(0xFFDCFCE7))
-        ) {
-            Row(
-                modifier = Modifier.padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AppIcon(
-                    icon = Icons.Rounded.CheckCircle,
-                    contentDescription = null,
-                    tint = if (isDark) Color(0xFF4ADE80) else Color(0xFF16A34A),
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = texts.officeFontSystemReady,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (isDark) Color(0xFF86EFAC) else Color(0xFF15803D)
-                    )
-                    Text(
-                        text = texts.officeFontSystemNote,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (isDark) Color(0xFF4ADE80) else Color(0xFF166534)
-                    )
-                }
-            }
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = texts.officeFontEnhancementNote,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            OfficeFontManager.ALL_FONTS.forEach { spec ->
-                OfficeFontDownloadSection(
-                    texts = texts,
-                    spec = spec,
-                    state = officeFontStates[spec.id] ?: OfficeFontUiState.NotDownloaded,
-                    onDownload = { onDownloadOfficeFont(spec) },
-                    onCancel = { onCancelOfficeFontDownload(spec) },
-                    onDelete = { onDeleteOfficeFont(spec) }
-                )
-            }
-        }
-    }
-}
 
-@Composable
-private fun EsrganModelDownloadSection(
-    texts: UiText,
-    spec: EsrganModelSpec,
-    state: EsrganModelUiState,
-    onDownload: () -> Unit,
-    onCancel: () -> Unit
-) {
-    val context = LocalContext.current
-    val purposeText = if (spec.id == EsrganModelManager.MODEL_ANIME.id) {
-        texts.modelPurposeAnime
-    } else {
-        texts.modelPurpose
-    }
 
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = spec.displayName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = purposeText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = formatBytes(spec.totalSizeBytes, texts),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = stringResource(R.string.display_esrgan_model_download_section_1_s_real_esrgan, texts.modelSource),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = texts.openLink,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable {
-                        openExternalLink(context, spec.sourceUrl, texts.linkUnavailable)
-                    }
-                )
-            }
-
-            when (state) {
-                EsrganModelUiState.NotDownloaded -> {
-                    Button(
-                        onClick = onDownload,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(texts.modelDownloadAction)
-                    }
-                }
-                is EsrganModelUiState.Downloading -> {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        LinearProgressIndicator(
-                            progress = state.progress,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = stringResource(R.string.display_esrgan_model_download_section_1_s, (state.progress * 100).toInt()),
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                            TextButton(onClick = onCancel) {
-                                Text(texts.cancelDownload)
-                            }
-                        }
-                        Text(
-                            text = texts.modelDownloadNote,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                EsrganModelUiState.Downloaded -> {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            AppIcon(
-                                icon = Icons.Rounded.CheckCircle,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = texts.modelDownloaded,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        TextButton(onClick = onDownload) {
-                            Text(texts.modelRedownload)
-                        }
-                    }
-                }
-                is EsrganModelUiState.Failed -> {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = state.message?.resolve(LocalContext.current)
-                                ?: texts.downloadFailed,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                        Button(
-                            onClick = onDownload,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(texts.modelDownloadAction)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RifeModelDownloadSection(
-    texts: UiText,
-    spec: RifeModelSpec,
-    state: RifeModelUiState,
-    onDownload: () -> Unit,
-    onCancel: () -> Unit
-) {
-    val context = LocalContext.current
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = spec.displayName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = texts.rifeModelPurpose,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = formatBytes(spec.totalSizeBytes, texts),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = stringResource(R.string.display_rife_model_download_section_1_s_rife, texts.modelSource),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = texts.openLink,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable {
-                        openExternalLink(context, spec.sourceUrl, texts.linkUnavailable)
-                    }
-                )
-            }
-
-            when (state) {
-                RifeModelUiState.NotDownloaded -> {
-                    Button(
-                        onClick = onDownload,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(texts.modelDownloadAction)
-                    }
-                }
-                is RifeModelUiState.Downloading -> {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        LinearProgressIndicator(
-                            progress = state.progress,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = stringResource(R.string.display_esrgan_model_download_section_1_s, (state.progress * 100).toInt()),
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                            TextButton(onClick = onCancel) {
-                                Text(texts.cancelDownload)
-                            }
-                        }
-                        Text(
-                            text = texts.modelDownloadNote,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                RifeModelUiState.Downloaded -> {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            AppIcon(
-                                icon = Icons.Rounded.CheckCircle,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = texts.modelDownloaded,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        TextButton(onClick = onDownload) {
-                            Text(texts.modelRedownload)
-                        }
-                    }
-                }
-                is RifeModelUiState.Failed -> {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = state.message?.resolve(LocalContext.current)
-                                ?: texts.downloadFailed,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                        Button(
-                            onClick = onDownload,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(texts.modelDownloadAction)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun OfficeFontDownloadSection(
-    texts: UiText,
-    spec: OfficeFontSpec,
-    state: OfficeFontUiState,
-    onDownload: () -> Unit,
-    onCancel: () -> Unit,
-    onDelete: () -> Unit
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = texts.taskMessage(spec.displayName),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = texts.taskMessage(spec.description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = formatBytes(spec.sizeBytes, texts),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = stringResource(R.string.display_office_font_download_section_1_s_google_noto_cjk_sil_ofl_1_1, texts.officeFontSource),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            when (state) {
-                OfficeFontUiState.NotDownloaded -> {
-                    Button(
-                        onClick = onDownload,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(texts.modelDownloadAction)
-                    }
-                }
-                is OfficeFontUiState.Downloading -> {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        LinearProgressIndicator(
-                            progress = state.progress,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = stringResource(R.string.display_esrgan_model_download_section_1_s, (state.progress * 100).toInt()),
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                            TextButton(onClick = onCancel) {
-                                Text(texts.cancelDownload)
-                            }
-                        }
-                        Text(
-                            text = texts.modelDownloadNote,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                OfficeFontUiState.Downloaded -> {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            AppIcon(
-                                icon = Icons.Rounded.CheckCircle,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = texts.modelDownloaded,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        Row {
-                            TextButton(onClick = onDownload) {
-                                Text(texts.modelRedownload)
-                            }
-                        }
-                    }
-                }
-                is OfficeFontUiState.Failed -> {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = state.message?.resolve(LocalContext.current)
-                                ?: texts.downloadFailed,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                        Button(
-                            onClick = onDownload,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(texts.modelDownloadAction)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AboutPanel(
-    texts: UiText,
-    onShowPrivacyPolicy: () -> Unit,
-    onShowHelp: () -> Unit,
-    onShowSupport: () -> Unit
-) {
-    val context = LocalContext.current
-    val installedVersion = remember(context) { installedAppVersion(context) }
-
-    QuietPanel {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            BrandImage(
-                painter = painterResource(id = R.drawable.zenconverter),
-                contentDescription = texts.appLogo,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(92.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(20.dp))
-            )
-            Text(
-                text = stringResource(R.string.app_name),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            SmallTag("${texts.appVersion} ${installedVersion.versionName}")
-            SmallTag(texts.appLicense)
-            Text(
-                text = texts.aboutDescription,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth(),
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-
-        Spacer(modifier = Modifier.height(18.dp))
-
-        OutlinedButton(
-            onClick = { openExternalLink(context, ZENCONVERTER_REPOSITORY_URL, texts.linkUnavailable) },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(8.dp),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
-        ) {
-            AppIcon(
-                icon = Icons.Rounded.Description,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = texts.githubRepository,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-            AppIcon(
-                icon = Icons.Rounded.OpenInNew,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(17.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedButton(
-                onClick = onShowHelp,
-                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 12.dp)
-            ) {
-                AppIcon(
-                    icon = Icons.Rounded.ErrorOutline,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(text = texts.helpGuide.help, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            OutlinedButton(
-                onClick = onShowPrivacyPolicy,
-                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 12.dp)
-            ) {
-                AppIcon(
-                    icon = Icons.Rounded.PrivacyTip,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(text = texts.privacyPolicy.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-
-        if (BuildConfig.ENABLE_GITHUB_UPDATES) {
-            Spacer(modifier = Modifier.height(10.dp))
-
-            UpdatePanel(
-                texts = texts,
-                installedVersion = installedVersion
-            )
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        Button(
-            onClick = onShowSupport,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 52.dp),
-            shape = RoundedCornerShape(8.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
-        ) {
-            AppIcon(
-                icon = Icons.Rounded.Favorite,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(19.dp)
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = texts.supportDevelopment,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
 
 @Composable
 private fun HelpScreen(
     copy: HelpGuideCopy,
-    onBack: () -> Unit
+    onBack: () -> Unit,
 ) {
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        contentWindowInsets = WindowInsets.safeDrawing,
-        topBar = {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
-                    AppIcon(
-                        icon = Icons.AutoMirrored.Rounded.ArrowBack,
-                        contentDescription = copy.back,
-                        tint = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
+    SettingsPage(copy.help, copy.back, onBack) {
+        item {
+            Column(modifier = Modifier.widthIn(max = 680.dp).fillMaxWidth().padding(horizontal = 4.dp)) {
                 Text(
-                    text = copy.help,
-                    style = MaterialTheme.typography.titleLarge,
+                    text = copy.title,
+                    style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onBackground
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.semantics { heading() }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = copy.body,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(start = 20.dp, top = 18.dp, end = 20.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            item {
-                Column(modifier = Modifier.widthIn(max = 680.dp).fillMaxWidth()) {
-                    Text(
-                        text = copy.title,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.semantics { heading() }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(copy.body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            item {
-                GuideFlow(copy)
-            }
-            items(
-                listOf(
-                    GuideCardData(Icons.Rounded.Videocam, copy.videoTitle, copy.videoBody, copy.videoFormats),
-                    GuideCardData(Icons.Rounded.AudioFile, copy.audioTitle, copy.audioBody, copy.audioFormats),
-                    GuideCardData(Icons.Rounded.Image, copy.imageTitle, copy.imageBody, copy.imageFormats),
-                    GuideCardData(Icons.Rounded.Description, copy.documentTitle, copy.documentBody, copy.documentFormats),
-                    GuideCardData(Icons.Rounded.FontDownload, copy.fontTitle, copy.fontBody, copy.fontFormats),
-                    GuideCardData(Icons.Rounded.Subtitles, copy.subtitleTitle, copy.subtitleBody, copy.subtitleFormats)
-                )
-            ) { card ->
-                GuideCard(card)
-            }
+        item {
+            GuideFlow(copy)
+        }
+        items(
+            listOf(
+                GuideCardData(Icons.Rounded.Videocam, copy.videoTitle, copy.videoBody, copy.videoFormats),
+                GuideCardData(Icons.Rounded.AudioFile, copy.audioTitle, copy.audioBody, copy.audioFormats),
+                GuideCardData(Icons.Rounded.Image, copy.imageTitle, copy.imageBody, copy.imageFormats),
+                GuideCardData(Icons.Rounded.Description, copy.documentTitle, copy.documentBody, copy.documentFormats),
+                GuideCardData(Icons.Rounded.FontDownload, copy.fontTitle, copy.fontBody, copy.fontFormats),
+                GuideCardData(Icons.Rounded.Subtitles, copy.subtitleTitle, copy.subtitleBody, copy.subtitleFormats)
+            )
+        ) { card ->
+            GuideCard(card)
         }
     }
 }
@@ -3104,46 +1999,73 @@ private data class GuideCardData(
 
 @Composable
 private fun GuideFlow(copy: HelpGuideCopy) {
-    Row(
-        modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primary.copy(alpha = 0.06f), RoundedCornerShape(12.dp)).border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.16f), RoundedCornerShape(12.dp)).padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceEvenly
-    ) {
-        GuideFlowStep(Icons.Rounded.FolderOpen, copy.flowInput)
-        AppIcon(Icons.Rounded.PlayArrow, null, MaterialTheme.colorScheme.primary, Modifier.size(18.dp))
-        GuideFlowStep(Icons.Rounded.Settings, copy.flowProcess)
-        AppIcon(Icons.Rounded.PlayArrow, null, MaterialTheme.colorScheme.primary, Modifier.size(18.dp))
-        GuideFlowStep(Icons.Rounded.Check, copy.flowOutput)
-    }
-}
-
-@Composable
-private fun GuideFlowStep(icon: ImageVector, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.widthIn(min = 64.dp, max = 110.dp)) {
-        Box(modifier = Modifier.size(38.dp).background(MaterialTheme.colorScheme.primary, CircleShape), contentAlignment = Alignment.Center) {
-            AppIcon(icon, null, MaterialTheme.colorScheme.onPrimary, Modifier.size(20.dp))
-        }
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
-    }
-}
-
-@Composable
-private fun GuideCard(card: GuideCardData) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.7f))
-    ) {
-        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Top) {
-            Box(modifier = Modifier.size(42.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
-                AppIcon(card.icon, null, MaterialTheme.colorScheme.primary, Modifier.size(23.dp))
+    InsetGroupCard {
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(16.dp)) {
+            if (maxWidth < 400.dp || LocalDensity.current.fontScale > 1.3f) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    GuideFlowStep(Icons.Rounded.FolderOpen, copy.flowInput)
+                    GuideFlowStep(Icons.Rounded.Settings, copy.flowProcess)
+                    GuideFlowStep(Icons.Rounded.Check, copy.flowOutput)
+                }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    GuideFlowStep(Icons.Rounded.FolderOpen, copy.flowInput, Modifier.weight(1f))
+                    GuideFlowStep(Icons.Rounded.Settings, copy.flowProcess, Modifier.weight(1f))
+                    GuideFlowStep(Icons.Rounded.Check, copy.flowOutput, Modifier.weight(1f))
+                }
             }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(card.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                Text(card.body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(card.formats, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+}
+
+@Composable
+private fun GuideFlowStep(icon: ImageVector, label: String, modifier: Modifier = Modifier) {
+    Row(modifier.heightIn(min = 36.dp), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        AppIcon(icon, null, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.size(20.dp))
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun GuideCard(
+    card: GuideCardData,
+) {
+    InsetGroupCard {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                AppIcon(card.icon, null, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.size(20.dp))
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = card.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = card.body,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = card.formats,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -3153,108 +2075,36 @@ private fun GuideCard(card: GuideCardData) {
 private fun PrivacyPolicyScreen(
     policy: PrivacyPolicyText,
     linkUnavailable: String,
-    onBack: () -> Unit
+    onBack: () -> Unit,
 ) {
     val context = LocalContext.current
-
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        contentWindowInsets = WindowInsets.safeDrawing
-    ) { contentPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(contentPadding)
-                .consumeWindowInsets(contentPadding)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = onBack,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    AppIcon(
-                        icon = Icons.AutoMirrored.Rounded.ArrowBack,
-                        contentDescription = policy.back,
-                        tint = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(4.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.app_name),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = policy.title,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.semantics { heading() }
-                    )
-                }
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.7f))
-            )
-
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentPadding = PaddingValues(
-                    start = 20.dp,
-                    top = 20.dp,
-                    end = 20.dp,
-                    bottom = 36.dp
-                ),
-                verticalArrangement = Arrangement.spacedBy(26.dp)
-            ) {
-                item(key = "privacy-introduction") {
-                    PrivacyPolicyContent {
+    SettingsPage(policy.title, policy.back, onBack) {
+        item(key = "privacy-introduction") {
+            PrivacyPolicyContent {
+                InsetGroupCard {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         Text(
                             text = policy.updated,
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier
                                 .background(
                                     color = MaterialTheme.colorScheme.surfaceVariant,
-                                    shape = RoundedCornerShape(8.dp)
+                                    shape = RoundedCornerShape(6.dp)
                                 )
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
                         )
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
-                                    shape = RoundedCornerShape(8.dp)
-                                )
-                                .border(
-                                    width = 1.dp,
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-                                    shape = RoundedCornerShape(8.dp)
-                                )
-                                .padding(16.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.Top
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(36.dp)
+                                    .size(32.dp)
                                     .background(
-                                        color = MaterialTheme.colorScheme.primary,
+                                        color = Color.Transparent,
                                         shape = RoundedCornerShape(8.dp)
                                     ),
                                 contentAlignment = Alignment.Center
@@ -3262,8 +2112,8 @@ private fun PrivacyPolicyScreen(
                                 AppIcon(
                                     icon = Icons.Rounded.PrivacyTip,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.size(20.dp)
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                             Text(
@@ -3275,49 +2125,56 @@ private fun PrivacyPolicyScreen(
                         }
                     }
                 }
+            }
+        }
 
-                items(
-                    items = policy.sections,
-                    key = { section -> section.title }
-                ) { section ->
-                    PrivacyPolicyContent {
+        items(
+            items = policy.sections,
+            key = { section -> policy.sections.indexOf(section) }
+        ) { section ->
+            PrivacyPolicyContent {
+                InsetGroupCard {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         PrivacyPolicySectionContent(section)
                     }
                 }
+            }
+        }
 
-                item(key = "privacy-project-page") {
-                    PrivacyPolicyContent {
-                        OutlinedButton(
-                            onClick = {
-                                openExternalLink(
-                                    context,
-                                    ZENCONVERTER_REPOSITORY_URL,
-                                    linkUnavailable
-                                )
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
-                        ) {
-                            Text(
-                                text = policy.projectPage,
-                                modifier = Modifier.weight(1f)
+        item(key = "privacy-project-page") {
+            PrivacyPolicyContent {
+                InsetGroupCard {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(
+                                onClick = {
+                                    openExternalLink(
+                                        context,
+                                        ZENCONVERTER_REPOSITORY_URL,
+                                        linkUnavailable
+                                    )
+                                }
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            AppIcon(
-                                icon = Icons.Rounded.OpenInNew,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = policy.projectPage,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        AppIcon(
+                            icon = Icons.AutoMirrored.Rounded.OpenInNew,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
-
             }
-
         }
     }
 }
@@ -3375,764 +2232,6 @@ private fun PrivacyPolicySectionContent(section: PrivacyPolicySection) {
     }
 }
 
-@Composable
-private fun MetadataSecurityPanel(
-    texts: UiText,
-    state: MetadataToolState,
-    onPickImage: () -> Unit,
-    onPickVideo: () -> Unit,
-    onClean: () -> Unit,
-    onRestore: (String) -> Unit
-) {
-    QuietPanel {
-        SectionTitle(
-            icon = Icons.Rounded.Security,
-            title = texts.metadataSecurityTitle
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = texts.metadataSecurityNote,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Button(
-                onClick = onPickImage,
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 48.dp),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
-            ) {
-                AppIcon(
-                    icon = Icons.Rounded.Image,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(texts.pickMetadataImage, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            OutlinedButton(
-                onClick = onPickVideo,
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 48.dp),
-                shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                ),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
-            ) {
-                AppIcon(
-                    icon = Icons.Rounded.Videocam,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(texts.pickMetadataVideo, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-        StatusLine(text = texts.metadataBackupNote)
-
-        Spacer(modifier = Modifier.height(12.dp))
-        AnimatedContent(
-            targetState = state,
-            transitionSpec = {
-                fadeIn(animationSpec = tween(ZenAnimations.ContentFadeDuration)) togetherWith
-                fadeOut(animationSpec = tween(ZenAnimations.ContentFadeOutDuration)) using
-                SizeTransform(clip = false)
-            },
-            label = "MetadataState"
-        ) { targetState ->
-            Column(modifier = Modifier.fillMaxWidth()) {
-                when (targetState) {
-                    MetadataToolState.Empty -> {
-                        Text(
-                            text = texts.metadataEmpty,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    MetadataToolState.Loading -> {
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = texts.processing,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    is MetadataToolState.Error -> {
-                        StatusLine(
-                            text = texts.metadataMessage(targetState.message),
-                            isError = true
-                        )
-                    }
-                    is MetadataToolState.Ready -> {
-                        MetadataInspectionCard(
-                            texts = texts,
-                            state = targetState,
-                            onClean = onClean,
-                            onRestore = onRestore
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MetadataInspectionCard(
-    texts: UiText,
-    state: MetadataToolState.Ready,
-    onClean: () -> Unit,
-    onRestore: (String) -> Unit
-) {
-    val inspection = state.inspection
-    var showDetails by remember(inspection.uri, state.message) { mutableStateOf(false) }
-    var showRestoreChoices by remember(inspection.uri, inspection.backups) { mutableStateOf(false) }
-    val metadataNotice = state.message ?: when {
-        inspection.kind == MetadataTargetKind.Image && !inspection.editable ->
-            MetadataStatusMessage(inspection.unsupportedMessage ?: MetadataMessageKey.UnsupportedImageFormat)
-        inspection.kind == MetadataTargetKind.Image && !inspection.canWrite ->
-            MetadataStatusMessage(MetadataMessageKey.WritePermissionNeeded)
-        inspection.kind == MetadataTargetKind.Image && !inspection.hasRemovableMetadata ->
-            MetadataStatusMessage(MetadataMessageKey.NoRemovableMetadata)
-        else -> null
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
-        ) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(end = 10.dp)
-            ) {
-                Text(
-                    text = inspection.displayName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = metadataPrimaryInfoLine(inspection, texts),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            SmallTag(texts.metadataKindLabel(inspection.kind))
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SmallTag(texts.metadataSupportLabel(inspection))
-            if (inspection.kind == MetadataTargetKind.Image) {
-                SmallTag(texts.yesNoLabel(inspection.hasGps, texts.metadataGps))
-                if (inspection.editable) {
-                    SmallTag(texts.metadataBackupCountLabel(inspection.backups.size))
-                }
-            }
-        }
-
-        MetadataCompactRows(
-            rows = metadataCompactRows(inspection, texts)
-        )
-
-        metadataNotice?.let { message ->
-            StatusLine(
-                text = texts.metadataMessage(message),
-                isError = message.key !in setOf(
-                    MetadataMessageKey.Cleaned,
-                    MetadataMessageKey.Restored,
-                    MetadataMessageKey.NoRemovableMetadata
-                )
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedButton(
-                onClick = { showDetails = true },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
-            ) {
-                Text(texts.metadataDetails, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            if (inspection.kind == MetadataTargetKind.Image) {
-                Button(
-                    onClick = onClean,
-                    enabled = inspection.editable &&
-                        inspection.hasRemovableMetadata &&
-                        inspection.canWrite &&
-                        !state.busy,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
-                ) {
-                    Text(
-                        text = if (state.busy) texts.processing else texts.metadataCleanAndBackup,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-        }
-
-        if (inspection.kind == MetadataTargetKind.Image) {
-            OutlinedButton(
-                onClick = {
-                    if (inspection.backups.size == 1) {
-                        onRestore(inspection.backups.first().id)
-                    } else {
-                        showRestoreChoices = true
-                    }
-                },
-                enabled = inspection.editable &&
-                    inspection.backups.isNotEmpty() &&
-                    inspection.canWrite &&
-                    !state.busy,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.045f),
-                    contentColor = MaterialTheme.colorScheme.primary
-                ),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
-            ) {
-                Text(texts.metadataRestore, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-    }
-
-    if (showDetails) {
-        MetadataDetailsDialog(
-            texts = texts,
-            inspection = inspection,
-            onDismiss = { showDetails = false }
-        )
-    }
-    if (showRestoreChoices) {
-        MetadataRestoreDialog(
-            texts = texts,
-            backups = inspection.backups,
-            onRestore = { backupId ->
-                showRestoreChoices = false
-                onRestore(backupId)
-            },
-            onDismiss = { showRestoreChoices = false }
-        )
-    }
-}
-
-@Composable
-private fun MetadataCompactRows(rows: List<Pair<String, String>>) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        rows.forEach { (label, value) ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(0.38f)
-                )
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(0.62f)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun MetadataDetailsDialog(
-    texts: UiText,
-    inspection: MetadataInspection,
-    onDismiss: () -> Unit
-) {
-    ZenPromptFrame(onDismissRequest = onDismiss) {
-        SectionTitle(
-            icon = Icons.Rounded.Security,
-            title = texts.metadataDetails
-        )
-        Column(
-            modifier = Modifier
-                .heightIn(max = 360.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            MetadataCompactRows(rows = metadataDetailRows(inspection, texts))
-        }
-        Button(
-            onClick = onDismiss,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(8.dp),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
-        ) {
-            Text(texts.optionValue("Close"))
-        }
-    }
-}
-
-@Composable
-private fun MetadataRestoreDialog(
-    texts: UiText,
-    backups: List<MetadataBackupInfo>,
-    onRestore: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    ZenPromptFrame(onDismissRequest = onDismiss) {
-        SectionTitle(
-            icon = Icons.Rounded.Security,
-            title = texts.metadataRestoreTitle
-        )
-        Column(
-            modifier = Modifier
-                .heightIn(max = 360.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            backups.forEachIndexed { index, backup ->
-                OutlinedButton(
-                    onClick = { onRestore(backup.id) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(
-                        1.dp,
-                        if (index == 0) {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.34f)
-                        } else {
-                            MaterialTheme.colorScheme.outline
-                        }
-                    ),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        containerColor = if (index == 0) {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.045f)
-                        } else {
-                            MaterialTheme.colorScheme.surface
-                        },
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    ),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
-                ) {
-                    Text(
-                        text = texts.metadataBackupLabel(backup, recommended = index == 0),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-        }
-        OutlinedButton(
-            onClick = onDismiss,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(8.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-            colors = ButtonDefaults.outlinedButtonColors(
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface
-            ),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)
-        ) {
-            Text(texts.cancel)
-        }
-    }
-}
-
-@Composable
-private fun UpdatePanel(
-    texts: UiText,
-    installedVersion: InstalledAppVersion
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var channel by remember { mutableStateOf(UpdateChannel.Stable) }
-    var updateState by remember { mutableStateOf<UpdateUiState>(UpdateUiState.Idle) }
-    var downloadState by remember {
-        mutableStateOf<UpdateDownloadUiState>(UpdateDownloadUiState.Idle)
-    }
-    var downloadJob by remember { mutableStateOf<Job?>(null) }
-
-    val isChecking = updateState is UpdateUiState.Checking
-    val isDownloading = downloadState is UpdateDownloadUiState.Downloading
-    val isBusy = isChecking || isDownloading
-    val availableRelease = (updateState as? UpdateUiState.Available)?.release
-
-    fun resetForChannel(nextChannel: UpdateChannel) {
-        if (channel == nextChannel || isBusy) return
-        channel = nextChannel
-        updateState = UpdateUiState.Idle
-        downloadState = UpdateDownloadUiState.Idle
-    }
-
-    fun checkUpdates() {
-        if (isBusy) return
-        updateState = UpdateUiState.Checking
-        downloadState = UpdateDownloadUiState.Idle
-        scope.launch {
-            when (val result = GitHubUpdateChecker.check(channel, installedVersion)) {
-                is UpdateCheckResult.Available -> {
-                    updateState = UpdateUiState.Available(result.release)
-                }
-                is UpdateCheckResult.UpToDate -> {
-                    updateState = UpdateUiState.UpToDate(result.latest)
-                }
-                is UpdateCheckResult.Failed -> {
-                    updateState = UpdateUiState.Failed(result.reason, result.detail)
-                }
-            }
-        }
-    }
-
-    fun startAppDownload(release: UpdateRelease) {
-        if (isDownloading) return
-        downloadJob?.cancel()
-        downloadState = UpdateDownloadUiState.Downloading(
-            DownloadProgress(bytesDownloaded = 0L, totalBytes = release.sizeBytes)
-        )
-        downloadJob = scope.launch {
-            try {
-                val downloadedUpdate = ApkUpdateDownloader.download(context, release) { progress ->
-                    downloadState = UpdateDownloadUiState.Downloading(progress)
-                }
-                downloadState = UpdateDownloadUiState.Completed(downloadedUpdate)
-            } catch (_: CancellationException) {
-                downloadState = UpdateDownloadUiState.Idle
-                Toast.makeText(context, texts.downloadCancelled, Toast.LENGTH_SHORT).show()
-            } catch (exception: Throwable) {
-                downloadState = UpdateDownloadUiState.Failed(exception.localizedFailure(R.string.ui_download_failed))
-            } finally {
-                downloadJob = null
-            }
-        }
-    }
-
-    fun openDownloadedApk(downloadedUpdate: DownloadedUpdate) {
-        when (ApkInstaller.openDownloadedApk(context, downloadedUpdate.file)) {
-            ApkOpenResult.Started -> Unit
-            ApkOpenResult.PermissionSettingsOpened -> {
-                Toast.makeText(context, texts.installPermissionRequired, Toast.LENGTH_LONG).show()
-            }
-            ApkOpenResult.Failed -> {
-                Toast.makeText(context, texts.apkOpenFailed, Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            UpdateChannelButton(
-                text = texts.updateChannelLabel(UpdateChannel.Stable),
-                selected = channel == UpdateChannel.Stable,
-                enabled = !isBusy,
-                onClick = { resetForChannel(UpdateChannel.Stable) },
-                modifier = Modifier.weight(1f)
-            )
-            UpdateChannelButton(
-                text = texts.updateChannelLabel(UpdateChannel.Preview),
-                selected = channel == UpdateChannel.Preview,
-                enabled = !isBusy,
-                onClick = { resetForChannel(UpdateChannel.Preview) },
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        OutlinedButton(
-            onClick = ::checkUpdates,
-            enabled = !isBusy,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(8.dp),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
-        ) {
-            AppIcon(
-                icon = Icons.Rounded.Check,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = if (isChecking) texts.checkingUpdates else texts.checkUpdates,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        when (val state = updateState) {
-            UpdateUiState.Idle -> Unit
-            UpdateUiState.Checking -> {
-                StatusLine(text = texts.checkingUpdates)
-            }
-            is UpdateUiState.Available -> {
-                StatusLine(text = texts.updateAvailableMessage(state.release))
-                Text(
-                    text = texts.releaseDetail(state.release),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            is UpdateUiState.UpToDate -> {
-                StatusLine(text = texts.currentIsLatest(state.latest.channel))
-            }
-            is UpdateUiState.Failed -> {
-                StatusLine(
-                    text = texts.updateFailureMessage(state.reason, state.detail),
-                    isError = true
-                )
-            }
-        }
-
-        availableRelease?.let { release ->
-            UpdateDownloadActions(
-                texts = texts,
-                downloadState = downloadState,
-                onAppDownload = { startAppDownload(release) },
-                onBrowserDownload = {
-                    openExternalLink(context, release.downloadUrl, texts.linkUnavailable)
-                },
-                onCancelDownload = { downloadJob?.cancel() },
-                onOpenDownloadedApk = ::openDownloadedApk
-            )
-        }
-    }
-}
-
-@Composable
-private fun UpdateChannelButton(
-    text: String,
-    selected: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    if (selected) {
-        Button(
-            onClick = onClick,
-            enabled = enabled,
-            modifier = modifier.heightIn(min = 42.dp),
-            shape = RoundedCornerShape(8.dp),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-        ) {
-            Text(text = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    } else {
-        OutlinedButton(
-            onClick = onClick,
-            enabled = enabled,
-            modifier = modifier.heightIn(min = 42.dp),
-            shape = RoundedCornerShape(8.dp),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
-        ) {
-            Text(text = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
-}
-
-@Composable
-private fun UpdateDownloadActions(
-    texts: UiText,
-    downloadState: UpdateDownloadUiState,
-    onAppDownload: () -> Unit,
-    onBrowserDownload: () -> Unit,
-    onCancelDownload: () -> Unit,
-    onOpenDownloadedApk: (DownloadedUpdate) -> Unit
-) {
-    when (downloadState) {
-        UpdateDownloadUiState.Idle -> {
-            UpdateDownloadButtons(
-                texts = texts,
-                onAppDownload = onAppDownload,
-                onBrowserDownload = onBrowserDownload
-            )
-        }
-        is UpdateDownloadUiState.Downloading -> {
-            UpdateDownloadProgress(
-                texts = texts,
-                progress = downloadState.progress,
-                onCancelDownload = onCancelDownload
-            )
-        }
-        is UpdateDownloadUiState.Completed -> {
-            StatusLine(text = texts.downloadComplete)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = { onOpenDownloadedApk(downloadState.downloadedUpdate) },
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
-                ) {
-                    Text(
-                        text = texts.openDownloadedApk,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                OutlinedButton(
-                    onClick = onBrowserDownload,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
-                ) {
-                    Text(
-                        text = texts.browserDownload,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-        }
-        is UpdateDownloadUiState.Failed -> {
-            StatusLine(
-                text = texts.downloadFailureMessage(downloadState.message),
-                isError = true
-            )
-            UpdateDownloadButtons(
-                texts = texts,
-                onAppDownload = onAppDownload,
-                onBrowserDownload = onBrowserDownload
-            )
-        }
-    }
-}
-
-@Composable
-private fun UpdateDownloadButtons(
-    texts: UiText,
-    onAppDownload: () -> Unit,
-    onBrowserDownload: () -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Button(
-            onClick = onAppDownload,
-            modifier = Modifier
-                .weight(1f)
-                .heightIn(min = 48.dp),
-            shape = RoundedCornerShape(8.dp),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
-        ) {
-            Text(
-                text = texts.appDownload,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        OutlinedButton(
-            onClick = onBrowserDownload,
-            modifier = Modifier
-                .weight(1f)
-                .heightIn(min = 48.dp),
-            shape = RoundedCornerShape(8.dp),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
-        ) {
-            Text(
-                text = texts.browserDownload,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-private fun UpdateDownloadProgress(
-    texts: UiText,
-    progress: DownloadProgress,
-    onCancelDownload: () -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        val fraction = progress.fraction
-        if (fraction == null) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-        } else {
-            LinearProgressIndicator(
-                progress = fraction,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = texts.downloadProgressMessage(progress),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            TextButton(onClick = onCancelDownload) {
-                Text(texts.cancelDownload)
-            }
-        }
-    }
-}
 
 @Composable
 private fun SupportDialog(
@@ -4242,7 +2341,7 @@ private fun SupportTargetCard(
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                     ) {
                         AppIcon(
-                            icon = Icons.Rounded.OpenInNew,
+                            icon = Icons.AutoMirrored.Rounded.OpenInNew,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier.size(17.dp)
@@ -4346,117 +2445,50 @@ private fun CopyableValueBox(
 }
 
 @Composable
-private fun AccentSwatch(
-    texts: UiText,
-    option: AccentColorOption,
-    selected: Boolean,
-    onSelected: () -> Unit
-) {
-    val context = LocalContext.current
-    val label = texts.accentLabel(option)
-    val isDark = MaterialTheme.colorScheme.background.red < 0.5f
-
-    val (swatchColor, swatchContentColor) = if (option == AccentColorOption.Dynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        val scheme = if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        Pair(scheme.primary, scheme.onPrimary)
-    } else {
-        Pair(option.color(isDark), option.contentColor(isDark))
-    }
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier.width(72.dp)
-    ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .background(swatchColor)
-                .border(
-                    width = if (selected) 3.dp else 1.dp,
-                    color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
-                    shape = CircleShape
-                )
-                .clickable(
-                    onClickLabel = label,
-                    role = Role.Button,
-                    onClick = onSelected
-                )
-                .semantics {
-                    contentDescription = label
-                    role = Role.Button
-                    this.selected = selected
-                }
-        ) {
-            if (option == AccentColorOption.Dynamic) {
-                Icon(
-                    imageVector = Icons.Rounded.AutoAwesome,
-                    contentDescription = null,
-                    tint = swatchContentColor,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-        }
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.clearAndSetSemantics {}
-        )
-    }
-}
-
-@Composable
 private fun EmptyAddState(
     texts: UiText,
     height: Dp,
     showButton: Boolean,
     onPickFiles: () -> Unit,
+    onOpenMetadataSecurity: () -> Unit,
+    onHeroTopChanged: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(height),
+        modifier = modifier.fillMaxWidth().heightIn(min = height).padding(vertical = 24.dp),
         contentAlignment = Alignment.Center
     ) {
-        if (showButton) {
-            HeroAddButton(
-                morphProgress = 0f,
-                texts = texts,
-                onPickFiles = onPickFiles,
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .offset(y = EmptyHeroButtonOffsetY)
-            )
-        }
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier
-                .align(Alignment.Center)
-                .offset(y = EmptyHeroTextOffsetY)
+            modifier = Modifier.widthIn(max = 480.dp).fillMaxWidth().padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Measure the actual empty-state origin so the existing add-button morph also works with large text.
+            Box(
+                Modifier.size(ZenAnimations.HeroCenterSize.dp)
+                    .onGloballyPositioned { onHeroTopChanged(it.positionInRoot().y) }
+            ) {
+                if (showButton) HeroAddButton(morphProgress = 0f, texts = texts, onPickFiles = onPickFiles)
+            }
+            Spacer(Modifier.height(16.dp))
             Text(
-                text = texts.addFilesTitle,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground,
-                textAlign = TextAlign.Center
+                texts.addFilesTitle, style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(Modifier.height(12.dp))
             Text(
-                text = texts.addFilesNote,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth(0.82f)
+                texts.addFilesNote, style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center
             )
+            Spacer(Modifier.height(20.dp))
+            OutlinedButton(
+                onClick = onOpenMetadataSecurity,
+                modifier = Modifier.heightIn(min = 48.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                AppIcon(Icons.Rounded.Security, null, MaterialTheme.colorScheme.primary, Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(texts.settingsQuickPrivacyCapsule)
+            }
         }
     }
 }
@@ -8777,7 +6809,7 @@ private fun DropdownOption(
 }
 
 @Composable
-private fun SmallTag(text: String) {
+internal fun SmallTag(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.labelSmall,
@@ -8807,7 +6839,7 @@ private fun ResultInfoLine(text: String) {
 }
 
 @Composable
-private fun StatusLine(
+internal fun StatusLine(
     text: String,
     isError: Boolean = false
 ) {
@@ -8848,7 +6880,7 @@ private fun QuietPanel(
 }
 
 @Composable
-private fun AppIcon(
+internal fun AppIcon(
     icon: ImageVector,
     contentDescription: String?,
     tint: Color,
@@ -9749,7 +7781,7 @@ private val AUDIO_LOSSLESS_OUTPUT_EXTENSIONS = setOf("wav", "flac")
 
 
 
-private fun installedAppVersion(context: Context): InstalledAppVersion {
+internal fun installedAppVersion(context: Context): InstalledAppVersion {
     return runCatching {
         val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
         InstalledAppVersion(
@@ -9764,7 +7796,7 @@ private fun installedAppVersion(context: Context): InstalledAppVersion {
     }.getOrDefault(InstalledAppVersion(versionName = "0.1.0", versionCode = 1_000_001L))
 }
 
-private fun openExternalLink(
+internal fun openExternalLink(
     context: Context,
     url: String,
     failureMessage: String
@@ -9893,7 +7925,7 @@ private fun copyToClipboard(
 
 private const val MIME_TYPE_ANY = "*/*"
 
-private fun metadataPrimaryInfoLine(
+internal fun metadataPrimaryInfoLine(
     inspection: MetadataInspection,
     texts: UiText
 ): String {
@@ -9907,7 +7939,7 @@ private fun metadataPrimaryInfoLine(
     }.joinToString(" · ")
 }
 
-private fun metadataCompactRows(
+internal fun metadataCompactRows(
     inspection: MetadataInspection,
     texts: UiText
 ): List<Pair<String, String>> {
@@ -9942,7 +7974,7 @@ private fun metadataCompactRows(
     }
 }
 
-private fun metadataDetailRows(
+internal fun metadataDetailRows(
     inspection: MetadataInspection,
     texts: UiText
 ): List<Pair<String, String>> {

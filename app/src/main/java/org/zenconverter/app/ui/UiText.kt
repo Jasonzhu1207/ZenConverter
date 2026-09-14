@@ -955,6 +955,19 @@ internal class UiText(private val context: Context) {
 
     val usePureBlackTheme: String get() = text(R.string.text_use_pure_black_theme)
 
+    val settingsTitle: String get() = text(R.string.ui_settings_title)
+    val settingsGroupGeneral: String get() = text(R.string.ui_settings_group_general)
+    val settingsGroupAppearance: String get() = text(R.string.ui_settings_group_appearance)
+    val settingsGroupPrivacyEngines: String get() = text(R.string.ui_settings_group_privacy_engines)
+    val settingsGroupAboutSupport: String get() = text(R.string.ui_settings_group_about_support)
+    val settingsLanguage: String get() = text(R.string.ui_settings_language)
+    val settingsOfflineEngines: String get() = text(R.string.ui_settings_offline_engines)
+    val settingsOfflineEnginesDesc: String get() = text(R.string.ui_settings_offline_engines_desc)
+    val settingsMetadataSecurityDesc: String get() = text(R.string.ui_settings_metadata_security_desc)
+    val settingsCheckUpdates: String get() = text(R.string.ui_settings_check_updates)
+    val settingsQuickPrivacyCapsule: String get() = text(R.string.ui_settings_quick_privacy_capsule)
+    val settingsBack: String get() = text(R.string.ui_settings_back)
+
     fun languageLabel(option: LanguageOption): String =
         if (option.tag.isEmpty()) text(R.string.language_follow_system) else option.nativeName
 

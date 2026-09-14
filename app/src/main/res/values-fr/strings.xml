@@ -643,8 +643,22 @@
     <string name="format_detail_parenthesized">%1$s (%2$s)</string>
     <string name="ui_selected_folder">Dossier sélectionné</string>
     <string name="ui_device_storage">Stockage de l\'appareil</string>
+    <string name="ui_settings_title">Paramètres</string>
+    <string name="ui_settings_group_general">Général</string>
+    <string name="ui_settings_group_appearance">Apparence et thème</string>
+    <string name="ui_settings_group_privacy_engines">Outils et ressources</string>
+    <string name="ui_settings_group_about_support">À propos et assistance</string>
+    <string name="ui_settings_language">Langue de l\'application</string>
+    <string name="ui_settings_offline_engines">Modèles et polices</string>
+    <string name="ui_settings_offline_engines_desc">Gérer les modèles IA pour les images et vidéos et les polices des documents</string>
+    <string name="ui_settings_metadata_security_desc">Consulter les métadonnées des photos et vidéos ; supprimer et restaurer les métadonnées sensibles des images JPEG</string>
+    <string name="ui_settings_check_updates">Rechercher des mises à jour</string>
+    <string name="ui_settings_quick_privacy_capsule">Outils de métadonnées</string>
+    <string name="ui_settings_back">Retour</string>
     <plurals name="contact_sheet_audio_channel_count">
         <item quantity="one">%1$d canal</item>
         <item quantity="other">%1$d canaux</item>
     </plurals>
+    <string name="ui_settings_release_notes">Notes de version</string>
+    <string name="ui_settings_update_source">Source du téléchargement : GitHub Releases</string>
 </resources>

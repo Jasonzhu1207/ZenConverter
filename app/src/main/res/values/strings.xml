@@ -653,5 +653,19 @@
         <item quantity="one">%1$d channel</item>
         <item quantity="other">%1$d channels</item>
     </plurals>
+    <string name="ui_settings_title">Settings</string>
+    <string name="ui_settings_group_general">General</string>
+    <string name="ui_settings_group_appearance">Appearance</string>
+    <string name="ui_settings_group_privacy_engines">Tools &amp; resources</string>
+    <string name="ui_settings_group_about_support">About &amp; Support</string>
+    <string name="ui_settings_language">Language</string>
+    <string name="ui_settings_offline_engines">Models &amp; fonts</string>
+    <string name="ui_settings_offline_engines_desc">Manage image and video AI models and document fonts</string>
+    <string name="ui_settings_metadata_security_desc">View photo and video metadata; clean and restore sensitive metadata in JPEG images</string>
+    <string name="ui_settings_check_updates">Check for updates</string>
+    <string name="ui_settings_quick_privacy_capsule">Metadata tools</string>
+    <string name="ui_settings_back">Back</string>
     <string name="project_identifier" translatable="false">Jasonzhu1207/ZenConverter</string>
+    <string name="ui_settings_release_notes">Release notes</string>
+    <string name="ui_settings_update_source">Download source: GitHub Releases</string>
 </resources>
