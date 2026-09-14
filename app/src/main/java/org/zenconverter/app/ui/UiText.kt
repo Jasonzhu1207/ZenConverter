@@ -557,6 +557,9 @@ internal class UiText(private val context: Context) {
     val videoInterpolationSummary: String
         get() = text(R.string.ui_video_interpolation_summary)
 
+    val videoInterpolationOpticalFlowSummary: String
+        get() = text(R.string.ui_video_interpolation_optical_flow_summary)
+
     val rifeModelPurpose: String
         get() = text(R.string.ui_rife_model_purpose)
 
@@ -764,6 +767,10 @@ internal class UiText(private val context: Context) {
 
     fun aspectRatioLabel(): String {
         return text(R.string.text_aspect_ratio_label)
+    }
+
+    fun motionBlurLabel(): String {
+        return text(R.string.text_motion_blur_label)
     }
 
     fun volumeLabel(): String {
@@ -1061,6 +1068,10 @@ internal class UiText(private val context: Context) {
             VIDEO_ASPECT_CROP_16_9 -> text(R.string.text_option_value_crop_16_9)
             VIDEO_ASPECT_CROP_9_16 -> text(R.string.text_option_value_crop_9_16)
             VIDEO_ASPECT_CROP_1_1 -> text(R.string.text_option_value_crop_1_1)
+            VIDEO_MOTION_BLUR_OFF -> text(R.string.text_option_value_off)
+            VIDEO_MOTION_BLUR_SUBTLE -> text(R.string.text_option_value_subtle_motion_blur)
+            VIDEO_MOTION_BLUR_STANDARD -> text(R.string.text_option_value_standard_motion_blur)
+            VIDEO_MOTION_BLUR_HEAVY -> text(R.string.text_option_value_heavy_motion_blur)
             AUDIO_VOLUME_MUTE -> text(R.string.text_option_value_mute)
             AUDIO_ECHO_OFF -> text(R.string.text_option_value_off)
             AUDIO_ECHO_LIGHT -> text(R.string.text_option_value_light)
@@ -1070,6 +1081,7 @@ internal class UiText(private val context: Context) {
             AUDIO_DENOISE_STANDARD -> text(R.string.text_option_value_standard)
             VIDEO_COMPRESSION_STANDARD -> text(R.string.text_option_value_off_manual)
             VIDEO_INTERPOLATION_OFF -> text(R.string.text_option_value_off)
+            VIDEO_INTERPOLATION_OPTICAL_FLOW_2X -> text(R.string.text_option_value_optical_flow_2_interpolation)
             VIDEO_INTERPOLATION_RIFE_2X -> text(R.string.text_option_value_rife_2_interpolation)
             VIDEO_COMPRESSION_VISUAL_LOSSLESS -> text(R.string.text_option_value_visual_lossless)
             VIDEO_COMPRESSION_BALANCED -> text(R.string.text_option_value_balanced_shrink)

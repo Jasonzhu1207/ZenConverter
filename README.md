@@ -1,7 +1,5 @@
 <h1 align="center">ZenConverter</h1>
 
-**Help translate ZenConverter:** [English source and translation guide](docs/translating.md).
-
 <p align="center">
   <strong>Private, local-first file conversion for Android.</strong>
 </p>
@@ -116,6 +114,10 @@ More detail lives in [docs/architecture.md](docs/architecture.md) and
 [docs/technical-route.md](docs/technical-route.md).
 
 Development setup notes are in [docs/development-setup.md](docs/development-setup.md).
+
+## Translations
+
+ZenConverter welcomes community translations! You can contribute translations without knowing Kotlin or installing Android Studio. See the [English source and translation guide](docs/translating.md) to get started.
 
 ## License
 

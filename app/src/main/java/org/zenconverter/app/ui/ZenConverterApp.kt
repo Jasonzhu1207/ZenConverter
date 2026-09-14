@@ -212,6 +212,7 @@ import org.zenconverter.app.conversion.VideoCompressionMode
 import org.zenconverter.app.conversion.VideoExportOptions
 import org.zenconverter.app.conversion.VideoFrameInterpolationMode
 import org.zenconverter.app.conversion.VideoMirrorMode
+import org.zenconverter.app.conversion.VideoMotionBlurMode
 import org.zenconverter.app.conversion.VideoRotationMode
 import org.zenconverter.app.conversion.ContactSheetGrid
 import org.zenconverter.app.conversion.VideoContactSheetOptions
@@ -498,7 +499,8 @@ private data class VideoAdvancedUiState(
     val fadeOut: String,
     val mirror: String,
     val rotation: String,
-    val aspectRatio: String
+    val aspectRatio: String,
+    val motionBlur: String
 )
 
 private data class AudioAdvancedUiState(
@@ -601,9 +603,11 @@ private val VIDEO_COMPRESSION_OPTIONS = listOf(
 )
 
 internal const val VIDEO_INTERPOLATION_OFF = "Video interpolation off"
+internal const val VIDEO_INTERPOLATION_OPTICAL_FLOW_2X = "Video interpolation optical flow 2x"
 internal const val VIDEO_INTERPOLATION_RIFE_2X = "Video interpolation rife 2x"
 private val VIDEO_INTERPOLATION_OPTIONS = listOf(
     VIDEO_INTERPOLATION_OFF,
+    VIDEO_INTERPOLATION_OPTICAL_FLOW_2X,
     VIDEO_INTERPOLATION_RIFE_2X
 )
 
@@ -760,6 +764,17 @@ private val VIDEO_ASPECT_OPTIONS = listOf(
     VIDEO_ASPECT_CROP_16_9,
     VIDEO_ASPECT_CROP_9_16,
     VIDEO_ASPECT_CROP_1_1
+)
+
+internal const val VIDEO_MOTION_BLUR_OFF = "Motion blur off"
+internal const val VIDEO_MOTION_BLUR_SUBTLE = "Subtle"
+internal const val VIDEO_MOTION_BLUR_STANDARD = "Standard"
+internal const val VIDEO_MOTION_BLUR_HEAVY = "Heavy"
+private val VIDEO_MOTION_BLUR_OPTIONS = listOf(
+    VIDEO_MOTION_BLUR_OFF,
+    VIDEO_MOTION_BLUR_SUBTLE,
+    VIDEO_MOTION_BLUR_STANDARD,
+    VIDEO_MOTION_BLUR_HEAVY
 )
 
 internal const val AUDIO_VOLUME_MUTE = "Mute"
@@ -4958,9 +4973,28 @@ private fun QueuedFile.withBatchVideoInterpolationMode(
 ): QueuedFile {
     val mode = videoInterpolationModeFor(value)
     val isInterpolationActive = mode != VideoFrameInterpolationMode.Off
+    val isOpticalFlow = mode == VideoFrameInterpolationMode.OpticalFlow2x
+    val sourceShortSide = inputInfo?.let {
+        val w = it.width ?: 0
+        val h = it.height ?: 0
+        if (w > 0 && h > 0) minOf(w, h) else null
+    }
+    val currentRes = videoOptions.maxShortSidePixels
+    val clampedRes = if (isOpticalFlow) {
+        if (currentRes == null) {
+            if (sourceShortSide != null && sourceShortSide > 1080) 1080 else null
+        } else if (currentRes > 1080) {
+            1080
+        } else {
+            currentRes
+        }
+    } else {
+        currentRes
+    }
     return copy(
         videoOptions = videoOptions.copy(
             frameInterpolation = mode,
+            maxShortSidePixels = clampedRes,
             compressionMode = if (isInterpolationActive) VideoCompressionMode.Standard else videoOptions.compressionMode,
             advanced = if (isInterpolationActive) VideoAdvancedOptions() else videoOptions.advanced
         )
@@ -5047,7 +5081,9 @@ private fun BatchVideoTargetOptions(
                 )
             }
 
-            if (!isRifeModelDownloaded) {
+            val showRifeHint = !isRifeModelDownloaded &&
+                (commonInterpolation == VIDEO_INTERPOLATION_RIFE_2X || openMenuId == "batch-video-frame-interpolation")
+            if (showRifeHint) {
                 Text(
                     text = texts.rifeInterpolationHint(),
                     style = MaterialTheme.typography.bodySmall,
@@ -5059,8 +5095,13 @@ private fun BatchVideoTargetOptions(
         }
 
         if (isInterpolationActive) {
+            val summaryText = if (commonInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X) {
+                texts.videoInterpolationOpticalFlowSummary
+            } else {
+                texts.videoInterpolationSummary
+            }
             Text(
-                text = texts.videoInterpolationSummary,
+                text = summaryText,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary,
                 maxLines = 3,
@@ -5097,7 +5138,22 @@ private fun BatchVideoTargetOptions(
             }
         }
 
-        if (!isInterpolationActive && (isGifTarget || standardCompressionActive || mixedCompression)) {
+        if ((!isInterpolationActive || commonInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X) && (isGifTarget || standardCompressionActive || mixedCompression)) {
+            val anySourceExceeds1080 = files.any { file ->
+                val w = file.inputInfo?.width ?: 0
+                val h = file.inputInfo?.height ?: 0
+                w > 0 && h > 0 && minOf(w, h) > 1080
+            }
+            val isBatchOpticalFlow = commonInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X
+            val disabledBatchResolutionOptions = buildSet {
+                if (isBatchOpticalFlow) {
+                    add(VIDEO_RESOLUTION_2160P)
+                    add(VIDEO_RESOLUTION_1440P)
+                    if (anySourceExceeds1080) {
+                        add(VIDEO_RESOLUTION_ORIGINAL)
+                    }
+                }
+            }
             OptionDropdown(
                 "batch-video-size",
                 texts.resolution,
@@ -5105,7 +5161,8 @@ private fun BatchVideoTargetOptions(
                 if (isGifTarget) VIDEO_GIF_RESOLUTION_OPTIONS else VIDEO_RESOLUTION_OPTIONS,
                 texts,
                 openMenuId,
-                onOpenMenuChange
+                onOpenMenuChange,
+                disabledOptions = disabledBatchResolutionOptions
             ) { value ->
                 onOpenMenuChange(null)
                 onUpdateFiles(
@@ -6306,6 +6363,7 @@ private fun VideoOptions(
     onVideoMirrorChange: (String) -> Unit,
     onVideoRotationChange: (String) -> Unit,
     onVideoAspectRatioChange: (String) -> Unit,
+    onVideoMotionBlurChange: (String) -> Unit = {},
     onAudioAdvancedExpandedChange: (Boolean) -> Unit,
     onAudioReverseChange: (Boolean) -> Unit,
     onAudioFadeInChange: (String) -> Unit,
@@ -6315,6 +6373,7 @@ private fun VideoOptions(
     onAudioNoiseReductionChange: (String) -> Unit,
     contactSheetOptions: VideoContactSheetOptions = VideoContactSheetOptions(),
     onContactSheetOptionsChange: (VideoContactSheetOptions) -> Unit = {},
+    sourceShortSide: Int? = null,
 ) {
     val isContactSheetTarget = targetFormat.id.isContactSheet
     if (isContactSheetTarget) {
@@ -6364,6 +6423,16 @@ private fun VideoOptions(
     val isGifTarget = targetFormat.extension.equals("gif", ignoreCase = true)
     val isInterpolationActive = !isGifTarget && videoInterpolationModeFor(frameInterpolation) != VideoFrameInterpolationMode.Off
     val disabledInterpolationOptions = if (isRifeModelDownloaded) emptySet() else setOf(VIDEO_INTERPOLATION_RIFE_2X)
+    val isOpticalFlow = !isGifTarget && frameInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X
+    val disabledResolutionOptions = buildSet {
+        if (isOpticalFlow) {
+            add(VIDEO_RESOLUTION_2160P)
+            add(VIDEO_RESOLUTION_1440P)
+            if (sourceShortSide != null && sourceShortSide > 1080) {
+                add(VIDEO_RESOLUTION_ORIGINAL)
+            }
+        }
+    }
     val isStandardCompression = videoCompressionModeFor(compressionMode) == VideoCompressionMode.Standard
     val presetCompressionActive = !isGifTarget && !isInterpolationActive && !isStandardCompression
     OptionGrid {
@@ -6389,7 +6458,9 @@ private fun VideoOptions(
                 disabledOptions = disabledInterpolationOptions,
                 onSelected = onFrameInterpolationChange
             )
-            if (!isRifeModelDownloaded) {
+            val showRifeHint = !isRifeModelDownloaded &&
+                (frameInterpolation == VIDEO_INTERPOLATION_RIFE_2X || openMenuId == "${menuPrefix}video-frame-interpolation")
+            if (showRifeHint) {
                 Text(
                     text = texts.rifeInterpolationHint(),
                     style = MaterialTheme.typography.bodySmall,
@@ -6400,8 +6471,13 @@ private fun VideoOptions(
             }
         }
         if (isInterpolationActive) {
+            val summaryText = if (frameInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X) {
+                texts.videoInterpolationOpticalFlowSummary
+            } else {
+                texts.videoInterpolationSummary
+            }
             Text(
-                text = texts.videoInterpolationSummary,
+                text = summaryText,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary,
                 maxLines = 3,
@@ -6425,7 +6501,7 @@ private fun VideoOptions(
                 onCompressionModeChange
             )
         }
-        if (!isInterpolationActive && (isGifTarget || isStandardCompression)) {
+        if ((!isInterpolationActive || frameInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X) && (isGifTarget || isStandardCompression)) {
             OptionDropdown(
                 "${menuPrefix}video-size",
                 texts.resolution,
@@ -6434,7 +6510,8 @@ private fun VideoOptions(
                 texts,
                 openMenuId,
                 onOpenMenuChange,
-                onResolutionChange
+                disabledOptions = disabledResolutionOptions,
+                onSelected = onResolutionChange
             )
         }
         if (presetCompressionActive) {
@@ -6524,7 +6601,8 @@ private fun VideoOptions(
                 onFadeOutChange = onVideoFadeOutChange,
                 onMirrorChange = onVideoMirrorChange,
                 onRotationChange = onVideoRotationChange,
-                onAspectRatioChange = onVideoAspectRatioChange
+                onAspectRatioChange = onVideoAspectRatioChange,
+                onMotionBlurChange = onVideoMotionBlurChange
             )
             AudioAdvancedOptionsPanel(
                 texts = texts,
@@ -7299,7 +7377,8 @@ private fun VideoAdvancedOptionsPanel(
     onFadeOutChange: (String) -> Unit,
     onMirrorChange: (String) -> Unit,
     onRotationChange: (String) -> Unit,
-    onAspectRatioChange: (String) -> Unit
+    onAspectRatioChange: (String) -> Unit,
+    onMotionBlurChange: (String) -> Unit
 ) {
     AdvancedOptionsPanel(
         title = texts.videoAdvancedTitle(),
@@ -7361,6 +7440,16 @@ private fun VideoAdvancedOptionsPanel(
             openMenuId,
             onOpenMenuChange,
             onAspectRatioChange
+        )
+        OptionDropdown(
+            "${menuPrefix}video-advanced-motion-blur",
+            texts.motionBlurLabel(),
+            state.motionBlur,
+            VIDEO_MOTION_BLUR_OPTIONS,
+            texts,
+            openMenuId,
+            onOpenMenuChange,
+            onMotionBlurChange
         )
     }
 }
@@ -8141,6 +8230,11 @@ private fun QueuedFileOptionsPanel(
                 onContactSheetOptionsChange = { options ->
                     onUpdateFile(file.copy(contactSheetOptions = options))
                 },
+                sourceShortSide = file.inputInfo?.let {
+                    val w = it.width ?: 0
+                    val h = it.height ?: 0
+                    if (w > 0 && h > 0) minOf(w, h) else null
+                },
                 frameInterpolation = videoInterpolationLabelFor(file.videoOptions.frameInterpolation),
                 isRifeModelDownloaded = isRifeModelDownloaded,
                 openMenuId = openMenuId,
@@ -8149,10 +8243,29 @@ private fun QueuedFileOptionsPanel(
                 onFrameInterpolationChange = { value ->
                     val mode = videoInterpolationModeFor(value)
                     val isInterpolationActive = mode != VideoFrameInterpolationMode.Off
+                    val isOpticalFlow = mode == VideoFrameInterpolationMode.OpticalFlow2x
+                    val sourceShort = file.inputInfo?.let {
+                        val w = it.width ?: 0
+                        val h = it.height ?: 0
+                        if (w > 0 && h > 0) minOf(w, h) else null
+                    }
+                    val currentRes = file.videoOptions.maxShortSidePixels
+                    val clampedRes = if (isOpticalFlow) {
+                        if (currentRes == null) {
+                            if (sourceShort != null && sourceShort > 1080) 1080 else null
+                        } else if (currentRes > 1080) {
+                            1080
+                        } else {
+                            currentRes
+                        }
+                    } else {
+                        currentRes
+                    }
                     onUpdateFile(
                         file.copy(
                             videoOptions = file.videoOptions.copy(
                                 frameInterpolation = mode,
+                                maxShortSidePixels = clampedRes,
                                 compressionMode = if (isInterpolationActive) VideoCompressionMode.Standard else file.videoOptions.compressionMode,
                                 advanced = if (isInterpolationActive) VideoAdvancedOptions() else file.videoOptions.advanced
                             )
@@ -8254,6 +8367,9 @@ private fun QueuedFileOptionsPanel(
                 },
                 onVideoAspectRatioChange = { value ->
                     onUpdateFile(file.copy(videoOptions = file.videoOptions.copy(advanced = file.videoOptions.advanced.copy(aspectRatio = videoAspectRatioModeFor(value)))))
+                },
+                onVideoMotionBlurChange = { value ->
+                    onUpdateFile(file.copy(videoOptions = file.videoOptions.copy(advanced = file.videoOptions.advanced.copy(motionBlur = videoMotionBlurModeFor(value)))))
                 },
                 onAudioAdvancedExpandedChange = onAudioAdvancedExpandedChange,
                 onAudioReverseChange = { enabled ->
@@ -9077,6 +9193,7 @@ private fun videoCompressionLabelFor(mode: VideoCompressionMode): String {
 
 private fun videoInterpolationLabelFor(mode: VideoFrameInterpolationMode): String {
     return when (mode) {
+        VideoFrameInterpolationMode.OpticalFlow2x -> VIDEO_INTERPOLATION_OPTICAL_FLOW_2X
         VideoFrameInterpolationMode.Rife2x -> VIDEO_INTERPOLATION_RIFE_2X
         VideoFrameInterpolationMode.Off -> VIDEO_INTERPOLATION_OFF
     }
@@ -9150,7 +9267,8 @@ private fun videoAdvancedUiStateFor(
         fadeOut = fadeLabelFor(advanced.fadeOutSeconds),
         mirror = videoMirrorLabelFor(advanced.mirror),
         rotation = videoRotationLabelFor(advanced.rotation),
-        aspectRatio = videoAspectRatioLabelFor(advanced.aspectRatio)
+        aspectRatio = videoAspectRatioLabelFor(advanced.aspectRatio),
+        motionBlur = videoMotionBlurLabelFor(advanced.motionBlur)
     )
 }
 
@@ -9205,6 +9323,15 @@ private fun videoAspectRatioLabelFor(value: VideoAspectRatioMode): String {
         VideoAspectRatioMode.Crop9By16 -> VIDEO_ASPECT_CROP_9_16
         VideoAspectRatioMode.Crop1By1 -> VIDEO_ASPECT_CROP_1_1
         VideoAspectRatioMode.Keep -> VIDEO_ASPECT_KEEP
+    }
+}
+
+private fun videoMotionBlurLabelFor(value: VideoMotionBlurMode): String {
+    return when (value) {
+        VideoMotionBlurMode.Subtle -> VIDEO_MOTION_BLUR_SUBTLE
+        VideoMotionBlurMode.Standard -> VIDEO_MOTION_BLUR_STANDARD
+        VideoMotionBlurMode.Heavy -> VIDEO_MOTION_BLUR_HEAVY
+        VideoMotionBlurMode.Off -> VIDEO_MOTION_BLUR_OFF
     }
 }
 
@@ -9372,6 +9499,7 @@ private fun videoCompressionModeFor(value: String): VideoCompressionMode {
 
 private fun videoInterpolationModeFor(value: String): VideoFrameInterpolationMode {
     return when (value) {
+        VIDEO_INTERPOLATION_OPTICAL_FLOW_2X -> VideoFrameInterpolationMode.OpticalFlow2x
         VIDEO_INTERPOLATION_RIFE_2X -> VideoFrameInterpolationMode.Rife2x
         else -> VideoFrameInterpolationMode.Off
     }
@@ -9497,6 +9625,15 @@ private fun videoAspectRatioModeFor(value: String): VideoAspectRatioMode {
         VIDEO_ASPECT_CROP_9_16 -> VideoAspectRatioMode.Crop9By16
         VIDEO_ASPECT_CROP_1_1 -> VideoAspectRatioMode.Crop1By1
         else -> VideoAspectRatioMode.Keep
+    }
+}
+
+private fun videoMotionBlurModeFor(value: String): VideoMotionBlurMode {
+    return when (value) {
+        VIDEO_MOTION_BLUR_SUBTLE -> VideoMotionBlurMode.Subtle
+        VIDEO_MOTION_BLUR_STANDARD -> VideoMotionBlurMode.Standard
+        VIDEO_MOTION_BLUR_HEAVY -> VideoMotionBlurMode.Heavy
+        else -> VideoMotionBlurMode.Off
     }
 }
 
