@@ -49,6 +49,7 @@ checklist. Mark runtime results only after observing them.
 | --- | --- |
 | Phone portrait, narrow multi-window, tablet landscape | Settings, models/fonts, metadata, help, and privacy share a centered column of at most 680 dp. Header and list align. No horizontally stretched tablet rows. |
 | Light, dark, pure black, dynamic and explicit accent colors | Surfaces and controls use the chosen Material palette; symbols and selected states remain readable. |
+| Android 11 or below / Android 12 or above | Wallpaper dynamic color is absent below API 31 and selectable from API 31 onward. On older Android versions, a restored Dynamic preference falls back to Charcoal with the correct label and selection. |
 | English, Simplified/Traditional Chinese, French, largest system font | Labels and instructions wrap. Theme/channel selectors become vertical when needed. Actions and metadata tags do not overlap. The home add button and metadata button remain separate and usable. |
 | System animator duration scale set to zero | Page transitions finish immediately, with no stuck overlay or hidden controls. |
 | RTL layout (debug testing only) | Back icons and page transitions mirror; order and alignment remain usable. |

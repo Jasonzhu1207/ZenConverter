@@ -234,6 +234,11 @@ internal fun AccentColorPickerRow(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val availableAccents = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        AccentColorOption.entries
+    } else {
+        AccentColorOption.entries.filter { it != AccentColorOption.Dynamic }
+    }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(texts.accentLabel(selectedAccent), style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -241,9 +246,9 @@ internal fun AccentColorPickerRow(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).selectableGroup(),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            AccentColorOption.entries.forEach { option ->
+            availableAccents.forEach { option ->
                 val selected = option == selectedAccent
-                val (color, foreground) = if (option == AccentColorOption.Dynamic && Build.VERSION.SDK_INT >= 31) {
+                val (color, foreground) = if (option == AccentColorOption.Dynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     val scheme = if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
                     scheme.primary to scheme.onPrimary
                 } else option.color(isDark) to option.contentColor(isDark)
