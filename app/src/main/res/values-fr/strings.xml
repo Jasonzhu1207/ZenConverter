@@ -403,7 +403,7 @@
     <string name="text_task_message_compatibility_engine_needs_an_opus_capable_ffmpeg_package">Nécessite un paquet FFmpeg compatible Opus.</string>
     <string name="text_task_message_compatibility_engine_needs_duration_metadata_for_fade_out">Métadonnée de durée requise pour le fondu en sortie.</string>
     <string name="text_task_message_compatibility_engine_needs_duration_metadata_for_reverse_playback">Métadonnée de durée requise pour la lecture inversée.</string>
-    <string name="text_task_message_compatibility_engine_needs_motion_blur_filter">Le moteur de compatibilité requiert le filtre de flou de mouvement</string>
+    <string name="text_task_message_compatibility_engine_needs_motion_blur_filter">Filtre de flou de mouvement requis</string>
     <string name="text_task_message_compatibility_engine_needs_reverse_filters">Filtres d\'inversion requis</string>
     <string name="text_task_message_compatibility_engine_needs_subtitle_support">Prise en charge des sous-titres requis</string>
     <string name="text_task_message_compatibility_engine_needs_the_audio_denoise_filter">Filtre de réduction de bruit requis</string>
