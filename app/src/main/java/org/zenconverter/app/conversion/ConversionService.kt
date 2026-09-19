@@ -107,6 +107,8 @@ import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlin.math.roundToInt
@@ -235,6 +237,7 @@ class ConversionService : Service() {
                         input.category == ConversionMediaCategory.Document -> "Office2Pdf"
                         input.category == ConversionMediaCategory.Font -> "Font"
                         input.category == ConversionMediaCategory.Subtitle -> "Subtitle"
+                        input.category == ConversionMediaCategory.Video && isVideoContactSheetOutput(input) -> "ContactSheet"
                         useCompatibilityEngine -> "Compatibility"
                         else -> "Unrouted"
                     }
@@ -340,22 +343,19 @@ class ConversionService : Service() {
                 }
             }
 
-            val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+            var durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
                 ?: input.inputInfo?.durationMs
                 ?: 0L
-            val rawWidth = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull()
+            var rawWidth = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull()
                 ?: input.inputInfo?.width
                 ?: 1920
-            val rawHeight = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()
+            var rawHeight = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()
                 ?: input.inputInfo?.height
                 ?: 1080
-            val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
-            val isRotated = rotation == 90 || rotation == 270
-            val displayWidth = if (isRotated) rawHeight else rawWidth
-            val displayHeight = if (isRotated) rawWidth else rawHeight
-            val captureFps = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)?.toFloatOrNull()
+            var rawRotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toDoubleOrNull()?.toInt() ?: 0
+            var captureFps = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)?.toFloatOrNull()
                 ?: input.inputInfo?.frameRate
-            val totalBitrateBps = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)?.toLongOrNull()
+            var totalBitrateBps = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)?.toLongOrNull()
                 ?: input.inputInfo?.bitrateBitsPerSecond
 
             var videoCodecName = localizedText(R.string.contact_sheet_unknown_codec).resolve(this)
@@ -376,9 +376,54 @@ class ConversionService : Service() {
                             FFprobeKit.getMediaInformation(inputSource.path, 2000)?.getMediaInformation()
                         }.getOrNull()
                         if (mediaInfo != null) {
+                            if (durationMs <= 0L) {
+                                mediaInfo.getDuration()?.toDoubleOrNull()?.let { durationSec ->
+                                    val parsedMs = (durationSec * 1000).toLong()
+                                    if (parsedMs > 0L) durationMs = parsedMs
+                                }
+                            }
+                            if (totalBitrateBps == null) {
+                                mediaInfo.getBitrate()?.toLongOrNull()?.let {
+                                    if (it > 0L) totalBitrateBps = it
+                                }
+                            }
                             val streams = mediaInfo.getStreams().orEmpty()
                             val vStream = streams.firstOrNull { it.getType().equals("video", ignoreCase = true) }
                             if (vStream != null) {
+                                val probeWidth = vStream.getWidth()?.toInt()
+                                val probeHeight = vStream.getHeight()?.toInt()
+                                if (probeWidth != null && probeWidth > 0 && probeHeight != null && probeHeight > 0) {
+                                    rawWidth = probeWidth
+                                    rawHeight = probeHeight
+                                }
+                                val probeRotation = vStream.getNumberProperty("rotate")?.toInt()
+                                    ?: vStream.getStringProperty("rotate")?.toDoubleOrNull()?.toInt()
+                                    ?: vStream.getTags()?.opt("rotate")?.toString()?.toDoubleOrNull()?.toInt()
+                                    ?: runCatching {
+                                        val sideData = vStream.getAllProperties()?.optJSONArray("side_data_list")
+                                        if (sideData != null) {
+                                            var rot: Int? = null
+                                            for (j in 0 until sideData.length()) {
+                                                val obj = sideData.optJSONObject(j)
+                                                val r = obj?.opt("rotation")?.toString()?.toDoubleOrNull()?.toInt()
+                                                if (r != null && r != 0) {
+                                                    rot = r
+                                                    break
+                                                }
+                                            }
+                                            rot
+                                        } else null
+                                    }.getOrNull()
+                                if (rawRotation == 0 && probeRotation != null && probeRotation != 0) {
+                                    rawRotation = probeRotation
+                                }
+                                if (captureFps == null) {
+                                    val rFps = vStream.getRealFrameRate()?.let { parseFpsString(it) }
+                                        ?: vStream.getAverageFrameRate()?.let { parseFpsString(it) }
+                                    if (rFps != null && rFps > 0f) {
+                                        captureFps = rFps
+                                    }
+                                }
                                 videoCodecName = vStream.getCodec().orEmpty().ifBlank { videoCodecName }
                                 videoProfile = vStream.getStringProperty("profile").orEmpty()
                                 videoPixFmt = vStream.getFormat().orEmpty()
@@ -407,6 +452,11 @@ class ConversionService : Service() {
                 }
             }
 
+            val rotation = ((rawRotation % 360) + 360) % 360
+            val isRotated = rotation == 90 || rotation == 270
+            val displayWidth = if (isRotated) rawHeight else rawWidth
+            val displayHeight = if (isRotated) rawWidth else rawHeight
+
             if (audioCodecName.isBlank()) {
                 val hasAudio = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO)
                 if (hasAudio != null) {
@@ -433,63 +483,89 @@ class ConversionService : Service() {
             val margin = 20
             val gap = 12
             val availableWidth = sheetWidth - (margin * 2) - ((cols - 1) * gap)
-            val cellWidth = availableWidth / cols
-            val cellHeight = (cellWidth * (displayHeight.toFloat() / displayWidth)).toInt().coerceAtLeast(80)
+            val rawCellWidth = availableWidth / cols
+            val cellWidth = ((rawCellWidth / 2) * 2).coerceAtLeast(2)
+            val rawCellHeight = (cellWidth * (displayHeight.toFloat() / displayWidth.coerceAtLeast(1))).toInt().coerceAtLeast(80)
+            val cellHeight = ((rawCellHeight / 2) * 2).coerceAtLeast(2)
+            val gridTotalWidth = cols * cellWidth + (cols - 1) * gap
+            val startX = (sheetWidth - gridTotalWidth) / 2f
 
             val includeHeader = input.contactSheetOptions.includeHeader
             val headerHeight = if (includeHeader) 160 else 0
             val sheetHeight = headerHeight + (margin * 2) + (rows * cellHeight) + ((rows - 1) * gap)
 
             val stepMs = effectiveDurationMs / (frameCount + 1)
-            val frameBitmaps = mutableListOf<Pair<Bitmap, Long>>()
+            val frameSlots = arrayOfNulls<Pair<Bitmap, Long>>(frameCount)
+            var retrieverAvailable = true
+            var retrieverFailures = 0
 
-            for (i in 0 until frameCount) {
+            try {
+                for (i in 0 until frameCount) {
+                    if (ConversionTaskStore.isCancelled()) {
+                        return
+                    }
+                    val timeMs = effectiveStartMs + (i + 1) * stepMs
+                    val timeUs = timeMs * 1000L
+
+                    var bmp: Bitmap? = null
+
+                    if (retrieverAvailable) {
+                        bmp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                            runCatching {
+                                retriever.getScaledFrameAtTime(
+                                    timeUs,
+                                    MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+                                    cellWidth,
+                                    cellHeight
+                                )
+                            }.getOrNull()
+                        } else null
+
+                        if (bmp == null) {
+                            bmp = runCatching {
+                                retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                            }.getOrNull()
+                            if (bmp != null) {
+                                val scaled = Bitmap.createScaledBitmap(bmp, cellWidth, cellHeight, true)
+                                if (scaled != bmp) bmp.recycle()
+                                bmp = scaled
+                            }
+                        }
+
+                        if (bmp == null) {
+                            retrieverFailures++
+                            if (i == 0 || retrieverFailures >= 2) {
+                                retrieverAvailable = false
+                                Log.i(TAG, "MediaMetadataRetriever failed ($retrieverFailures failure(s)); switching to FFmpeg fallback")
+                            }
+                        } else {
+                            retrieverFailures = 0
+                        }
+                    }
+
+                    if (bmp == null) {
+                        bmp = extractFrameWithFfmpeg(input, timeMs, cellWidth, cellHeight)
+                    }
+
+                    if (bmp != null) {
+                        frameSlots[i] = bmp to timeMs
+                    }
+
+                    ConversionTaskStore.updateProgress(taskIndex, 0.05f + 0.80f * ((i + 1).toFloat() / frameCount))
+                }
+
                 if (ConversionTaskStore.isCancelled()) {
-                    frameBitmaps.forEach { it.first.recycle() }
                     return
                 }
-                val timeMs = effectiveStartMs + (i + 1) * stepMs
-                val timeUs = timeMs * 1000L
 
-                var bmp: Bitmap? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                    runCatching {
-                        retriever.getScaledFrameAtTime(
-                            timeUs,
-                            MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
-                            cellWidth,
-                            cellHeight
-                        )
-                    }.getOrNull()
-                } else null
-
-                if (bmp == null) {
-                    bmp = runCatching {
-                        retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-                    }.getOrNull()
-                    if (bmp != null) {
-                        val scaled = Bitmap.createScaledBitmap(bmp, cellWidth, cellHeight, true)
-                        if (scaled != bmp) bmp.recycle()
-                        bmp = scaled
-                    }
+                if (frameSlots.all { it == null }) {
+                    throw LocalizedFailure(localizedText(R.string.message_video_contact_sheet_failed))
                 }
-
-                if (bmp != null && rotation != 0) {
-                    val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
-                    val rotated = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, matrix, true)
-                    if (rotated != bmp) bmp.recycle()
-                    bmp = rotated
-                }
-
-                if (bmp != null) {
-                    frameBitmaps.add(bmp to timeMs)
-                }
-
-                ConversionTaskStore.updateProgress(taskIndex, 0.05f + 0.80f * ((i + 1).toFloat() / frameCount))
-            }
 
             val sheetBitmap = Bitmap.createBitmap(sheetWidth, sheetHeight, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(sheetBitmap)
-            canvas.drawColor(Color.parseColor("#16181D"))
+            try {
+                val canvas = Canvas(sheetBitmap)
+                canvas.drawColor(Color.parseColor("#16181D"))
 
             if (includeHeader) {
                 val headerRect = RectF(0f, 0f, sheetWidth.toFloat(), headerHeight.toFloat())
@@ -562,7 +638,7 @@ class ConversionService : Service() {
                 val vBitrateStr = videoBitrateKbps?.let { String.format(displayLocale, "%d kbps", it) }
                     ?: totalBitrateBps?.let { String.format(displayLocale, "%.2f Mbps", it / 1_000_000.0) }
                     ?: localizedText(R.string.text_option_value_auto).resolve(this)
-                val resStr = String.format(displayLocale, "%dx%d", displayWidth, displayHeight)
+                val resStr = String.format(displayLocale, "%dx%d", rawWidth, rawHeight)
                 val line3Segments = mutableListOf(
                     localizedText(R.string.contact_sheet_video).resolve(this@ConversionService) to labelPaint,
                     codecLabel to valuePaint,
@@ -680,11 +756,12 @@ class ConversionService : Service() {
                 color = Color.argb(180, 0, 0, 0)
             }
 
-            for (idx in frameBitmaps.indices) {
-                val (frameBmp, timeMs) = frameBitmaps[idx]
-                val row = idx / cols
-                val col = idx % cols
-                val cellLeft = (margin + col * (cellWidth + gap)).toFloat()
+            for (i in 0 until frameCount) {
+                val slot = frameSlots[i] ?: continue
+                val (frameBmp, timeMs) = slot
+                val row = i / cols
+                val col = i % cols
+                val cellLeft = startX + col * (cellWidth + gap)
                 val cellTop = (headerHeight + margin + row * (cellHeight + gap)).toFloat()
                 val cellRect = RectF(cellLeft, cellTop, cellLeft + cellWidth, cellTop + cellHeight)
 
@@ -723,11 +800,127 @@ class ConversionService : Service() {
                     sheetBitmap.compress(Bitmap.CompressFormat.JPEG, 92, outStream)
                 }
             }
-            sheetBitmap.recycle()
+            } finally {
+                sheetBitmap.recycle()
+            }
+            } finally {
+                frameSlots.forEach {
+                    if (it != null && !it.first.isRecycled) {
+                        it.first.recycle()
+                    }
+                }
+            }
         } finally {
             runCatching { retriever.release() }
             runCatching { pfd?.close() }
         }
+    }
+
+    private fun extractFrameWithFfmpeg(
+        input: ConversionTaskInput,
+        timeMs: Long,
+        targetWidth: Int,
+        targetHeight: Int
+    ): Bitmap? {
+        if (ConversionTaskStore.isCancelled()) return null
+
+        val ffmpegFailure = ensureFfmpegKitReady()
+        if (ffmpegFailure != null) return null
+
+        val inputSource = runCatching { openFfmpegInputSource(input.inputUri) }.getOrNull() ?: return null
+        val tempFrameFile = runCatching {
+            File.createTempFile("contact_sheet_frame_", ".jpg", cacheDir)
+        }.getOrNull()
+        if (tempFrameFile == null) {
+            inputSource.close()
+            return null
+        }
+
+        var session: FFmpegSession? = null
+        try {
+            if (ConversionTaskStore.isCancelled()) return null
+
+            val sec = String.format(Locale.US, "%.3f", (timeMs.coerceAtLeast(0L)) / 1000.0)
+            val arguments = listOf(
+                "-hide_banner",
+                "-loglevel", "error",
+                "-ss", sec,
+                "-i", inputSource.path,
+                "-map", "0:v:0",
+                "-an", "-sn", "-dn",
+                "-frames:v", "1",
+                "-vf", "scale=$targetWidth:$targetHeight",
+                "-f", "image2",
+                "-c:v", "mjpeg",
+                "-q:v", "2",
+                "-y",
+                tempFrameFile.absolutePath
+            )
+
+            val latch = CountDownLatch(1)
+            var success = false
+            session = FFmpegKit.executeWithArgumentsAsync(
+                arguments.toTypedArray(),
+                { completedSession ->
+                    success = ReturnCode.isSuccess(completedSession.getReturnCode())
+                    latch.countDown()
+                }
+            )
+            activeFfmpegSession = session
+            if (ConversionTaskStore.isCancelled()) {
+                runCatching { FFmpegKit.cancel(session.getSessionId()) }
+                return null
+            }
+            try {
+                val completed = latch.await(10, TimeUnit.SECONDS)
+                if (!completed) {
+                    runCatching { FFmpegKit.cancel(session.getSessionId()) }
+                }
+            } finally {
+                if (activeFfmpegSession == session) {
+                    activeFfmpegSession = null
+                }
+            }
+
+            if (ConversionTaskStore.isCancelled()) {
+                return null
+            }
+
+            if (success && tempFrameFile.length() > 0L) {
+                return BitmapFactory.decodeFile(tempFrameFile.absolutePath)
+            } else {
+                Log.w(
+                    TAG,
+                    "extractFrameWithFfmpeg failed for timeMs=$timeMs rc=${session.getReturnCode()} " +
+                        "logs=${session.getAllLogsAsString()?.take(500)}"
+                )
+            }
+            return null
+        } catch (e: Exception) {
+            Log.w(TAG, "extractFrameWithFfmpeg exception for timeMs=$timeMs", e)
+            return null
+        } finally {
+            if (activeFfmpegSession == session) {
+                activeFfmpegSession = null
+            }
+            tempFrameFile.delete()
+            inputSource.close()
+        }
+    }
+
+    private fun parseFpsString(fps: String): Float? {
+        val trimmed = fps.trim()
+        if (trimmed.contains('/')) {
+            val parts = trimmed.split('/')
+            if (parts.size == 2) {
+                val num = parts[0].toFloatOrNull()
+                val den = parts[1].toFloatOrNull()
+                if (num != null && den != null && den > 0f) {
+                    return (num / den).takeIf { it in 1.0f..240.0f }
+                }
+            }
+        }
+        return trimmed.toFloatOrNull()?.takeIf { it in 1.0f..240.0f }
     }
 
     private fun formatFileSize(bytes: Long): String {
