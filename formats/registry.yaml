@@ -26,11 +26,16 @@ groups:
         engine: ffmpeg-compatible
         status: stable
         note: "FFmpeg re-encode path for video inputs. Encodes the first video track with H.264/H.265 and writes AAC audio in a QuickTime MOV container. Fixed compression presets own CRF/preset/resolution/frame-rate strategy and AAC audio bitrate; manual-mode advanced filters (including temporal motion blur) apply."
-      - from: multiple-videos
-        to: mp4-mkv-mov
+      - from: video
+        to: webm
         engine: ffmpeg-compatible
         status: stable
-        note: "Video merge path. Concatenates multiple selected video files in order using FFmpeg filter_complex concat with aspect-ratio letterboxing/pillarboxing (scale+pad) and audio track normalization."
+        note: "FFmpeg re-encode path for video inputs. Encodes the first video track with VP9 (libvpx-vp9, default) or VP8 (libvpx) and writes Opus audio (libopus). Fixed compression presets own CRF/preset/resolution/frame-rate strategy with mobile tuning (-deadline realtime -cpu-used 4, -b:v 0, multi-threaded); manual-mode advanced filters apply."
+      - from: multiple-videos
+        to: mp4-mkv-mov-webm
+        engine: ffmpeg-compatible
+        status: stable
+        note: "Video merge path. Concatenates multiple selected video files in order using FFmpeg filter_complex concat with aspect-ratio letterboxing/pillarboxing (scale+pad) and audio track normalization (Opus 48kHz for WebM, AAC for MP4/MKV/MOV)."
       - from: video
         to: gif
         engine: ffmpeg-compatible

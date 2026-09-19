@@ -69,7 +69,7 @@
     <string name="help_subtitle_title">字幕与歌词</string>
     <string name="help_title">ZenConverter 能做什么</string>
     <string name="help_video_body">转换常见视频格式，支持 AI 2× 深度学习视频插帧（实验性）、多视频拼接合并、时间轴裁剪与多段分割，也可提取音频。</string>
-    <string name="help_video_formats">MP4 · MKV · MOV · GIF  →  合并 · MP4 · MKV · MOV · GIF</string>
+    <string name="help_video_formats">MP4 · MKV · MOV · WEBM · GIF  →  合并 · MP4 · MKV · MOV · WEBM · GIF</string>
     <string name="help_video_title">视频</string>
     <string name="language_follow_system">跟随系统</string>
     <string name="message_ai_rife">RIFE 插帧模型未就绪，请先在设置中下载。</string>
@@ -379,6 +379,7 @@
     <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_mkv">兼容引擎无法把这个文件转码为 MKV</string>
     <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_mov">兼容引擎无法把这个文件转码为 MOV</string>
     <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_mp4">兼容引擎无法把这个文件转码为 MP4</string>
+    <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_webm">兼容引擎无法把这个文件转码为 WebM</string>
     <string name="text_task_message_compatibility_engine_could_not_write_this_audio_container">兼容引擎无法写出这个音频容器</string>
     <string name="text_task_message_compatibility_engine_could_not_write_this_video_container">兼容引擎无法写出这个视频容器</string>
     <string name="text_task_message_compatibility_engine_failed_before_export">兼容引擎启动导出前失败</string>
@@ -386,6 +387,8 @@
     <string name="text_task_message_compatibility_engine_needs_a_flac_capable_ffmpeg_package">当前兼容包不包含 FLAC 编码器</string>
     <string name="text_task_message_compatibility_engine_needs_a_gif_capable_ffmpeg_package">当前兼容包不包含 GIF 编码器</string>
     <string name="text_task_message_compatibility_engine_needs_a_pcm_wav_capable_ffmpeg_package">当前兼容包不包含 PCM WAV 编码器</string>
+    <string name="text_task_message_compatibility_engine_needs_a_vp8_capable_ffmpeg_package">当前兼容包不包含 VP8 编码器</string>
+    <string name="text_task_message_compatibility_engine_needs_a_vp9_capable_ffmpeg_package">当前兼容包不包含 VP9 编码器</string>
     <string name="text_task_message_compatibility_engine_needs_a_wma_capable_ffmpeg_package">当前兼容包不包含 WMA 编码器</string>
     <string name="text_task_message_compatibility_engine_needs_an_aac_capable_ffmpeg_package">当前兼容包不包含 AAC 编码器</string>
     <string name="text_task_message_compatibility_engine_needs_an_h_264_capable_ffmpeg_package">当前兼容包不包含 H.264 编码器</string>

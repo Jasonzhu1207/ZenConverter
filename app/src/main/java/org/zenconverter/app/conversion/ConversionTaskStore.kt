@@ -76,6 +76,8 @@ data class VideoExportOptions(
     companion object {
         const val VIDEO_MIME_TYPE_H264 = "video/avc"
         const val VIDEO_MIME_TYPE_H265 = "video/hevc"
+        const val VIDEO_MIME_TYPE_VP9 = "video/x-vnd.on2.vp9"
+        const val VIDEO_MIME_TYPE_VP8 = "video/x-vnd.on2.vp8"
     }
 }
 

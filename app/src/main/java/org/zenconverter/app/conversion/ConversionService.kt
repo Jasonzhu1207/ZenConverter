@@ -3721,16 +3721,34 @@ class ConversionService : Service() {
                 "-framerate", String.format(Locale.US, "%.3f", targetFps),
                 "-i", framePatternOut
             )
+            val videoProfile = ffmpegVideoProfileFor(input)
+            val isWebm = videoProfile?.format == "webm"
             if (tempAudioFile.exists() && tempAudioFile.length() > 0) {
-                encodeArgs.addAll(listOf("-i", tempAudioFile.absolutePath, "-c:a", "aac", "-b:a", "192k"))
+                val audioCodec = if (isWebm) FFMPEG_OPUS_ENCODER else FFMPEG_AAC_ENCODER
+                encodeArgs.addAll(listOf("-i", tempAudioFile.absolutePath, "-c:a", audioCodec, "-b:a", "192k"))
             }
-            encodeArgs.addAll(listOf(
-                "-c:v", "libx264",
-                "-crf", "18",
-                "-preset", "medium",
-                "-pix_fmt", "yuv420p",
-                tempFile.absolutePath
-            ))
+            if (isWebm) {
+                encodeArgs.addAll(listOf(
+                    "-c:v", FFMPEG_VIDEO_ENCODER_VP9,
+                    "-deadline", "realtime",
+                    "-cpu-used", "4",
+                    "-row-mt", "1",
+                    "-threads", Runtime.getRuntime().availableProcessors().coerceIn(1, 8).toString(),
+                    "-b:v", "0",
+                    "-crf", "24",
+                    "-pix_fmt", "yuv420p",
+                    "-f", "webm",
+                    tempFile.absolutePath
+                ))
+            } else {
+                encodeArgs.addAll(listOf(
+                    "-c:v", "libx264",
+                    "-crf", "18",
+                    "-preset", "medium",
+                    "-pix_fmt", "yuv420p",
+                    tempFile.absolutePath
+                ))
+            }
 
             val encodeResult = executeFfmpeg(
                 input = input,
@@ -3816,6 +3834,9 @@ class ConversionService : Service() {
             val targetW = (baseSize.width / 2) * 2
             val targetH = (baseSize.height / 2) * 2
 
+            val isWebm = videoProfile.format == "webm"
+            val mergeSampleRate = if (isWebm) 48000 else 44100
+
             // Build filter_complex
             val filterComplex = buildString {
                 for (i in inputSources.indices) {
@@ -3825,10 +3846,10 @@ class ConversionService : Service() {
 
                     if (includeAudio) {
                         if (inputAudioFlags[i]) {
-                            append("[$i:a:0]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a$i];")
+                            append("[$i:a:0]aformat=sample_fmts=fltp:sample_rates=$mergeSampleRate:channel_layouts=stereo[a$i];")
                         } else {
                             val durSec = (inputDurations[i].toDouble() / 1000.0).coerceAtLeast(0.1)
-                            append("aevalsrc=0:d=$durSec:s=44100:c=stereo[a$i];")
+                            append("aevalsrc=0:d=$durSec:s=$mergeSampleRate:c=stereo[a$i];")
                         }
                     }
                 }
@@ -3867,16 +3888,36 @@ class ConversionService : Service() {
                 if (!includeAudio) {
                     add("-an")
                 }
+                val isVpx = videoProfile.videoCodec == FFMPEG_VIDEO_ENCODER_VP9 ||
+                    videoProfile.videoCodec == FFMPEG_VIDEO_ENCODER_VP8
                 add("-c:v")
                 add(videoProfile.videoCodec)
                 add("-pix_fmt")
                 add(videoProfile.pixelFormat)
-                add("-preset")
-                add(videoProfile.preset)
+                if (isVpx) {
+                    add("-deadline")
+                    add("realtime")
+                    add("-cpu-used")
+                    add("4")
+                    if (videoProfile.videoCodec == FFMPEG_VIDEO_ENCODER_VP9) {
+                        add("-row-mt")
+                        add("1")
+                    }
+                    add("-threads")
+                    add(Runtime.getRuntime().availableProcessors().coerceIn(1, 8).toString())
+                }
+                if (videoProfile.preset != null) {
+                    add("-preset")
+                    add(videoProfile.preset)
+                }
                 input.videoOptions.videoBitrate?.let { bitrate ->
                     add("-b:v")
                     add(bitrate.toString())
                 } ?: run {
+                    if (isVpx) {
+                        add("-b:v")
+                        add("0")
+                    }
                     add("-crf")
                     add(videoProfile.crf)
                 }
@@ -3892,7 +3933,7 @@ class ConversionService : Service() {
                 }
                 if (includeAudio) {
                     add("-c:a")
-                    add(FFMPEG_AAC_ENCODER)
+                    add(if (isWebm) FFMPEG_OPUS_ENCODER else FFMPEG_AAC_ENCODER)
                     if (videoAudioOptions.audioBitrate != null) {
                         add("-b:a")
                         add(videoAudioOptions.audioBitrate.toString())
@@ -4253,16 +4294,37 @@ class ConversionService : Service() {
             if (!includeAudio) {
                 add("-an")
             }
+            val isVpx = videoProfile.videoCodec == FFMPEG_VIDEO_ENCODER_VP9 ||
+                videoProfile.videoCodec == FFMPEG_VIDEO_ENCODER_VP8
+            val isWebm = videoProfile.format == "webm"
             add("-c:v")
             add(videoProfile.videoCodec)
             add("-pix_fmt")
             add(videoProfile.pixelFormat)
-            add("-preset")
-            add(videoProfile.preset)
+            if (isVpx) {
+                add("-deadline")
+                add("realtime")
+                add("-cpu-used")
+                add("4")
+                if (videoProfile.videoCodec == FFMPEG_VIDEO_ENCODER_VP9) {
+                    add("-row-mt")
+                    add("1")
+                }
+                add("-threads")
+                add(Runtime.getRuntime().availableProcessors().coerceIn(1, 8).toString())
+            }
+            if (videoProfile.preset != null) {
+                add("-preset")
+                add(videoProfile.preset)
+            }
             input.videoOptions.videoBitrate?.let { bitrate ->
                 add("-b:v")
                 add(bitrate.toString())
             } ?: run {
+                if (isVpx) {
+                    add("-b:v")
+                    add("0")
+                }
                 add("-crf")
                 add(videoProfile.crf)
             }
@@ -4286,10 +4348,10 @@ class ConversionService : Service() {
             }
             if (includeAudio) {
                 add("-c:a")
-                add(FFMPEG_AAC_ENCODER)
+                add(if (isWebm) FFMPEG_OPUS_ENCODER else FFMPEG_AAC_ENCODER)
                 addFfmpegAudioOptions(
                     audioOptions = videoAudioOptions,
-                    audioProfile = ffmpegAacAudioProfile(),
+                    audioProfile = if (isWebm) ffmpegOpusAudioProfile() else ffmpegAacAudioProfile(),
                     durationMs = durationMs,
                     forceReverse = input.videoOptions.compressionMode == VideoCompressionMode.Standard &&
                         !isInterpolationActive &&
@@ -4383,6 +4445,14 @@ class ConversionService : Service() {
         )
     }
 
+    private fun ffmpegOpusAudioProfile(): FfmpegAudioProfile {
+        return FfmpegAudioProfile(
+            codec = FFMPEG_OPUS_ENCODER,
+            format = "opus",
+            requiredEncoder = FFMPEG_OPUS_ENCODER
+        )
+    }
+
     private fun ffmpegVideoGifArgumentsFor(
         input: ConversionTaskInput,
         inputPath: String,
@@ -4450,9 +4520,20 @@ class ConversionService : Service() {
 
     private fun ffmpegVideoProfileFor(input: ConversionTaskInput): FfmpegVideoProfile? {
         val targetExtension = videoTargetExtensionFor(input.targetFormat) ?: return null
-        val videoCodec = when (input.videoOptions.videoMimeType) {
-            VideoExportOptions.VIDEO_MIME_TYPE_H265 -> FFMPEG_VIDEO_ENCODER_H265
-            else -> FFMPEG_VIDEO_ENCODER_H264
+        val videoCodec = when (targetExtension) {
+            "webm" -> {
+                if (input.videoOptions.videoMimeType == VideoExportOptions.VIDEO_MIME_TYPE_VP8) {
+                    FFMPEG_VIDEO_ENCODER_VP8
+                } else {
+                    FFMPEG_VIDEO_ENCODER_VP9
+                }
+            }
+            else -> {
+                when (input.videoOptions.videoMimeType) {
+                    VideoExportOptions.VIDEO_MIME_TYPE_H265 -> FFMPEG_VIDEO_ENCODER_H265
+                    else -> FFMPEG_VIDEO_ENCODER_H264
+                }
+            }
         }
         return when (targetExtension) {
             "mp4" -> FfmpegVideoProfile(
@@ -4477,6 +4558,12 @@ class ConversionService : Service() {
                 preset = videoPresetFor(input.videoOptions.compressionMode),
                 crf = videoCrfFor(videoCodec, input.videoOptions.compressionMode)
             )
+            "webm" -> FfmpegVideoProfile(
+                videoCodec = videoCodec,
+                format = "webm",
+                preset = null,
+                crf = videoCrfFor(videoCodec, input.videoOptions.compressionMode)
+            )
             else -> null
         }
     }
@@ -4494,34 +4581,34 @@ class ConversionService : Service() {
         return when (compressionMode) {
             VideoCompressionMode.Standard -> defaultVideoCrfFor(videoCodec)
             VideoCompressionMode.VisualLossless -> {
-                if (videoCodec == FFMPEG_VIDEO_ENCODER_H265) {
-                    FFMPEG_VISUAL_LOSSLESS_CRF_H265
-                } else {
-                    FFMPEG_VISUAL_LOSSLESS_CRF_H264
+                when (videoCodec) {
+                    FFMPEG_VIDEO_ENCODER_H265 -> FFMPEG_VISUAL_LOSSLESS_CRF_H265
+                    FFMPEG_VIDEO_ENCODER_VP9, FFMPEG_VIDEO_ENCODER_VP8 -> FFMPEG_VISUAL_LOSSLESS_CRF_VP9
+                    else -> FFMPEG_VISUAL_LOSSLESS_CRF_H264
                 }
             }
             VideoCompressionMode.BalancedShrink -> {
-                if (videoCodec == FFMPEG_VIDEO_ENCODER_H265) {
-                    FFMPEG_BALANCED_SHRINK_CRF_H265
-                } else {
-                    FFMPEG_BALANCED_SHRINK_CRF_H264
+                when (videoCodec) {
+                    FFMPEG_VIDEO_ENCODER_H265 -> FFMPEG_BALANCED_SHRINK_CRF_H265
+                    FFMPEG_VIDEO_ENCODER_VP9, FFMPEG_VIDEO_ENCODER_VP8 -> FFMPEG_BALANCED_SHRINK_CRF_VP9
+                    else -> FFMPEG_BALANCED_SHRINK_CRF_H264
                 }
             }
             VideoCompressionMode.SmallFile -> {
-                if (videoCodec == FFMPEG_VIDEO_ENCODER_H265) {
-                    FFMPEG_SMALL_FILE_CRF_H265
-                } else {
-                    FFMPEG_SMALL_FILE_CRF_H264
+                when (videoCodec) {
+                    FFMPEG_VIDEO_ENCODER_H265 -> FFMPEG_SMALL_FILE_CRF_H265
+                    FFMPEG_VIDEO_ENCODER_VP9, FFMPEG_VIDEO_ENCODER_VP8 -> FFMPEG_SMALL_FILE_CRF_VP9
+                    else -> FFMPEG_SMALL_FILE_CRF_H264
                 }
             }
         }
     }
 
     private fun defaultVideoCrfFor(videoCodec: String): String {
-        return if (videoCodec == FFMPEG_VIDEO_ENCODER_H265) {
-            FFMPEG_DEFAULT_CRF_H265
-        } else {
-            FFMPEG_DEFAULT_CRF_H264
+        return when (videoCodec) {
+            FFMPEG_VIDEO_ENCODER_H265 -> FFMPEG_DEFAULT_CRF_H265
+            FFMPEG_VIDEO_ENCODER_VP9, FFMPEG_VIDEO_ENCODER_VP8 -> FFMPEG_DEFAULT_CRF_VP9
+            else -> FFMPEG_DEFAULT_CRF_H264
         }
     }
 
@@ -5208,7 +5295,7 @@ class ConversionService : Service() {
                     buildList {
                         add(profile.videoCodec)
                         if (audioOptions.advanced.volume != AudioVolumeMode.Mute) {
-                            add(FFMPEG_AAC_ENCODER)
+                            add(if (profile.format == "webm") FFMPEG_OPUS_ENCODER else FFMPEG_AAC_ENCODER)
                         }
                     }
                 }
@@ -5322,6 +5409,10 @@ class ConversionService : Service() {
                 localizedText(R.string.text_task_message_compatibility_engine_needs_an_h_264_capable_ffmpeg_package)
             encoder == FFMPEG_VIDEO_ENCODER_H265 ->
                 localizedText(R.string.text_task_message_compatibility_engine_needs_an_h_265_capable_ffmpeg_package)
+            encoder == FFMPEG_VIDEO_ENCODER_VP9 ->
+                localizedText(R.string.text_task_message_compatibility_engine_needs_a_vp9_capable_ffmpeg_package)
+            encoder == FFMPEG_VIDEO_ENCODER_VP8 ->
+                localizedText(R.string.text_task_message_compatibility_engine_needs_a_vp8_capable_ffmpeg_package)
             encoder == FFMPEG_AAC_ENCODER ->
                 localizedText(R.string.text_task_message_compatibility_engine_needs_an_aac_capable_ffmpeg_package)
             encoder == FFMPEG_WAV_ENCODER ->
@@ -5431,6 +5522,7 @@ class ConversionService : Service() {
             ConversionMediaCategory.Video -> when (videoTargetExtensionFor(input.targetFormat)) {
                 "mkv" -> localizedText(R.string.text_task_message_compatibility_engine_could_not_transcode_this_file_to_mkv)
                 "mov" -> localizedText(R.string.text_task_message_compatibility_engine_could_not_transcode_this_file_to_mov)
+                "webm" -> localizedText(R.string.text_task_message_compatibility_engine_could_not_transcode_this_file_to_webm)
                 "gif" -> localizedText(R.string.text_task_message_compatibility_engine_could_not_create_this_gif)
                 else -> localizedText(R.string.text_task_message_compatibility_engine_could_not_transcode_this_file_to_mp4)
             }
@@ -6450,6 +6542,7 @@ class ConversionService : Service() {
                     "mp4" -> OutputProfile(extension = "mp4", mimeType = MIME_TYPE_MP4, kind = OutputMediaKind.Video)
                     "mkv" -> OutputProfile(extension = "mkv", mimeType = MIME_TYPE_MKV, kind = OutputMediaKind.Video)
                     "mov" -> OutputProfile(extension = "mov", mimeType = MIME_TYPE_MOV, kind = OutputMediaKind.Video)
+                    "webm" -> OutputProfile(extension = "webm", mimeType = MIME_TYPE_WEBM, kind = OutputMediaKind.Video)
                     "gif" -> OutputProfile(extension = "gif", mimeType = MIME_TYPE_GIF, kind = OutputMediaKind.Image)
                     "jpg" -> OutputProfile(extension = "jpg", mimeType = MIME_TYPE_JPEG, kind = OutputMediaKind.Image)
                     "png" -> OutputProfile(extension = "png", mimeType = MIME_TYPE_PNG, kind = OutputMediaKind.Image)
@@ -6562,6 +6655,7 @@ class ConversionService : Service() {
             normalized.contains("mp4") -> "mp4"
             normalized.contains("mkv") -> "mkv"
             normalized.contains("mov") -> "mov"
+            normalized.contains("webm") -> "webm"
             normalized.contains("gif") -> "gif"
             else -> null
         }
@@ -6622,7 +6716,7 @@ class ConversionService : Service() {
         val format: String,
         val useFastStart: Boolean = false,
         val pixelFormat: String = "yuv420p",
-        val preset: String = "veryfast",
+        val preset: String? = "veryfast",
         val crf: String,
         val videoTag: String? = null
     )
@@ -6928,6 +7022,8 @@ class ConversionService : Service() {
         private const val FFMPEG_LOG_LINE_LIMIT = 600
         private const val FFMPEG_VIDEO_ENCODER_H264 = "libx264"
         private const val FFMPEG_VIDEO_ENCODER_H265 = "libx265"
+        private const val FFMPEG_VIDEO_ENCODER_VP9 = "libvpx-vp9"
+        private const val FFMPEG_VIDEO_ENCODER_VP8 = "libvpx"
         private const val FFMPEG_GIF_ENCODER = "gif"
         private const val FFMPEG_AAC_ENCODER = "aac"
         private const val FFMPEG_MP3_ENCODER = "libmp3lame"
@@ -6938,12 +7034,16 @@ class ConversionService : Service() {
         private val OPUS_SUPPORTED_SAMPLE_RATES = setOf(48_000, 24_000, 16_000, 12_000, 8_000)
         private const val FFMPEG_DEFAULT_CRF_H264 = "23"
         private const val FFMPEG_DEFAULT_CRF_H265 = "28"
+        private const val FFMPEG_DEFAULT_CRF_VP9 = "30"
         private const val FFMPEG_VISUAL_LOSSLESS_CRF_H264 = "18"
         private const val FFMPEG_VISUAL_LOSSLESS_CRF_H265 = "20"
+        private const val FFMPEG_VISUAL_LOSSLESS_CRF_VP9 = "24"
         private const val FFMPEG_BALANCED_SHRINK_CRF_H264 = "21"
         private const val FFMPEG_BALANCED_SHRINK_CRF_H265 = "24"
+        private const val FFMPEG_BALANCED_SHRINK_CRF_VP9 = "31"
         private const val FFMPEG_SMALL_FILE_CRF_H264 = "24"
         private const val FFMPEG_SMALL_FILE_CRF_H265 = "28"
+        private const val FFMPEG_SMALL_FILE_CRF_VP9 = "38"
         private const val FFMPEG_STANDARD_VIDEO_PRESET = "veryfast"
         private const val FFMPEG_PRESET_COMPRESSION_MEDIUM = "medium"
         private const val FFMPEG_VIDEO_REVERSE_MAX_DURATION_MS = 60_000L
@@ -6958,6 +7058,7 @@ class ConversionService : Service() {
         private const val MIME_TYPE_MP4 = "video/mp4"
         private const val MIME_TYPE_MKV = "video/x-matroska"
         private const val MIME_TYPE_MOV = "video/quicktime"
+        private const val MIME_TYPE_WEBM = "video/webm"
         private const val MIME_TYPE_MP3 = "audio/mpeg"
         private const val MIME_TYPE_M4A = "audio/mp4"
         private const val MIME_TYPE_WAV = "audio/wav"

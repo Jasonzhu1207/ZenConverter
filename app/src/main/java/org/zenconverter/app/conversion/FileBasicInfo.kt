@@ -167,6 +167,7 @@ object FileBasicInfoReader {
         return when {
             mimeType == "video/quicktime" -> "MOV"
             mimeType == "video/x-matroska" -> "MKV"
+            mimeType == "video/webm" -> "WEBM"
             mimeType == "image/jpeg" -> "JPEG"
             mimeType == "application/pdf" -> "PDF"
             mimeType.contains('/') -> mimeType.substringAfter('/').uppercase(Locale.US)

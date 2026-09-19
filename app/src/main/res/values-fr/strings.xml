@@ -77,7 +77,7 @@
     <string name="help_subtitle_title">Sous-titres et paroles</string>
     <string name="help_title">Ce que ZenConverter peut faire</string>
     <string name="help_video_body">Convertir les formats vidéo courants, utiliser l\'interpolation de fréquence d\'images 2× par IA (fonctionnalité expérimentale), fusionner plusieurs vidéos, découper et scinder des segments, ou extraire des pistes audio.</string>
-    <string name="help_video_formats">MP4 · MKV · MOV · GIF  →  Fusion · MP4 · MKV · MOV · GIF</string>
+    <string name="help_video_formats">MP4 · MKV · MOV · WEBM · GIF  →  Fusion · MP4 · MKV · MOV · WEBM · GIF</string>
     <string name="help_video_title">Vidéo</string>
     <string name="language_follow_system">Système</string>
     <string name="message_ai_rife">Le modèle RIFE n\'est pas encore disponible. Téléchargez-le d\'abord dans les paramètres.</string>
@@ -388,6 +388,7 @@
     <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_mkv">Impossible de convertir ce fichier au format MKV.</string>
     <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_mov">Impossible de convertir ce fichier au format MOV.</string>
     <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_mp4">Impossible de convertir ce fichier au format MP4.</string>
+    <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_webm">Impossible de convertir ce fichier au format WebM.</string>
     <string name="text_task_message_compatibility_engine_could_not_write_this_audio_container">Impossible de générer ce conteneur audio.</string>
     <string name="text_task_message_compatibility_engine_could_not_write_this_video_container">Impossible de générer ce conteneur vidéo.</string>
     <string name="text_task_message_compatibility_engine_failed_before_export">Échec avant l\'exportation</string>
@@ -395,6 +396,8 @@
     <string name="text_task_message_compatibility_engine_needs_a_flac_capable_ffmpeg_package">Nécessite un paquet FFmpeg compatible FLAC.</string>
     <string name="text_task_message_compatibility_engine_needs_a_gif_capable_ffmpeg_package">Nécessite un paquet FFmpeg compatible GIF.</string>
     <string name="text_task_message_compatibility_engine_needs_a_pcm_wav_capable_ffmpeg_package">Nécessite un paquet FFmpeg compatible PCM WAV.</string>
+    <string name="text_task_message_compatibility_engine_needs_a_vp8_capable_ffmpeg_package">Nécessite un paquet FFmpeg compatible VP8.</string>
+    <string name="text_task_message_compatibility_engine_needs_a_vp9_capable_ffmpeg_package">Nécessite un paquet FFmpeg compatible VP9.</string>
     <string name="text_task_message_compatibility_engine_needs_a_wma_capable_ffmpeg_package">Nécessite un paquet FFmpeg compatible WMA.</string>
     <string name="text_task_message_compatibility_engine_needs_an_aac_capable_ffmpeg_package">Nécessite un paquet FFmpeg compatible AAC.</string>
     <string name="text_task_message_compatibility_engine_needs_an_h_264_capable_ffmpeg_package">Nécessite un paquet FFmpeg compatible H.264.</string>

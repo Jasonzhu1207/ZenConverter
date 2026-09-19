@@ -129,7 +129,9 @@ class MainActivity : AppCompatActivity() {
     private var externalImportGeneration = 0
     private val supportedVideoMimeTypes = setOf(
         VideoExportOptions.VIDEO_MIME_TYPE_H264,
-        VideoExportOptions.VIDEO_MIME_TYPE_H265
+        VideoExportOptions.VIDEO_MIME_TYPE_H265,
+        VideoExportOptions.VIDEO_MIME_TYPE_VP9,
+        VideoExportOptions.VIDEO_MIME_TYPE_VP8
     )
 
     private val requestNotificationPermission = registerForActivityResult(
@@ -2304,15 +2306,23 @@ private fun VideoMergeGroup.toConversionTaskInput(
 }
 
 private fun defaultVideoOptionsFor(targetFormat: TargetFormat): VideoExportOptions {
-    return if (targetFormat.extension.equals("gif", ignoreCase = true)) {
-        VideoExportOptions(
-            maxShortSidePixels = 480,
-            videoBitrate = null,
-            videoMimeType = VideoExportOptions.VIDEO_MIME_TYPE_H264,
-            maxFrameRate = 30
-        )
-    } else {
-        VideoExportOptions()
+    return when {
+        targetFormat.extension.equals("gif", ignoreCase = true) -> {
+            VideoExportOptions(
+                maxShortSidePixels = 480,
+                videoBitrate = null,
+                videoMimeType = VideoExportOptions.VIDEO_MIME_TYPE_H264,
+                maxFrameRate = 30
+            )
+        }
+        targetFormat.id == TargetId.Webm || targetFormat.extension.equals("webm", ignoreCase = true) -> {
+            VideoExportOptions(
+                videoMimeType = VideoExportOptions.VIDEO_MIME_TYPE_VP9
+            )
+        }
+        else -> {
+            VideoExportOptions()
+        }
     }
 }
 

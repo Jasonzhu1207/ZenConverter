@@ -82,7 +82,7 @@
     <string name="help_subtitle_title">Subtitles and Lyrics</string>
     <string name="help_title">What ZenConverter can do</string>
     <string name="help_video_body">Convert common video formats, AI 2× frame rate interpolation (Experimental), merge multiple videos, trim &amp; split segments, or extract audio tracks.</string>
-    <string name="help_video_formats">MP4 · MKV · MOV · GIF  →  Merge · MP4 · MKV · MOV · GIF</string>
+    <string name="help_video_formats">MP4 · MKV · MOV · WEBM · GIF  →  Merge · MP4 · MKV · MOV · WEBM · GIF</string>
     <string name="help_video_title">Video</string>
     <string name="language_follow_system">Follow system</string>
     <string name="message_ai_rife">The RIFE model is not ready. Download it in Settings first.</string>
@@ -393,6 +393,7 @@
     <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_mkv">Compatibility engine could not transcode this file to MKV</string>
     <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_mov">Compatibility engine could not transcode this file to MOV</string>
     <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_mp4">Compatibility engine could not transcode this file to MP4</string>
+    <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_webm">Compatibility engine could not transcode this file to WebM</string>
     <string name="text_task_message_compatibility_engine_could_not_write_this_audio_container">Compatibility engine could not write this audio container</string>
     <string name="text_task_message_compatibility_engine_could_not_write_this_video_container">Compatibility engine could not write this video container</string>
     <string name="text_task_message_compatibility_engine_failed_before_export">Compatibility engine failed before export</string>
@@ -400,6 +401,8 @@
     <string name="text_task_message_compatibility_engine_needs_a_flac_capable_ffmpeg_package">Compatibility engine needs a FLAC-capable FFmpeg package</string>
     <string name="text_task_message_compatibility_engine_needs_a_gif_capable_ffmpeg_package">Compatibility engine needs a GIF-capable FFmpeg package</string>
     <string name="text_task_message_compatibility_engine_needs_a_pcm_wav_capable_ffmpeg_package">Compatibility engine needs a PCM WAV-capable FFmpeg package</string>
+    <string name="text_task_message_compatibility_engine_needs_a_vp8_capable_ffmpeg_package">Compatibility engine needs a VP8-capable FFmpeg package</string>
+    <string name="text_task_message_compatibility_engine_needs_a_vp9_capable_ffmpeg_package">Compatibility engine needs a VP9-capable FFmpeg package</string>
     <string name="text_task_message_compatibility_engine_needs_a_wma_capable_ffmpeg_package">Compatibility engine needs a WMA-capable FFmpeg package</string>
     <string name="text_task_message_compatibility_engine_needs_an_aac_capable_ffmpeg_package">Compatibility engine needs an AAC-capable FFmpeg package</string>
     <string name="text_task_message_compatibility_engine_needs_an_h_264_capable_ffmpeg_package">Compatibility engine needs an H.264-capable FFmpeg package</string>

@@ -4,6 +4,7 @@ enum class TargetId(val key: String) {
     Mp4("MP4"),
     Mkv("MKV"),
     Mov("MOV"),
+    Webm("WEBM"),
     Gif("GIF"),
     ContactSheetJpg("contact_sheet_jpg"),
     ContactSheetPng("contact_sheet_png"),
