@@ -1,8 +1,8 @@
 # Office2PDF JNI source
 
 This is the reproducible source for `libzen_office2pdf.so`. It pins the
-upstream `office2pdf` release `v0.6.8` at commit
-`e01828a5f07b52bebf4574859efaca4554b134d9`, which exposes
+upstream `office2pdf` release `v0.7.0` at commit
+`bb6658bbb66003d0ab5131375acf4daf2f8556a6`, which exposes
 `ConvertOptions.font_paths` to Typst's font searcher.
 
 For the server workflow, copy this directory to
@@ -28,8 +28,8 @@ bash build-arm64-v8a.sh
 The script writes the compiled shared library to
 `../built-jniLibs/arm64-v8a/libzen_office2pdf.so`. Copy that file over
 `app/src/main/jniLibs/arm64-v8a/libzen_office2pdf.so` before Android Studio
-Run/Debug. Codex must not run this build. The checked-in September 12, 2026 arm64
-build is `34,550,576` bytes with SHA-256
-`a0b842468887130ada81cdc782b4494e4cc921c9f805fd2e6805b7799f02da98`.
+Run/Debug. Codex must not run this build. The checked-in September 19, 2026 arm64
+build is `38,124,952` bytes with SHA-256
+`60bda29a607679d7f4c543d8c32a5ca60b21ea02e8e59f3c43bb4bcacb75b025`.
 After rebuilding, record the new SHA-256 in the third-party attribution files
 and test Chinese DOCX, PPTX, and XLSX output on a physical arm64 device.
