@@ -191,6 +191,8 @@ import org.zenconverter.app.conversion.GifFrameExportMode
 import org.zenconverter.app.conversion.ImageExportOptions
 import org.zenconverter.app.conversion.ImageSuperResolutionMode
 import org.zenconverter.app.conversion.MediaTrimRange
+import org.zenconverter.app.conversion.Mp3BitrateMode
+import org.zenconverter.app.conversion.DEFAULT_MP3_VBR_QUALITY
 import org.zenconverter.app.conversion.PdfCompressionPreset
 import org.zenconverter.app.conversion.PdfExportOptions
 import org.zenconverter.app.conversion.PdfImagePageMode
@@ -632,6 +634,21 @@ private val AUDIO_BITRATE_OPTIONS = listOf(
     AUDIO_BITRATE_HIGH,
     AUDIO_BITRATE_COMPACT,
     AUDIO_BITRATE_VOICE
+)
+
+private const val AUDIO_MODE_CBR = "Constant bitrate (CBR)"
+private const val AUDIO_MODE_VBR = "Variable bitrate (VBR)"
+private val MP3_BITRATE_MODE_OPTIONS = listOf(AUDIO_MODE_CBR, AUDIO_MODE_VBR)
+
+private const val MP3_VBR_QUALITY_V0 = "V0 (highest quality)"
+private const val MP3_VBR_QUALITY_V2 = "V2 (recommended)"
+private const val MP3_VBR_QUALITY_V4 = "V4 (balanced)"
+private const val MP3_VBR_QUALITY_V6 = "V6 (smaller file)"
+private val MP3_VBR_QUALITY_OPTIONS = listOf(
+    MP3_VBR_QUALITY_V0,
+    MP3_VBR_QUALITY_V2,
+    MP3_VBR_QUALITY_V4,
+    MP3_VBR_QUALITY_V6
 )
 
 private const val AUDIO_SAMPLE_RATE_ORIGINAL = "Original"
@@ -3379,7 +3396,80 @@ private fun BatchAudioTargetOptions(
     onUpdateFiles: (List<QueuedFile>) -> Unit
 ) {
     OptionGrid {
-        if (audioSupportsBitrateOption(target)) {
+        if (isMp3Target(target)) {
+            OptionDropdown(
+                "batch-audio-mode",
+                texts.audioEncodingModeLabel(),
+                commonBatchLabel(files) { mp3BitrateModeLabelFor(it.audioOptions.mp3BitrateMode) },
+                MP3_BITRATE_MODE_OPTIONS,
+                texts,
+                openMenuId,
+                onOpenMenuChange
+            ) { value ->
+                onOpenMenuChange(null)
+                onUpdateFiles(
+                    files.map { file ->
+                        file.copy(
+                            audioOptions = file.audioOptions.copy(
+                                mp3BitrateMode = mp3BitrateModeFor(value)
+                            )
+                        )
+                    }
+                )
+            }
+            val commonMode = files
+                .map { it.audioOptions.mp3BitrateMode }
+                .distinct()
+                .singleOrNull()
+            if (commonMode == Mp3BitrateMode.Vbr) {
+                OptionDropdown(
+                    "batch-audio-vbr-quality",
+                    texts.mp3VbrQualityLabel(),
+                    commonBatchLabel(files) { mp3VbrQualityLabelFor(it.audioOptions.mp3VbrQuality) },
+                    MP3_VBR_QUALITY_OPTIONS,
+                    texts,
+                    openMenuId,
+                    onOpenMenuChange
+                ) { value ->
+                    onOpenMenuChange(null)
+                    onUpdateFiles(
+                        files.map { file ->
+                            file.copy(
+                                audioOptions = file.audioOptions.copy(
+                                    mp3VbrQuality = mp3VbrQualityFor(value)
+                                )
+                            )
+                        }
+                    )
+                }
+                Text(
+                    text = texts.mp3VbrQualityHint(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                OptionDropdown(
+                    "batch-audio-bitrate",
+                    texts.bitrate,
+                    commonBatchLabel(files) { audioEncodingSummaryFor(it.audioOptions, target) },
+                    AUDIO_BITRATE_OPTIONS,
+                    texts,
+                    openMenuId,
+                    onOpenMenuChange
+                ) { value ->
+                    onOpenMenuChange(null)
+                    onUpdateFiles(
+                        files.map { file ->
+                            file.copy(
+                                audioOptions = file.audioOptions.copy(
+                                    audioBitrate = audioBitrateToBits(value)
+                                )
+                            )
+                        }
+                    )
+                }
+            }
+        } else if (audioSupportsBitrateOption(target)) {
             OptionDropdown(
                 "batch-audio-bitrate",
                 texts.bitrate,
@@ -4705,6 +4795,8 @@ private fun AudioOptions(
     menuPrefix: String = "",
     trimRange: MediaTrimRange,
     sourceDurationMs: Long?,
+    bitrateMode: Mp3BitrateMode,
+    vbrQuality: Int,
     bitrate: String,
     sampleRate: String,
     channels: String,
@@ -4717,6 +4809,8 @@ private fun AudioOptions(
     onTrimStartSecondsChange: (Double?) -> Unit,
     onTrimEndSecondsChange: (Double?) -> Unit,
     onTrimRangeChange: (MediaTrimRange) -> Unit,
+    onBitrateModeChange: (String) -> Unit,
+    onVbrQualityChange: (String) -> Unit,
     onBitrateChange: (String) -> Unit,
     onSampleRateChange: (String) -> Unit,
     onChannelsChange: (String) -> Unit,
@@ -4739,7 +4833,46 @@ private fun AudioOptions(
             onEndSecondsChange = onTrimEndSecondsChange,
             onTrimRangeChange = onTrimRangeChange
         )
-        if (audioSupportsBitrateOption(targetFormat)) {
+        if (isMp3Target(targetFormat)) {
+            OptionDropdown(
+                "${menuPrefix}audio-mode",
+                texts.audioEncodingModeLabel(),
+                mp3BitrateModeLabelFor(bitrateMode),
+                MP3_BITRATE_MODE_OPTIONS,
+                texts,
+                openMenuId,
+                onOpenMenuChange,
+                onBitrateModeChange
+            )
+            if (bitrateMode == Mp3BitrateMode.Vbr) {
+                OptionDropdown(
+                    "${menuPrefix}audio-vbr-quality",
+                    texts.mp3VbrQualityLabel(),
+                    mp3VbrQualityLabelFor(vbrQuality),
+                    MP3_VBR_QUALITY_OPTIONS,
+                    texts,
+                    openMenuId,
+                    onOpenMenuChange,
+                    onVbrQualityChange
+                )
+                Text(
+                    text = texts.mp3VbrQualityHint(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                OptionDropdown(
+                    "${menuPrefix}audio-bitrate",
+                    texts.bitrate,
+                    bitrate,
+                    AUDIO_BITRATE_OPTIONS,
+                    texts,
+                    openMenuId,
+                    onOpenMenuChange,
+                    onBitrateChange
+                )
+            }
+        } else if (audioSupportsBitrateOption(targetFormat)) {
             OptionDropdown(
                 "${menuPrefix}audio-bitrate",
                 texts.bitrate,
@@ -6478,6 +6611,8 @@ private fun QueuedFileOptionsPanel(
                 menuPrefix = menuPrefix,
                 trimRange = file.audioOptions.trimRange,
                 sourceDurationMs = file.inputInfo?.durationMs,
+                bitrateMode = file.audioOptions.mp3BitrateMode,
+                vbrQuality = file.audioOptions.mp3VbrQuality,
                 bitrate = audioBitrateLabelFor(file.audioOptions.audioBitrate),
                 sampleRate = audioSampleRateLabelFor(file.audioOptions.sampleRateHz),
                 channels = audioChannelsLabelFor(file.audioOptions.channelCount),
@@ -6511,6 +6646,12 @@ private fun QueuedFileOptionsPanel(
                             audioOptions = file.audioOptions.copy(trimRange = range)
                         )
                     )
+                },
+                onBitrateModeChange = { value ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(mp3BitrateMode = mp3BitrateModeFor(value))))
+                },
+                onVbrQualityChange = { value ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(mp3VbrQuality = mp3VbrQualityFor(value))))
                 },
                 onBitrateChange = { value ->
                     onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(audioBitrate = audioBitrateToBits(value))))
@@ -7331,6 +7472,37 @@ private fun audioBitrateLabelFor(value: Int?): String {
     }
 }
 
+private fun isMp3Target(targetFormat: TargetFormat): Boolean {
+    return targetFormat.id == TargetId.Mp3 || targetFormat.extension.equals("mp3", ignoreCase = true)
+}
+
+private fun audioEncodingSummaryFor(
+    options: AudioExportOptions,
+    targetFormat: TargetFormat
+): String {
+    return if (isMp3Target(targetFormat) && options.mp3BitrateMode == Mp3BitrateMode.Vbr) {
+        mp3VbrQualityLabelFor(options.mp3VbrQuality)
+    } else {
+        audioBitrateLabelFor(options.audioBitrate)
+    }
+}
+
+private fun mp3BitrateModeLabelFor(value: Mp3BitrateMode): String {
+    return when (value) {
+        Mp3BitrateMode.Cbr -> AUDIO_MODE_CBR
+        Mp3BitrateMode.Vbr -> AUDIO_MODE_VBR
+    }
+}
+
+private fun mp3VbrQualityLabelFor(value: Int): String {
+    return when (value) {
+        0 -> MP3_VBR_QUALITY_V0
+        4 -> MP3_VBR_QUALITY_V4
+        6 -> MP3_VBR_QUALITY_V6
+        else -> MP3_VBR_QUALITY_V2
+    }
+}
+
 private fun audioSampleRateLabelFor(value: Int?): String {
     return when (value) {
         48_000 -> AUDIO_SAMPLE_RATE_RECOMMENDED
@@ -7670,6 +7842,19 @@ private fun audioBitrateToBits(value: String): Int? {
         AUDIO_BITRATE_COMPACT -> 128_000
         AUDIO_BITRATE_VOICE -> 96_000
         else -> null
+    }
+}
+
+private fun mp3BitrateModeFor(value: String): Mp3BitrateMode {
+    return if (value == AUDIO_MODE_VBR) Mp3BitrateMode.Vbr else Mp3BitrateMode.Cbr
+}
+
+private fun mp3VbrQualityFor(value: String): Int {
+    return when (value) {
+        MP3_VBR_QUALITY_V0 -> 0
+        MP3_VBR_QUALITY_V4 -> 4
+        MP3_VBR_QUALITY_V6 -> 6
+        else -> DEFAULT_MP3_VBR_QUALITY
     }
 }
 

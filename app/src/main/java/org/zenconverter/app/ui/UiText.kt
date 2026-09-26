@@ -721,6 +721,18 @@ internal class UiText(private val context: Context) {
         return text(R.string.text_audio_bitrate_label)
     }
 
+    fun audioEncodingModeLabel(): String {
+        return text(R.string.text_audio_encoding_mode_label)
+    }
+
+    fun mp3VbrQualityLabel(): String {
+        return text(R.string.text_mp3_vbr_quality_label)
+    }
+
+    fun mp3VbrQualityHint(): String {
+        return text(R.string.text_mp3_vbr_quality_hint)
+    }
+
     fun trimDurationHint(durationText: String?): String {
         return durationText?.let { text(R.string.text_trim_duration_hint, it) } ?: trimDurationUnknown
     }
@@ -1111,6 +1123,12 @@ internal class UiText(private val context: Context) {
             "High audio bitrate" -> text(R.string.text_option_value_high_256_kbps)
             "Compact audio bitrate" -> text(R.string.text_option_value_compact_128_kbps)
             "Voice audio bitrate" -> text(R.string.text_option_value_voice_96_kbps)
+            "Constant bitrate (CBR)" -> text(R.string.text_option_value_constant_bitrate_cbr)
+            "Variable bitrate (VBR)" -> text(R.string.text_option_value_variable_bitrate_vbr)
+            "V0 (highest quality)" -> text(R.string.text_option_value_mp3_vbr_v0)
+            "V2 (recommended)" -> text(R.string.text_option_value_mp3_vbr_v2)
+            "V4 (balanced)" -> text(R.string.text_option_value_mp3_vbr_v4)
+            "V6 (smaller file)" -> text(R.string.text_option_value_mp3_vbr_v6)
             "Recommended sample rate" -> text(R.string.text_option_value_recommended_48_khz)
             "Low bitrate" -> text(R.string.text_option_value_low_1_mbps)
             "Medium bitrate" -> text(R.string.text_option_value_medium_2_5_mbps)

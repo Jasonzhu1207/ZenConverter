@@ -96,11 +96,20 @@ enum class VideoFrameInterpolationMode {
 
 data class AudioExportOptions(
     val audioBitrate: Int? = null,
+    val mp3BitrateMode: Mp3BitrateMode = Mp3BitrateMode.Cbr,
+    val mp3VbrQuality: Int = DEFAULT_MP3_VBR_QUALITY,
     val sampleRateHz: Int? = null,
     val channelCount: Int? = null,
     val trimRange: MediaTrimRange = MediaTrimRange(),
     val advanced: AudioAdvancedOptions = AudioAdvancedOptions()
 )
+
+enum class Mp3BitrateMode {
+    Cbr,
+    Vbr
+}
+
+const val DEFAULT_MP3_VBR_QUALITY = 2
 
 data class MediaTrimRange(
     val startSeconds: Double? = null,

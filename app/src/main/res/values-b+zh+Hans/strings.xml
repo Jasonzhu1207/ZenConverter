@@ -185,6 +185,9 @@
     <string name="text_audio_advanced_note">倒放、降噪、淡入淡出、音量、静音、回音</string>
     <string name="text_audio_advanced_title">音频高级处理</string>
     <string name="text_audio_bitrate_label">音频码率</string>
+    <string name="text_audio_encoding_mode_label">音频编码模式</string>
+    <string name="text_mp3_vbr_quality_label">MP3 VBR 质量</string>
+    <string name="text_mp3_vbr_quality_hint">按质量编码；实际平均码率会随音频内容变化。</string>
     <string name="text_bitrate_label">总码率 %1$s</string>
     <string name="text_compression_preset_summary">优先 H.265 · 原分辨率 · 原帧率 · AAC 192 kbps</string>
     <string name="text_compression_preset_summary_h_265_preferred_short_side_1080p_original_frame_rate_aac_160_kbps">优先 H.265 · 短边 1080p · 原帧率 · AAC 160 kbps</string>
@@ -254,6 +257,7 @@
     <string name="text_option_value_auto">自动</string>
     <string name="text_option_value_auto_allocation">自动分配</string>
     <string name="text_option_value_auto_encoder_default">自动（编码器默认）</string>
+    <string name="text_option_value_constant_bitrate_cbr">恒定码率（CBR）</string>
     <string name="text_option_value_auto_recommended">自动（推荐）</string>
     <string name="text_option_value_balanced">均衡</string>
     <string name="text_option_value_balanced_shrink">均衡压缩</string>
@@ -263,6 +267,10 @@
     <string name="text_option_value_charcoal">炭黑</string>
     <string name="text_option_value_close">关闭</string>
     <string name="text_option_value_compact_128_kbps">小体积（128 kbps）</string>
+    <string name="text_option_value_mp3_vbr_v0">V0（最高质量）</string>
+    <string name="text_option_value_mp3_vbr_v2">V2（推荐）</string>
+    <string name="text_option_value_mp3_vbr_v4">V4（均衡）</string>
+    <string name="text_option_value_mp3_vbr_v6">V6（更小文件）</string>
     <string name="text_option_value_compress_pdf">压缩 PDF</string>
     <string name="text_option_value_contact_sheet_jpg">概览拼图 · JPG</string>
     <string name="text_option_value_contact_sheet_png">概览拼图 · PNG</string>
@@ -358,6 +366,7 @@
     <string name="text_option_value_very_high_8_mbps">极高（8 Mbps）</string>
     <string name="text_option_value_visual_lossless">视觉无损</string>
     <string name="text_option_value_voice_96_kbps">语音（96 kbps）</string>
+    <string name="text_option_value_variable_bitrate_vbr">可变码率（VBR）</string>
     <string name="text_option_value_web_font">网页字体</string>
     <string name="text_output_larger_hint">源文件可能已经高效压缩</string>
     <string name="text_pdf_password_message">%1$s 受密码保护。输入密码后再加入队列。</string>

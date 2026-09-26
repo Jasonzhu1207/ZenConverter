@@ -4584,9 +4584,17 @@ class ConversionService : Service() {
             add(filter)
         }
         if (audioProfile.supportsBitrate) {
-            audioOptions.audioBitrate?.let { bitrate ->
-                add("-b:a")
-                add(bitrate.toString())
+            if (
+                audioProfile.codec == FFMPEG_MP3_ENCODER &&
+                    audioOptions.mp3BitrateMode == Mp3BitrateMode.Vbr
+            ) {
+                add("-q:a")
+                add(audioOptions.mp3VbrQuality.coerceIn(MP3_VBR_QUALITY_MIN, MP3_VBR_QUALITY_MAX).toString())
+            } else {
+                audioOptions.audioBitrate?.let { bitrate ->
+                    add("-b:a")
+                    add(bitrate.toString())
+                }
             }
         }
         if (audioProfile.supportsSampleRate) {
@@ -7220,6 +7228,8 @@ class ConversionService : Service() {
         private const val FFMPEG_GIF_ENCODER = "gif"
         private const val FFMPEG_AAC_ENCODER = "aac"
         private const val FFMPEG_MP3_ENCODER = "libmp3lame"
+        private const val MP3_VBR_QUALITY_MIN = 0
+        private const val MP3_VBR_QUALITY_MAX = 9
         private const val FFMPEG_WAV_ENCODER = "pcm_s16le"
         private const val FFMPEG_FLAC_ENCODER = "flac"
         private const val FFMPEG_WMA_ENCODER = "wmav2"

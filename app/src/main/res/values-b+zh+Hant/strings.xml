@@ -185,6 +185,9 @@
     <string name="text_audio_advanced_note">倒放、降噪、淡入淡出、音量、靜音、回音</string>
     <string name="text_audio_advanced_title">音訊進階處理</string>
     <string name="text_audio_bitrate_label">音訊位元率</string>
+    <string name="text_audio_encoding_mode_label">音訊編碼模式</string>
+    <string name="text_mp3_vbr_quality_label">MP3 VBR 品質</string>
+    <string name="text_mp3_vbr_quality_hint">依品質編碼；實際平均位元率會隨音訊內容變化。</string>
     <string name="text_bitrate_label">總碼率 %1$s</string>
     <string name="text_compression_preset_summary">優先 H.265 · 原解析度 · 原幀率 · AAC 192 kbps</string>
     <string name="text_compression_preset_summary_h_265_preferred_short_side_1080p_original_frame_rate_aac_160_kbps">優先 H.265 · 短邊 1080p · 原幀率 · AAC 160 kbps</string>
@@ -254,6 +257,7 @@
     <string name="text_option_value_auto">自動</string>
     <string name="text_option_value_auto_allocation">自動分配</string>
     <string name="text_option_value_auto_encoder_default">自動（編碼器預設）</string>
+    <string name="text_option_value_constant_bitrate_cbr">固定位元率（CBR）</string>
     <string name="text_option_value_auto_recommended">自動（推薦）</string>
     <string name="text_option_value_balanced">均衡</string>
     <string name="text_option_value_balanced_shrink">均衡壓縮</string>
@@ -263,6 +267,10 @@
     <string name="text_option_value_charcoal">炭黑</string>
     <string name="text_option_value_close">關閉</string>
     <string name="text_option_value_compact_128_kbps">小體積（128 kbps）</string>
+    <string name="text_option_value_mp3_vbr_v0">V0（最高品質）</string>
+    <string name="text_option_value_mp3_vbr_v2">V2（建議）</string>
+    <string name="text_option_value_mp3_vbr_v4">V4（均衡）</string>
+    <string name="text_option_value_mp3_vbr_v6">V6（較小檔案）</string>
     <string name="text_option_value_compress_pdf">壓縮 PDF</string>
     <string name="text_option_value_contact_sheet_jpg">概覽拼圖 · JPG</string>
     <string name="text_option_value_contact_sheet_png">概覽拼圖 · PNG</string>
@@ -358,6 +366,7 @@
     <string name="text_option_value_very_high_8_mbps">極高（8 Mbps）</string>
     <string name="text_option_value_visual_lossless">視覺無損</string>
     <string name="text_option_value_voice_96_kbps">語音（96 kbps）</string>
+    <string name="text_option_value_variable_bitrate_vbr">可變位元率（VBR）</string>
     <string name="text_option_value_web_font">網頁字型</string>
     <string name="text_output_larger_hint">來源檔案可能已高效壓縮</string>
     <string name="text_pdf_password_message">%1$s 受密碼保護。輸入密碼後再加入佇列。</string>

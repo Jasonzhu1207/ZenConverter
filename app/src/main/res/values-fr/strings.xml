@@ -194,6 +194,9 @@
     <string name="text_audio_advanced_note">Inverser, réduire le bruit, fondu, volume, couper le son et écho</string>
     <string name="text_audio_advanced_title">Audio avancé</string>
     <string name="text_audio_bitrate_label">Débit binaire audio</string>
+    <string name="text_audio_encoding_mode_label">Mode d’encodage audio</string>
+    <string name="text_mp3_vbr_quality_label">Qualité VBR MP3</string>
+    <string name="text_mp3_vbr_quality_hint">Encodage basé sur la qualité ; le débit moyen varie selon le contenu audio.</string>
     <string name="text_bitrate_label">Débit binaire global %1$s</string>
     <string name="text_compression_preset_summary">H.265 préféré · Résolution d\'origine · Fréquence d\'images d\'origine · AAC 192 kbps</string>
     <string name="text_compression_preset_summary_h_265_preferred_short_side_1080p_original_frame_rate_aac_160_kbps">H.265 préféré · Largeur : 1080p · Fréquence d\'images d\'origine · AAC 160 kbps</string>
@@ -263,6 +266,7 @@
     <string name="text_option_value_auto">Auto</string>
     <string name="text_option_value_auto_allocation">Allocation automatique</string>
     <string name="text_option_value_auto_encoder_default">Auto (encoder par défaut)</string>
+    <string name="text_option_value_constant_bitrate_cbr">Débit constant (CBR)</string>
     <string name="text_option_value_auto_recommended">Auto (recommandé)</string>
     <string name="text_option_value_balanced">Équilibré</string>
     <string name="text_option_value_balanced_shrink">Rétrécissement équilibré</string>
@@ -272,6 +276,10 @@
     <string name="text_option_value_charcoal">Charbon</string>
     <string name="text_option_value_close">Fermer</string>
     <string name="text_option_value_compact_128_kbps">Compact (128 kbps)</string>
+    <string name="text_option_value_mp3_vbr_v0">V0 (qualité maximale)</string>
+    <string name="text_option_value_mp3_vbr_v2">V2 (recommandé)</string>
+    <string name="text_option_value_mp3_vbr_v4">V4 (équilibré)</string>
+    <string name="text_option_value_mp3_vbr_v6">V6 (fichier plus petit)</string>
     <string name="text_option_value_compress_pdf">Compresser un fichier PDF</string>
     <string name="text_option_value_contact_sheet_jpg">Planche-contact · JPG</string>
     <string name="text_option_value_contact_sheet_png">Planche-contact · PNG</string>
@@ -367,6 +375,7 @@
     <string name="text_option_value_very_high_8_mbps">Très élevé (8 Mbps)</string>
     <string name="text_option_value_visual_lossless">Sans perte visuelle</string>
     <string name="text_option_value_voice_96_kbps">Voix (96 kbps)</string>
+    <string name="text_option_value_variable_bitrate_vbr">Débit variable (VBR)</string>
     <string name="text_option_value_web_font">Police Web</string>
     <string name="text_output_larger_hint">Le fichier source semble déjà compressé de manière efficace</string>
     <string name="text_pdf_password_message">%1$s est protégé par un mot de passe. Saisissez le mot de passe pour l\'ajouter.</string>
