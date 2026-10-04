@@ -78,7 +78,7 @@ the encoder. MP3 export has been verified on a physical device.
 
 The limited Office compatibility renderer is reproducible from
 `native/office2pdf-jni`. It pins `developer0hye/office2pdf` at release commit
-`0676e599a7a90d164ebabc7341fc814343cf48e2` (`v0.8.0`) and exposes
+`9ca03fecab22a6b4828736b003ee1c5f9551e0dc` (`v0.8.1`) and exposes
 `convertBytesWithFontPaths`, which passes app-private CJK font directories
 through `ConvertOptions.font_paths`.
 
@@ -94,8 +94,8 @@ The script writes the compiled shared library to
 Copy that file over `app/src/main/jniLibs/arm64-v8a/libzen_office2pdf.so`.
 Set `ANDROID_NDK_HOME` to the NDK root if it is not installed in a common
 system path.
-The checked-in October 01, 2026 rebuild is `38,213,128` bytes with SHA-256
-`e4a7a1d845a8654efe39eb022a09a8864935bc04573ab599b5bd64dabc350cd9` and
+The checked-in October 04, 2026 rebuild is `38,180,168` bytes with SHA-256
+`7c8a27a46141a555c148dc7d03142ab4f9d959858f8bbb5a2dbe62c2c2669004` and
 exports `convertBytesWithFontPaths`. Do not validate the CJK fix with a
 Kotlin-only build: an older shared library can still start through the legacy
 `convertBytes` fallback, but it cannot pass the bundled CJK font directory.
