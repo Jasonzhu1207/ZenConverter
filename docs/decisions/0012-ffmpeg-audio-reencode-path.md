@@ -35,6 +35,13 @@ audio target.
   targets when selected.
 - WAV and FLAC intentionally ignore bitrate options because the targets are
   lossless/PCM style outputs.
+- Global audio tags are copied with `-map_metadata 0`, and unchanged chapters
+  with `-map_chapters 0`.
+- MP3, M4A, and FLAC map an input `attached_pic` stream with `-c:v copy`.
+  OPUS serializes the picture as the Ogg/Vorbis
+  `METADATA_BLOCK_PICTURE` value because Ogg cannot carry a video stream. WAV
+  and WMA keep tags where their muxers support them but do not claim portable
+  cover art.
 
 ## Consequences
 
@@ -43,7 +50,12 @@ audio target.
   real and predictable.
 - Same-format audio conversions are still re-encodes, not byte-identical copies.
 - Only the first audio stream is used; extra audio streams, video, subtitles,
-  attachments, and metadata are not copied.
-- Physical-device coverage has verified the connected audio targets and
-  video-source audio extraction. Automated sample coverage remains a future
-  quality improvement.
+  attachments, and timed lyric streams are not copied. Supported global tags,
+  unchanged chapters, and attached pictures are copied according to the target
+  container's capability. Common plain lyric tags are normalized to the
+  `lyrics` key when present; trimmed/split outputs drop chapters whose original
+  timestamps would no longer be correct.
+- Existing physical-device coverage has verified the connected FFmpeg audio
+  targets and video-source audio extraction. The native MP3/Opus/FLAC metadata
+  repair path still requires the Android Studio arm64 acceptance matrix;
+  automated sample coverage remains a future quality improvement.

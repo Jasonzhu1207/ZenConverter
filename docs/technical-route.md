@@ -61,9 +61,16 @@ Goal: add flexible media conversion with one predictable audio/video engine.
 Success: FFmpeg jobs run from Kotlin, report progress, and do not require
 duplicating normal local files into cache.
 
-Current verified path: a self-built `arthenica/ffmpeg-kit-next` `v7.1.0` AAR
+Current FFmpeg path: a self-built `arthenica/ffmpeg-kit-next` `v7.1.0` AAR
 handles MP4/MKV/MOV video re-encode, video-to-GIF output, video-file audio
-extraction, and MP3/M4A/WAV/FLAC/WMA audio targets through FFmpeg arguments.
+extraction, and MP3/M4A/WAV/FLAC/WMA/OPUS audio targets through FFmpeg
+arguments. MP3, Opus, and FLAC audio targets now take a bounded metadata
+snapshot and verify common fields, one JPEG/PNG primary cover, and ordinary
+lyrics in the native output container. MP3 repair writes a true ID3 `USLT`
+without touching audio frames; Opus and FLAC may use one metadata-only
+`-c:a copy` remux. Required verification failure stops the task. Trimmed/split
+outputs drop chapters whose source timestamps are no longer valid. The
+metadata-specific arm64 physical-device acceptance matrix remains pending.
 The advanced filter set is also verified for MP4/MKV/MOV video outputs and
 audio outputs: video reverse playback, fade, mirror, rotate, frame fit/crop;
 audio reverse playback, non-model `afftdn` noise reduction, volume/mute, fade,

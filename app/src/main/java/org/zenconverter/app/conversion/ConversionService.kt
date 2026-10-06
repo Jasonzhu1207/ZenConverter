@@ -63,6 +63,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.cos.COSBase
 import com.tom_roush.pdfbox.cos.COSName
@@ -3619,6 +3620,16 @@ class ConversionService : Service() {
                 message = message
             )
         }
+        val metadataPreparation = prepareAudioMetadataFor(input)
+        metadataPreparation.failure?.let { failure ->
+            return@withContext FfmpegRunResult(
+                success = false,
+                cancelled = false,
+                message = failure,
+                outputTail = metadataPreparation.diagnostic
+            )
+        }
+        val audioMetadata = metadataPreparation.snapshot
         if (input.category == ConversionMediaCategory.Video &&
             input.videoOptions.frameInterpolation == VideoFrameInterpolationMode.Rife2x
         ) {
@@ -3685,7 +3696,8 @@ class ConversionService : Service() {
                         inputPath = segInputSource.path,
                         outputFile = partTempFile,
                         durationMs = segment.effectiveDurationMs,
-                        trimWindow = segTrimWindow
+                        trimWindow = segTrimWindow,
+                        audioMetadata = audioMetadata
                     )
                     val segStartProgress = (i.toFloat() / segmentCount.toFloat()) * FFMPEG_MAX_PROGRESS_BEFORE_SAVE
                     val segEndProgress = ((i + 1).toFloat() / segmentCount.toFloat()) * FFMPEG_MAX_PROGRESS_BEFORE_SAVE
@@ -3711,6 +3723,17 @@ class ConversionService : Service() {
                     segmentTempFiles.forEach { it.delete() }
                     return@withContext partResult
                 }
+                val metadataResult = finalizeAudioOutput(
+                    input,
+                    partTempFile,
+                    audioMetadata,
+                    dropChapters = segTrimWindow.isTrimmed
+                )
+                if (!metadataResult.success) {
+                    partTempFile.delete()
+                    segmentTempFiles.forEach { it.delete() }
+                    return@withContext metadataResult
+                }
                 segmentTempFiles.add(partTempFile)
             }
             return@withContext FfmpegRunResult(
@@ -3731,9 +3754,15 @@ class ConversionService : Service() {
                 inputPath = inputSource.path,
                 outputFile = tempFile,
                 durationMs = effectiveDurationMs,
-                trimWindow = trimWindow
+                trimWindow = trimWindow,
+                audioMetadata = audioMetadata
             )
-            executeFfmpeg(input, arguments, effectiveDurationMs, logTail, inputSource.label)
+            val result = executeFfmpeg(input, arguments, effectiveDurationMs, logTail, inputSource.label)
+            if (!result.success || result.cancelled) {
+                result
+            } else {
+                finalizeAudioOutput(input, tempFile, audioMetadata, dropChapters = trimWindow.isTrimmed)
+            }
         } finally {
             inputSource.close()
         }
@@ -4013,8 +4042,10 @@ class ConversionService : Service() {
             // Determine output video dimensions
             val firstUri = inputUris.first()
             val rawSourceSize = input.inputInfo?.let {
-                if (it.width != null && it.height != null && it.width > 0 && it.height > 0) {
-                    VideoSize(it.width, it.height)
+                val width = it.width
+                val height = it.height
+                if (width != null && height != null && width > 0 && height > 0) {
+                    VideoSize(width, height)
                 } else null
             } ?: readVideoSize(firstUri) ?: VideoSize(1920, 1080)
 
@@ -4406,12 +4437,224 @@ class ConversionService : Service() {
         }.getOrNull()
     }
 
+    private data class AudioMetadataPreparation(
+        val snapshot: AudioMetadataCodec.AudioMetadataSnapshot? = null,
+        val failure: LocalizedText? = null,
+        val diagnostic: String? = null
+    )
+
+    private suspend fun prepareAudioMetadataFor(input: ConversionTaskInput): AudioMetadataPreparation {
+        if (input.category != ConversionMediaCategory.Audio) return AudioMetadataPreparation()
+        val strict = audioTargetExtensionFor(input.targetFormat) in setOf("mp3", "opus", "flac")
+        val source = openFfmpegInputSource(input.inputUri)
+            ?: return AudioMetadataPreparation(failure = if (strict) localizedText(R.string.message_audio_metadata_probe_failed) else null)
+        var coverFile: File? = null
+        try {
+            val information = FFprobeKit.getMediaInformation(source.path, FFMPEG_MEDIA_INFORMATION_PROBE_TIMEOUT_MS).getMediaInformation()
+                ?: return AudioMetadataPreparation(failure = if (strict) localizedText(R.string.message_audio_metadata_probe_failed) else null)
+            val streams = information.getStreams().orEmpty()
+            val audio = streams.firstOrNull { it.getType().equals("audio", true) }
+            val tags = listOfNotNull(audio?.getTags(), information.getTags()).flatMap { it.metadataEntries() }
+            val generic = AudioMetadataCodec.snapshotFromTags(tags)
+            // Native readers preserve USLT language/description which FFprobe can normalize away.
+            // FFmpegKit SAF parameters (saf:...) are not filesystem paths.
+            // Open a separate resolver stream so probing/encoding keeps its
+            // own descriptor and cursor, including with non-local providers.
+            val native = if (strict) {
+                val stream = contentResolver.openInputStream(input.inputUri)
+                    ?: error("source-metadata-stream-unavailable")
+                stream.buffered().use { AudioMetadataCodec.readSource(it) }
+            } else null
+            val pictures = streams.filter { stream ->
+                stream.getType().equals("video", true) &&
+                    (stream.getNumberProperty("disposition.attached_pic") == 1L ||
+                        stream.getAllProperties()?.optJSONObject("disposition")?.optInt("attached_pic", 0) == 1)
+            }
+            val picture = pictures.firstOrNull { stream ->
+                stream.getTags()?.optString("comment").orEmpty().contains("front", true)
+            } ?: pictures.firstOrNull()
+            var cover = native?.cover
+            if (strict && cover == null && picture != null) {
+                val index = picture.getIndex() ?: error("cover-stream-index-missing")
+                val extracted = File.createTempFile("audio-cover-", ".img", externalCacheDir ?: cacheDir)
+                coverFile = extracted
+                val result = executeFfmpeg(
+                    input = input,
+                    arguments = listOf(
+                        "-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-i", source.path,
+                        "-map", "0:$index", "-frames:v", "1", "-c:v", "copy",
+                        "-f", "image2", "-update", "1", extracted.absolutePath
+                    ),
+                    durationMs = null,
+                    logTail = mutableListOf(),
+                    inputSourceLabel = "extract-audio-cover",
+                    progressStart = 0f, progressEnd = 0f
+                )
+                if (result.cancelled || ConversionTaskStore.isCancelled()) throw CancellationException()
+                if (result.success && extracted.length() in 1..AudioMetadataCodec.MAX_COVER_BYTES) {
+                    cover = AudioMetadataCodec.coverFromBytes(extracted.readBytes())
+                }
+                if (cover == null) {
+                    Log.e(TAG, "Source audio cover extraction/validation failed")
+                    return AudioMetadataPreparation(failure = localizedText(R.string.message_audio_metadata_cover_extraction_failed))
+                }
+            }
+            val snapshot = generic.copy(
+                fields = generic.fields + native?.fields.orEmpty(),
+                lyrics = native?.lyrics ?: generic.lyrics,
+                cover = cover,
+                pictureStreamIndex = if (strict) picture?.getIndex() else null,
+                flacStreamInfo = native?.flacStreamInfo
+            )
+            Log.i(TAG, "Audio metadata source fields=${snapshot.fields.keys} lyrics=${snapshot.lyrics != null} " +
+                "cover=${cover?.mimeType ?: "none"} coverBytes=${cover?.bytes?.size ?: 0} coverHash=${cover?.sha256 ?: "none"}")
+            return AudioMetadataPreparation(snapshot = snapshot)
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            // Never log source text/lyrics: parsers use fixed diagnostic codes.
+            val diagnostic = "source-metadata:${exception.javaClass.simpleName}"
+            Log.e(TAG, "Audio metadata preparation failed code=$diagnostic")
+            return AudioMetadataPreparation(
+                failure = if (strict) localizedText(R.string.message_audio_metadata_probe_failed) else null,
+                diagnostic = diagnostic
+            )
+        } finally {
+            coverFile?.delete()
+            source.close()
+        }
+    }
+
+    private fun JSONObject.metadataEntries(): List<Pair<String, String>> {
+        val result = mutableListOf<Pair<String, String>>()
+        val iterator = keys()
+        while (iterator.hasNext()) {
+            val key = iterator.next()
+            val value = optString(key).takeIf { it.isNotBlank() } ?: continue
+            result += key to value
+        }
+        return result
+    }
+
+    private suspend fun finalizeAudioOutput(
+        input: ConversionTaskInput,
+        outputFile: File,
+        snapshot: AudioMetadataCodec.AudioMetadataSnapshot?,
+        dropChapters: Boolean
+    ): FfmpegRunResult {
+        if (ConversionTaskStore.isCancelled()) return FfmpegRunResult(success = false, cancelled = true)
+        val target = audioTargetExtensionFor(input.targetFormat)
+            ?: return FfmpegRunResult(success = true, cancelled = false)
+        if (input.category != ConversionMediaCategory.Audio || snapshot == null ||
+            target !in setOf("mp3", "opus", "flac")) {
+            return FfmpegRunResult(success = true, cancelled = false)
+        }
+        var verification = verifyAudioOutput(target, outputFile, snapshot)
+        if (!verification.success && target in setOf("opus", "flac")) {
+            verification = remuxAudioMetadata(input, outputFile, target, snapshot, dropChapters)
+        }
+        if (ConversionTaskStore.isCancelled()) return FfmpegRunResult(success = false, cancelled = true)
+        snapshot.flacStreamInfo?.let { sourceInfo ->
+            if (verification.success && target == "flac" && !input.audioOptions.trimRange.isEnabled &&
+                !input.audioOptions.advanced.hasEnabledEffects &&
+                (input.audioOptions.sampleRateHz == null || input.audioOptions.sampleRateHz == AudioMetadataCodec.flacSampleRate(sourceInfo)) &&
+                (input.audioOptions.channelCount == null || input.audioOptions.channelCount == AudioMetadataCodec.flacChannels(sourceInfo))) {
+                verification = AudioMetadataCodec.verifyFlacPcm(outputFile, sourceInfo)
+            }
+        }
+        Log.i(TAG, "Audio metadata output target=$target verified=${verification.success} diagnostic=${verification.diagnostic.orEmpty()}")
+        return if (verification.success) FfmpegRunResult(success = true, cancelled = false) else FfmpegRunResult(
+            success = false,
+            cancelled = false,
+            message = localizedText(
+                if (verification.diagnostic?.startsWith("mp3-repair") == true ||
+                    verification.diagnostic?.startsWith("metadata-remux") == true
+                ) R.string.message_audio_metadata_repair_failed
+                else R.string.message_audio_metadata_verification_failed
+            ),
+            outputTail = verification.diagnostic
+        )
+    }
+
+    private fun verifyAudioOutput(
+        target: String,
+        file: File,
+        snapshot: AudioMetadataCodec.AudioMetadataSnapshot
+    ): AudioMetadataCodec.Verification = when (target) {
+        "mp3" -> AudioMetadataCodec.repairAndVerifyMp3(file, snapshot) { ConversionTaskStore.isCancelled() }
+        "opus" -> AudioMetadataCodec.verifyOpus(file, snapshot)
+        "flac" -> AudioMetadataCodec.verifyFlac(file, snapshot)
+        else -> AudioMetadataCodec.Verification(true)
+    }
+
+    private suspend fun remuxAudioMetadata(
+        input: ConversionTaskInput,
+        outputFile: File,
+        target: String,
+        snapshot: AudioMetadataCodec.AudioMetadataSnapshot,
+        dropChapters: Boolean
+    ): AudioMetadataCodec.Verification {
+        val remuxFile = File(outputFile.parentFile ?: cacheDir, "${outputFile.name}.metadata-remux-${System.nanoTime()}.$target")
+        var coverFile: File? = null
+        try {
+            val before = AudioMetadataCodec.audioFingerprint(outputFile, target) { ConversionTaskStore.isCancelled() }
+            val arguments = mutableListOf("-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-i", outputFile.absolutePath)
+            if (target == "flac" && snapshot.cover != null) {
+                // A Vorbis comment named METADATA_BLOCK_PICTURE is not a native FLAC picture block.
+                val cover = snapshot.cover
+                val extracted = File.createTempFile("audio-remux-cover-", if (cover.mimeType == "image/png") ".png" else ".jpg", outputFile.parentFile ?: cacheDir)
+                coverFile = extracted
+                extracted.writeBytes(cover.bytes)
+                arguments += listOf("-i", extracted.absolutePath)
+            }
+            arguments += listOf(
+                "-map", "0:a:0", "-sn", "-dn", "-map_metadata", "0",
+                "-map_metadata:s:a:0", "0:s:a:0", "-map_chapters", if (dropChapters) "-1" else "0"
+            )
+            if (coverFile != null) {
+                arguments += listOf("-map", "1:v:0", "-c:v", "copy", "-disposition:v:0", "attached_pic",
+                    "-metadata:s:v:0", "title=Album cover", "-metadata:s:v:0", "comment=Cover (front)")
+            } else {
+                arguments += "-vn"
+            }
+            // Ogg merges globals with AV_DICT_DONT_OVERWRITE. Override both
+            // dictionaries so a stale stream-level value cannot win. This
+            // produces one comment per key, not duplicate OpusTags entries.
+            addAudioMetadataArguments(arguments, snapshot, includePicture = target == "opus")
+            arguments += listOf("-c:a", "copy", "-f", target, remuxFile.absolutePath)
+            val result = executeFfmpeg(
+                input = input, arguments = arguments, durationMs = null, logTail = mutableListOf(),
+                inputSourceLabel = "metadata-remux", progressStart = FFMPEG_MAX_PROGRESS_BEFORE_SAVE,
+                progressEnd = FFMPEG_MAX_PROGRESS_BEFORE_SAVE
+            )
+            if (result.cancelled || ConversionTaskStore.isCancelled()) throw CancellationException()
+            if (!result.success || !remuxFile.isFile || remuxFile.length() == 0L) {
+                return AudioMetadataCodec.Verification(false, "metadata-remux:ffmpeg-failed")
+            }
+            val verified = verifyAudioOutput(target, remuxFile, snapshot)
+            if (!verified.success) return verified
+            val after = AudioMetadataCodec.audioFingerprint(remuxFile, target) { ConversionTaskStore.isCancelled() }
+            if (before != after) return AudioMetadataCodec.Verification(false, "metadata-remux:audio-payload-changed")
+            Log.i(TAG, "Audio metadata remux verified target=$target audioHash=$after")
+            AudioMetadataCodec.replaceVerified(remuxFile, outputFile)
+            return AudioMetadataCodec.Verification(true)
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            return AudioMetadataCodec.Verification(false, "metadata-remux:${exception.javaClass.simpleName}")
+        } finally {
+            remuxFile.delete()
+            coverFile?.delete()
+        }
+    }
+
     private fun ffmpegArgumentsFor(
         input: ConversionTaskInput,
         inputPath: String,
         outputFile: File,
         durationMs: Long?,
-        trimWindow: FfmpegTrimWindow
+        trimWindow: FfmpegTrimWindow,
+        audioMetadata: AudioMetadataCodec.AudioMetadataSnapshot? = null
     ): List<String> {
         return when (input.category) {
             ConversionMediaCategory.Video -> ffmpegVideoArgumentsFor(
@@ -4426,18 +4669,53 @@ class ConversionService : Service() {
                     ?: throw LocalizedFailure(localizedText(R.string.message_unsupported_audio_target_1_s, input.targetFormat))
                 add("-hide_banner")
                 add("-nostdin")
+                add("-loglevel")
+                add("error")
                 add("-y")
                 addFfmpegTrimInputOptions(trimWindow)
                 add("-i")
                 add(inputPath)
                 add("-map")
                 add("0:a:0")
-                add("-vn")
+                if (audioProfile.supportsAttachedPicture) {
+                    // Audio containers that define an attached-picture metadata
+                    // representation (ID3 APIC, MP4 covr, FLAC picture blocks,
+                    // or another supported native picture item) expose the
+                    // cover as a video stream with the attached_pic
+                    // disposition. Map only that disposition so a video
+                    // selected in the Audio lane never drags its real video
+                    // track into the output. Ogg Opus uses the separate
+                    // METADATA_BLOCK_PICTURE path below.
+                    add("-map")
+                    add(audioMetadata?.pictureStreamIndex?.let { "0:$it" } ?: "0:v:disp:attached_pic?")
+                    add("-c:v")
+                    add("copy")
+                } else {
+                    add("-vn")
+                }
                 add("-sn")
                 add("-dn")
+                add("-map_metadata")
+                add("0")
+                // Global tags carry the common artist/title/album/lyrics
+                // fields. Keep stream-level tags (for example a language or
+                // track title) attached to the one audio stream as well.
+                add("-map_metadata:s:a:0")
+                add("0:s:a:0")
+                add("-map_chapters")
+                add(if (trimWindow.isTrimmed) "-1" else "0")
+                audioMetadata?.let { snapshot ->
+                    addAudioMetadataArguments(this, snapshot, includePicture = false)
+                }
                 add("-c:a")
                 add(audioProfile.codec)
                 addFfmpegAudioOptions(input.audioOptions, audioProfile, durationMs)
+                if (audioProfile.codec == FFMPEG_FLAC_ENCODER) {
+                    audioMetadata?.flacStreamInfo?.let { info ->
+                        add("-bits_per_raw_sample")
+                        add(AudioMetadataCodec.flacBitDepth(info).toString())
+                    }
+                }
                 if (audioProfile.useFastStart) {
                     add("-movflags")
                     add("+faststart")
@@ -4451,6 +4729,25 @@ class ConversionService : Service() {
             ConversionMediaCategory.Document -> throw LocalizedFailure(localizedText(R.string.message_compatibility_engine_is_not_connected_for_documents))
             ConversionMediaCategory.Font -> throw LocalizedFailure(localizedText(R.string.message_compatibility_engine_is_not_connected_for_fonts))
             ConversionMediaCategory.Subtitle -> throw LocalizedFailure(localizedText(R.string.ui_failed))
+        }
+    }
+
+
+    private fun addAudioMetadataArguments(
+        arguments: MutableList<String>,
+        snapshot: AudioMetadataCodec.AudioMetadataSnapshot,
+        includePicture: Boolean
+    ) {
+        fun addTag(key: String, value: String) {
+            arguments += listOf("-metadata", "$key=$value", "-metadata:s:a:0", "$key=$value")
+        }
+        snapshot.fields.forEach { (key, value) -> addTag(key, value) }
+        snapshot.lyrics?.let { lyrics ->
+            addTag("lyrics", lyrics.text)
+            if (lyrics.commentKey != "lyrics") addTag(lyrics.commentKey, lyrics.text)
+        }
+        if (includePicture) snapshot.cover?.let { cover ->
+            addTag("METADATA_BLOCK_PICTURE", AudioMetadataCodec.opusPictureMetadata(cover))
         }
     }
 
@@ -4642,7 +4939,8 @@ class ConversionService : Service() {
             codec = FFMPEG_AAC_ENCODER,
             format = "ipod",
             useFastStart = true,
-            requiredEncoder = FFMPEG_AAC_ENCODER
+            requiredEncoder = FFMPEG_AAC_ENCODER,
+            supportsAttachedPicture = true
         )
     }
 
@@ -5015,7 +5313,8 @@ class ConversionService : Service() {
             "mp3" -> FfmpegAudioProfile(
                 codec = FFMPEG_MP3_ENCODER,
                 format = "mp3",
-                requiredEncoder = FFMPEG_MP3_ENCODER
+                requiredEncoder = FFMPEG_MP3_ENCODER,
+                supportsAttachedPicture = true
             )
             "m4a" -> ffmpegAacAudioProfile()
             "wav" -> FfmpegAudioProfile(
@@ -5028,7 +5327,8 @@ class ConversionService : Service() {
                 codec = FFMPEG_FLAC_ENCODER,
                 format = "flac",
                 supportsBitrate = false,
-                requiredEncoder = FFMPEG_FLAC_ENCODER
+                requiredEncoder = FFMPEG_FLAC_ENCODER,
+                supportsAttachedPicture = true
             )
             "wma" -> FfmpegAudioProfile(
                 codec = FFMPEG_WMA_ENCODER,
@@ -5111,13 +5411,11 @@ class ConversionService : Service() {
             },
             { log ->
                 val message = log.message
-                if (message != null) {
-                    appendFfmpegLogTail(logTail, message)
-                    ffmpegProgressFromMessage(message, durationMs)?.let { progress ->
-                        updateCompatibilityProgress(
-                            scaledFfmpegProgress(progress, progressStart, progressEnd)
-                        )
-                    }
+                appendFfmpegLogTail(logTail, message)
+                ffmpegProgressFromMessage(message, durationMs)?.let { progress ->
+                    updateCompatibilityProgress(
+                        scaledFfmpegProgress(progress, progressStart, progressEnd)
+                    )
                 }
             },
             { statistics ->
@@ -6008,10 +6306,17 @@ class ConversionService : Service() {
 
     private fun formatFfmpegArguments(arguments: List<String>): String {
         return arguments.joinToString(separator = " ") { argument ->
-            if (argument.any { it.isWhitespace() }) {
-                "\"${argument.replace("\"", "\\\"")}\""
+            val logSafeArgument = when {
+                argument.startsWith("METADATA_BLOCK_PICTURE=") ->
+                    "METADATA_BLOCK_PICTURE=<redacted:${argument.length}>"
+                argument.substringBefore('=').lowercase(Locale.US).startsWith("lyrics") ->
+                    "${argument.substringBefore('=')}=<redacted:${argument.length}>"
+                else -> argument
+            }
+            if (logSafeArgument.any { it.isWhitespace() }) {
+                "\"${logSafeArgument.replace("\"", "\\\"")}\""
             } else {
-                argument
+                logSafeArgument
             }
         }
     }
@@ -6929,8 +7234,10 @@ class ConversionService : Service() {
         val supportsBitrate: Boolean = true,
         val supportsSampleRate: Boolean = true,
         val supportsChannelCount: Boolean = true,
+        val supportsAttachedPicture: Boolean = false,
         val requiredEncoder: String? = null
     )
+
 
     private data class FfmpegRunResult(
         val success: Boolean,
@@ -6964,6 +7271,12 @@ class ConversionService : Service() {
         val durationLimitMs: Long? get() = segments.firstOrNull()?.durationLimitMs
         val effectiveDurationMs: Long? get() = segments.firstOrNull()?.effectiveDurationMs
         val isMultiSegment: Boolean get() = segments.size > 1
+        // Chapters are source-timeline metadata. Once a task trims or splits
+        // the audio, copying them unchanged would leave chapter positions
+        // pointing at the wrong samples, so those outputs explicitly drop
+        // chapters while retaining ordinary tags and cover art.
+        val isTrimmed: Boolean
+            get() = isMultiSegment || startSeconds > 0.0 || durationLimitMs != null
     }
 
     private data class GifFrameExtraction(

@@ -47,6 +47,13 @@
 - Verified audio extraction and true re-encode for MP3/M4A/WAV/FLAC/WMA,
   including video-source audio extraction. Applicable bitrate, sample-rate,
   channel, and advanced audio options are mapped to FFmpeg arguments.
+- Implemented bounded native-container metadata preservation for MP3, Opus,
+  and FLAC targets: common music fields, one validated JPEG/PNG primary cover,
+  and ordinary embedded lyrics are snapshotted and verified after conversion.
+  MP3 malformed `TXXX:USLT` values are repaired to a real ID3 `USLT` frame;
+  Opus and FLAC can use one metadata-only `-c:a copy` remux. Required metadata
+  verification fails the task with a diagnostic instead of returning an
+  incomplete file. Android Studio physical-device acceptance remains pending.
 
 ## Milestone 4: Non-media Formats
 

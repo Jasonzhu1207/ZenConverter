@@ -663,4 +663,8 @@
     <string name="ui_settings_back">返回</string>
     <string name="ui_settings_release_notes">更新说明</string>
     <string name="ui_settings_update_source">下载来源：GitHub Releases</string>
+    <string name="message_audio_metadata_probe_failed">无法读取源音频元数据，无法保证这次音频转换。</string>
+    <string name="message_audio_metadata_cover_extraction_failed">无法提取并验证源文件封面。</string>
+    <string name="message_audio_metadata_repair_failed">无法修补输出音频元数据。</string>
+    <string name="message_audio_metadata_verification_failed">无法验证输出音频元数据。</string>
 </resources>

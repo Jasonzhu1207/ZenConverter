@@ -680,4 +680,8 @@
     <string name="project_identifier" translatable="false">Jasonzhu1207/ZenConverter</string>
     <string name="ui_settings_release_notes">Release notes</string>
     <string name="ui_settings_update_source">Download source: GitHub Releases</string>
+    <string name="message_audio_metadata_probe_failed">Could not read source audio metadata for a guaranteed audio conversion.</string>
+    <string name="message_audio_metadata_cover_extraction_failed">The source cover art could not be extracted and verified.</string>
+    <string name="message_audio_metadata_repair_failed">Could not repair the output audio metadata.</string>
+    <string name="message_audio_metadata_verification_failed">The output audio metadata could not be verified.</string>
 </resources>

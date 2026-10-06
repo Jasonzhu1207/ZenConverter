@@ -2,6 +2,7 @@ version: 1
 policy:
   unsupported_behavior: "Show explicitly. Do not imply full support."
   local_processing: "Required unless a future feature is clearly marked online."
+  audio_metadata_guarantee: "MP3, Opus, and FLAC targets verify common music fields, one validated JPEG/PNG primary cover, and ordinary embedded lyrics in the native output container. MP3 lyrics are repaired as ID3 USLT; Opus and FLAC may use one metadata-only -c:a copy remux. Required metadata verification failure fails the task. M4A, WAV, WMA, multiple covers, private tags, external LRC, and timed lyrics remain outside this guarantee."
 
 groups:
   media:
@@ -86,6 +87,11 @@ groups:
         engine: ffmpeg-compatible
         status: stable
         note: "TS-family alias for routing. Uses the same FFmpeg re-encode path and fixed video compression presets."
+      # Audio outputs explicitly copy global/stream tags and unchanged
+      # chapters. MP3, M4A, and FLAC map attached_pic cover streams with
+      # -c:v copy; OPUS serializes the picture as METADATA_BLOCK_PICTURE;
+      # WAV/WMA keep tags only where their muxers support them.
+      # Trimming/splitting drops chapters whose source timestamps are invalid.
       - from: mp3
         to: mp3
         engine: ffmpeg-compatible

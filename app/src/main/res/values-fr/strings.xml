@@ -673,4 +673,8 @@
     </plurals>
     <string name="ui_settings_release_notes">Notes de version</string>
     <string name="ui_settings_update_source">Source du téléchargement : GitHub Releases</string>
+    <string name="message_audio_metadata_probe_failed">Impossible de lire les métadonnées audio source ; la conversion garantie est interrompue.</string>
+    <string name="message_audio_metadata_cover_extraction_failed">Impossible d\'extraire et de vérifier la pochette source.</string>
+    <string name="message_audio_metadata_repair_failed">Impossible de réparer les métadonnées audio de sortie.</string>
+    <string name="message_audio_metadata_verification_failed">Impossible de vérifier les métadonnées audio de sortie.</string>
 </resources>
