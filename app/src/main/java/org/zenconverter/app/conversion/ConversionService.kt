@@ -27,6 +27,7 @@ import android.graphics.ImageDecoder
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.pdf.LoadParams
@@ -475,25 +476,25 @@ class ConversionService : Service() {
             }
             val effectiveDurationMs = (effectiveEndMs - effectiveStartMs).coerceAtLeast(1000L)
 
-            val grid = input.contactSheetOptions.grid
-            val rows = grid.rows
-            val cols = grid.cols
-            val frameCount = rows * cols
-
-            val sheetWidth = 2048
-            val margin = 20
-            val gap = 12
-            val availableWidth = sheetWidth - (margin * 2) - ((cols - 1) * gap)
-            val rawCellWidth = availableWidth / cols
-            val cellWidth = ((rawCellWidth / 2) * 2).coerceAtLeast(2)
-            val rawCellHeight = (cellWidth * (displayHeight.toFloat() / displayWidth.coerceAtLeast(1))).toInt().coerceAtLeast(80)
-            val cellHeight = ((rawCellHeight / 2) * 2).coerceAtLeast(2)
-            val gridTotalWidth = cols * cellWidth + (cols - 1) * gap
-            val startX = (sheetWidth - gridTotalWidth) / 2f
-
+            val geometry = ContactSheetGeometry.calculate(
+                input.contactSheetOptions,
+                displayWidth,
+                displayHeight
+            )
+            if (!geometry.isValid) {
+                throw LocalizedFailure(localizedText(R.string.message_video_contact_sheet_failed))
+            }
+            val frameCount = geometry.frameCount
+            val sheetWidth = geometry.width
+            val sheetHeight = geometry.height
+            val margin = input.contactSheetOptions.outerMarginPx.coerceIn(
+                ContactSheetGeometry.MIN_MARGIN,
+                ContactSheetGeometry.MAX_MARGIN
+            )
+            val cellWidth = geometry.cellWidth
+            val cellHeight = geometry.cellHeight
             val includeHeader = input.contactSheetOptions.includeHeader
-            val headerHeight = if (includeHeader) 160 else 0
-            val sheetHeight = headerHeight + (margin * 2) + (rows * cellHeight) + ((rows - 1) * gap)
+            val headerHeight = geometry.headerHeight
 
             val stepMs = effectiveDurationMs / (frameCount + 1)
             val frameSlots = arrayOfNulls<Pair<Bitmap, Long>>(frameCount)
@@ -566,12 +567,22 @@ class ConversionService : Service() {
             val sheetBitmap = Bitmap.createBitmap(sheetWidth, sheetHeight, Bitmap.Config.ARGB_8888)
             try {
                 val canvas = Canvas(sheetBitmap)
-                canvas.drawColor(Color.parseColor("#16181D"))
+                val outputIsPng = outputProfile.extension.equals("png", ignoreCase = true)
+                val backgroundColor = when (input.contactSheetOptions.background) {
+                    ContactSheetBackground.Dark -> Color.parseColor("#16181D")
+                    ContactSheetBackground.Light -> Color.parseColor("#F4F5F7")
+                    ContactSheetBackground.Transparent -> if (outputIsPng) Color.TRANSPARENT else Color.WHITE
+                }
+                canvas.drawColor(backgroundColor)
 
             if (includeHeader) {
                 val headerRect = RectF(0f, 0f, sheetWidth.toFloat(), headerHeight.toFloat())
                 val headerBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.parseColor("#1C1F26")
+                    color = when (input.contactSheetOptions.background) {
+                        ContactSheetBackground.Dark -> Color.parseColor("#1C1F26")
+                        ContactSheetBackground.Light -> Color.parseColor("#E4E7EC")
+                        ContactSheetBackground.Transparent -> if (outputIsPng) Color.TRANSPARENT else Color.WHITE
+                    }
                 }
                 canvas.drawRect(headerRect, headerBgPaint)
 
@@ -584,14 +595,18 @@ class ConversionService : Service() {
                 val headerPaddingX = margin.toFloat()
                 val headerPaddingY = 24f
                 val labelTextSize = 22f
+                val lightHeader = input.contactSheetOptions.background == ContactSheetBackground.Light
+                val headerLabelColor = if (lightHeader) Color.parseColor("#475569") else Color.parseColor("#94A3B8")
+                val headerValueColor = if (lightHeader) Color.parseColor("#111827") else Color.parseColor("#F8FAFC")
+                val headerSeparatorColor = if (lightHeader) Color.parseColor("#64748B") else Color.parseColor("#475569")
 
                 val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.parseColor("#94A3B8")
+                    color = headerLabelColor
                     typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
                     textSize = labelTextSize
                 }
                 val valuePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.parseColor("#F8FAFC")
+                    color = headerValueColor
                     typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
                     textSize = labelTextSize
                 }
@@ -601,7 +616,7 @@ class ConversionService : Service() {
                     textSize = labelTextSize
                 }
                 val separatorPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.parseColor("#475569")
+                    color = headerSeparatorColor
                     typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
                     textSize = labelTextSize
                 }
@@ -684,9 +699,10 @@ class ConversionService : Service() {
                     drawSegments(line4Segments, headerPaddingX, curY)
                 }
 
+                if (input.contactSheetOptions.includeWatermark) {
                 val wmText = localizedText(R.string.contact_sheet_generated_by, getString(R.string.project_identifier)).resolve(this)
                 val wmPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.parseColor("#94A3B8")
+                    color = headerLabelColor
                     typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
                     textSize = 20f
                 }
@@ -743,6 +759,7 @@ class ConversionService : Service() {
                 }
                 val textY = pillCenterY + (wmTextHeight / 2f) - wmMetrics.descent
                 canvas.drawText(wmText, curPillX, textY, wmPaint)
+                }
             }
 
             val includeTimestamp = input.contactSheetOptions.includeTimestamp
@@ -760,18 +777,20 @@ class ConversionService : Service() {
             for (i in 0 until frameCount) {
                 val slot = frameSlots[i] ?: continue
                 val (frameBmp, timeMs) = slot
-                val row = i / cols
-                val col = i % cols
-                val cellLeft = startX + col * (cellWidth + gap)
-                val cellTop = (headerHeight + margin + row * (cellHeight + gap)).toFloat()
-                val cellRect = RectF(cellLeft, cellTop, cellLeft + cellWidth, cellTop + cellHeight)
+                val geometryCell = geometry.cells.getOrNull(i) ?: continue
+                val cellRect = RectF(
+                    geometryCell.left.toFloat(),
+                    geometryCell.top.toFloat(),
+                    geometryCell.right.toFloat(),
+                    geometryCell.bottom.toFloat()
+                )
 
                 val cellPath = Path().apply {
                     addRoundRect(cellRect, 8f, 8f, Path.Direction.CW)
                 }
                 canvas.save()
                 canvas.clipPath(cellPath)
-                canvas.drawBitmap(frameBmp, null, cellRect, null)
+                drawContactSheetBitmap(canvas, frameBmp, cellRect, input.contactSheetOptions.fitMode)
                 canvas.restore()
 
                 if (includeTimestamp) {
@@ -817,6 +836,60 @@ class ConversionService : Service() {
         }
     }
 
+    private fun drawContactSheetBitmap(
+        canvas: Canvas,
+        bitmap: Bitmap,
+        destination: RectF,
+        fitMode: ContactSheetFitMode
+    ) {
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        if (fitMode == ContactSheetFitMode.Stretch) {
+            canvas.drawBitmap(bitmap, null, destination, paint)
+            return
+        }
+        val sourceAspect = bitmap.width.toFloat() / bitmap.height.coerceAtLeast(1).toFloat()
+        val destinationAspect = destination.width() / destination.height().coerceAtLeast(1f)
+        if (fitMode == ContactSheetFitMode.Contain) {
+            val scaledWidth: Float
+            val scaledHeight: Float
+            if (sourceAspect > destinationAspect) {
+                scaledWidth = destination.width()
+                scaledHeight = scaledWidth / sourceAspect
+            } else {
+                scaledHeight = destination.height()
+                scaledWidth = scaledHeight * sourceAspect
+            }
+            val left = destination.centerX() - scaledWidth / 2f
+            val top = destination.centerY() - scaledHeight / 2f
+            canvas.drawBitmap(
+                bitmap,
+                null,
+                RectF(left, top, left + scaledWidth, top + scaledHeight),
+                paint
+            )
+            return
+        }
+
+        val sourceRect = if (sourceAspect > destinationAspect) {
+            val width = (bitmap.height * destinationAspect).toInt().coerceAtLeast(1)
+            Rect(
+                (bitmap.width - width) / 2,
+                0,
+                (bitmap.width + width) / 2,
+                bitmap.height
+            )
+        } else {
+            val height = (bitmap.width / destinationAspect).toInt().coerceAtLeast(1)
+            Rect(
+                0,
+                (bitmap.height - height) / 2,
+                bitmap.width,
+                (bitmap.height + height) / 2
+            )
+        }
+        canvas.drawBitmap(bitmap, sourceRect, destination, paint)
+    }
+
     private fun extractFrameWithFfmpeg(
         input: ConversionTaskInput,
         timeMs: Long,
@@ -850,7 +923,7 @@ class ConversionService : Service() {
                 "-map", "0:v:0",
                 "-an", "-sn", "-dn",
                 "-frames:v", "1",
-                "-vf", "scale=$targetWidth:$targetHeight",
+                "-vf", "scale=$targetWidth:$targetHeight:force_original_aspect_ratio=decrease",
                 "-f", "image2",
                 "-c:v", "mjpeg",
                 "-q:v", "2",

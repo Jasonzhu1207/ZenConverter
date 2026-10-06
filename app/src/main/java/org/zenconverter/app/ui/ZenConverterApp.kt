@@ -3071,37 +3071,18 @@ private fun BatchVideoTargetOptions(
 ) {
     val isContactSheetTarget = target.extension.startsWith("contact_sheet", ignoreCase = true)
     if (isContactSheetTarget) {
-        val commonGrid = commonBatchLabel(files) { it.contactSheetOptions.grid.labelKey }
-        val allIncludeHeader = files.all { it.contactSheetOptions.includeHeader }
-        val allIncludeTimestamp = files.all { it.contactSheetOptions.includeTimestamp }
+        val first = files.firstOrNull()
         OptionGrid {
-            OptionDropdown(
-                menuId = "batch-contact-sheet-grid",
-                label = texts.contactSheetGridLabel,
-                selected = commonGrid,
-                options = CONTACT_SHEET_GRID_OPTIONS,
-                texts = texts,
-                openMenuId = openMenuId,
-                onOpenMenuChange = onOpenMenuChange,
-                onSelected = { key ->
-                    val grid = contactSheetGridFor(key)
-                    onUpdateFiles(files.map { it.copy(contactSheetOptions = it.contactSheetOptions.copy(grid = grid)) })
-                }
-            )
-            AdvancedSwitchRow(
-                label = texts.contactSheetIncludeHeader,
-                checked = allIncludeHeader,
-                onCheckedChange = { checked ->
-                    onUpdateFiles(files.map { it.copy(contactSheetOptions = it.contactSheetOptions.copy(includeHeader = checked)) })
-                }
-            )
-            AdvancedSwitchRow(
-                label = texts.contactSheetIncludeTimestamp,
-                checked = allIncludeTimestamp,
-                onCheckedChange = { checked ->
-                    onUpdateFiles(files.map { it.copy(contactSheetOptions = it.contactSheetOptions.copy(includeTimestamp = checked)) })
-                }
-            )
+            if (first != null) {
+                ContactSheetDesignerCard(
+                    options = first.contactSheetOptions,
+                    inputInfo = first.inputInfo,
+                    outputExtension = target.extension,
+                    onOptionsChange = { options ->
+                        onUpdateFiles(files.map { it.copy(contactSheetOptions = options) })
+                    }
+                )
+            }
         }
         return
     }
@@ -4541,6 +4522,7 @@ private fun VideoOptions(
     contactSheetOptions: VideoContactSheetOptions = VideoContactSheetOptions(),
     onContactSheetOptionsChange: (VideoContactSheetOptions) -> Unit = {},
     sourceShortSide: Int? = null,
+    contactSheetInputInfo: FileBasicInfo? = null,
 ) {
     val isContactSheetTarget = targetFormat.id.isContactSheet
     if (isContactSheetTarget) {
@@ -4555,33 +4537,11 @@ private fun VideoOptions(
                 onEndSecondsChange = onTrimEndSecondsChange,
                 onTrimRangeChange = onTrimRangeChange
             )
-            OptionDropdown(
-                menuId = "${menuPrefix}contact-sheet-grid",
-                label = texts.contactSheetGridLabel,
-                selected = contactSheetOptions.grid.labelKey,
-                options = CONTACT_SHEET_GRID_OPTIONS,
-                texts = texts,
-                openMenuId = openMenuId,
-                onOpenMenuChange = onOpenMenuChange,
-                onSelected = { key ->
-                    onContactSheetOptionsChange(
-                        contactSheetOptions.copy(grid = contactSheetGridFor(key))
-                    )
-                }
-            )
-            AdvancedSwitchRow(
-                label = texts.contactSheetIncludeHeader,
-                checked = contactSheetOptions.includeHeader,
-                onCheckedChange = { checked ->
-                    onContactSheetOptionsChange(contactSheetOptions.copy(includeHeader = checked))
-                }
-            )
-            AdvancedSwitchRow(
-                label = texts.contactSheetIncludeTimestamp,
-                checked = contactSheetOptions.includeTimestamp,
-                onCheckedChange = { checked ->
-                    onContactSheetOptionsChange(contactSheetOptions.copy(includeTimestamp = checked))
-                }
+            ContactSheetDesignerCard(
+                options = contactSheetOptions,
+                inputInfo = contactSheetInputInfo,
+                outputExtension = targetFormat.extension,
+                onOptionsChange = onContactSheetOptionsChange
             )
         }
         return
@@ -6440,6 +6400,7 @@ private fun QueuedFileOptionsPanel(
                 onContactSheetOptionsChange = { options ->
                     onUpdateFile(file.copy(contactSheetOptions = options))
                 },
+                contactSheetInputInfo = file.inputInfo,
                 sourceShortSide = file.inputInfo?.let {
                     val w = it.width ?: 0
                     val h = it.height ?: 0

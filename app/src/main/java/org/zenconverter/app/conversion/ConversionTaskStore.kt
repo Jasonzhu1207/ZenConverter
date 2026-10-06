@@ -29,10 +29,61 @@ data class ConversionTaskInput(
 )
 
 data class VideoContactSheetOptions(
-    val grid: ContactSheetGrid = ContactSheetGrid.Grid3x4,
+    val rows: Int = 3,
+    val columns: Int = 4,
+    val widthMode: ContactSheetWidthMode = ContactSheetWidthMode.Canvas,
+    val canvasWidthPx: Int = 2048,
+    val cellWidthPx: Int = 480,
+    val cellHeightMode: ContactSheetCellHeightMode = ContactSheetCellHeightMode.AspectRatio,
+    val cellHeightPx: Int = 270,
+    val gapPx: Int = 12,
+    val outerMarginPx: Int = 20,
+    val alignment: ContactSheetAlignment = ContactSheetAlignment.Center,
+    val fitMode: ContactSheetFitMode = ContactSheetFitMode.Crop,
+    val background: ContactSheetBackground = ContactSheetBackground.Dark,
     val includeHeader: Boolean = true,
-    val includeTimestamp: Boolean = true
-)
+    val headerHeightPx: Int = 160,
+    val includeTimestamp: Boolean = true,
+    val includeWatermark: Boolean = true
+) {
+    val frameCount: Int
+        get() = (rows.coerceIn(1, 10) * columns.coerceIn(1, 10)).coerceAtMost(ContactSheetGeometry.MAX_FRAME_COUNT)
+
+    val grid: ContactSheetGrid
+        get() = ContactSheetGrid.from(rows, columns)
+
+    fun withGrid(grid: ContactSheetGrid): VideoContactSheetOptions {
+        return copy(rows = grid.rows, columns = grid.cols)
+    }
+}
+
+enum class ContactSheetWidthMode {
+    Canvas,
+    Cell
+}
+
+enum class ContactSheetCellHeightMode {
+    AspectRatio,
+    Fixed
+}
+
+enum class ContactSheetAlignment {
+    Start,
+    Center,
+    End
+}
+
+enum class ContactSheetFitMode {
+    Crop,
+    Contain,
+    Stretch
+}
+
+enum class ContactSheetBackground {
+    Dark,
+    Light,
+    Transparent
+}
 
 enum class ContactSheetGrid(val rows: Int, val cols: Int, val frameCount: Int) {
     Grid3x3(3, 3, 9),
@@ -45,6 +96,12 @@ enum class ContactSheetGrid(val rows: Int, val cols: Int, val frameCount: Int) {
         Grid3x4 -> "3 × 4 (12)"
         Grid4x4 -> "4 × 4 (16)"
         Grid5x5 -> "5 × 5 (25)"
+    }
+
+    companion object {
+        fun from(rows: Int, columns: Int): ContactSheetGrid {
+            return entries.firstOrNull { it.rows == rows && it.cols == columns } ?: Grid3x4
+        }
     }
 }
 
