@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 OUTPUT_DIR="$SCRIPT_DIR/build-arm64"
 ABI="arm64-v8a"
 ANDROID_API="26"
-NCNN_VERSION="20240410"
+NCNN_VERSION="20261020"
 NCNN_ZIP="ncnn-${NCNN_VERSION}-android-vulkan.zip"
 NCNN_URL="https://github.com/Tencent/ncnn/releases/download/${NCNN_VERSION}/${NCNN_ZIP}"
 
@@ -40,17 +40,19 @@ echo "Using NDK: $NDK_HOME"
 
 # Download and extract NCNN Android Vulkan SDK
 NCNN_EXTRACT_DIR="$SCRIPT_DIR/ncnn-sdk-extract"
-if [ ! -d "$NCNN_EXTRACT_DIR" ] || [ -z "$(ls -A "$NCNN_EXTRACT_DIR" 2>/dev/null)" ]; then
+TARGET_MARKER="$NCNN_EXTRACT_DIR/ncnn-${NCNN_VERSION}-android-vulkan"
+if [ ! -d "$TARGET_MARKER" ]; then
   echo "Downloading NCNN Android Vulkan SDK (${NCNN_VERSION})..."
   mkdir -p "$SCRIPT_DIR/download"
   if [ ! -f "$SCRIPT_DIR/download/$NCNN_ZIP" ]; then
     curl -sSfL "$NCNN_URL" -o "$SCRIPT_DIR/download/$NCNN_ZIP"
   fi
+  rm -rf "$NCNN_EXTRACT_DIR"
   mkdir -p "$NCNN_EXTRACT_DIR"
   unzip -q -o "$SCRIPT_DIR/download/$NCNN_ZIP" -d "$NCNN_EXTRACT_DIR"
 fi
 
-# The zip extracts with a versioned root dir, e.g. ncnn-20240410-android-vulkan/arm64-v8a
+# The zip extracts with a versioned root dir, e.g. ncnn-20261020-android-vulkan/arm64-v8a
 # Search for the ABI directory wherever it ended up inside the extract root
 NCNN_ABI_DIR="$(find "$NCNN_EXTRACT_DIR" -type d -name "$ABI" | head -1)"
 if [ -z "$NCNN_ABI_DIR" ] || [ ! -d "$NCNN_ABI_DIR/include/ncnn" ]; then

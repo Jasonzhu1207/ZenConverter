@@ -217,6 +217,24 @@ Transitive dependencies required when consuming the local AAR through
 - Release guardrail: record the exact upstream commit and NDK/CMake build command
   before promoting this Beta path to Stable.
 
+## Current NCNN Native Binary
+
+- Runtime path: local native library `app/src/main/jniLibs/arm64-v8a/libzen_ncnn.so` for `arm64-v8a` only.
+- Upstream source: Tencent NCNN (`https://github.com/Tencent/ncnn`), BSD-3-Clause license.
+- Upstream release: `20261020` (prebuilt `ncnn-20261020-android-vulkan.zip`).
+- JNI symbols consumed by the app:
+  `Java_org_zenconverter_app_model_NcnnNative_nativeInit`,
+  `Java_org_zenconverter_app_model_NcnnNative_nativeDestroy`,
+  `Java_org_zenconverter_app_model_NcnnNative_nativeGetGpuCount`,
+  `Java_org_zenconverter_app_model_NcnnNative_nativeGetGpuDeviceName`,
+  `Java_org_zenconverter_app_model_NcnnNative_nativeRealEsrganUpscale`,
+  `Java_org_zenconverter_app_model_NcnnNative_nativeRifeInit`,
+  `Java_org_zenconverter_app_model_NcnnNative_nativeRifeDestroy`,
+  `Java_org_zenconverter_app_model_NcnnNative_nativeRifeInterpolate`.
+- Reason platform APIs are not enough: Android lacks native neural network APIs with Vulkan GPU compute acceleration for Real-ESRGAN super-resolution and RIFE optical flow frame interpolation.
+- 16 KB page-size alignment: linked with `-Wl,-z,max-page-size=16384` for Android 15+ compatibility.
+- Build workflow: automated via `.github/workflows/build-ncnn.yml` and `native/ncnn-jni/build-arm64-v8a.sh`.
+
 ## Current ONNX Runtime Dependency
 
 - Dependency: `com.microsoft.onnxruntime:onnxruntime-android:1.29.0`, consumed

@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # NCNN_ABI_DIR must be passed in via -DNCNN_ABI_DIR=<path>
 # It points to the arm64-v8a directory from the NCNN Android Vulkan prebuilt zip,
-# e.g. ncnn-sdk-extract/ncnn-20240410-android-vulkan/arm64-v8a
+# e.g. ncnn-sdk-extract/ncnn-20261020-android-vulkan/arm64-v8a
 if(NOT DEFINED NCNN_ABI_DIR OR NOT EXISTS "${NCNN_ABI_DIR}/include/ncnn")
   message(FATAL_ERROR "NCNN_ABI_DIR is not set or invalid: '${NCNN_ABI_DIR}'")
 endif()
