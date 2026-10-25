@@ -6,6 +6,27 @@
 #include <vector>
 #include <cmath>
 #include <mutex>
+#include <cstddef>
+#include <cstdint>
+
+#if defined(__ANDROID__)
+namespace std {
+namespace __ndk1 {
+    // ABI compatibility shim: ncnn 20261020 prebuilt libglslang.a was compiled with NDK r30 (LLVM 21+),
+    // which references std::__ndk1::__hash_memory. When linked under NDK <= r28 toolchains, this symbol
+    // is missing in libc++_static.a. Providing a weak fallback resolves the symbol safely across all NDK versions.
+    __attribute__((weak)) size_t __hash_memory(const void* ptr, size_t len) {
+        const uint8_t* data = static_cast<const uint8_t*>(ptr);
+        size_t hash = 14695981039346656037ULL;
+        for (size_t i = 0; i < len; ++i) {
+            hash ^= data[i];
+            hash *= 1099511628211ULL;
+        }
+        return hash;
+    }
+}
+}
+#endif
 
 #include "net.h"
 #include "gpu.h"
