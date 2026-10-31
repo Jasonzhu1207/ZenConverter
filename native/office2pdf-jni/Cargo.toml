@@ -11,7 +11,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 jni = "=0.21.1"
-office2pdf = { git = "https://github.com/developer0hye/office2pdf.git", rev = "7893fe96341a11504abba6428cf2614b3821c733" }
+office2pdf = { git = "https://github.com/developer0hye/office2pdf.git", rev = "e8d7378f49823d03208f52eb86ab6f0a12b71d8e" }
 
 [profile.release]
 opt-level = "z"
