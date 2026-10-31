@@ -69,21 +69,21 @@ work within the stated compatibility limits.
 
 | Area | Status | Notes |
 | --- | --- | --- |
-| Native Android shell | Done | Kotlin, Compose, Material 3, foreground service pipeline. Supports Material You dynamic colors, dark mode, an independent OLED black toggle, and in-app language switching (English, Simplified/Traditional Chinese, French). |
-| Task queue and results | Done | Direct share/open import, gallery and folder batch import, same-type batch option configuration, mixed-file routing, per-file target selection, file basics, per-task progress and failures, compact before/after conversion details, cancellation, output sharing, and best-effort opening of the result or its location. |
-| Video conversion & merge | Done | MP4 / MKV / MOV outputs use FFmpeg true video and audio re-encoding, including MP4-to-MP4. Video merge concatenates multiple video files with aspect-ratio normalization and audio stream handling. Codec, bitrate, resolution, frame rate, audio, draggable quick trimming & multi-point splitting, and advanced processing can be adjusted. Enabling a compression preset fixes the CRF, video quality/size strategy, and AAC audio bitrate. |
-| Video overview contact sheet | Done | Generates video contact sheets with 3×3, 3×4, 4×4, or 5×5 sample grids, with an optional metadata header and timestamp badges, exported as JPG or PNG. |
-| Video to animated GIF | Done | FFmpeg palette-based GIF export automatically uses at most the first 30 seconds, 30 fps, and 900 frames. The default short-side cap is 480 px, with 720 px and Original options. |
-| Audio extraction and conversion | Done | Video audio extraction and MP3 / M4A / WAV / FLAC / WMA / OPUS targets all use FFmpeg true audio re-encoding. Applicable bitrate, sample-rate, channel, and encoder checks are wired. OPUS automatically resamples to standard sample rates. |
-| Advanced audio/video processing | Stable | Video supports short reverse playback, fade, mirror, rotation, and frame fit/crop. Audio supports reverse playback, non-model `afftdn` noise reduction, fade, volume/mute, and echo. Reverse playback has conservative safety limits. |
-| Video frame interpolation | Experimental | 2× deep-learning frame multiplication via Tencent NCNN Vulkan and RIFE. Supports on-demand model download with SHA-256 verification and adaptive downscaling for 1080p+ inputs. Currently experimental due to mobile GPU driver and memory variance across chipsets. |
-| Image conversion | Stable / Beta | JPG / JPEG / JFIF / JPE, PNG, WEBP, GIF, HEIC / HEIF, and ICO inputs; JPG / JFIF / PNG / WEBP / ICO / PDF outputs. HEIC / HEIF remains device-decoder dependent. GIF can use its first frame or split frames into a folder. Metadata and animation timing are not copied. |
-| Image super-resolution | Stable | Bilinear algorithmic upscaling (2×, 3×, 4×) and Real-ESRGAN 4× deep-learning AI models (compact general, high-quality, and anime) via Tencent NCNN with Vulkan GPU acceleration. Features on-demand model download with SHA-256 verification, tiled inference, and RAM-adaptive pixel budgets. |
-| Metadata safety | Stable | A separate privacy tool can inspect images/videos (including JPG and HEIC/HEIF). JPG / JPEG / JFIF can be cleaned in place without re-encoding, with removed metadata backed up in app data for same-image restore. |
-| PDF tools | Stable | Image/PDF conversion, PDF merge, PDF compression with presets (High Quality, Balanced, Small File), selectable-text export to TXT / lightweight MD, plus password-based PDF encryption and decryption. No OCR or password cracking is included. |
-| Office conversion | Beta | DOCX / PPTX / XLSX can produce PDF, TXT, or lightweight MD locally. Chinese text renders with system CJK fonts or optional on-demand Noto CJK fonts, but layout fidelity is limited and source files are capped at 64 MiB. |
-| Font conversion | Stable | Mutual conversion between TTF, OTF, WOFF, and WOFF2 formats. WOFF2 compression/decompression uses bundled native Google woff2 (arm64); WOFF 1.0 uses pure Kotlin zlib. Automatically matches font flavors (.ttf / .otf). |
-| Subtitle & lyrics conversion | Stable | Mutual conversion between SRT, VTT, LRC, and ASS subtitle/lyrics files. LRC lyrics parsing and generation in pure Kotlin with multi-timestamp support, `[offset:]` time shifts, and GB18030/GBK Chinese fallback; SRT/VTT/ASS via FFmpeg. |
+| Video conversion & merge | Stable | MP4 / MKV / MOV (H.264/H.265) and WebM (VP9/VP8) output, always re-encoded with FFmpeg. Adjust codec, bitrate, resolution, frame rate, and audio, or pick a compression preset. Drag to trim or split, and merge several clips into one. |
+| Video to GIF | Stable | Uses the first 30 seconds of the selected range, up to 30 fps and 900 frames. Short side defaults to 480 px; 720 px and Original are available. |
+| Video contact sheet | Stable | Samples frames from the whole video or a trimmed range into a JPG or PNG sheet. Start from a preset or set rows, columns, sizes, spacing, fit, background (transparent on PNG), info header, watermark, and timestamps yourself. Capped at 100 frames and about 32 MP. |
+| Audio extraction and conversion | Stable | Extract audio from video or convert between MP3 / M4A / WAV / FLAC / WMA / OPUS, always re-encoded with FFmpeg. MP3 offers CBR or VBR (V0/V2/V4/V6). MP3, Opus, and FLAC outputs keep tags, cover art, and embedded lyrics, and are checked after writing. |
+| Advanced audio/video processing | Stable | Video: reverse (short clips), fade, mirror, rotate, fit/crop, and motion blur. Audio: reverse, noise reduction (`afftdn`), fade, volume/mute, and echo. |
+| Video frame interpolation | Beta | Two ways to double the frame rate. Optical flow (FFmpeg `minterpolate`) runs offline with no download, up to 1080p. RIFE AI (NCNN + Vulkan) needs a one-time model download and is experimental because results vary across phone GPUs. |
+| Image conversion | Stable | Inputs: JPG / JPEG / JFIF / JPE, PNG, WEBP, GIF, HEIC / HEIF, ICO. Outputs: JPG / JFIF / PNG / WEBP / ICO / PDF. HEIC depends on the device decoder. GIFs can use the first frame or be split into a folder. Metadata and animation timing are not kept. |
+| Image super-resolution | Stable | Bilinear 2× / 3× / 4×, or Real-ESRGAN 4× AI models (general, high quality, anime) on the GPU through NCNN + Vulkan. Models download on demand and are SHA-256 checked; large images are processed in tiles. |
+| Metadata safety | Stable | A separate privacy tool in Settings. Shows location, capture time, and device info in photos (including HEIC) and videos. JPG / JPEG / JFIF metadata can be removed in place without re-encoding and restored later from a local backup. |
+| PDF tools | Stable | Images ↔ PDF, merge, compress (High Quality / Balanced / Small File), export selectable text to TXT / MD, and add or remove a password. No OCR and no password cracking. |
+| Office conversion | Beta | DOCX / PPTX / XLSX to PDF, TXT, or MD on the device. Chinese uses system fonts, with optional Noto CJK download. Layout can differ from Office; files are capped at 64 MiB. |
+| Font conversion | Stable | Convert between TTF, OTF, WOFF, and WOFF2. The output gets .ttf or .otf to match the font. |
+| Subtitle & lyrics conversion | Stable | Convert between SRT, VTT, LRC, and ASS. LRC handles multiple timestamps, `[offset:]`, and GBK/GB18030 Chinese files. |
+
+Also included: import from share/open-with, the gallery, or a whole folder; queue different file types together and set each one separately; share or open results right away. The app supports Material You colors, dark mode with an optional OLED black theme, and English, Simplified/Traditional Chinese, and French.
 
 ## Architecture
 
@@ -102,7 +102,7 @@ flowchart LR
 The UI does not do conversion work. Each task is routed to an engine based on
 the input, output, and selected mode:
 
-- `Compatibility`: FFmpeg true re-encode path for connected video/audio targets, GIF output, subtitles (SRT/VTT/ASS), and advanced processing.
+- `Compatibility`: FFmpeg re-encode path for video/audio targets, GIF output, subtitles (SRT/VTT/ASS), advanced processing, and optical-flow interpolation.
 - `Native`: Android platform bitmap/PDF handling, PDFBox-Android (PDF merge/text/security), and pure-Kotlin engines (WOFF, LRC).
 - `Office`: Local first-pass Office rendering path for DOCX, PPTX, and XLSX.
 - `Font / WOFF2`: Native `google/woff2` engine for WOFF2 compression and decompression.

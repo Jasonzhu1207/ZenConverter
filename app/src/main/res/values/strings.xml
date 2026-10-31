@@ -59,7 +59,7 @@
     <string name="format_seconds">%1$.1f s</string>
     <string name="format_task_progress">%1$s %2$d%%</string>
     <string name="format_to_target">To %1$s</string>
-    <string name="help_audio_body">Convert audio files, trim range, and apply audio filters.</string>
+    <string name="help_audio_body">Convert audio files, trim them, and apply noise reduction, fades, volume, or echo. MP3 offers CBR or VBR. MP3, Opus, and FLAC outputs keep tags, cover art, and lyrics.</string>
     <string name="help_audio_formats" translatable="false">MP3 · M4A · WAV · FLAC · WMA · OPUS</string>
     <string name="help_audio_title">Audio</string>
     <string name="help_back">Back</string>
@@ -74,15 +74,18 @@
     <string name="help_font_formats" translatable="false">TTF · OTF  →  WOFF2 · WOFF  |  WOFF2 · WOFF  →  TTF · OTF</string>
     <string name="help_font_title">Fonts</string>
     <string name="help_help">Help</string>
-    <string name="help_image_body">Convert images, AI 4× upscaling, split GIF frames, or combine into a PDF.</string>
-    <string name="help_image_formats" translatable="false">JPG · PNG · JFIF · WEBP · ICO  →  JPG · PNG · WEBP · ICO · PDF</string>
+    <string name="help_image_body">Convert images, upscale them 2–4× (including AI 4×), split GIF frames, or combine images into a PDF.</string>
+    <string name="help_image_formats" translatable="false">JPG · PNG · WEBP · HEIC · GIF · ICO  →  JPG · JFIF · PNG · WEBP · ICO · PDF</string>
     <string name="help_image_title">Images &amp; Super-Resolution</string>
+    <string name="help_privacy_body">Check photos and videos for location, capture time, and device details before you share them. JPG metadata can be removed without re-encoding and restored later. Open it from Settings.</string>
+    <string name="help_privacy_formats">View: JPG · HEIC · Video  |  Clean and restore: JPG</string>
+    <string name="help_privacy_title">Metadata safety</string>
     <string name="help_subtitle_body">Convert between subtitle and lyrics formats with timing preserved.</string>
     <string name="help_subtitle_formats" translatable="false">SRT · VTT · LRC · ASS</string>
     <string name="help_subtitle_title">Subtitles and Lyrics</string>
     <string name="help_title">What ZenConverter can do</string>
-    <string name="help_video_body">Convert common video formats, AI 2× frame rate interpolation (Experimental), merge multiple videos, trim &amp; split segments, or extract audio tracks.</string>
-    <string name="help_video_formats">MP4 · MKV · MOV · WEBM · GIF  →  Merge · MP4 · MKV · MOV · WEBM · GIF</string>
+    <string name="help_video_body">Convert, compress, trim, split, or merge videos, and pull out the audio. You can also make GIFs and contact sheets, add effects such as reverse or motion blur, and double the frame rate with optical flow or AI (experimental).</string>
+    <string name="help_video_formats">MP4 · MKV · MOV · WEBM · AVI · TS  →  MP4 · MKV · MOV · WEBM · GIF · Contact sheet</string>
     <string name="help_video_title">Video</string>
     <string name="language_follow_system">Follow system</string>
     <string name="message_ai_rife">The RIFE model is not ready. Download it in Settings first.</string>

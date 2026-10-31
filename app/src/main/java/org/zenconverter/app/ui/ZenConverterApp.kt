@@ -2078,7 +2078,8 @@ private fun HelpScreen(
                 GuideCardData(Icons.Rounded.Image, copy.imageTitle, copy.imageBody, copy.imageFormats),
                 GuideCardData(Icons.Rounded.Description, copy.documentTitle, copy.documentBody, copy.documentFormats),
                 GuideCardData(Icons.Rounded.FontDownload, copy.fontTitle, copy.fontBody, copy.fontFormats),
-                GuideCardData(Icons.Rounded.Subtitles, copy.subtitleTitle, copy.subtitleBody, copy.subtitleFormats)
+                GuideCardData(Icons.Rounded.Subtitles, copy.subtitleTitle, copy.subtitleBody, copy.subtitleFormats),
+                GuideCardData(Icons.Rounded.Security, copy.privacyTitle, copy.privacyBody, copy.privacyFormats)
             )
         ) { card ->
             GuideCard(card)
