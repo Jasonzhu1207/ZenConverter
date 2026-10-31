@@ -721,4 +721,11 @@
     <string name="ui_contact_sheet_png_note">PNG keeps the selected background, including transparency.</string>
     <string name="ui_contact_sheet_size_too_large">The layout is larger than the safe 32 MP output limit.</string>
     <string name="ui_contact_sheet_apply">Apply layout</string>
+    <string name="category_contact_sheet">Contact Sheet</string>
+    <string name="settings_action_bar_position">Queue Action Bar</string>
+    <string name="settings_action_bar_position_bottom">Bottom (Pinned)</string>
+    <string name="settings_action_bar_position_top">Top of Queue</string>
+    <string name="settings_action_bar_position_desc">Position of the clear and start conversion buttons</string>
+    <string name="ui_clear_tasks">Clear</string>
+    <string name="ui_start_conversion">Start (%1$d)</string>
 </resources>

@@ -22,6 +22,8 @@ import org.zenconverter.app.metadata.MetadataInspection
 import org.zenconverter.app.metadata.MetadataMessageKey
 import org.zenconverter.app.metadata.MetadataStatusMessage
 import org.zenconverter.app.metadata.MetadataTargetKind
+import org.zenconverter.app.conversion.TargetId
+import org.zenconverter.app.settings.ActionBarPosition
 import org.zenconverter.app.updates.DownloadProgress
 import org.zenconverter.app.updates.UpdateChannel
 import org.zenconverter.app.updates.UpdateFailureReason
@@ -670,6 +672,34 @@ internal class UiText(private val context: Context) {
             return formatLabel
         }
         return "${categoryLabel(target.category)} · $formatLabel"
+    }
+
+    fun externalImportTargetPureLabel(target: ExternalImportTarget): String {
+        return when (target.targetFormat.id) {
+            TargetId.ContactSheetJpg -> "JPG"
+            TargetId.ContactSheetPng -> "PNG"
+            TargetId.M4a -> "M4A"
+            TargetId.PdfCompress -> optionValue("pdf_compress")
+            TargetId.PdfEncrypt -> optionValue("pdf_encrypt")
+            TargetId.PdfDecrypt -> optionValue("pdf_decrypt")
+            else -> optionValue(target.targetFormat.key)
+        }
+    }
+
+    val categoryContactSheet: String get() = text(R.string.category_contact_sheet)
+    val settingsActionBarPosition: String get() = text(R.string.settings_action_bar_position)
+    val settingsActionBarPositionBottom: String get() = text(R.string.settings_action_bar_position_bottom)
+    val settingsActionBarPositionTop: String get() = text(R.string.settings_action_bar_position_top)
+    val settingsActionBarPositionDesc: String get() = text(R.string.settings_action_bar_position_desc)
+    val clearTasks: String get() = text(R.string.ui_clear_tasks)
+    val startConversion: String get() = text(R.string.ui_start)
+    fun startConversion(count: Int): String = text(R.string.ui_start_conversion, count)
+
+    fun actionBarPositionLabel(position: ActionBarPosition): String {
+        return when (position) {
+            ActionBarPosition.Bottom -> settingsActionBarPositionBottom
+            ActionBarPosition.Top -> settingsActionBarPositionTop
+        }
     }
 
     fun fileCountLabel(count: Int): String {

@@ -133,14 +133,14 @@ internal fun SettingsRow(
 ) {
     Column(Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                 .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            AppIcon(badgeIcon, null, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.size(24.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            AppIcon(badgeIcon, null, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.size(22.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(title, style = MaterialTheme.typography.bodyLarge)
                 (subtitle ?: trailingText)?.let {
                     Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -153,7 +153,7 @@ internal fun SettingsRow(
             }
         }
         if (showDivider) {
-            HorizontalDivider(Modifier.padding(start = 52.dp), color = settingsDividerColor())
+            HorizontalDivider(Modifier.padding(start = 48.dp), color = settingsDividerColor())
         }
     }
 }
@@ -191,7 +191,7 @@ internal fun <T> SettingsChoiceGroup(
     val style = MaterialTheme.typography.labelLarge
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val requiredWidth = options.maxOfOrNull { option ->
-            with(density) { measurer.measure(labelProvider(option), style).size.width.toDp() } + 64.dp
+            with(density) { measurer.measure(labelProvider(option), style).size.width.toDp() } + 20.dp
         } ?: 0.dp
         if (density.fontScale <= 1.3f && requiredWidth * options.size <= maxWidth) {
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
@@ -201,7 +201,7 @@ internal fun <T> SettingsChoiceGroup(
                         onClick = { onOptionSelected(option) },
                         enabled = enabled,
                         shape = SegmentedButtonDefaults.itemShape(index, options.size),
-                        modifier = Modifier.heightIn(min = 48.dp)
+                        modifier = Modifier.heightIn(min = 38.dp)
                     ) { Text(labelProvider(option)) }
                 }
             }
@@ -209,14 +209,14 @@ internal fun <T> SettingsChoiceGroup(
             Column(Modifier.fillMaxWidth().selectableGroup()) {
                 options.forEach { option ->
                     Row(
-                        Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                        Modifier.fillMaxWidth().heightIn(min = 44.dp)
                             .selectable(selectedOption == option, enabled = enabled, role = Role.RadioButton,
                                 onClick = { onOptionSelected(option) })
-                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(selected = selectedOption == option, onClick = null, enabled = enabled)
-                        Spacer(Modifier.width(12.dp))
+                        Spacer(Modifier.width(10.dp))
                         Text(labelProvider(option), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                     }
                 }
@@ -244,7 +244,7 @@ internal fun AccentColorPickerRow(
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).selectableGroup(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             availableAccents.forEach { option ->
                 val selected = option == selectedAccent
@@ -253,20 +253,20 @@ internal fun AccentColorPickerRow(
                     scheme.primary to scheme.onPrimary
                 } else option.color(isDark) to option.contentColor(isDark)
                 Box(
-                    Modifier.size(48.dp).clip(CircleShape)
+                    Modifier.size(36.dp).clip(CircleShape)
                         .selectable(selected, role = Role.RadioButton, onClick = { onAccentSelected(option) })
                         .semantics { contentDescription = texts.accentLabel(option) },
                     contentAlignment = Alignment.Center
                 ) {
                     Box(
-                        Modifier.size(38.dp)
-                            .then(if (selected) Modifier.border(2.dp, MaterialTheme.colorScheme.onSurface, CircleShape) else Modifier),
+                        Modifier.size(32.dp)
+                            .then(if (selected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape) else Modifier),
                         contentAlignment = Alignment.Center
                     ) {
-                        Box(Modifier.size(30.dp).background(color, CircleShape), contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(24.dp).background(color, CircleShape), contentAlignment = Alignment.Center) {
                             if (selected || option == AccentColorOption.Dynamic) {
                                 Icon(if (selected) Icons.Rounded.Check else Icons.Rounded.AutoAwesome,
-                                    null, tint = foreground, modifier = Modifier.size(18.dp))
+                                    null, tint = foreground, modifier = Modifier.size(14.dp))
                             }
                         }
                     }

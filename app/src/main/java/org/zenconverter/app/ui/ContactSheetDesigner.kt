@@ -22,6 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
+import org.zenconverter.app.ui.theme.ZenDimensions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -435,15 +436,15 @@ private fun <T> ChoiceRow(
                     color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelMedium,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(100.dp))
+                        .clip(RoundedCornerShape(ZenDimensions.RadiusChip))
                         .background(if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent)
                         .border(
                             1.dp,
                             if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                            RoundedCornerShape(100.dp)
+                            RoundedCornerShape(ZenDimensions.RadiusChip)
                         )
                         .clickable { onSelected(value) }
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
                 )
             }
         }

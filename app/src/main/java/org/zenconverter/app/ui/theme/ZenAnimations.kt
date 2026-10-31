@@ -77,9 +77,9 @@ object ZenAnimations {
         stiffness = 380f
     )
 
-    const val HeroHeaderSize = 44f
+    const val HeroHeaderSize = 38f
     const val HeroCenterSize = 118f
-    const val HeroHeaderIconSize = 24f
+    const val HeroHeaderIconSize = 20f
     const val HeroCenterIconSize = 58f
 
     const val SubpageEnterDuration = 180

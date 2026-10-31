@@ -8,20 +8,28 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -144,117 +152,147 @@ private fun EsrganModelItem(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = spec.displayName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(2.dp))
+            Column(
+                modifier = Modifier.weight(1f).padding(end = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = spec.displayName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "· ${formatBytes(spec.totalSizeBytes, texts)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    IconButton(
+                        onClick = { openExternalLink(context, spec.sourceUrl, texts.linkUnavailable) },
+                        modifier = Modifier.size(20.dp)
+                    ) {
+                        AppIcon(
+                            icon = Icons.AutoMirrored.Rounded.OpenInNew,
+                            contentDescription = texts.openLink,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                }
                 Text(
                     text = purposeText,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = formatBytes(spec.totalSizeBytes, texts),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
 
-        Column {
-            Text(
-                text = stringResource(R.string.display_esrgan_model_download_section_1_s_real_esrgan, texts.modelSource),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            TextButton(onClick = { openExternalLink(context, spec.sourceUrl, texts.linkUnavailable) }) {
-                Text(texts.openLink)
-            }
-        }
-
-        when (state) {
-            EsrganModelUiState.NotDownloaded -> {
-                Button(
-                    onClick = onDownload,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text(texts.modelDownloadAction)
+            when (state) {
+                EsrganModelUiState.NotDownloaded -> {
+                    Button(
+                        onClick = onDownload,
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.heightIn(min = 32.dp, max = 34.dp)
+                    ) {
+                        Text(texts.modelDownloadAction, style = MaterialTheme.typography.labelMedium)
+                    }
                 }
-            }
-            is EsrganModelUiState.Downloading -> {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    LinearProgressIndicator(
-                        progress = { state.progress },
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp))
-                    )
+                is EsrganModelUiState.Downloading -> {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            progress = { state.progress },
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.5.dp
+                        )
+                        IconButton(onClick = onCancel, modifier = Modifier.size(28.dp)) {
+                            AppIcon(
+                                icon = Icons.Rounded.Close,
+                                contentDescription = texts.cancelDownload,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+                EsrganModelUiState.Downloaded -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            AppIcon(
+                                icon = Icons.Rounded.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = texts.modelDownloaded,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        IconButton(onClick = onDownload, modifier = Modifier.size(28.dp)) {
+                            AppIcon(
+                                icon = Icons.Rounded.Refresh,
+                                contentDescription = texts.modelRedownload,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+                is EsrganModelUiState.Failed -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
-                            text = stringResource(R.string.display_esrgan_model_download_section_1_s, (state.progress * 100).toInt()),
-                            style = MaterialTheme.typography.labelMedium
+                            text = state.message?.resolve(context) ?: texts.downloadFailed,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error
                         )
-                        TextButton(onClick = onCancel) {
-                            Text(texts.cancelDownload)
+                        Button(
+                            onClick = onDownload,
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.heightIn(min = 30.dp, max = 32.dp)
+                        ) {
+                            Text(texts.modelDownloadAction, style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }
             }
-            EsrganModelUiState.Downloaded -> {
-                AdaptiveActions {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        AppIcon(
-                            icon = Icons.Rounded.CheckCircle,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = texts.modelDownloaded,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    TextButton(onClick = onDownload) {
-                        Text(texts.modelRedownload)
-                    }
-                }
-            }
-            is EsrganModelUiState.Failed -> {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = state.message?.resolve(LocalContext.current) ?: texts.downloadFailed,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    Button(
-                        onClick = onDownload,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text(texts.modelDownloadAction)
-                    }
-                }
-            }
+        }
+
+        if (state is EsrganModelUiState.Downloading) {
+            LinearProgressIndicator(
+                progress = { state.progress },
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(2.dp)).height(3.dp)
+            )
         }
     }
 
@@ -284,117 +322,147 @@ private fun RifeModelItem(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = spec.displayName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(2.dp))
+            Column(
+                modifier = Modifier.weight(1f).padding(end = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = spec.displayName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "· ${formatBytes(spec.totalSizeBytes, texts)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    IconButton(
+                        onClick = { openExternalLink(context, spec.sourceUrl, texts.linkUnavailable) },
+                        modifier = Modifier.size(20.dp)
+                    ) {
+                        AppIcon(
+                            icon = Icons.AutoMirrored.Rounded.OpenInNew,
+                            contentDescription = texts.openLink,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                }
                 Text(
                     text = texts.rifeModelPurpose,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = formatBytes(spec.totalSizeBytes, texts),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
 
-        Column {
-            Text(
-                text = stringResource(R.string.display_rife_model_download_section_1_s_rife, texts.modelSource),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            TextButton(onClick = { openExternalLink(context, spec.sourceUrl, texts.linkUnavailable) }) {
-                Text(texts.openLink)
-            }
-        }
-
-        when (state) {
-            RifeModelUiState.NotDownloaded -> {
-                Button(
-                    onClick = onDownload,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text(texts.modelDownloadAction)
+            when (state) {
+                RifeModelUiState.NotDownloaded -> {
+                    Button(
+                        onClick = onDownload,
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.heightIn(min = 32.dp, max = 34.dp)
+                    ) {
+                        Text(texts.modelDownloadAction, style = MaterialTheme.typography.labelMedium)
+                    }
                 }
-            }
-            is RifeModelUiState.Downloading -> {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    LinearProgressIndicator(
-                        progress = { state.progress },
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp))
-                    )
+                is RifeModelUiState.Downloading -> {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            progress = { state.progress },
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.5.dp
+                        )
+                        IconButton(onClick = onCancel, modifier = Modifier.size(28.dp)) {
+                            AppIcon(
+                                icon = Icons.Rounded.Close,
+                                contentDescription = texts.cancelDownload,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+                RifeModelUiState.Downloaded -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            AppIcon(
+                                icon = Icons.Rounded.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = texts.modelDownloaded,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        IconButton(onClick = onDownload, modifier = Modifier.size(28.dp)) {
+                            AppIcon(
+                                icon = Icons.Rounded.Refresh,
+                                contentDescription = texts.modelRedownload,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+                is RifeModelUiState.Failed -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
-                            text = stringResource(R.string.display_esrgan_model_download_section_1_s, (state.progress * 100).toInt()),
-                            style = MaterialTheme.typography.labelMedium
+                            text = state.message?.resolve(context) ?: texts.downloadFailed,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error
                         )
-                        TextButton(onClick = onCancel) {
-                            Text(texts.cancelDownload)
+                        Button(
+                            onClick = onDownload,
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.heightIn(min = 30.dp, max = 32.dp)
+                        ) {
+                            Text(texts.modelDownloadAction, style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }
             }
-            RifeModelUiState.Downloaded -> {
-                AdaptiveActions {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        AppIcon(
-                            icon = Icons.Rounded.CheckCircle,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = texts.modelDownloaded,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    TextButton(onClick = onDownload) {
-                        Text(texts.modelRedownload)
-                    }
-                }
-            }
-            is RifeModelUiState.Failed -> {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = state.message?.resolve(LocalContext.current) ?: texts.downloadFailed,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    Button(
-                        onClick = onDownload,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text(texts.modelDownloadAction)
-                    }
-                }
-            }
+        }
+
+        if (state is RifeModelUiState.Downloading) {
+            LinearProgressIndicator(
+                progress = { state.progress },
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(2.dp)).height(3.dp)
+            )
         }
     }
 
@@ -423,94 +491,99 @@ private fun OfficeFontItem(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = texts.taskMessage(spec.displayName),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(2.dp))
+            Column(
+                modifier = Modifier.weight(1f).padding(end = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = texts.taskMessage(spec.displayName),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "· ${formatBytes(spec.sizeBytes, texts)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Text(
                     text = texts.taskMessage(spec.description),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = formatBytes(spec.sizeBytes, texts),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
 
-        Column {
-            Text(
-                text = stringResource(R.string.display_office_font_download_section_1_s_google_noto_cjk_sil_ofl_1_1, texts.officeFontSource),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        when (state) {
-            OfficeFontUiState.NotDownloaded -> {
-                Button(
-                    onClick = onDownload,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text(texts.modelDownloadAction)
-                }
-            }
-            is OfficeFontUiState.Downloading -> {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    LinearProgressIndicator(
-                        progress = { state.progress },
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp))
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+            when (state) {
+                OfficeFontUiState.NotDownloaded -> {
+                    Button(
+                        onClick = onDownload,
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.heightIn(min = 32.dp, max = 34.dp)
                     ) {
-                        Text(
-                            text = stringResource(R.string.display_esrgan_model_download_section_1_s, (state.progress * 100).toInt()),
-                            style = MaterialTheme.typography.labelMedium
+                        Text(texts.modelDownloadAction, style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+                is OfficeFontUiState.Downloading -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            progress = { state.progress },
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.5.dp
                         )
-                        TextButton(onClick = onCancel) {
-                            Text(texts.cancelDownload)
+                        IconButton(onClick = onCancel, modifier = Modifier.size(28.dp)) {
+                            AppIcon(
+                                icon = Icons.Rounded.Close,
+                                contentDescription = texts.cancelDownload,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
                         }
                     }
                 }
-            }
-            OfficeFontUiState.Downloaded -> {
-                AdaptiveActions {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        AppIcon(
-                            icon = Icons.Rounded.CheckCircle,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = texts.modelDownloaded,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TextButton(onClick = onDelete) {
+                OfficeFontUiState.Downloaded -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            AppIcon(
+                                icon = Icons.Rounded.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = texts.modelDownloaded,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
                             AppIcon(
                                 icon = Icons.Rounded.DeleteOutline,
                                 contentDescription = texts.remove,
@@ -518,28 +591,44 @@ private fun OfficeFontItem(
                                 modifier = Modifier.size(16.dp)
                             )
                         }
-                        TextButton(onClick = onDownload) {
-                            Text(texts.modelRedownload)
+                        IconButton(onClick = onDownload, modifier = Modifier.size(28.dp)) {
+                            AppIcon(
+                                icon = Icons.Rounded.Refresh,
+                                contentDescription = texts.modelRedownload,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+                is OfficeFontUiState.Failed -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = state.message?.resolve(LocalContext.current) ?: texts.downloadFailed,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Button(
+                            onClick = onDownload,
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.heightIn(min = 30.dp, max = 32.dp)
+                        ) {
+                            Text(texts.modelDownloadAction, style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }
             }
-            is OfficeFontUiState.Failed -> {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = state.message?.resolve(LocalContext.current) ?: texts.downloadFailed,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    Button(
-                        onClick = onDownload,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text(texts.modelDownloadAction)
-                    }
-                }
-            }
+        }
+
+        if (state is OfficeFontUiState.Downloading) {
+            LinearProgressIndicator(
+                progress = { state.progress },
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(2.dp)).height(3.dp)
+            )
         }
     }
 
@@ -569,7 +658,7 @@ private fun SystemFontBanner(
         border = androidx.compose.foundation.BorderStroke(0.5.dp, borderColor)
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             AppIcon(

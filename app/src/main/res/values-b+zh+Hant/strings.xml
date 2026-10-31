@@ -704,4 +704,11 @@
     <string name="ui_contact_sheet_png_note">PNG 會保留所選背景，包括透明背景。</string>
     <string name="ui_contact_sheet_size_too_large">版式超過安全的 3200 萬像素輸出限制。</string>
     <string name="ui_contact_sheet_apply">套用版式</string>
+    <string name="category_contact_sheet">拼圖</string>
+    <string name="settings_action_bar_position">操作列位置</string>
+    <string name="settings_action_bar_position_bottom">底部常駐</string>
+    <string name="settings_action_bar_position_top">佇列頂部</string>
+    <string name="settings_action_bar_position_desc">清空與開始轉換操作列的顯示位置</string>
+    <string name="ui_clear_tasks">清空</string>
+    <string name="ui_start_conversion">開始 (%1$d)</string>
 </resources>

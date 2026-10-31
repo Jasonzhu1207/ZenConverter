@@ -1,6 +1,8 @@
 package org.zenconverter.app.ui
 
 import org.zenconverter.app.conversion.TargetId
+import org.zenconverter.app.settings.ActionBarPosition
+import androidx.compose.material3.HorizontalDivider
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
@@ -10,6 +12,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.provider.DocumentsContract
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -37,7 +40,9 @@ import org.zenconverter.app.ui.settings.SubpageHost
 import org.zenconverter.app.ui.settings.MountedHome
 import org.zenconverter.app.ui.settings.UpdateStateHolder
 import org.zenconverter.app.ui.settings.InsetGroupCard
+import org.zenconverter.app.ui.settings.settingsDividerColor
 import org.zenconverter.app.ui.theme.ZenAnimations
+import org.zenconverter.app.ui.theme.ZenDimensions
 import org.zenconverter.app.ui.theme.bounceClick
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -55,10 +60,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
@@ -152,6 +161,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -163,6 +173,7 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -179,8 +190,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import org.zenconverter.app.conversion.AudioAdvancedOptions
 import org.zenconverter.app.conversion.AudioEchoMode
 import org.zenconverter.app.conversion.AudioExportOptions
@@ -485,11 +503,11 @@ private const val BTC_ADDRESS = "bc1p4s8e4pgwse4336vtwuqrxs58jdwkyaqcxtg0txg2xjz
 private const val ETH_ERC20_ADDRESS = "0x53a2d13bf808AC104cB09C722f01Ad68AFc9Da1F"
 
 private val HomeHorizontalPadding = 20.dp
-private val HomeTopPadding = 16.dp
-private val HomeBottomPadding = 16.dp
-private val HeaderContentGap = 12.dp
-private val HeaderButtonSize = 44.dp
-private val HeaderAddSlotWidth = 50.dp
+private val HomeTopPadding = 10.dp
+private val HomeBottomPadding = 14.dp
+private val HeaderContentGap = 10.dp
+private val HeaderButtonSize = 38.dp
+private val HeaderAddSlotWidth = 44.dp
 
 private val supportTargets = listOf(
     SupportTarget("Afdian", AFDIAN_URL, SupportTargetType.Link),
@@ -1121,7 +1139,11 @@ private fun ZenConverterContent(
     }
 
     var returning by remember { mutableStateOf(false) }
-    val updateContext = LocalContext.current.applicationContext
+    val context = LocalContext.current
+    var actionBarPosition by remember(context) {
+        mutableStateOf(AppPreferences.actionBarPosition(context))
+    }
+    val updateContext = context.applicationContext
     val updateScope = rememberCoroutineScope()
     val updateState = remember(updateContext, updateScope) {
         UpdateStateHolder(updateContext, installedAppVersion(updateContext), updateScope)
@@ -1195,6 +1217,29 @@ private fun ZenConverterContent(
                 Scaffold(
                     containerColor = MaterialTheme.colorScheme.background,
                     contentWindowInsets = WindowInsets.safeDrawing,
+                    bottomBar = {
+                        if (actionBarPosition == ActionBarPosition.Bottom && queuedFiles.isNotEmpty()) {
+                            BottomQueueActionBar(
+                                texts = texts,
+                                isRunning = isConversionRunning,
+                                fileCount = queuedFiles.size,
+                                onStart = {
+                                    openMenuId = null
+                                    queueMessage = null
+                                    onStartConversion()
+                                },
+                                onCancel = {
+                                    openMenuId = null
+                                    queueMessage = null
+                                    if (isConversionRunning) {
+                                        onCancelConversion()
+                                    } else {
+                                        onClearQueue()
+                                    }
+                                }
+                            )
+                        }
+                    },
                     modifier = Modifier.fillMaxSize()
                 ) { contentPadding ->
                 BoxWithConstraints(
@@ -1232,7 +1277,7 @@ private fun ZenConverterContent(
                             end = HomeHorizontalPadding,
                             bottom = HomeBottomPadding
                         ),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         if (showEmptyStateItem) {
                             item(key = "empty-state") {
@@ -1256,7 +1301,7 @@ private fun ZenConverterContent(
                             }
                         }
 
-                        if (queuedFiles.isNotEmpty() && !isConversionRunning) {
+                        if (shouldShowBatchSettingsPanel(queuedFiles, canEdit = !isConversionRunning)) {
                             item(key = "batch-settings") {
                                 BatchSettingsPanel(
                                     texts = texts,
@@ -1270,7 +1315,7 @@ private fun ZenConverterContent(
                                 )
                             }
                         }
-                        if (queuedFiles.isNotEmpty()) {
+                        if (shouldShowPdfMergeGroupsPanel(queuedFiles, pdfMergeGroups, canEdit = !isConversionRunning)) {
                             item(key = "pdf-merge-groups") {
                                 PdfMergeGroupsPanel(
                                     texts = texts,
@@ -1287,6 +1332,8 @@ private fun ZenConverterContent(
                                     onRemoveFileFromGroup = onRemoveFileFromPdfMergeGroup
                                 )
                             }
+                        }
+                        if (shouldShowVideoMergeGroupsPanel(queuedFiles, videoMergeGroups, canEdit = !isConversionRunning)) {
                             item(key = "video-merge-groups") {
                                 VideoMergeGroupsPanel(
                                     texts = texts,
@@ -1305,11 +1352,12 @@ private fun ZenConverterContent(
                             }
                         }
 
-                        if (queuedFiles.isNotEmpty()) {
+                        if (queuedFiles.isNotEmpty() && actionBarPosition == ActionBarPosition.Top) {
                             item(key = "queue-actions") {
                                 QueueActions(
                                     texts = texts,
                                     isRunning = isConversionRunning,
+                                    fileCount = queuedFiles.size,
                                     onStart = {
                                         openMenuId = null
                                         queueMessage = null
@@ -1326,7 +1374,9 @@ private fun ZenConverterContent(
                                     }
                                 )
                             }
+                        }
 
+                        if (queuedFiles.isNotEmpty()) {
                             item(key = "queue-header") {
                                 QueueHeader(
                                     texts = texts,
@@ -1424,9 +1474,10 @@ private fun ZenConverterContent(
                     val emptyCenterY = emptyHeroTopInRoot?.let { top ->
                         with(density) { (top - homeTopInRoot).toDp() }
                     } ?: (listTopPadding + (emptyEntryHeight - currentHeroSize.dp) / 2 - 36.dp)
+                    val heroTargetY = HomeTopPadding + ((headerHeight - HeaderButtonSize) / 2).coerceAtLeast(0.dp)
                     val heroY = androidx.compose.ui.unit.lerp(
                         emptyCenterY,
-                        HomeTopPadding,
+                        heroTargetY,
                         morphProgress
                     )
 
@@ -1497,12 +1548,17 @@ private fun ZenConverterContent(
                     selectedThemeMode = themeModeOption,
                     isOledDark = isOledDark,
                     selectedLanguage = languageOption,
+                    selectedActionBarPosition = actionBarPosition,
                     outputLocationMode = outputLocationMode,
                     outputDirectory = outputDirectory,
                     onAccentSelected = onAccentSelected,
                     onThemeModeSelected = onThemeModeSelected,
                     onOledDarkChange = onOledDarkChange,
                     onLanguageSelected = onLanguageSelected,
+                    onActionBarPositionSelected = { newPos ->
+                        actionBarPosition = newPos
+                        AppPreferences.setActionBarPosition(context, newPos)
+                    },
                     onOutputLocationModeChange = onOutputLocationModeChange,
                     onPickOutputDirectory = onPickOutputDirectory,
                     onNavigateToMetadataSecurity = { navigateTo(AppScreen.MetadataSecurity) },
@@ -1714,33 +1770,37 @@ private fun ExternalImportTargetChip(
     texts: UiText,
     target: ExternalImportTarget,
     selected: Boolean,
+    pureLabel: Boolean = false,
     onSelected: () -> Unit
 ) {
-    val label = texts.externalImportTargetLabel(target)
+    val label = if (pureLabel) texts.externalImportTargetPureLabel(target) else texts.externalImportTargetLabel(target)
+    val shape = RoundedCornerShape(8.dp)
     if (selected) {
         Button(
             onClick = onSelected,
-            shape = RoundedCornerShape(100.dp),
+            shape = shape,
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary
             ),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 9.dp)
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+            modifier = Modifier.heightIn(min = 30.dp, max = 34.dp)
         ) {
-            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     } else {
         OutlinedButton(
             onClick = onSelected,
-            shape = RoundedCornerShape(100.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            shape = shape,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
             colors = ButtonDefaults.outlinedButtonColors(
                 containerColor = MaterialTheme.colorScheme.surface,
                 contentColor = MaterialTheme.colorScheme.onSurface
             ),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 9.dp)
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+            modifier = Modifier.heightIn(min = 30.dp, max = 34.dp)
         ) {
-            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -1748,6 +1808,7 @@ private fun ExternalImportTargetChip(
 @Composable
 internal fun ZenPromptFrame(
     onDismissRequest: () -> Unit,
+    maxWidth: Dp = 400.dp,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Dialog(
@@ -1758,38 +1819,51 @@ internal fun ZenPromptFrame(
             usePlatformDefaultWidth = false
         )
     ) {
-        val dialogScale by animateFloatAsState(
-            targetValue = 1f,
-            animationSpec = tween(ZenAnimations.DialogScaleDuration),
-            label = "dialogScale"
+        var appeared by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) { appeared = true }
+        val dialogProgress by animateFloatAsState(
+            targetValue = if (appeared) 1f else 0f,
+            animationSpec = tween(
+                durationMillis = ZenAnimations.DialogScaleDuration,
+                easing = ZenAnimations.StrongEaseOut
+            ),
+            label = "dialogEnterProgress"
         )
-        val dialogAlpha by animateFloatAsState(
-            targetValue = 1f,
-            animationSpec = tween(ZenAnimations.DialogScaleDuration),
-            label = "dialogAlpha"
-        )
-        Surface(
+        val containerColor = if (MaterialTheme.colorScheme.surface == Color(0xFF000000)) {
+            Color(0xFF101010)
+        } else {
+            MaterialTheme.colorScheme.surface
+        }
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .heightIn(max = 520.dp)
-                .graphicsLayer {
-                    scaleX = ZenAnimations.DialogScaleFrom +
-                        (1f - ZenAnimations.DialogScaleFrom) * dialogScale
-                    scaleY = scaleX
-                    alpha = dialogAlpha
-                },
-            shape = RoundedCornerShape(8.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                .padding(horizontal = 20.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Column(
-                modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                content = content
-            )
+            Surface(
+                modifier = Modifier
+                    .widthIn(max = maxWidth)
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp)
+                    .graphicsLayer {
+                        scaleX = ZenAnimations.DialogScaleFrom +
+                            (1f - ZenAnimations.DialogScaleFrom) * dialogProgress
+                        scaleY = scaleX
+                        alpha = dialogProgress
+                    },
+                shape = RoundedCornerShape(ZenDimensions.RadiusLarge),
+                color = containerColor,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                tonalElevation = 0.dp,
+                shadowElevation = 10.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    content = content
+                )
+            }
         }
     }
 }
@@ -1864,17 +1938,17 @@ private fun Header(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(34.dp)
                     .clip(RoundedCornerShape(8.dp))
             )
             Spacer(modifier = Modifier.width(10.dp))
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+                verticalArrangement = Arrangement.spacedBy(1.dp)
             ) {
                 Text(
                     text = stringResource(R.string.app_name),
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onBackground,
                     maxLines = 1,
@@ -1882,7 +1956,7 @@ private fun Header(
                 )
                 Text(
                     text = texts.tagline,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -1929,13 +2003,13 @@ private fun HeaderIconButton(
             .size(HeaderButtonSize)
             .clip(CircleShape)
             .background(
-                MaterialTheme.colorScheme.primary.copy(alpha = bgColor * 0.08f),
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (active) 0.8f else 0.45f),
                 CircleShape
             )
             .border(
                 1.dp,
-                if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
-                else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
+                if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                else MaterialTheme.colorScheme.outlineVariant,
                 CircleShape
             )
             .clickable(role = Role.Button, onClick = onClick)
@@ -1955,7 +2029,7 @@ private fun HeaderIconButton(
                 contentDescription = null,
                 tint = if (active) MaterialTheme.colorScheme.primary
                        else MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(20.dp)
             )
         }
     }
@@ -2742,6 +2816,16 @@ private fun ImportSourceRow(
     }
 }
 
+private fun shouldShowBatchSettingsPanel(
+    files: List<QueuedFile>,
+    canEdit: Boolean
+): Boolean {
+    if (!canEdit || files.size < 2) return false
+    return files
+        .groupBy { it.sourceCategory }
+        .any { (category, list) -> list.size > 1 && targetsForSourceCategory(category).isNotEmpty() }
+}
+
 @Composable
 private fun BatchSettingsPanel(
     texts: UiText,
@@ -2755,7 +2839,7 @@ private fun BatchSettingsPanel(
 ) {
     val groups = files
         .groupBy { it.sourceCategory }
-        .filterValues { it.size > 1 }
+        .filter { (category, list) -> list.size > 1 && targetsForSourceCategory(category).isNotEmpty() }
     if (groups.isEmpty()) return
 
     var selectedCategory by remember(files.map { it.id to it.sourceCategory }) {
@@ -2903,11 +2987,11 @@ private fun BatchScopeChip(
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier
-            .clip(RoundedCornerShape(100.dp))
+            .clip(RoundedCornerShape(ZenDimensions.RadiusChip))
             .background(backgroundColor)
-            .border(1.dp, borderColor, RoundedCornerShape(100.dp))
+            .border(1.dp, borderColor, RoundedCornerShape(ZenDimensions.RadiusChip))
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 7.dp)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
     )
 }
 
@@ -3102,34 +3186,231 @@ private fun BatchVideoTargetOptions(
     val presetCompressionActive = !isGifTarget && !isInterpolationActive && !standardCompressionActive && !mixedCompression
 
     OptionGrid {
-        if (!isGifTarget) {
-            OptionDropdown(
-                menuId = "batch-video-frame-interpolation",
-                label = texts.videoFrameInterpolation,
-                selected = commonInterpolation,
-                options = VIDEO_INTERPOLATION_OPTIONS,
-                texts = texts,
-                openMenuId = openMenuId,
-                onOpenMenuChange = onOpenMenuChange,
-                disabledOptions = disabledInterpolationOptions
-            ) { value ->
-                onOpenMenuChange(null)
-                onUpdateFiles(
-                    files.map { it.withBatchVideoInterpolationMode(value) }
-                )
+        InsetGroupCard {
+            if (!isGifTarget) {
+                OptionDropdown(
+                    menuId = "batch-video-frame-interpolation",
+                    label = texts.videoFrameInterpolation,
+                    selected = commonInterpolation,
+                    options = VIDEO_INTERPOLATION_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    disabledOptions = disabledInterpolationOptions,
+                    showDivider = !isInterpolationActive || commonInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X
+                ) { value ->
+                    onOpenMenuChange(null)
+                    onUpdateFiles(
+                        files.map { it.withBatchVideoInterpolationMode(value) }
+                    )
+                }
             }
 
-            val showRifeHint = !isRifeModelDownloaded &&
-                (commonInterpolation == VIDEO_INTERPOLATION_RIFE_2X || openMenuId == "batch-video-frame-interpolation")
-            if (showRifeHint) {
-                Text(
-                    text = texts.rifeInterpolationHint(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+            if (!isGifTarget && !isInterpolationActive) {
+                OptionDropdown(
+                    menuId = "batch-video-compression-mode",
+                    label = texts.videoCompressionMode,
+                    selected = commonCompression,
+                    options = VIDEO_COMPRESSION_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = standardCompressionActive || mixedCompression
+                ) { value ->
+                    onOpenMenuChange(null)
+                    onUpdateFiles(
+                        files.map { it.withBatchVideoCompressionMode(value, supportedVideoMimeTypes) }
+                    )
+                }
             }
+
+            if ((!isInterpolationActive || commonInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X) && (isGifTarget || standardCompressionActive || mixedCompression)) {
+                val anySourceExceeds1080 = files.any { file ->
+                    val w = file.inputInfo?.width ?: 0
+                    val h = file.inputInfo?.height ?: 0
+                    w > 0 && h > 0 && minOf(w, h) > 1080
+                }
+                val isBatchOpticalFlow = commonInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X
+                val disabledBatchResolutionOptions = buildSet {
+                    if (isBatchOpticalFlow) {
+                        add(VIDEO_RESOLUTION_2160P)
+                        add(VIDEO_RESOLUTION_1440P)
+                        if (anySourceExceeds1080) {
+                            add(VIDEO_RESOLUTION_ORIGINAL)
+                        }
+                    }
+                }
+                OptionDropdown(
+                    menuId = "batch-video-size",
+                    label = texts.resolution,
+                    selected = commonBatchLabel(files) { videoResolutionLabelFor(it.videoOptions) },
+                    options = if (isGifTarget) VIDEO_GIF_RESOLUTION_OPTIONS else VIDEO_RESOLUTION_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    disabledOptions = disabledBatchResolutionOptions,
+                    showDivider = !isGifTarget && (standardCompressionActive || mixedCompression)
+                ) { value ->
+                    onOpenMenuChange(null)
+                    onUpdateFiles(
+                        files.map { file ->
+                            file.copy(
+                                videoOptions = file.videoOptions.copy(
+                                    maxShortSidePixels = videoResolutionToShortSide(value)
+                                )
+                            )
+                        }
+                    )
+                }
+            }
+
+            if (!isGifTarget && !isInterpolationActive && (standardCompressionActive || mixedCompression)) {
+                OptionDropdown(
+                    menuId = "batch-video-bitrate",
+                    label = texts.bitrate,
+                    selected = commonBatchLabel(files) { videoBitrateLabelFor(it.videoOptions.videoBitrate) },
+                    options = VIDEO_BITRATE_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = true
+                ) { value ->
+                    onOpenMenuChange(null)
+                    onUpdateFiles(
+                        files.map { file ->
+                            file.copy(
+                                videoOptions = file.videoOptions.copy(
+                                    videoBitrate = videoBitrateToBits(value)
+                                )
+                            )
+                        }
+                    )
+                }
+                val batchVideoTargetId = if (files.all { it.targetFormat.equals("WEBM", ignoreCase = true) }) {
+                    TargetId.Webm
+                } else if (files.none { it.targetFormat.equals("WEBM", ignoreCase = true) }) {
+                    TargetId.Mp4
+                } else {
+                    null
+                }
+                OptionDropdown(
+                    menuId = "batch-video-codec",
+                    label = texts.codec,
+                    selected = commonBatchLabel(files) { videoCodecLabelFor(it.videoOptions.videoMimeType) },
+                    options = videoCodecOptionsFor(batchVideoTargetId, supportedVideoMimeTypes),
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = true
+                ) { value ->
+                    onOpenMenuChange(null)
+                    onUpdateFiles(
+                        files.map { file ->
+                            file.copy(
+                                videoOptions = file.videoOptions.copy(
+                                    videoMimeType = videoCodecToMimeType(value)
+                                )
+                            )
+                        }
+                    )
+                }
+                OptionDropdown(
+                    menuId = "batch-video-frame-rate",
+                    label = texts.frameRate,
+                    selected = commonBatchLabel(files) { videoFrameRateLabelFor(it.videoOptions.maxFrameRate) },
+                    options = VIDEO_FRAME_RATE_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = true
+                ) { value ->
+                    onOpenMenuChange(null)
+                    onUpdateFiles(
+                        files.map { file ->
+                            file.copy(
+                                videoOptions = file.videoOptions.copy(
+                                    maxFrameRate = videoFrameRateToCap(value)
+                                )
+                            )
+                        }
+                    )
+                }
+                OptionDropdown(
+                    menuId = "batch-video-audio-bitrate",
+                    label = texts.audioBitrateLabel(),
+                    selected = commonBatchLabel(files) { audioBitrateLabelFor(it.audioOptions.audioBitrate) },
+                    options = AUDIO_BITRATE_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = true
+                ) { value ->
+                    onOpenMenuChange(null)
+                    onUpdateFiles(
+                        files.map { file ->
+                            file.copy(
+                                audioOptions = file.audioOptions.copy(
+                                    audioBitrate = audioBitrateToBits(value)
+                                )
+                            )
+                        }
+                    )
+                }
+                OptionDropdown(
+                    menuId = "batch-video-audio-sample-rate",
+                    label = texts.sampleRate,
+                    selected = commonBatchLabel(files) { audioSampleRateLabelFor(it.audioOptions.sampleRateHz) },
+                    options = if (files.all { it.targetFormat.equals("WEBM", ignoreCase = true) }) OPUS_AUDIO_SAMPLE_RATE_OPTIONS else AUDIO_SAMPLE_RATE_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = true
+                ) { value ->
+                    onOpenMenuChange(null)
+                    onUpdateFiles(
+                        files.map { file ->
+                            file.copy(
+                                audioOptions = file.audioOptions.copy(
+                                    sampleRateHz = audioSampleRateToHz(value)
+                                )
+                            )
+                        }
+                    )
+                }
+                OptionDropdown(
+                    menuId = "batch-video-audio-channels",
+                    label = texts.channels,
+                    selected = commonBatchLabel(files) { audioChannelsLabelFor(it.audioOptions.channelCount) },
+                    options = AUDIO_CHANNEL_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = false
+                ) { value ->
+                    onOpenMenuChange(null)
+                    onUpdateFiles(
+                        files.map { file ->
+                            file.copy(
+                                audioOptions = file.audioOptions.copy(
+                                    channelCount = audioChannelsToCount(value)
+                                )
+                            )
+                        }
+                    )
+                }
+            }
+        }
+
+        val showRifeHint = !isRifeModelDownloaded &&
+            (commonInterpolation == VIDEO_INTERPOLATION_RIFE_2X || openMenuId == "batch-video-frame-interpolation")
+        if (showRifeHint) {
+            Text(
+                text = texts.rifeInterpolationHint(),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
 
         if (isInterpolationActive) {
@@ -3159,62 +3440,6 @@ private fun BatchVideoTargetOptions(
             )
         }
 
-        if (!isGifTarget && !isInterpolationActive) {
-            OptionDropdown(
-                "batch-video-compression-mode",
-                texts.videoCompressionMode,
-                commonCompression,
-                VIDEO_COMPRESSION_OPTIONS,
-                texts,
-                openMenuId,
-                onOpenMenuChange
-            ) { value ->
-                onOpenMenuChange(null)
-                onUpdateFiles(
-                    files.map { it.withBatchVideoCompressionMode(value, supportedVideoMimeTypes) }
-                )
-            }
-        }
-
-        if ((!isInterpolationActive || commonInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X) && (isGifTarget || standardCompressionActive || mixedCompression)) {
-            val anySourceExceeds1080 = files.any { file ->
-                val w = file.inputInfo?.width ?: 0
-                val h = file.inputInfo?.height ?: 0
-                w > 0 && h > 0 && minOf(w, h) > 1080
-            }
-            val isBatchOpticalFlow = commonInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X
-            val disabledBatchResolutionOptions = buildSet {
-                if (isBatchOpticalFlow) {
-                    add(VIDEO_RESOLUTION_2160P)
-                    add(VIDEO_RESOLUTION_1440P)
-                    if (anySourceExceeds1080) {
-                        add(VIDEO_RESOLUTION_ORIGINAL)
-                    }
-                }
-            }
-            OptionDropdown(
-                "batch-video-size",
-                texts.resolution,
-                commonBatchLabel(files) { videoResolutionLabelFor(it.videoOptions) },
-                if (isGifTarget) VIDEO_GIF_RESOLUTION_OPTIONS else VIDEO_RESOLUTION_OPTIONS,
-                texts,
-                openMenuId,
-                onOpenMenuChange,
-                disabledOptions = disabledBatchResolutionOptions
-            ) { value ->
-                onOpenMenuChange(null)
-                onUpdateFiles(
-                    files.map { file ->
-                        file.copy(
-                            videoOptions = file.videoOptions.copy(
-                                maxShortSidePixels = videoResolutionToShortSide(value)
-                            )
-                        )
-                    }
-                )
-            }
-        }
-
         if (presetCompressionActive) {
             Text(
                 text = texts.compressionPresetSummary(commonCompression),
@@ -3236,135 +3461,6 @@ private fun BatchVideoTargetOptions(
                     .padding(horizontal = 10.dp, vertical = 7.dp)
             )
         }
-        if (!isGifTarget && !isInterpolationActive && (standardCompressionActive || mixedCompression)) {
-            OptionDropdown(
-                "batch-video-bitrate",
-                texts.bitrate,
-                commonBatchLabel(files) { videoBitrateLabelFor(it.videoOptions.videoBitrate) },
-                VIDEO_BITRATE_OPTIONS,
-                texts,
-                openMenuId,
-                onOpenMenuChange
-            ) { value ->
-                onOpenMenuChange(null)
-                onUpdateFiles(
-                    files.map { file ->
-                        file.copy(
-                            videoOptions = file.videoOptions.copy(
-                                videoBitrate = videoBitrateToBits(value)
-                            )
-                        )
-                    }
-                )
-            }
-            val batchVideoTargetId = if (files.all { it.targetFormat.equals("WEBM", ignoreCase = true) }) {
-                TargetId.Webm
-            } else if (files.none { it.targetFormat.equals("WEBM", ignoreCase = true) }) {
-                TargetId.Mp4
-            } else {
-                null
-            }
-            OptionDropdown(
-                "batch-video-codec",
-                texts.codec,
-                commonBatchLabel(files) { videoCodecLabelFor(it.videoOptions.videoMimeType) },
-                videoCodecOptionsFor(batchVideoTargetId, supportedVideoMimeTypes),
-                texts,
-                openMenuId,
-                onOpenMenuChange
-            ) { value ->
-                onOpenMenuChange(null)
-                onUpdateFiles(
-                    files.map { file ->
-                        file.copy(
-                            videoOptions = file.videoOptions.copy(
-                                videoMimeType = videoCodecToMimeType(value)
-                            )
-                        )
-                    }
-                )
-            }
-            OptionDropdown(
-                "batch-video-frame-rate",
-                texts.frameRate,
-                commonBatchLabel(files) { videoFrameRateLabelFor(it.videoOptions.maxFrameRate) },
-                VIDEO_FRAME_RATE_OPTIONS,
-                texts,
-                openMenuId,
-                onOpenMenuChange
-            ) { value ->
-                onOpenMenuChange(null)
-                onUpdateFiles(
-                    files.map { file ->
-                        file.copy(
-                            videoOptions = file.videoOptions.copy(
-                                maxFrameRate = videoFrameRateToCap(value)
-                            )
-                        )
-                    }
-                )
-            }
-            OptionDropdown(
-                "batch-video-audio-bitrate",
-                texts.audioBitrateLabel(),
-                commonBatchLabel(files) { audioBitrateLabelFor(it.audioOptions.audioBitrate) },
-                AUDIO_BITRATE_OPTIONS,
-                texts,
-                openMenuId,
-                onOpenMenuChange
-            ) { value ->
-                onOpenMenuChange(null)
-                onUpdateFiles(
-                    files.map { file ->
-                        file.copy(
-                            audioOptions = file.audioOptions.copy(
-                                audioBitrate = audioBitrateToBits(value)
-                            )
-                        )
-                    }
-                )
-            }
-            OptionDropdown(
-                "batch-video-audio-sample-rate",
-                texts.sampleRate,
-                commonBatchLabel(files) { audioSampleRateLabelFor(it.audioOptions.sampleRateHz) },
-                if (files.all { it.targetFormat.equals("WEBM", ignoreCase = true) }) OPUS_AUDIO_SAMPLE_RATE_OPTIONS else AUDIO_SAMPLE_RATE_OPTIONS,
-                texts,
-                openMenuId,
-                onOpenMenuChange
-            ) { value ->
-                onOpenMenuChange(null)
-                onUpdateFiles(
-                    files.map { file ->
-                        file.copy(
-                            audioOptions = file.audioOptions.copy(
-                                sampleRateHz = audioSampleRateToHz(value)
-                            )
-                        )
-                    }
-                )
-            }
-            OptionDropdown(
-                "batch-video-audio-channels",
-                texts.channels,
-                commonBatchLabel(files) { audioChannelsLabelFor(it.audioOptions.channelCount) },
-                AUDIO_CHANNEL_OPTIONS,
-                texts,
-                openMenuId,
-                onOpenMenuChange
-            ) { value ->
-                onOpenMenuChange(null)
-                onUpdateFiles(
-                    files.map { file ->
-                        file.copy(
-                            audioOptions = file.audioOptions.copy(
-                                channelCount = audioChannelsToCount(value)
-                            )
-                        )
-                    }
-                )
-            }
-        }
     }
 }
 @Composable
@@ -3376,67 +3472,90 @@ private fun BatchAudioTargetOptions(
     onOpenMenuChange: (String?) -> Unit,
     onUpdateFiles: (List<QueuedFile>) -> Unit
 ) {
+    val commonMode = files
+        .map { it.audioOptions.mp3BitrateMode }
+        .distinct()
+        .singleOrNull()
+
     OptionGrid {
-        if (isMp3Target(target)) {
-            OptionDropdown(
-                "batch-audio-mode",
-                texts.audioEncodingModeLabel(),
-                commonBatchLabel(files) { mp3BitrateModeLabelFor(it.audioOptions.mp3BitrateMode) },
-                MP3_BITRATE_MODE_OPTIONS,
-                texts,
-                openMenuId,
-                onOpenMenuChange
-            ) { value ->
-                onOpenMenuChange(null)
-                onUpdateFiles(
-                    files.map { file ->
-                        file.copy(
-                            audioOptions = file.audioOptions.copy(
-                                mp3BitrateMode = mp3BitrateModeFor(value)
-                            )
-                        )
-                    }
-                )
-            }
-            val commonMode = files
-                .map { it.audioOptions.mp3BitrateMode }
-                .distinct()
-                .singleOrNull()
-            if (commonMode == Mp3BitrateMode.Vbr) {
+        InsetGroupCard {
+            if (isMp3Target(target)) {
                 OptionDropdown(
-                    "batch-audio-vbr-quality",
-                    texts.mp3VbrQualityLabel(),
-                    commonBatchLabel(files) { mp3VbrQualityLabelFor(it.audioOptions.mp3VbrQuality) },
-                    MP3_VBR_QUALITY_OPTIONS,
-                    texts,
-                    openMenuId,
-                    onOpenMenuChange
+                    menuId = "batch-audio-mode",
+                    label = texts.audioEncodingModeLabel(),
+                    selected = commonBatchLabel(files) { mp3BitrateModeLabelFor(it.audioOptions.mp3BitrateMode) },
+                    options = MP3_BITRATE_MODE_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = true
                 ) { value ->
                     onOpenMenuChange(null)
                     onUpdateFiles(
                         files.map { file ->
                             file.copy(
                                 audioOptions = file.audioOptions.copy(
-                                    mp3VbrQuality = mp3VbrQualityFor(value)
+                                    mp3BitrateMode = mp3BitrateModeFor(value)
                                 )
                             )
                         }
                     )
                 }
-                Text(
-                    text = texts.mp3VbrQualityHint(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
+                if (commonMode == Mp3BitrateMode.Vbr) {
+                    OptionDropdown(
+                        menuId = "batch-audio-vbr-quality",
+                        label = texts.mp3VbrQualityLabel(),
+                        selected = commonBatchLabel(files) { mp3VbrQualityLabelFor(it.audioOptions.mp3VbrQuality) },
+                        options = MP3_VBR_QUALITY_OPTIONS,
+                        texts = texts,
+                        openMenuId = openMenuId,
+                        onOpenMenuChange = onOpenMenuChange,
+                        showDivider = true
+                    ) { value ->
+                        onOpenMenuChange(null)
+                        onUpdateFiles(
+                            files.map { file ->
+                                file.copy(
+                                    audioOptions = file.audioOptions.copy(
+                                        mp3VbrQuality = mp3VbrQualityFor(value)
+                                    )
+                                )
+                            }
+                        )
+                    }
+                } else {
+                    OptionDropdown(
+                        menuId = "batch-audio-bitrate",
+                        label = texts.bitrate,
+                        selected = commonBatchLabel(files) { audioEncodingSummaryFor(it.audioOptions, target) },
+                        options = AUDIO_BITRATE_OPTIONS,
+                        texts = texts,
+                        openMenuId = openMenuId,
+                        onOpenMenuChange = onOpenMenuChange,
+                        showDivider = true
+                    ) { value ->
+                        onOpenMenuChange(null)
+                        onUpdateFiles(
+                            files.map { file ->
+                                file.copy(
+                                    audioOptions = file.audioOptions.copy(
+                                        audioBitrate = audioBitrateToBits(value)
+                                    )
+                                )
+                            }
+                        )
+                    }
+                }
+            } else if (audioSupportsBitrateOption(target)) {
                 OptionDropdown(
-                    "batch-audio-bitrate",
-                    texts.bitrate,
-                    commonBatchLabel(files) { audioEncodingSummaryFor(it.audioOptions, target) },
-                    AUDIO_BITRATE_OPTIONS,
-                    texts,
-                    openMenuId,
-                    onOpenMenuChange
+                    menuId = "batch-audio-bitrate",
+                    label = texts.bitrate,
+                    selected = commonBatchLabel(files) { audioBitrateLabelFor(it.audioOptions.audioBitrate) },
+                    options = AUDIO_BITRATE_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = true
                 ) { value ->
                     onOpenMenuChange(null)
                     onUpdateFiles(
@@ -3450,52 +3569,61 @@ private fun BatchAudioTargetOptions(
                     )
                 }
             }
-        } else if (audioSupportsBitrateOption(target)) {
             OptionDropdown(
-                "batch-audio-bitrate",
-                texts.bitrate,
-                commonBatchLabel(files) { audioBitrateLabelFor(it.audioOptions.audioBitrate) },
-                AUDIO_BITRATE_OPTIONS,
-                texts,
-                openMenuId,
-                onOpenMenuChange
+                menuId = "batch-audio-sample-rate",
+                label = texts.sampleRate,
+                selected = commonBatchLabel(files) { audioSampleRateLabelFor(it.audioOptions.sampleRateHz) },
+                options = audioSampleRateOptionsFor(target),
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = true
             ) { value ->
                 onOpenMenuChange(null)
                 onUpdateFiles(
                     files.map { file ->
                         file.copy(
                             audioOptions = file.audioOptions.copy(
-                                audioBitrate = audioBitrateToBits(value)
+                                sampleRateHz = audioSampleRateToHz(value)
                             )
                         )
                     }
                 )
             }
-        } else {
+            OptionDropdown(
+                menuId = "batch-audio-channels",
+                label = texts.channels,
+                selected = commonBatchLabel(files) { audioChannelsLabelFor(it.audioOptions.channelCount) },
+                options = AUDIO_CHANNEL_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = false
+            ) { value ->
+                onOpenMenuChange(null)
+                onUpdateFiles(
+                    files.map { file ->
+                        file.copy(
+                            audioOptions = file.audioOptions.copy(
+                                channelCount = audioChannelsToCount(value)
+                            )
+                        )
+                    }
+                )
+            }
+        }
+        if (isMp3Target(target) && commonMode == Mp3BitrateMode.Vbr) {
             Text(
-                text = texts.optionValue("Lossless output"),
+                text = texts.mp3VbrQualityHint(),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        OptionDropdown(
-            "batch-audio-sample-rate",
-            texts.sampleRate,
-            commonBatchLabel(files) { audioSampleRateLabelFor(it.audioOptions.sampleRateHz) },
-            audioSampleRateOptionsFor(target),
-            texts,
-            openMenuId,
-            onOpenMenuChange
-        ) { value ->
-            onOpenMenuChange(null)
-            onUpdateFiles(
-                files.map { file ->
-                    file.copy(
-                        audioOptions = file.audioOptions.copy(
-                            sampleRateHz = audioSampleRateToHz(value)
-                        )
-                    )
-                }
+        if (!isMp3Target(target) && !audioSupportsBitrateOption(target)) {
+            Text(
+                text = texts.optionValue("Lossless output"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         if (isOpusTarget(target)) {
@@ -3503,26 +3631,6 @@ private fun BatchAudioTargetOptions(
                 text = texts.opusSampleRateHint,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        OptionDropdown(
-            "batch-audio-channels",
-            texts.channels,
-            commonBatchLabel(files) { audioChannelsLabelFor(it.audioOptions.channelCount) },
-            AUDIO_CHANNEL_OPTIONS,
-            texts,
-            openMenuId,
-            onOpenMenuChange
-        ) { value ->
-            onOpenMenuChange(null)
-            onUpdateFiles(
-                files.map { file ->
-                    file.copy(
-                        audioOptions = file.audioOptions.copy(
-                            channelCount = audioChannelsToCount(value)
-                        )
-                    )
-                }
             )
         }
     }
@@ -3635,6 +3743,22 @@ private fun BatchPdfTargetOptions(
     )
 }
 
+private fun shouldShowPdfMergeGroupsPanel(
+    files: List<QueuedFile>,
+    groups: List<PdfMergeGroup>,
+    canEdit: Boolean
+): Boolean {
+    if (files.isEmpty()) return false
+    val hasVisibleGroups = groups.any { group ->
+        group.memberFileIds.count { id -> files.any { it.id == id } } >= 2
+    }
+    if (hasVisibleGroups) return true
+    if (!canEdit) return false
+    val imageCandidates = mergeablePdfFilesFor(files, groups, PdfMergeType.Images)
+    val pdfCandidates = mergeablePdfFilesFor(files, groups, PdfMergeType.Pdfs)
+    return imageCandidates.size >= 2 || pdfCandidates.size >= 2
+}
+
 @Composable
 private fun PdfMergeGroupsPanel(
     texts: UiText,
@@ -3745,7 +3869,7 @@ private fun PdfMergeActionChip(
 ) {
     OutlinedButton(
         onClick = onClick,
-        shape = RoundedCornerShape(100.dp),
+        shape = RoundedCornerShape(ZenDimensions.RadiusChip),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.36f)),
         colors = ButtonDefaults.outlinedButtonColors(
             containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
@@ -3846,22 +3970,25 @@ private fun PdfMergeGroupCard(
         }
 
         if (group.type == PdfMergeType.Images && canEdit) {
-            OptionDropdown(
-                "merge-${group.id}-page-mode",
-                texts.pageSize,
-                pdfPageModeLabelFor(group.pdfOptions.imagePageMode),
-                PDF_PAGE_MODE_OPTIONS,
-                texts,
-                openMenuId,
-                onOpenMenuChange
-            ) { value ->
-                onUpdateGroup(
-                    group.copy(
-                        pdfOptions = group.pdfOptions.copy(
-                            imagePageMode = pdfPageModeToOption(value)
+            InsetGroupCard {
+                OptionDropdown(
+                    menuId = "merge-${group.id}-page-mode",
+                    label = texts.pageSize,
+                    selected = pdfPageModeLabelFor(group.pdfOptions.imagePageMode),
+                    options = PDF_PAGE_MODE_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = false
+                ) { value ->
+                    onUpdateGroup(
+                        group.copy(
+                            pdfOptions = group.pdfOptions.copy(
+                                imagePageMode = pdfPageModeToOption(value)
+                            )
                         )
                     )
-                )
+                }
             }
         }
 
@@ -3994,6 +4121,19 @@ private fun mergeableVideoFilesFor(
     }
 }
 
+private fun shouldShowVideoMergeGroupsPanel(
+    files: List<QueuedFile>,
+    groups: List<VideoMergeGroup>,
+    canEdit: Boolean
+): Boolean {
+    if (files.isEmpty()) return false
+    val hasVisibleGroups = groups.any { group ->
+        group.memberFileIds.count { id -> files.any { it.id == id } } >= 2
+    }
+    if (hasVisibleGroups) return true
+    return canEdit && mergeableVideoFilesFor(files, groups).size >= 2
+}
+
 @Composable
 private fun VideoMergeGroupsPanel(
     texts: UiText,
@@ -4092,7 +4232,7 @@ private fun VideoMergeActionChip(
 ) {
     OutlinedButton(
         onClick = onClick,
-        shape = RoundedCornerShape(100.dp),
+        shape = RoundedCornerShape(ZenDimensions.RadiusChip),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.36f)),
         colors = ButtonDefaults.outlinedButtonColors(
             containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
@@ -4193,19 +4333,17 @@ private fun VideoMergeGroupCard(
         }
 
         if (canEdit) {
-            CenteredFlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalSpacing = 8.dp,
-                verticalSpacing = 8.dp
-            ) {
+            val isStandardMerge = group.videoOptions.compressionMode == VideoCompressionMode.Standard
+            InsetGroupCard {
                 OptionDropdown(
-                    "video-merge-${group.id}-target",
-                    texts.target,
-                    group.targetFormat,
-                    listOf("MP4", "MKV", "MOV", "WEBM"),
-                    texts,
-                    openMenuId,
-                    onOpenMenuChange
+                    menuId = "video-merge-${group.id}-target",
+                    label = texts.target,
+                    selected = group.targetFormat,
+                    options = listOf("MP4", "MKV", "MOV", "WEBM"),
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = true
                 ) { value ->
                     val wasWebm = group.targetFormat.equals("WEBM", ignoreCase = true)
                     val isWebm = value.equals("WEBM", ignoreCase = true)
@@ -4225,13 +4363,14 @@ private fun VideoMergeGroupCard(
                 }
 
                 OptionDropdown(
-                    "video-merge-${group.id}-preset",
-                    texts.videoCompressionMode,
-                    videoCompressionLabelFor(group.videoOptions.compressionMode),
-                    VIDEO_COMPRESSION_OPTIONS,
-                    texts,
-                    openMenuId,
-                    onOpenMenuChange
+                    menuId = "video-merge-${group.id}-preset",
+                    label = texts.videoCompressionMode,
+                    selected = videoCompressionLabelFor(group.videoOptions.compressionMode),
+                    options = VIDEO_COMPRESSION_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = isStandardMerge
                 ) { value ->
                     val mode = videoCompressionModeFor(value)
                     val presetActive = mode != VideoCompressionMode.Standard
@@ -4259,15 +4398,16 @@ private fun VideoMergeGroupCard(
                     )
                 }
 
-                if (group.videoOptions.compressionMode == VideoCompressionMode.Standard) {
+                if (isStandardMerge) {
                     OptionDropdown(
-                        "video-merge-${group.id}-resolution",
-                        texts.resolution,
-                        videoResolutionLabelFor(group.videoOptions),
-                        VIDEO_RESOLUTION_OPTIONS,
-                        texts,
-                        openMenuId,
-                        onOpenMenuChange
+                        menuId = "video-merge-${group.id}-resolution",
+                        label = texts.resolution,
+                        selected = videoResolutionLabelFor(group.videoOptions),
+                        options = VIDEO_RESOLUTION_OPTIONS,
+                        texts = texts,
+                        openMenuId = openMenuId,
+                        onOpenMenuChange = onOpenMenuChange,
+                        showDivider = true
                     ) { value ->
                         onUpdateGroup(
                             group.copy(
@@ -4285,13 +4425,14 @@ private fun VideoMergeGroupCard(
                         listOf(VIDEO_CODEC_H264, VIDEO_CODEC_H265)
                     }
                     OptionDropdown(
-                        "video-merge-${group.id}-codec",
-                        texts.codec,
-                        videoCodecLabelFor(group.videoOptions.videoMimeType),
-                        mergeCodecs,
-                        texts,
-                        openMenuId,
-                        onOpenMenuChange
+                        menuId = "video-merge-${group.id}-codec",
+                        label = texts.codec,
+                        selected = videoCodecLabelFor(group.videoOptions.videoMimeType),
+                        options = mergeCodecs,
+                        texts = texts,
+                        openMenuId = openMenuId,
+                        onOpenMenuChange = onOpenMenuChange,
+                        showDivider = false
                     ) { value ->
                         onUpdateGroup(
                             group.copy(
@@ -4573,29 +4714,127 @@ private fun VideoOptions(
             onEndSecondsChange = onTrimEndSecondsChange,
             onTrimRangeChange = onTrimRangeChange
         )
-        if (!isGifTarget) {
-            OptionDropdown(
-                menuId = "${menuPrefix}video-frame-interpolation",
-                label = texts.videoFrameInterpolation,
-                selected = frameInterpolation,
-                options = VIDEO_INTERPOLATION_OPTIONS,
-                texts = texts,
-                openMenuId = openMenuId,
-                onOpenMenuChange = onOpenMenuChange,
-                disabledOptions = disabledInterpolationOptions,
-                onSelected = onFrameInterpolationChange
-            )
-            val showRifeHint = !isRifeModelDownloaded &&
-                (frameInterpolation == VIDEO_INTERPOLATION_RIFE_2X || openMenuId == "${menuPrefix}video-frame-interpolation")
-            if (showRifeHint) {
-                Text(
-                    text = texts.rifeInterpolationHint(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+        InsetGroupCard {
+            if (!isGifTarget) {
+                OptionDropdown(
+                    menuId = "${menuPrefix}video-frame-interpolation",
+                    label = texts.videoFrameInterpolation,
+                    selected = frameInterpolation,
+                    options = VIDEO_INTERPOLATION_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    disabledOptions = disabledInterpolationOptions,
+                    showDivider = !isInterpolationActive || frameInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X,
+                    onSelected = onFrameInterpolationChange
                 )
             }
+            if (!isGifTarget && !isInterpolationActive) {
+                OptionDropdown(
+                    menuId = "${menuPrefix}video-compression-mode",
+                    label = texts.videoCompressionMode,
+                    selected = compressionMode,
+                    options = VIDEO_COMPRESSION_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = isStandardCompression,
+                    onSelected = onCompressionModeChange
+                )
+            }
+            if ((!isInterpolationActive || frameInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X) && (isGifTarget || isStandardCompression)) {
+                OptionDropdown(
+                    menuId = "${menuPrefix}video-size",
+                    label = texts.resolution,
+                    selected = resolution,
+                    options = if (isGifTarget) VIDEO_GIF_RESOLUTION_OPTIONS else VIDEO_RESOLUTION_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    disabledOptions = disabledResolutionOptions,
+                    showDivider = !isGifTarget && isStandardCompression,
+                    onSelected = onResolutionChange
+                )
+            }
+            if (!isGifTarget && !isInterpolationActive && isStandardCompression) {
+                OptionDropdown(
+                    menuId = "${menuPrefix}video-bitrate",
+                    label = texts.bitrate,
+                    selected = bitrate,
+                    options = VIDEO_BITRATE_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = true,
+                    onSelected = onBitrateChange
+                )
+                OptionDropdown(
+                    menuId = "${menuPrefix}video-codec",
+                    label = texts.codec,
+                    selected = codec,
+                    options = codecOptions,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = true,
+                    onSelected = onCodecChange
+                )
+                OptionDropdown(
+                    menuId = "${menuPrefix}video-frame-rate",
+                    label = texts.frameRate,
+                    selected = frameRate,
+                    options = VIDEO_FRAME_RATE_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = true,
+                    onSelected = onFrameRateChange
+                )
+                OptionDropdown(
+                    menuId = "${menuPrefix}video-audio-bitrate",
+                    label = texts.audioBitrateLabel(),
+                    selected = audioBitrate,
+                    options = AUDIO_BITRATE_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = true,
+                    onSelected = onAudioBitrateChange
+                )
+                OptionDropdown(
+                    menuId = "${menuPrefix}video-audio-sample-rate",
+                    label = texts.sampleRate,
+                    selected = audioSampleRate,
+                    options = if (isOpusTarget(targetFormat)) OPUS_AUDIO_SAMPLE_RATE_OPTIONS else AUDIO_SAMPLE_RATE_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = true,
+                    onSelected = onAudioSampleRateChange
+                )
+                OptionDropdown(
+                    menuId = "${menuPrefix}video-audio-channels",
+                    label = texts.channels,
+                    selected = audioChannels,
+                    options = AUDIO_CHANNEL_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = false,
+                    onSelected = onAudioChannelsChange
+                )
+            }
+        }
+        val showRifeHint = !isRifeModelDownloaded &&
+            (frameInterpolation == VIDEO_INTERPOLATION_RIFE_2X || openMenuId == "${menuPrefix}video-frame-interpolation")
+        if (showRifeHint) {
+            Text(
+                text = texts.rifeInterpolationHint(),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
         if (isInterpolationActive) {
             val summaryText = if (frameInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X) {
@@ -4616,31 +4855,6 @@ private fun VideoOptions(
                     .padding(horizontal = 10.dp, vertical = 7.dp)
             )
         }
-        if (!isGifTarget && !isInterpolationActive) {
-            OptionDropdown(
-                "${menuPrefix}video-compression-mode",
-                texts.videoCompressionMode,
-                compressionMode,
-                VIDEO_COMPRESSION_OPTIONS,
-                texts,
-                openMenuId,
-                onOpenMenuChange,
-                onCompressionModeChange
-            )
-        }
-        if ((!isInterpolationActive || frameInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X) && (isGifTarget || isStandardCompression)) {
-            OptionDropdown(
-                "${menuPrefix}video-size",
-                texts.resolution,
-                resolution,
-                if (isGifTarget) VIDEO_GIF_RESOLUTION_OPTIONS else VIDEO_RESOLUTION_OPTIONS,
-                texts,
-                openMenuId,
-                onOpenMenuChange,
-                disabledOptions = disabledResolutionOptions,
-                onSelected = onResolutionChange
-            )
-        }
         if (presetCompressionActive) {
             Text(
                 text = texts.compressionPresetSummary(compressionMode),
@@ -4656,66 +4870,6 @@ private fun VideoOptions(
             )
         }
         if (!isGifTarget && !isInterpolationActive && isStandardCompression) {
-            OptionDropdown(
-                "${menuPrefix}video-bitrate",
-                texts.bitrate,
-                bitrate,
-                VIDEO_BITRATE_OPTIONS,
-                texts,
-                openMenuId,
-                onOpenMenuChange,
-                onBitrateChange
-            )
-            OptionDropdown(
-                "${menuPrefix}video-codec",
-                texts.codec,
-                codec,
-                codecOptions,
-                texts,
-                openMenuId,
-                onOpenMenuChange,
-                onCodecChange
-            )
-            OptionDropdown(
-                "${menuPrefix}video-frame-rate",
-                texts.frameRate,
-                frameRate,
-                VIDEO_FRAME_RATE_OPTIONS,
-                texts,
-                openMenuId,
-                onOpenMenuChange,
-                onFrameRateChange
-            )
-            OptionDropdown(
-                "${menuPrefix}video-audio-bitrate",
-                texts.audioBitrateLabel(),
-                audioBitrate,
-                AUDIO_BITRATE_OPTIONS,
-                texts,
-                openMenuId,
-                onOpenMenuChange,
-                onAudioBitrateChange
-            )
-            OptionDropdown(
-                "${menuPrefix}video-audio-sample-rate",
-                texts.sampleRate,
-                audioSampleRate,
-                if (isOpusTarget(targetFormat)) OPUS_AUDIO_SAMPLE_RATE_OPTIONS else AUDIO_SAMPLE_RATE_OPTIONS,
-                texts,
-                openMenuId,
-                onOpenMenuChange,
-                onAudioSampleRateChange
-            )
-            OptionDropdown(
-                "${menuPrefix}video-audio-channels",
-                texts.channels,
-                audioChannels,
-                AUDIO_CHANNEL_OPTIONS,
-                texts,
-                openMenuId,
-                onOpenMenuChange,
-                onAudioChannelsChange
-            )
             VideoAdvancedOptionsPanel(
                 texts = texts,
                 state = videoAdvanced,
@@ -4793,73 +4947,94 @@ private fun AudioOptions(
             onEndSecondsChange = onTrimEndSecondsChange,
             onTrimRangeChange = onTrimRangeChange
         )
-        if (isMp3Target(targetFormat)) {
-            OptionDropdown(
-                "${menuPrefix}audio-mode",
-                texts.audioEncodingModeLabel(),
-                mp3BitrateModeLabelFor(bitrateMode),
-                MP3_BITRATE_MODE_OPTIONS,
-                texts,
-                openMenuId,
-                onOpenMenuChange,
-                onBitrateModeChange
-            )
-            if (bitrateMode == Mp3BitrateMode.Vbr) {
+        InsetGroupCard {
+            if (isMp3Target(targetFormat)) {
                 OptionDropdown(
-                    "${menuPrefix}audio-vbr-quality",
-                    texts.mp3VbrQualityLabel(),
-                    mp3VbrQualityLabelFor(vbrQuality),
-                    MP3_VBR_QUALITY_OPTIONS,
-                    texts,
-                    openMenuId,
-                    onOpenMenuChange,
-                    onVbrQualityChange
+                    menuId = "${menuPrefix}audio-mode",
+                    label = texts.audioEncodingModeLabel(),
+                    selected = mp3BitrateModeLabelFor(bitrateMode),
+                    options = MP3_BITRATE_MODE_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = true,
+                    onSelected = onBitrateModeChange
                 )
-                Text(
-                    text = texts.mp3VbrQualityHint(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
+                if (bitrateMode == Mp3BitrateMode.Vbr) {
+                    OptionDropdown(
+                        menuId = "${menuPrefix}audio-vbr-quality",
+                        label = texts.mp3VbrQualityLabel(),
+                        selected = mp3VbrQualityLabelFor(vbrQuality),
+                        options = MP3_VBR_QUALITY_OPTIONS,
+                        texts = texts,
+                        openMenuId = openMenuId,
+                        onOpenMenuChange = onOpenMenuChange,
+                        showDivider = true,
+                        onSelected = onVbrQualityChange
+                    )
+                } else {
+                    OptionDropdown(
+                        menuId = "${menuPrefix}audio-bitrate",
+                        label = texts.bitrate,
+                        selected = bitrate,
+                        options = AUDIO_BITRATE_OPTIONS,
+                        texts = texts,
+                        openMenuId = openMenuId,
+                        onOpenMenuChange = onOpenMenuChange,
+                        showDivider = true,
+                        onSelected = onBitrateChange
+                    )
+                }
+            } else if (audioSupportsBitrateOption(targetFormat)) {
                 OptionDropdown(
-                    "${menuPrefix}audio-bitrate",
-                    texts.bitrate,
-                    bitrate,
-                    AUDIO_BITRATE_OPTIONS,
-                    texts,
-                    openMenuId,
-                    onOpenMenuChange,
-                    onBitrateChange
+                    menuId = "${menuPrefix}audio-bitrate",
+                    label = texts.bitrate,
+                    selected = bitrate,
+                    options = AUDIO_BITRATE_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = true,
+                    onSelected = onBitrateChange
                 )
             }
-        } else if (audioSupportsBitrateOption(targetFormat)) {
             OptionDropdown(
-                "${menuPrefix}audio-bitrate",
-                texts.bitrate,
-                bitrate,
-                AUDIO_BITRATE_OPTIONS,
-                texts,
-                openMenuId,
-                onOpenMenuChange,
-                onBitrateChange
+                menuId = "${menuPrefix}audio-sample-rate",
+                label = texts.sampleRate,
+                selected = sampleRate,
+                options = audioSampleRateOptionsFor(targetFormat),
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = true,
+                onSelected = onSampleRateChange
             )
-        } else {
+            OptionDropdown(
+                menuId = "${menuPrefix}audio-channels",
+                label = texts.channels,
+                selected = channels,
+                options = AUDIO_CHANNEL_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = false,
+                onSelected = onChannelsChange
+            )
+        }
+        if (isMp3Target(targetFormat) && bitrateMode == Mp3BitrateMode.Vbr) {
+            Text(
+                text = texts.mp3VbrQualityHint(),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (!isMp3Target(targetFormat) && !audioSupportsBitrateOption(targetFormat)) {
             Text(
                 text = texts.optionValue("Lossless output"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        OptionDropdown(
-            "${menuPrefix}audio-sample-rate",
-            texts.sampleRate,
-            sampleRate,
-            audioSampleRateOptionsFor(targetFormat),
-            texts,
-            openMenuId,
-            onOpenMenuChange,
-            onSampleRateChange
-        )
         if (isOpusTarget(targetFormat)) {
             Text(
                 text = texts.opusSampleRateHint,
@@ -4867,16 +5042,6 @@ private fun AudioOptions(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        OptionDropdown(
-            "${menuPrefix}audio-channels",
-            texts.channels,
-            channels,
-            AUDIO_CHANNEL_OPTIONS,
-            texts,
-            openMenuId,
-            onOpenMenuChange,
-            onChannelsChange
-        )
         AudioAdvancedOptionsPanel(
             texts = texts,
             state = advanced,
@@ -4973,7 +5138,7 @@ private fun MediaTrimOptions(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 modifier = Modifier
-                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(100.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(ZenDimensions.RadiusChip))
                     .padding(horizontal = 4.dp, vertical = 2.dp)
             ) {
                 IconButton(
@@ -5067,7 +5232,7 @@ private fun TrimModeToggle(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(100.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(ZenDimensions.RadiusChip))
             .padding(3.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp)
     ) {
@@ -5095,7 +5260,7 @@ private fun TrimModeChip(
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(100.dp))
+            .clip(RoundedCornerShape(ZenDimensions.RadiusChip))
             .background(
                 if (selected) MaterialTheme.colorScheme.primary else Color.Transparent
             )
@@ -5561,66 +5726,74 @@ private fun VideoAdvancedOptionsPanel(
             checked = state.reverse,
             onCheckedChange = onReverseChange
         )
-        OptionDropdown(
-            "${menuPrefix}video-advanced-fade-in",
-            texts.fadeInLabel(),
-            state.fadeIn,
-            ADVANCED_FADE_OPTIONS,
-            texts,
-            openMenuId,
-            onOpenMenuChange,
-            onFadeInChange
-        )
-        OptionDropdown(
-            "${menuPrefix}video-advanced-fade-out",
-            texts.fadeOutLabel(),
-            state.fadeOut,
-            ADVANCED_FADE_OPTIONS,
-            texts,
-            openMenuId,
-            onOpenMenuChange,
-            onFadeOutChange
-        )
-        OptionDropdown(
-            "${menuPrefix}video-advanced-mirror",
-            texts.mirrorLabel(),
-            state.mirror,
-            VIDEO_MIRROR_OPTIONS,
-            texts,
-            openMenuId,
-            onOpenMenuChange,
-            onMirrorChange
-        )
-        OptionDropdown(
-            "${menuPrefix}video-advanced-rotation",
-            texts.rotationLabel(),
-            state.rotation,
-            VIDEO_ROTATION_OPTIONS,
-            texts,
-            openMenuId,
-            onOpenMenuChange,
-            onRotationChange
-        )
-        OptionDropdown(
-            "${menuPrefix}video-advanced-aspect",
-            texts.aspectRatioLabel(),
-            state.aspectRatio,
-            VIDEO_ASPECT_OPTIONS,
-            texts,
-            openMenuId,
-            onOpenMenuChange,
-            onAspectRatioChange
-        )
-        OptionDropdown(
-            "${menuPrefix}video-advanced-motion-blur",
-            texts.motionBlurLabel(),
-            state.motionBlur,
-            VIDEO_MOTION_BLUR_OPTIONS,
-            texts,
-            openMenuId,
-            onOpenMenuChange,
-            onMotionBlurChange
-        )
+        InsetGroupCard {
+            OptionDropdown(
+                menuId = "${menuPrefix}video-advanced-fade-in",
+                label = texts.fadeInLabel(),
+                selected = state.fadeIn,
+                options = ADVANCED_FADE_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = true,
+                onSelected = onFadeInChange
+            )
+            OptionDropdown(
+                menuId = "${menuPrefix}video-advanced-fade-out",
+                label = texts.fadeOutLabel(),
+                selected = state.fadeOut,
+                options = ADVANCED_FADE_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = true,
+                onSelected = onFadeOutChange
+            )
+            OptionDropdown(
+                menuId = "${menuPrefix}video-advanced-mirror",
+                label = texts.mirrorLabel(),
+                selected = state.mirror,
+                options = VIDEO_MIRROR_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = true,
+                onSelected = onMirrorChange
+            )
+            OptionDropdown(
+                menuId = "${menuPrefix}video-advanced-rotation",
+                label = texts.rotationLabel(),
+                selected = state.rotation,
+                options = VIDEO_ROTATION_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = true,
+                onSelected = onRotationChange
+            )
+            OptionDropdown(
+                menuId = "${menuPrefix}video-advanced-aspect",
+                label = texts.aspectRatioLabel(),
+                selected = state.aspectRatio,
+                options = VIDEO_ASPECT_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = true,
+                onSelected = onAspectRatioChange
+            )
+            OptionDropdown(
+                menuId = "${menuPrefix}video-advanced-motion-blur",
+                label = texts.motionBlurLabel(),
+                selected = state.motionBlur,
+                options = VIDEO_MOTION_BLUR_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = false,
+                onSelected = onMotionBlurChange
+            )
+        }
     }
 }
 
@@ -5650,56 +5823,63 @@ private fun AudioAdvancedOptionsPanel(
             checked = state.reverse,
             onCheckedChange = onReverseChange
         )
-        OptionDropdown(
-            "${menuPrefix}audio-advanced-fade-in",
-            texts.fadeInLabel(),
-            state.fadeIn,
-            ADVANCED_FADE_OPTIONS,
-            texts,
-            openMenuId,
-            onOpenMenuChange,
-            onFadeInChange
-        )
-        OptionDropdown(
-            "${menuPrefix}audio-advanced-fade-out",
-            texts.fadeOutLabel(),
-            state.fadeOut,
-            ADVANCED_FADE_OPTIONS,
-            texts,
-            openMenuId,
-            onOpenMenuChange,
-            onFadeOutChange
-        )
-        OptionDropdown(
-            "${menuPrefix}audio-advanced-volume",
-            texts.volumeLabel(),
-            state.volume,
-            AUDIO_VOLUME_OPTIONS,
-            texts,
-            openMenuId,
-            onOpenMenuChange,
-            onVolumeChange
-        )
-        OptionDropdown(
-            "${menuPrefix}audio-advanced-echo",
-            texts.echoLabel(),
-            state.echo,
-            AUDIO_ECHO_OPTIONS,
-            texts,
-            openMenuId,
-            onOpenMenuChange,
-            onEchoChange
-        )
-        OptionDropdown(
-            "${menuPrefix}audio-advanced-denoise",
-            texts.noiseReductionLabel(),
-            state.noiseReduction,
-            AUDIO_DENOISE_OPTIONS,
-            texts,
-            openMenuId,
-            onOpenMenuChange,
-            onNoiseReductionChange
-        )
+        InsetGroupCard {
+            OptionDropdown(
+                menuId = "${menuPrefix}audio-advanced-fade-in",
+                label = texts.fadeInLabel(),
+                selected = state.fadeIn,
+                options = ADVANCED_FADE_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = true,
+                onSelected = onFadeInChange
+            )
+            OptionDropdown(
+                menuId = "${menuPrefix}audio-advanced-fade-out",
+                label = texts.fadeOutLabel(),
+                selected = state.fadeOut,
+                options = ADVANCED_FADE_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = true,
+                onSelected = onFadeOutChange
+            )
+            OptionDropdown(
+                menuId = "${menuPrefix}audio-advanced-volume",
+                label = texts.volumeLabel(),
+                selected = state.volume,
+                options = AUDIO_VOLUME_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = true,
+                onSelected = onVolumeChange
+            )
+            OptionDropdown(
+                menuId = "${menuPrefix}audio-advanced-echo",
+                label = texts.echoLabel(),
+                selected = state.echo,
+                options = AUDIO_ECHO_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = true,
+                onSelected = onEchoChange
+            )
+            OptionDropdown(
+                menuId = "${menuPrefix}audio-advanced-denoise",
+                label = texts.noiseReductionLabel(),
+                selected = state.noiseReduction,
+                options = AUDIO_DENOISE_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = false,
+                onSelected = onNoiseReductionChange
+            )
+        }
     }
 }
 
@@ -5835,16 +6015,19 @@ private fun ImageOptions(
 ) {
     if (targetFormat.extension.equals("pdf", ignoreCase = true)) {
         OptionGrid {
-            OptionDropdown(
-                "${menuPrefix}image-pdf-page-mode",
-                texts.pageSize,
-                pdfPageMode,
-                PDF_PAGE_MODE_OPTIONS,
-                texts,
-                openMenuId,
-                onOpenMenuChange,
-                onPdfPageModeChange
-            )
+            InsetGroupCard {
+                OptionDropdown(
+                    menuId = "${menuPrefix}image-pdf-page-mode",
+                    label = texts.pageSize,
+                    selected = pdfPageMode,
+                    options = PDF_PAGE_MODE_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = false,
+                    onSelected = onPdfPageModeChange
+                )
+            }
         }
         return
     }
@@ -5864,17 +6047,37 @@ private fun ImageOptions(
     val disabledOptions = setOf(IMAGE_SUPER_RESOLUTION_AI_ANIME, IMAGE_SUPER_RESOLUTION_AI) - availableAiModels
 
     OptionGrid {
-        OptionDropdown(
-            menuId = "${menuPrefix}image-super-resolution",
-            label = texts.superResolution,
-            selected = superResolution,
-            options = IMAGE_SUPER_RESOLUTION_OPTIONS,
-            texts = texts,
-            openMenuId = openMenuId,
-            onOpenMenuChange = onOpenMenuChange,
-            disabledOptions = disabledOptions,
-            onSelected = onSuperResolutionChange
-        )
+        val hasQuality = !superResolutionActive && !isPng
+        val qualityOptions = if (hasQuality) imageQualityOptionsFor(targetFormat) else emptyList()
+        val selectedQuality = if (quality in qualityOptions) quality else IMAGE_QUALITY_BALANCED
+
+        InsetGroupCard {
+            OptionDropdown(
+                menuId = "${menuPrefix}image-super-resolution",
+                label = texts.superResolution,
+                selected = superResolution,
+                options = IMAGE_SUPER_RESOLUTION_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                disabledOptions = disabledOptions,
+                showDivider = hasQuality,
+                onSelected = onSuperResolutionChange
+            )
+            if (hasQuality) {
+                OptionDropdown(
+                    menuId = "${menuPrefix}image-quality",
+                    label = texts.quality,
+                    selected = selectedQuality,
+                    options = qualityOptions,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = false,
+                    onSelected = onQualityChange
+                )
+            }
+        }
 
         if (availableAiModels.isEmpty()) {
             Text(
@@ -5906,19 +6109,6 @@ private fun ImageOptions(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-        } else {
-            val qualityOptions = imageQualityOptionsFor(targetFormat)
-            val selectedQuality = if (quality in qualityOptions) quality else IMAGE_QUALITY_BALANCED
-            OptionDropdown(
-                "${menuPrefix}image-quality",
-                texts.quality,
-                selectedQuality,
-                qualityOptions,
-                texts,
-                openMenuId,
-                onOpenMenuChange,
-                onQualityChange
-            )
         }
     }
 }
@@ -5937,16 +6127,19 @@ private fun PdfOptions(
 ) {
     if (targetFormat.id == TargetId.PdfCompress) {
         OptionGrid {
-            OptionDropdown(
-                "${menuPrefix}pdf-compression-preset",
-                texts.compressionPreset,
-                compressionPreset,
-                PDF_COMPRESSION_PRESET_OPTIONS,
-                texts,
-                openMenuId,
-                onOpenMenuChange,
-                onCompressionPresetChange
-            )
+            InsetGroupCard {
+                OptionDropdown(
+                    menuId = "${menuPrefix}pdf-compression-preset",
+                    label = texts.compressionPreset,
+                    selected = compressionPreset,
+                    options = PDF_COMPRESSION_PRESET_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = false,
+                    onSelected = onCompressionPresetChange
+                )
+            }
         }
         return
     }
@@ -5965,23 +6158,26 @@ private fun PdfOptions(
     }
 
     OptionGrid {
-        OptionDropdown(
-            "${menuPrefix}pdf-render-quality",
-            texts.renderQuality,
-            renderQuality,
-            PDF_RENDER_QUALITY_OPTIONS,
-            texts,
-            openMenuId,
-            onOpenMenuChange,
-            onRenderQualityChange
-        )
+        InsetGroupCard {
+            OptionDropdown(
+                menuId = "${menuPrefix}pdf-render-quality",
+                label = texts.renderQuality,
+                selected = renderQuality,
+                options = PDF_RENDER_QUALITY_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = false,
+                onSelected = onRenderQualityChange
+            )
+        }
     }
 }
 
 @Composable
 private fun OptionGrid(content: @Composable ColumnScope.() -> Unit) {
     Column(
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
         content = content
     )
 }
@@ -6085,39 +6281,148 @@ private fun OutputLocationSection(
 private fun QueueActions(
     texts: UiText,
     isRunning: Boolean,
+    fileCount: Int,
     onStart: () -> Unit,
     onCancel: () -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         OutlinedButton(
             onClick = onCancel,
-            modifier = Modifier.weight(1f)
+            shape = RoundedCornerShape(8.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+            modifier = Modifier
+                .weight(1f)
+                .heightIn(min = 38.dp)
         ) {
             AppIcon(
                 icon = Icons.Rounded.Close,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(17.dp)
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
             )
-            Spacer(modifier = Modifier.width(7.dp))
-            Text(texts.cancelOrClearTasks)
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = if (isRunning) texts.cancel else texts.clearTasks,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
         Button(
             onClick = onStart,
             enabled = !isRunning,
-            modifier = Modifier.weight(1f)
+            shape = RoundedCornerShape(8.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+            modifier = Modifier
+                .weight(1f)
+                .heightIn(min = 38.dp)
         ) {
             AppIcon(
                 icon = Icons.Rounded.PlayArrow,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(17.dp)
             )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(texts.start)
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = texts.startConversion(fileCount),
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun BottomQueueActionBar(
+    texts: UiText,
+    isRunning: Boolean,
+    fileCount: Int,
+    onStart: () -> Unit,
+    onCancel: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+        tonalElevation = 3.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+                .padding(horizontal = HomeHorizontalPadding, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedButton(
+                onClick = onCancel,
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 40.dp)
+            ) {
+                AppIcon(
+                    icon = Icons.Rounded.Close,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (isRunning) texts.cancel else texts.clearTasks,
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Button(
+                onClick = onStart,
+                enabled = !isRunning,
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 40.dp)
+            ) {
+                AppIcon(
+                    icon = Icons.Rounded.PlayArrow,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(17.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = texts.startConversion(fileCount),
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
@@ -6240,16 +6545,81 @@ private fun FileRow(
             }
         }
         if (canEdit) {
+            val targets = targetsForQueuedFile(file)
+            val subcategories = remember(file.id, file.targetOptions, file.sourceCategory) {
+                buildTargetSubcategories(targets, texts)
+            }
+            val initialSubcatId = remember(file.id, selectedTarget) {
+                when {
+                    selectedTarget.targetFormat.id in setOf(TargetId.ContactSheetJpg, TargetId.ContactSheetPng) -> "contact_sheet"
+                    selectedTarget.category == FileCategory.Audio -> "audio"
+                    else -> "video"
+                }
+            }
+            var activeSubcatId by remember(file.id) {
+                mutableStateOf(
+                    subcategories.firstOrNull { it.id == initialSubcatId }?.id ?: subcategories.firstOrNull()?.id ?: "all"
+                )
+            }
+            LaunchedEffect(selectedTarget) {
+                val targetSubcat = when {
+                    selectedTarget.targetFormat.id in setOf(TargetId.ContactSheetJpg, TargetId.ContactSheetPng) -> "contact_sheet"
+                    selectedTarget.category == FileCategory.Audio -> "audio"
+                    else -> "video"
+                }
+                if (subcategories.any { it.id == targetSubcat } && activeSubcatId != targetSubcat) {
+                    activeSubcatId = targetSubcat
+                }
+            }
+            val currentSubcat = subcategories.firstOrNull { it.id == activeSubcatId } ?: subcategories.first()
+            val visibleTargets = currentSubcat.targets
+
+            if (subcategories.size > 1) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    subcategories.forEach { subcat ->
+                        val isSelected = activeSubcatId == subcat.id
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(
+                                    if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                                )
+                                .border(
+                                    1.dp,
+                                    if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                                    else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                                    RoundedCornerShape(6.dp)
+                                )
+                                .clickable { activeSubcatId = subcat.id }
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = subcat.label,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
             CenteredFlowRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalSpacing = 8.dp,
-                verticalSpacing = 8.dp
+                horizontalSpacing = 6.dp,
+                verticalSpacing = 6.dp
             ) {
-                targetsForQueuedFile(file).forEach { target ->
+                visibleTargets.forEach { target ->
                     ExternalImportTargetChip(
                         texts = texts,
                         target = target,
                         selected = target == selectedTarget,
+                        pureLabel = true,
                         onSelected = {
                             onOpenMenuChange(null)
                             onUpdateFile(fileWithTarget(file, target, supportedVideoMimeTypes))
@@ -6310,7 +6680,7 @@ private fun OptionsToggleChip(
     OutlinedButton(
         onClick = onClick,
         modifier = Modifier.heightIn(min = 32.dp),
-        shape = RoundedCornerShape(100.dp),
+        shape = RoundedCornerShape(ZenDimensions.RadiusChip),
         border = BorderStroke(
             1.dp,
             if (expanded) {
@@ -6739,16 +7109,19 @@ private fun GifImageOptions(
     } else {
         GIF_IMAGE_FRAME_MODE_OPTIONS
     }
-    OptionDropdown(
-        "file-${file.id}-gif-frame-mode",
-        texts.gifFrameMode,
-        gifFrameModeLabelFor(file.gifFrameMode, targetFormat),
-        frameModeOptions,
-        texts,
-        openMenuId,
-        onOpenMenuChange
-    ) { value ->
-        onUpdateFile(file.copy(gifFrameMode = gifFrameModeForLabel(value, targetFormat)))
+    InsetGroupCard {
+        OptionDropdown(
+            menuId = "file-${file.id}-gif-frame-mode",
+            label = texts.gifFrameMode,
+            selected = gifFrameModeLabelFor(file.gifFrameMode, targetFormat),
+            options = frameModeOptions,
+            texts = texts,
+            openMenuId = openMenuId,
+            onOpenMenuChange = onOpenMenuChange,
+            showDivider = false
+        ) { value ->
+            onUpdateFile(file.copy(gifFrameMode = gifFrameModeForLabel(value, targetFormat)))
+        }
     }
 }
 
@@ -6761,6 +7134,7 @@ private fun OptionDropdown(
     texts: UiText,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
+    showDivider: Boolean = false,
     onSelected: (String) -> Unit
 ) {
     OptionDropdown(
@@ -6772,8 +7146,47 @@ private fun OptionDropdown(
         openMenuId = openMenuId,
         onOpenMenuChange = onOpenMenuChange,
         disabledOptions = emptySet(),
+        showDivider = showDivider,
         onSelected = onSelected
     )
+}
+
+private class TrailingDropdownPositionProvider(
+    private val shadowPadXPx: Int,
+    private val shadowPadYPx: Int,
+    private val visualGapYPx: Int,
+    private val windowMarginPx: Int
+) : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize
+    ): IntOffset {
+        val rawX = if (layoutDirection == LayoutDirection.Ltr) {
+            anchorBounds.right - popupContentSize.width + shadowPadXPx
+        } else {
+            anchorBounds.left - shadowPadXPx
+        }
+        val minX = windowMarginPx - shadowPadXPx
+        val maxX = (windowSize.width - popupContentSize.width - windowMarginPx + shadowPadXPx)
+            .coerceAtLeast(minX)
+        val x = rawX.coerceIn(minX, maxX)
+
+        val belowY = anchorBounds.bottom + visualGapYPx - shadowPadYPx
+        val aboveY = anchorBounds.top - visualGapYPx - popupContentSize.height + shadowPadYPx
+        val fitsBelow = belowY + popupContentSize.height - shadowPadYPx <= windowSize.height - windowMarginPx
+        val fitsAbove = aboveY + shadowPadYPx >= windowMarginPx
+        val minY = windowMarginPx - shadowPadYPx
+        val maxY = (windowSize.height - popupContentSize.height - windowMarginPx + shadowPadYPx)
+            .coerceAtLeast(minY)
+        val y = when {
+            fitsBelow -> belowY
+            fitsAbove -> aboveY
+            else -> belowY.coerceIn(minY, maxY)
+        }
+        return IntOffset(x, y)
+    }
 }
 
 @Composable
@@ -6786,30 +7199,198 @@ private fun OptionDropdown(
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     disabledOptions: Set<String>,
+    showDivider: Boolean = false,
     onSelected: (String) -> Unit
 ) {
     val expanded = openMenuId == menuId
+    var lastDismissTimeMs by remember { mutableStateOf(0L) }
+    val rotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = ZenAnimations.IconRotationSpring,
+        label = "dropdownArrow"
+    )
+    val density = LocalDensity.current
+    val popupPositionProvider = remember(density) {
+        with(density) {
+            TrailingDropdownPositionProvider(
+                shadowPadXPx = 8.dp.roundToPx(),
+                shadowPadYPx = 6.dp.roundToPx(),
+                visualGapYPx = 4.dp.roundToPx(),
+                windowMarginPx = 12.dp.roundToPx()
+            )
+        }
+    }
 
-    Column(horizontalAlignment = Alignment.End) {
-        PillMenuButton(
-            onClick = { onOpenMenuChange(if (expanded) null else menuId) },
-            text = stringResource(R.string.display_option_dropdown_1_s_2_s, label, texts.optionValue(selected)),
-            expanded = expanded
-        )
-        InlineDropdownPanel(
-            expanded = expanded
-        ) {
-            options.forEach { option ->
-                DropdownOption(
-                    text = texts.optionValue(option),
-                    selected = option == selected,
-                    enabled = option !in disabledOptions,
-                    onClick = {
-                        onOpenMenuChange(null)
-                        onSelected(option)
-                    }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = ZenDimensions.RowHeightCompact)
+                .background(
+                    if (expanded) MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+                    else Color.Transparent
                 )
+                .clickable {
+                    if (expanded) {
+                        onOpenMenuChange(null)
+                    } else if (SystemClock.uptimeMillis() - lastDismissTimeMs > 120L) {
+                        onOpenMenuChange(menuId)
+                    }
+                }
+                .padding(horizontal = ZenDimensions.PaddingCardInner, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Box {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = texts.optionValue(selected),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = if (expanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    AppIcon(
+                        icon = Icons.Rounded.ExpandMore,
+                        contentDescription = null,
+                        tint = if (expanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .rotate(rotation)
+                    )
+                }
+
+                if (expanded) {
+                    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+                    var appeared by remember { mutableStateOf(false) }
+                    LaunchedEffect(Unit) { appeared = true }
+                    val menuProgress by animateFloatAsState(
+                        targetValue = if (appeared) 1f else 0f,
+                        animationSpec = tween(durationMillis = 150, easing = ZenAnimations.StrongEaseOut),
+                        label = "dropdownMenuEnter"
+                    )
+                    val menuContainerColor = if (MaterialTheme.colorScheme.surface == Color(0xFF000000)) {
+                        Color(0xFF141414)
+                    } else {
+                        MaterialTheme.colorScheme.surface
+                    }
+                    Popup(
+                        popupPositionProvider = popupPositionProvider,
+                        onDismissRequest = {
+                            lastDismissTimeMs = SystemClock.uptimeMillis()
+                            onOpenMenuChange(null)
+                        },
+                        properties = PopupProperties(focusable = true)
+                    ) {
+                        Surface(
+                            modifier = Modifier
+                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                                .graphicsLayer {
+                                    val scale = 0.94f + 0.06f * menuProgress
+                                    scaleX = scale
+                                    scaleY = scale
+                                    alpha = menuProgress
+                                    transformOrigin = TransformOrigin(if (isRtl) 0f else 1f, 0f)
+                                },
+                            shape = RoundedCornerShape(ZenDimensions.RadiusCard),
+                            color = menuContainerColor,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            tonalElevation = 0.dp,
+                            shadowElevation = 6.dp,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.72f))
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .width(IntrinsicSize.Max)
+                                    .widthIn(min = 152.dp, max = 280.dp)
+                                    .heightIn(max = 300.dp)
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(5.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                options.forEach { option ->
+                                    val isOptSelected = option == selected
+                                    val isOptEnabled = option !in disabledOptions
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 36.dp)
+                                            .clip(RoundedCornerShape(ZenDimensions.RadiusSmall))
+                                            .background(
+                                                if (isOptSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                                                else Color.Transparent
+                                            )
+                                            .clickable(enabled = isOptEnabled) {
+                                                onOpenMenuChange(null)
+                                                onSelected(option)
+                                            }
+                                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = texts.optionValue(option),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = if (isOptSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                            color = when {
+                                                isOptSelected -> MaterialTheme.colorScheme.primary
+                                                !isOptEnabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.42f)
+                                                else -> MaterialTheme.colorScheme.onSurface
+                                            },
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f, fill = false)
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        when {
+                                            isOptSelected -> {
+                                                AppIcon(
+                                                    icon = Icons.Rounded.Check,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                            !isOptEnabled -> {
+                                                AppIcon(
+                                                    icon = Icons.Rounded.Lock,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                            }
+                                            else -> {
+                                                Spacer(modifier = Modifier.size(16.dp))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
+        }
+
+        if (showDivider) {
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = ZenDimensions.PaddingCardInner),
+                thickness = 0.5.dp,
+                color = settingsDividerColor()
+            )
         }
     }
 }
@@ -6835,130 +7416,7 @@ private fun SectionTitle(
     }
 }
 
-@Composable
-private fun PillMenuButton(
-    onClick: () -> Unit,
-    text: String,
-    expanded: Boolean
-) {
-    val rotation by animateFloatAsState(
-        targetValue = if (expanded) 180f else 0f,
-        animationSpec = ZenAnimations.IconRotationSpring,
-        label = "dropdownArrow"
-    )
-    OutlinedButton(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(100.dp),
-        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
-        colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = if (expanded) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.onSurface
-        ),
-        border = BorderStroke(
-            1.dp,
-            if (expanded) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)
-        )
-    ) {
-        Text(
-            text = text,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        Icon(
-            imageVector = Icons.Rounded.ExpandMore,
-            contentDescription = null,
-            modifier = Modifier
-                .size(18.dp)
-                .rotate(rotation)
-        )
-    }
-}
 
-@Composable
-private fun InlineDropdownPanel(
-    expanded: Boolean,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    AnimatedVisibility(
-        visible = expanded,
-        enter = fadeIn(animationSpec = spring(stiffness = ZenAnimations.DropdownEnterStiffness)) + expandVertically(
-            expandFrom = Alignment.Top,
-            animationSpec = spring(stiffness = ZenAnimations.DropdownEnterStiffness)
-        ),
-        exit = fadeOut(animationSpec = spring(stiffness = ZenAnimations.DropdownExitStiffness)) + shrinkVertically(
-            shrinkTowards = Alignment.Top,
-            animationSpec = spring(stiffness = ZenAnimations.DropdownExitStiffness)
-        )
-    ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp),
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
-        ) {
-            Column(
-                modifier = Modifier.padding(6.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-                content = content
-            )
-        }
-    }
-}
-
-@Composable
-private fun DropdownOption(
-    text: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    enabled: Boolean = true
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(
-                if (selected) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
-                } else {
-                    Color.Transparent
-                }
-            )
-            .clickable(enabled = enabled) { onClick() }
-            .padding(horizontal = 12.dp, vertical = 11.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-            modifier = Modifier.weight(1f)
-        )
-        if (selected) {
-            AppIcon(
-                icon = Icons.Rounded.Check,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(17.dp)
-            )
-        } else if (!enabled) {
-            AppIcon(
-                icon = Icons.Rounded.Lock,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier.size(15.dp)
-            )
-        }
-    }
-}
 
 @Composable
 internal fun SmallTag(text: String) {
@@ -6969,8 +7427,8 @@ internal fun SmallTag(text: String) {
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier
-            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(100.dp))
-            .padding(horizontal = 9.dp, vertical = 5.dp)
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(ZenDimensions.RadiusMicro))
+            .padding(horizontal = 7.dp, vertical = 3.dp)
     )
 }
 
@@ -7104,6 +7562,11 @@ private fun zenConverterColorScheme(
             onSurface = Color(0xFF111111),
             surfaceVariant = Color(0xFFF6F6F6),
             onSurfaceVariant = Color(0xFF666666),
+            surfaceContainerLowest = Color.White,
+            surfaceContainerLow = Color(0xFFFAFAFA),
+            surfaceContainer = Color(0xFFF6F6F6),
+            surfaceContainerHigh = Color(0xFFF0F0F0),
+            surfaceContainerHighest = Color(0xFFE8E8E8),
             outline = Color(0xFFD8D8D8),
             outlineVariant = Color(0xFFEBEBEB),
             error = Color(0xFFB3261E),
@@ -7121,6 +7584,11 @@ private fun zenConverterColorScheme(
             onSurface = Color(0xFFF5F5F5),
             surfaceVariant = Color(0xFF141414),
             onSurfaceVariant = Color(0xFFA3A3A3),
+            surfaceContainerLowest = Color(0xFF000000),
+            surfaceContainerLow = Color(0xFF0C0C0C),
+            surfaceContainer = Color(0xFF141414),
+            surfaceContainerHigh = Color(0xFF1C1C1C),
+            surfaceContainerHighest = Color(0xFF242424),
             outline = Color(0xFF282828),
             outlineVariant = Color(0xFF1C1C1C),
             error = Color(0xFFCF6679),
@@ -7138,6 +7606,11 @@ private fun zenConverterColorScheme(
             onSurface = Color(0xFFF3F4F6),
             surfaceVariant = Color(0xFF262B35),
             onSurfaceVariant = Color(0xFF9CA3AF),
+            surfaceContainerLowest = Color(0xFF121418),
+            surfaceContainerLow = Color(0xFF1A1D24),
+            surfaceContainer = Color(0xFF21262F),
+            surfaceContainerHigh = Color(0xFF282E39),
+            surfaceContainerHighest = Color(0xFF303744),
             outline = Color(0xFF374151),
             outlineVariant = Color(0xFF2B3240),
             error = Color(0xFFEF4444),
@@ -7161,6 +7634,40 @@ private fun themeModeFromPreference(value: String?): ThemeModeOption {
 }
 
 
+
+private data class TargetSubcategory(
+    val id: String,
+    val label: String,
+    val targets: List<ExternalImportTarget>
+)
+
+private fun buildTargetSubcategories(
+    allTargets: List<ExternalImportTarget>,
+    texts: UiText
+): List<TargetSubcategory> {
+    val hasVideo = allTargets.any { it.category == FileCategory.Video && it.targetFormat.id !in setOf(TargetId.ContactSheetJpg, TargetId.ContactSheetPng) }
+    val hasAudio = allTargets.any { it.category == FileCategory.Audio }
+    val hasContactSheet = allTargets.any { it.targetFormat.id in setOf(TargetId.ContactSheetJpg, TargetId.ContactSheetPng) }
+
+    if (hasVideo && (hasAudio || hasContactSheet)) {
+        return buildList {
+            val videoTargets = allTargets.filter { it.category == FileCategory.Video && it.targetFormat.id !in setOf(TargetId.ContactSheetJpg, TargetId.ContactSheetPng) }
+            if (videoTargets.isNotEmpty()) {
+                add(TargetSubcategory("video", texts.categoryLabel(FileCategory.Video), videoTargets))
+            }
+            val audioTargets = allTargets.filter { it.category == FileCategory.Audio }
+            if (audioTargets.isNotEmpty()) {
+                add(TargetSubcategory("audio", texts.categoryLabel(FileCategory.Audio), audioTargets))
+            }
+            val contactSheetTargets = allTargets.filter { it.targetFormat.id in setOf(TargetId.ContactSheetJpg, TargetId.ContactSheetPng) }
+            if (contactSheetTargets.isNotEmpty()) {
+                add(TargetSubcategory("contact_sheet", texts.categoryContactSheet, contactSheetTargets))
+            }
+        }
+    }
+
+    return listOf(TargetSubcategory("all", "", allTargets))
+}
 
 private fun targetsForSourceCategory(category: FileCategory?): List<ExternalImportTarget> {
     return when (category) {

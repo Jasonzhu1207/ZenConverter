@@ -4,6 +4,21 @@ import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 
+enum class ActionBarPosition {
+    Bottom,
+    Top;
+
+    companion object {
+        fun fromValue(value: String?): ActionBarPosition {
+            return when (value) {
+                "top" -> Top
+                "bottom" -> Bottom
+                else -> Bottom
+            }
+        }
+    }
+}
+
 data class SavedOutputDirectory(
     val uri: Uri,
     val label: String
@@ -15,6 +30,7 @@ object AppPreferences {
     private const val KEY_ACCENT_COLOR = "accent_color"
     private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_OLED_DARK_MODE = "oled_dark_mode"
+    private const val KEY_ACTION_BAR_POSITION = "action_bar_position"
     private const val KEY_LANGUAGE = "language"
     private const val KEY_USE_CUSTOM_OUTPUT = "use_custom_output"
     private const val KEY_OUTPUT_DIRECTORY_URI = "output_directory_uri"
@@ -52,6 +68,18 @@ object AppPreferences {
         preferences(context)
             .edit()
             .putBoolean(KEY_OLED_DARK_MODE, enabled)
+            .apply()
+    }
+
+    fun actionBarPosition(context: Context): ActionBarPosition {
+        val value = preferences(context).getString(KEY_ACTION_BAR_POSITION, null)
+        return ActionBarPosition.fromValue(value)
+    }
+
+    fun setActionBarPosition(context: Context, position: ActionBarPosition) {
+        preferences(context)
+            .edit()
+            .putString(KEY_ACTION_BAR_POSITION, if (position == ActionBarPosition.Top) "top" else "bottom")
             .apply()
     }
 

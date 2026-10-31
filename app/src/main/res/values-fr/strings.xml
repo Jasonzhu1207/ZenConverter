@@ -714,4 +714,11 @@
     <string name="ui_contact_sheet_png_note">Le PNG conserve l’arrière-plan choisi, y compris la transparence.</string>
     <string name="ui_contact_sheet_size_too_large">La mise en page dépasse la limite sûre de 32 MP.</string>
     <string name="ui_contact_sheet_apply">Appliquer la mise en page</string>
+    <string name="category_contact_sheet">Planche contact</string>
+    <string name="settings_action_bar_position">Barre d\'actions</string>
+    <string name="settings_action_bar_position_bottom">En bas (fixée)</string>
+    <string name="settings_action_bar_position_top">Haut de la file</string>
+    <string name="settings_action_bar_position_desc">Position des boutons d\'effacement et de démarrage</string>
+    <string name="ui_clear_tasks">Effacer</string>
+    <string name="ui_start_conversion">Démarrer (%1$d)</string>
 </resources>
