@@ -165,6 +165,12 @@
     <string name="notification_cancel">Cancel</string>
     <string name="notification_channel_description">Shows local conversion progress</string>
     <string name="notification_channel_name">Conversion progress</string>
+    <string name="notification_conversion_failed">Conversion failed</string>
+    <plurals name="notification_files_converted">
+        <item quantity="one">%1$d file converted</item>
+        <item quantity="other">%1$d files converted</item>
+    </plurals>
+    <string name="notification_partial_summary">%1$d completed, %2$d failed</string>
     <plurals name="pdf_output_password_message">
         <item quantity="one">Set the password required to open %1$d PDF after export.</item>
         <item quantity="other">Set the password required to open these %1$d PDFs after export.</item>
@@ -542,7 +548,7 @@
     <string name="ui_download_complete">Download complete</string>
     <string name="ui_download_failed">Download failed</string>
     <string name="ui_failed">Failed</string>
-    <string name="ui_flow_complete">Flow complete</string>
+    <string name="ui_flow_complete">Conversion complete</string>
     <string name="ui_flow_complete_no_files">Flow checked, no files created</string>
     <string name="ui_folder_permission_saved">Folder permission saved</string>
     <string name="ui_folder_selected_for_session">Folder selected for this session</string>

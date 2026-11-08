@@ -119,8 +119,14 @@ class ConversionService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
+    private enum class NotificationState {
+        Idle,
+        Running,
+        Completed
+    }
+
     private var taskIndex = 0
-    private var notificationActive = false
+    private var notificationState = NotificationState.Idle
     private var notificationTitle: LocalizedText = localizedText(R.string.message_preparing)
     private var notificationProgress = 0
     private var activeFfmpegSession: FFmpegSession? = null
@@ -150,9 +156,24 @@ class ConversionService : Service() {
     }
 
     private fun refreshNotificationLanguage() {
-        if (!notificationActive) return
         ensureNotificationChannel()
-        updateNotification(notificationTitle, notificationProgress)
+        when (notificationState) {
+            NotificationState.Running -> {
+                val manager = getSystemService(NotificationManager::class.java)
+                manager.notify(
+                    NOTIFICATION_ID,
+                    buildProgressNotification(notificationTitle, notificationProgress)
+                )
+            }
+            NotificationState.Completed -> {
+                val manager = getSystemService(NotificationManager::class.java)
+                manager.notify(
+                    NOTIFICATION_ID,
+                    buildCompletedNotification()
+                )
+            }
+            NotificationState.Idle -> Unit
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -167,22 +188,24 @@ class ConversionService : Service() {
                     return START_NOT_STICKY
                 }
                 handler.removeCallbacksAndMessages(null)
-                notificationActive = true
+                notificationState = NotificationState.Running
+                notificationTitle = localizedText(R.string.message_preparing)
+                notificationProgress = 0
                 // mediaProcessing only exists on Android 15 (API 35)+. On Android 14
                 // (API 34) it is unrecognized and would crash with
                 // "Starting FGS with type unknown", so fall back to dataSync there.
                 when {
                     Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM -> startForeground(
                         NOTIFICATION_ID,
-                        buildNotification(localizedText(R.string.message_preparing), 0),
+                        buildProgressNotification(notificationTitle, 0),
                         ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
                     )
                     Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> startForeground(
                         NOTIFICATION_ID,
-                        buildNotification(localizedText(R.string.message_preparing), 0),
+                        buildProgressNotification(notificationTitle, 0),
                         ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
                     )
-                    else -> startForeground(NOTIFICATION_ID, buildNotification(localizedText(R.string.message_preparing), 0))
+                    else -> startForeground(NOTIFICATION_ID, buildProgressNotification(notificationTitle, 0))
                 }
                 taskIndex = 0
                 customOutputFallbackOccurred = false
@@ -199,6 +222,10 @@ class ConversionService : Service() {
         cancelActiveFfmpegSession()
         copyThread?.interrupt()
         activeTempFile?.delete()
+        if (notificationState == NotificationState.Running) {
+            removeForegroundNotification()
+            notificationState = NotificationState.Idle
+        }
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -6721,11 +6748,10 @@ class ConversionService : Service() {
         } else {
             ConversionTaskStore.markRunFinished()
         }
-        updateNotification(
-            ConversionTaskStore.summaryMessage.value ?: localizedText(R.string.ui_flow_complete),
-            (ConversionTaskStore.aggregateProgress() * 100).toInt()
-        )
+        notificationState = NotificationState.Completed
         detachForeground()
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.notify(NOTIFICATION_ID, buildCompletedNotification())
         stopSelf()
     }
 
@@ -6736,8 +6762,8 @@ class ConversionService : Service() {
         activeTempFile?.delete()
         activeTempFile = null
         ConversionTaskStore.cancelAll()
-        updateNotification(localizedText(R.string.ui_cancelled), (ConversionTaskStore.aggregateProgress() * 100).toInt())
-        detachForeground()
+        notificationState = NotificationState.Idle
+        removeForegroundNotification()
         stopSelf()
     }
 
@@ -7521,13 +7547,14 @@ class ConversionService : Service() {
     }
 
     private fun updateNotification(title: LocalizedText, progress: Int) {
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(NOTIFICATION_ID, buildNotification(title, progress.coerceIn(0, 100)))
-    }
-
-    private fun buildNotification(title: LocalizedText, progress: Int): Notification {
         notificationTitle = title
         notificationProgress = progress
+        if (notificationState != NotificationState.Running) return
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.notify(NOTIFICATION_ID, buildProgressNotification(title, progress.coerceIn(0, 100)))
+    }
+
+    private fun buildProgressNotification(title: LocalizedText, progress: Int): Notification {
         val openIntent = Intent(this, MainActivity::class.java)
         val openPendingIntent = PendingIntent.getActivity(
             this,
@@ -7550,11 +7577,75 @@ class ConversionService : Service() {
             .setContentTitle(getString(R.string.app_name))
             .setContentText(title.resolve(this))
             .setContentIntent(openPendingIntent)
-            .setOngoing(ConversionTaskStore.isRunning.value)
+            .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setProgress(100, progress, false)
-            .addAction(R.drawable.ic_stat_zenconverter, localizedText(R.string.notification_cancel).resolve(this), cancelPendingIntent)
+            .setProgress(100, progress.coerceIn(0, 100), false)
+            .addAction(
+                R.drawable.ic_stat_zenconverter,
+                localizedText(R.string.notification_cancel).resolve(this),
+                cancelPendingIntent
+            )
             .build()
+    }
+
+    private fun buildCompletedNotification(): Notification {
+        val openIntent = Intent(this, MainActivity::class.java)
+        val openPendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            openIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val tasks = ConversionTaskStore.tasks
+        val totalCount = tasks.size
+        val failedCount = tasks.count { it.status == ConversionTaskStatus.Failed }
+        val completedCount = tasks.count { it.status == ConversionTaskStatus.Completed }
+
+        val title: String
+        val contentText: String
+
+        when {
+            failedCount == totalCount && totalCount > 0 -> {
+                title = getString(R.string.notification_conversion_failed)
+                contentText = tasks.firstOrNull()?.message?.resolve(this)
+                    ?: ConversionTaskStore.summaryMessage.value?.resolve(this)
+                    ?: getString(R.string.ui_failed)
+            }
+            failedCount > 0 && completedCount > 0 -> {
+                title = getString(R.string.ui_flow_complete)
+                contentText = getString(R.string.notification_partial_summary, completedCount, failedCount)
+            }
+            else -> {
+                title = getString(R.string.ui_flow_complete)
+                contentText = when {
+                    customOutputFallbackOccurred -> {
+                        getString(R.string.text_task_message_custom_output_folder_was_unavailable_saved_to_default_directory)
+                    }
+                    totalCount == 1 -> {
+                        tasks.firstOrNull()?.displayName.orEmpty()
+                    }
+                    totalCount > 1 -> {
+                        resources.getQuantityString(R.plurals.notification_files_converted, completedCount, completedCount)
+                    }
+                    else -> ""
+                }
+            }
+        }
+
+        val builder = Notification.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_zenconverter)
+            .setContentTitle(title)
+            .setContentIntent(openPendingIntent)
+            .setOngoing(false)
+            .setAutoCancel(true)
+            .setProgress(0, 0, false)
+
+        if (contentText.isNotBlank()) {
+            builder.setContentText(contentText)
+        }
+
+        return builder.build()
     }
 
     @Suppress("DEPRECATION")
@@ -7564,6 +7655,17 @@ class ConversionService : Service() {
         } else {
             stopForeground(false)
         }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun removeForegroundNotification() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            stopForeground(true)
+        }
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.cancel(NOTIFICATION_ID)
     }
 
     private fun ensureNotificationChannel() {

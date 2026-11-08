@@ -152,6 +152,11 @@
     <string name="notification_cancel">取消</string>
     <string name="notification_channel_description">顯示本機轉換進度</string>
     <string name="notification_channel_name">轉換進度</string>
+    <string name="notification_conversion_failed">轉換失敗</string>
+    <plurals name="notification_files_converted">
+        <item quantity="other">已完成 %1$d 個檔案的轉換</item>
+    </plurals>
+    <string name="notification_partial_summary">%1$d 個成功，%2$d 個失敗</string>
     <plurals name="pdf_output_password_message">
         <item quantity="other">設定匯出後開啟這 %1$d 個 PDF 所需的密碼。</item>
     </plurals>
@@ -527,7 +532,7 @@
     <string name="ui_download_complete">下載完成</string>
     <string name="ui_download_failed">下載失敗</string>
     <string name="ui_failed">失敗</string>
-    <string name="ui_flow_complete">流程完成</string>
+    <string name="ui_flow_complete">轉換完成</string>
     <string name="ui_flow_complete_no_files">流程已跑通，暫未產生檔案</string>
     <string name="ui_folder_permission_saved">資料夾權限已儲存</string>
     <string name="ui_folder_selected_for_session">本次已選擇資料夾</string>

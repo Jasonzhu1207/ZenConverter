@@ -160,6 +160,12 @@
     <string name="notification_cancel">Annuler</string>
     <string name="notification_channel_description">Affiche la progression de la conversion locale.</string>
     <string name="notification_channel_name">Progression de la conversion</string>
+    <string name="notification_conversion_failed">Échec de la conversion</string>
+    <plurals name="notification_files_converted">
+        <item quantity="one">%1$d fichier converti</item>
+        <item quantity="other">%1$d fichiers convertis</item>
+    </plurals>
+    <string name="notification_partial_summary">%1$d terminé(s), %2$d échoué(s)</string>
     <plurals name="pdf_output_password_message">
         <item quantity="one">Définissez le mot de passe d\'ouverture du PDF %1$d après exportation.</item>
         <item quantity="other">Définissez le mot de passe d\'ouverture de ces PDF %1$d après exportation.</item>
@@ -536,7 +542,7 @@
     <string name="ui_download_complete">Téléchargement terminé</string>
     <string name="ui_download_failed">Échec du téléchargement</string>
     <string name="ui_failed">Échec</string>
-    <string name="ui_flow_complete">Flux terminé</string>
+    <string name="ui_flow_complete">Conversion terminée</string>
     <string name="ui_flow_complete_no_files">Flux vérifié, aucun fichier créé</string>
     <string name="ui_folder_permission_saved">Autorisations du dossier enregistrées</string>
     <string name="ui_folder_selected_for_session">Dossier sélectionné pour cette session</string>
