@@ -44,7 +44,8 @@ enum class MetadataMessageKey {
     CouldNotWrite,
     BackupMissing,
     BackupDoesNotMatch,
-    InvalidJpeg
+    InvalidJpeg,
+    NothingSelected
 }
 
 data class MetadataStatusMessage(
@@ -104,6 +105,37 @@ data class MetadataBackupInfo(
     val segmentBytes: Long,
     val originalDisplayName: String
 )
+
+/**
+ * Which categories of metadata a scrub should remove. Everything the user
+ * leaves off is preserved, so a selective scrub keeps orientation, dimensions
+ * and any descriptive text they still want.
+ */
+data class MetadataScrubTargets(
+    val gps: Boolean = true,
+    val device: Boolean = true,
+    val author: Boolean = true,
+    val timestamps: Boolean = false,
+    val keepBackup: Boolean = true
+) {
+    val removesAnything: Boolean
+        get() = gps || device || author || timestamps
+
+    val removesEverything: Boolean
+        get() = gps && device && author && timestamps
+}
+
+/** What to do with one removable JPEG segment during a scrub. */
+internal sealed interface JpegSegmentDecision {
+    /** Leave the segment exactly as it was. */
+    object Keep : JpegSegmentDecision
+
+    /** Drop the segment and record it in the backup. */
+    object Remove : JpegSegmentDecision
+
+    /** Write [payload] in place of the original payload, backing the original up. */
+    data class Replace(val payload: ByteArray) : JpegSegmentDecision
+}
 
 class MetadataOperationException(
     val status: MetadataStatusMessage,
@@ -187,13 +219,17 @@ object MetadataPrivacyManager {
 
     fun cleanJpegInPlace(
         context: Context,
-        inspection: MetadataInspection
+        inspection: MetadataInspection,
+        targets: MetadataScrubTargets = MetadataScrubTargets()
     ): MetadataStatusMessage {
         if (!inspection.editable) {
             throw MetadataOperationException(MetadataStatusMessage(MetadataMessageKey.UnsupportedImageFormat))
         }
         if (!inspection.canWrite) {
             throw MetadataOperationException(MetadataStatusMessage(MetadataMessageKey.WritePermissionNeeded))
+        }
+        if (!targets.removesAnything) {
+            return MetadataStatusMessage(MetadataMessageKey.NothingSelected)
         }
 
         val workDir = File(context.cacheDir, "metadata-edit").apply { mkdirs() }
@@ -207,7 +243,8 @@ object MetadataPrivacyManager {
             val result = rewriteJpegWithoutRemovableMetadata(
                 inputFile = sourceCopy,
                 outputFile = cleanedCopy,
-                backupDirectory = stagingBackupDir
+                backupDirectory = stagingBackupDir,
+                decision = jpegDecisionFor(targets)
             )
             if (!result.validJpeg) {
                 throw MetadataOperationException(MetadataStatusMessage(MetadataMessageKey.InvalidJpeg))
@@ -223,13 +260,18 @@ object MetadataPrivacyManager {
                 replacement = cleanedCopy,
                 rollback = sourceCopy
             )
-            committedBackupDir = commitBackupDirectory(
-                context = context,
-                inspection = inspection,
-                result = result,
-                stagingBackupDir = stagingBackupDir
+            if (targets.keepBackup) {
+                committedBackupDir = commitBackupDirectory(
+                    context = context,
+                    inspection = inspection,
+                    result = result,
+                    stagingBackupDir = stagingBackupDir
+                )
+            }
+            return MetadataStatusMessage(
+                key = MetadataMessageKey.Cleaned,
+                detail = if (targets.keepBackup) null else localizedText(R.string.text_metadata_message_no_backup_kept)
             )
-            return MetadataStatusMessage(MetadataMessageKey.Cleaned)
         } catch (exception: MetadataOperationException) {
             stagingBackupDir.deleteRecursively()
             committedBackupDir?.deleteRecursively()
@@ -279,7 +321,8 @@ object MetadataPrivacyManager {
             val strippedResult = rewriteJpegWithoutRemovableMetadata(
                 inputFile = sourceCopy,
                 outputFile = strippedCopy,
-                backupDirectory = null
+                backupDirectory = null,
+                decision = { _, _ -> JpegSegmentDecision.Remove }
             )
             if (!strippedResult.validJpeg) {
                 throw MetadataOperationException(MetadataStatusMessage(MetadataMessageKey.InvalidJpeg))
@@ -481,26 +524,76 @@ object MetadataPrivacyManager {
         return rewriteJpegWithoutRemovableMetadata(
             input = input,
             output = null,
-            backupDirectory = null
+            backupDirectory = null,
+            decision = { _, _ -> JpegSegmentDecision.Remove }
         )
+    }
+
+    /**
+     * Chooses what happens to one removable segment. A whole-segment removal is
+     * used when the user asked for everything in that category; otherwise the
+     * Exif block is rewritten tag by tag and falls back to a full removal when
+     * its structure cannot be parsed safely.
+     */
+    private fun jpegDecisionFor(targets: MetadataScrubTargets): (Int, ByteArray) -> JpegSegmentDecision {
+        return decision@{ marker, payload ->
+            val kind = removableKind(marker, payload) ?: return@decision JpegSegmentDecision.Keep
+            when (kind) {
+                JpegMetadataSegmentKind.Xmp,
+                JpegMetadataSegmentKind.Iptc,
+                JpegMetadataSegmentKind.Comment ->
+                    if (targets.author) JpegSegmentDecision.Remove else JpegSegmentDecision.Keep
+
+                JpegMetadataSegmentKind.Exif -> {
+                    val wantsGps = targets.gps
+                    val wantsDevice = targets.device
+                    val wantsAuthor = targets.author
+                    val wantsTime = targets.timestamps
+                    if (wantsGps && wantsDevice && wantsAuthor && wantsTime) {
+                        JpegSegmentDecision.Remove
+                    } else if (wantsGps || wantsDevice || wantsAuthor || wantsTime) {
+                        val rewritten = ExifRewriter.rewrite(payload) { tag ->
+                            shouldDropExifTag(tag, targets)
+                        }
+                        rewritten?.let { JpegSegmentDecision.Replace(it) }
+                            ?: JpegSegmentDecision.Remove
+                    } else {
+                        JpegSegmentDecision.Keep
+                    }
+                }
+            }
+        }
+    }
+
+    /** Whether one Exif tag belongs to a category the user asked to remove. */
+    private fun shouldDropExifTag(tag: Int, targets: MetadataScrubTargets): Boolean {
+        return when {
+            targets.gps && tag == ExifRewriter.TAG_GPS_IFD -> true
+            targets.device && tag in ExifRewriter.DEVICE_TAGS -> true
+            targets.author && tag in ExifRewriter.AUTHOR_TAGS -> true
+            targets.timestamps && tag in ExifRewriter.TIME_TAGS -> true
+            else -> false
+        }
     }
 
     private fun rewriteJpegWithoutRemovableMetadata(
         inputFile: File,
         outputFile: File?,
-        backupDirectory: File?
+        backupDirectory: File?,
+        decision: (Int, ByteArray) -> JpegSegmentDecision
     ): JpegRewriteResult {
         return FileInputStream(inputFile).use { input ->
             outputFile?.outputStream()?.use { output ->
-                rewriteJpegWithoutRemovableMetadata(input, output, backupDirectory)
-            } ?: rewriteJpegWithoutRemovableMetadata(input, null, backupDirectory)
+                rewriteJpegWithoutRemovableMetadata(input, output, backupDirectory, decision)
+            } ?: rewriteJpegWithoutRemovableMetadata(input, null, backupDirectory, decision)
         }
     }
 
     private fun rewriteJpegWithoutRemovableMetadata(
         input: InputStream,
         output: OutputStream?,
-        backupDirectory: File?
+        backupDirectory: File?,
+        decision: (Int, ByteArray) -> JpegSegmentDecision
     ): JpegRewriteResult {
         val bufferedInput = BufferedInputStream(input)
         val bufferedOutput = output?.let { BufferedOutputStream(it) }
@@ -574,17 +667,34 @@ object MetadataPrivacyManager {
             payload.copyInto(rawSegment, destinationOffset = 4)
 
             val kind = removableKind(marker, payload)
-            if (kind != null) {
-                removedCount++
-                removedBytes += rawSegment.size.toLong()
-                kinds.add(kind)
-                backupDirectory?.let { directory ->
-                    val segmentFile = File(directory, segmentFileName(backupIndex))
-                    segmentFile.outputStream().use { it.write(rawSegment) }
-                    backupIndex++
-                }
-            } else {
+            if (kind == null) {
                 keep(rawSegment)
+            } else {
+                when (val action = decision(marker, payload)) {
+                    JpegSegmentDecision.Keep -> keep(rawSegment)
+                    is JpegSegmentDecision.Replace -> {
+                        val replacement = buildSegment(marker, action.payload)
+                        removedCount++
+                        removedBytes += (rawSegment.size - replacement.size).coerceAtLeast(0).toLong()
+                        kinds.add(kind)
+                        backupDirectory?.let { directory ->
+                            val segmentFile = File(directory, segmentFileName(backupIndex))
+                            segmentFile.outputStream().use { it.write(rawSegment) }
+                            backupIndex++
+                        }
+                        keep(replacement)
+                    }
+                    JpegSegmentDecision.Remove -> {
+                        removedCount++
+                        removedBytes += rawSegment.size.toLong()
+                        kinds.add(kind)
+                        backupDirectory?.let { directory ->
+                            val segmentFile = File(directory, segmentFileName(backupIndex))
+                            segmentFile.outputStream().use { it.write(rawSegment) }
+                            backupIndex++
+                        }
+                    }
+                }
             }
 
             if (marker == JPEG_MARKER_SOS) {
@@ -601,6 +711,18 @@ object MetadataPrivacyManager {
             removedBytes = removedBytes,
             kinds = kinds
         )
+    }
+
+    /** Wraps a payload in its JPEG marker and length bytes. */
+    private fun buildSegment(marker: Int, payload: ByteArray): ByteArray {
+        val length = payload.size + 2
+        val segment = ByteArray(payload.size + 4)
+        segment[0] = JPEG_MARKER_PREFIX.toByte()
+        segment[1] = marker.toByte()
+        segment[2] = ((length shr 8) and 0xFF).toByte()
+        segment[3] = (length and 0xFF).toByte()
+        payload.copyInto(segment, destinationOffset = 4)
+        return segment
     }
 
     private fun insertMetadataSegments(

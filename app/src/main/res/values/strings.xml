@@ -1609,7 +1609,30 @@
     <string name="converter_mp3_note">MP3 supports CBR and VBR, with tags and cover art.</string>
     <string name="converter_flac_note">FLAC is lossless and keeps artwork.</string>
     <string name="converter_wav_note">WAV is uncompressed PCM, bit-perfect.</string>
+
+    <!-- Metadata scrub parity -->
+    <string name="text_metadata_message_nothing_selected">Choose at least one kind of metadata to remove</string>
+    <string name="text_metadata_message_no_backup_kept">Removed without a backup, so it cannot be restored</string>
+    <string name="ui_metadata_scrub_title">Scrub metadata</string>
+    <string name="ui_metadata_scrub_note">Inspect and remove metadata from photos, video, audio and PDFs. A backup is kept so you can restore it.</string>
+    <string name="ui_metadata_what_to_remove">What to remove</string>
+    <string name="ui_metadata_remove_gps">GPS location</string>
+    <string name="ui_metadata_remove_device">Device and camera</string>
+    <string name="ui_metadata_remove_author">Author and software</string>
+    <string name="ui_metadata_remove_time">Timestamps</string>
+    <string name="ui_metadata_keep_backup">Keep a backup</string>
+    <string name="ui_metadata_found">Found metadata</string>
+    <string name="ui_metadata_formats">Formats</string>
+    <string name="ui_metadata_batch_scrub">Batch scrub</string>
+    <string name="ui_metadata_scrub_action">Scrub metadata</string>
+    <string name="ui_metadata_restore_backup">Restore backup</string>
+    <string name="ui_metadata_scrub_done">Scrubbed the selected metadata.</string>
+    <string name="ui_metadata_formats_jpeg_clean">Lossless clean</string>
+    <string name="ui_metadata_formats_clean">Clean</string>
+    <string name="ui_metadata_formats_view_only">View only</string>
+    <string name="text_metadata_message_batch_scrub_summary">Scrubbed %1$d file(s), skipped %2$d.</string>
 </resources>
+
 
 
 

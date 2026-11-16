@@ -47,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.zenconverter.app.metadata.MetadataBackupInfo
 import org.zenconverter.app.metadata.MetadataInspection
+import org.zenconverter.app.metadata.MetadataScrubTargets
 import org.zenconverter.app.metadata.MetadataMessageKey
 import org.zenconverter.app.metadata.MetadataStatusMessage
 import org.zenconverter.app.metadata.MetadataTargetKind
@@ -67,12 +68,14 @@ internal fun MetadataSecurityScreen(
     state: MetadataToolState,
     onPickImage: () -> Unit,
     onPickVideo: () -> Unit,
-    onClean: () -> Unit,
+    onClean: (MetadataScrubTargets) -> Unit,
     onRestore: (String) -> Unit,
     onBack: () -> Unit,
+    onBatchScrub: (MetadataScrubTargets) -> Unit = {},
 
     modifier: Modifier = Modifier
 ) {
+    var scrubTargets by remember { mutableStateOf(MetadataScrubTargets()) }
     SettingsPage(texts.metadataSecurityTitle, texts.settingsBack, onBack, modifier = modifier) {
         // Introductory Guidance Card
         item {
@@ -170,6 +173,72 @@ internal fun MetadataSecurityScreen(
             }
         }
 
+        // What to remove
+        item {
+            InsetGroupCard {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = texts.metadataWhatToRemove(),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    MetadataScrubToggle(texts.metadataRemoveGps(), scrubTargets.gps) {
+                        scrubTargets = scrubTargets.copy(gps = it)
+                    }
+                    MetadataScrubToggle(texts.metadataRemoveDevice(), scrubTargets.device) {
+                        scrubTargets = scrubTargets.copy(device = it)
+                    }
+                    MetadataScrubToggle(texts.metadataRemoveAuthor(), scrubTargets.author) {
+                        scrubTargets = scrubTargets.copy(author = it)
+                    }
+                    MetadataScrubToggle(texts.metadataRemoveTime(), scrubTargets.timestamps) {
+                        scrubTargets = scrubTargets.copy(timestamps = it)
+                    }
+                    MetadataScrubToggle(texts.metadataKeepBackup(), scrubTargets.keepBackup) {
+                        scrubTargets = scrubTargets.copy(keepBackup = it)
+                    }
+                    OutlinedButton(
+                        onClick = { onBatchScrub(scrubTargets) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(0.5.dp, settingsHairlineColor()),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+                    ) { Text(texts.metadataBatchScrub()) }
+                }
+            }
+        }
+
+        // Supported formats
+        item {
+            InsetGroupCard {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = texts.metadataFormatsTitle(),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    MetadataFormatRow("JPG / JPEG / JFIF", texts.metadataFormatJpegClean())
+                    MetadataFormatRow("PNG / WebP", texts.metadataFormatClean())
+                    MetadataFormatRow("HEIC", texts.metadataFormatViewOnly())
+                    MetadataFormatRow("MP4 / MOV", texts.metadataFormatClean())
+                    MetadataFormatRow("MP3 / FLAC", texts.metadataFormatClean())
+                    MetadataFormatRow("PDF", texts.metadataFormatClean())
+                }
+            }
+        }
+
         // Inspection Results Workbench
         item {
             AnimatedContent(
@@ -231,7 +300,7 @@ internal fun MetadataSecurityScreen(
                             MetadataInspectionWorkbenchCard(
                                 texts = texts,
                                 state = targetState,
-                                onClean = onClean,
+                                onClean = { onClean(scrubTargets) },
                                 onRestore = onRestore,
                             )
                         }
@@ -547,5 +616,41 @@ private fun MetadataRestoreDialog(
         ) {
             Text(texts.cancel)
         }
+    }
+}
+
+@Composable
+private fun MetadataScrubToggle(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        androidx.compose.material3.Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun MetadataFormatRow(name: String, verdict: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = name,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        SmallTag(verdict)
     }
 }

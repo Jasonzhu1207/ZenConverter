@@ -1513,6 +1513,7 @@ internal class UiText(private val context: Context) {
             MetadataMessageKey.BackupMissing -> text(R.string.text_metadata_message_metadata_backup_was_not_found)
             MetadataMessageKey.BackupDoesNotMatch -> text(R.string.text_metadata_message_this_backup_does_not_match_the_selected_image)
             MetadataMessageKey.InvalidJpeg -> text(R.string.text_metadata_message_this_jpeg_file_could_not_be_parsed_safely)
+            MetadataMessageKey.NothingSelected -> text(R.string.text_metadata_message_nothing_selected)
         }
         val detail = message.detail?.resolve(context)
         return if (detail.isNullOrBlank()) base else text(R.string.format_label_value, base, detail)
@@ -2237,4 +2238,23 @@ internal class UiText(private val context: Context) {
     fun converterMp3Note(): String = text(R.string.converter_mp3_note)
     fun converterFlacNote(): String = text(R.string.converter_flac_note)
     fun converterWavNote(): String = text(R.string.converter_wav_note)
+
+    // Metadata scrub parity
+    fun metadataScrubTitle(): String = text(R.string.ui_metadata_scrub_title)
+    fun metadataScrubNote(): String = text(R.string.ui_metadata_scrub_note)
+    fun metadataWhatToRemove(): String = text(R.string.ui_metadata_what_to_remove)
+    fun metadataRemoveGps(): String = text(R.string.ui_metadata_remove_gps)
+    fun metadataRemoveDevice(): String = text(R.string.ui_metadata_remove_device)
+    fun metadataRemoveAuthor(): String = text(R.string.ui_metadata_remove_author)
+    fun metadataRemoveTime(): String = text(R.string.ui_metadata_remove_time)
+    fun metadataKeepBackup(): String = text(R.string.ui_metadata_keep_backup)
+    fun metadataFound(): String = text(R.string.ui_metadata_found)
+    fun metadataFormatsTitle(): String = text(R.string.ui_metadata_formats)
+    fun metadataBatchScrub(): String = text(R.string.ui_metadata_batch_scrub)
+    fun metadataScrubAction(): String = text(R.string.ui_metadata_scrub_action)
+    fun metadataRestoreBackup(): String = text(R.string.ui_metadata_restore_backup)
+    fun metadataScrubDone(): String = text(R.string.ui_metadata_scrub_done)
+    fun metadataFormatJpegClean(): String = text(R.string.ui_metadata_formats_jpeg_clean)
+    fun metadataFormatClean(): String = text(R.string.ui_metadata_formats_clean)
+    fun metadataFormatViewOnly(): String = text(R.string.ui_metadata_formats_view_only)
 }

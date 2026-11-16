@@ -63,6 +63,7 @@ import org.zenconverter.app.metadata.MetadataOperationException
 import org.zenconverter.app.metadata.MetadataPrivacyManager
 import org.zenconverter.app.metadata.MetadataStatusMessage
 import org.zenconverter.app.metadata.MetadataTargetKind
+import org.zenconverter.app.metadata.MetadataScrubTargets
 import org.zenconverter.app.metadata.MetadataToolState
 import org.zenconverter.app.model.EsrganModelManager
 import org.zenconverter.app.model.EsrganModelSpec
@@ -121,6 +122,8 @@ class MainActivity : AppCompatActivity() {
     private val pendingQueuedPdfSelections = ArrayDeque<PendingQueuedPdfSelection>()
     private var pendingPdfOutputPasswordQueuedFileIds: List<String> = emptyList()
     private var pendingMetadataTargetKind: MetadataTargetKind? = null
+    private var activeScrubTargets: MetadataScrubTargets = MetadataScrubTargets()
+    private var pendingBatchScrubTargets: MetadataScrubTargets = MetadataScrubTargets()
     private var pendingMetadataMediaWriteGrant: PendingMetadataMediaWriteGrant? = null
     private var pendingMetadataReadPermissionRetry: PendingMetadataMediaWriteGrant? = null
     private var pendingAlbumPickKind: AlbumPickKind? = null
@@ -244,6 +247,13 @@ class MainActivity : AppCompatActivity() {
         inspectMetadataSelection(uri, kind, canWrite)
     }
 
+    private val openMetadataBatch = registerForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isEmpty()) return@registerForActivityResult
+        launchMetadataBatchScrub(pendingBatchScrubTargets, uris)
+    }
+
     private val requestMetadataMediaReadPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -253,7 +263,10 @@ class MainActivity : AppCompatActivity() {
         if (ready.inspection.uri != pending.uri) return@registerForActivityResult
         if (granted) {
             when (pending.operation) {
-                MetadataWriteOperation.Clean -> cleanSelectedMetadata(allowMediaWriteRequest = true)
+                MetadataWriteOperation.Clean -> cleanSelectedMetadata(
+                    allowMediaWriteRequest = true,
+                    targets = activeScrubTargets
+                )
                 MetadataWriteOperation.Restore -> {
                     val backupId = pending.backupId ?: return@registerForActivityResult
                     restoreSelectedMetadata(
@@ -279,7 +292,10 @@ class MainActivity : AppCompatActivity() {
             val ready = metadataToolState.value as? MetadataToolState.Ready ?: return@registerForActivityResult
             if (ready.inspection.uri != pending.uri) return@registerForActivityResult
             when (pending.operation) {
-                MetadataWriteOperation.Clean -> cleanSelectedMetadata(allowMediaWriteRequest = false)
+                MetadataWriteOperation.Clean -> cleanSelectedMetadata(
+                    allowMediaWriteRequest = false,
+                    targets = activeScrubTargets
+                )
                 MetadataWriteOperation.Restore -> {
                     val backupId = pending.backupId ?: return@registerForActivityResult
                     restoreSelectedMetadata(
@@ -437,11 +453,14 @@ class MainActivity : AppCompatActivity() {
                 onPickMetadataVideo = {
                     openMetadataPicker(MetadataTargetKind.Video)
                 },
-                onCleanMetadata = {
-                    cleanSelectedMetadata()
+                onCleanMetadata = { targets ->
+                    cleanSelectedMetadata(targets = targets)
                 },
                 onRestoreMetadata = { backupId ->
                     restoreSelectedMetadata(backupId)
+                },
+                onBatchScrubMetadata = { targets ->
+                    launchMetadataBatchScrub(targets)
                 },
                 onDownloadEsrganModel = { spec ->
                     downloadEsrganModel(spec)
@@ -1525,6 +1544,68 @@ class MainActivity : AppCompatActivity() {
         openMetadataDocument.launch(intent)
     }
 
+    /**
+     * Opens the multi-file picker for a batch scrub. The targets are stashed so
+     * the picker callback can use them after the activity result round trip.
+     */
+    private fun launchMetadataBatchScrub(targets: MetadataScrubTargets) {
+        pendingBatchScrubTargets = targets
+        openMetadataBatch.launch(
+            arrayOf(
+                "image/jpeg",
+                "image/jpg",
+                "image/jfif",
+                "image/png",
+                "image/webp",
+                "image/heic",
+                "image/heif"
+            )
+        )
+    }
+
+    /**
+     * Scrubs every selected image with [targets] and reports how many were
+     * touched. Files that cannot be written are counted as skipped rather than
+     * aborting the batch, so one locked file never stops the rest.
+     */
+    private fun launchMetadataBatchScrub(targets: MetadataScrubTargets, uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        lifecycleScope.launch {
+            val summary = withContext(Dispatchers.IO) {
+                var scrubbed = 0
+                var skipped = 0
+                uris.forEach { uri ->
+                    val result = runCatching {
+                        val metadata = queryOpenableMetadata(uri)
+                        val mimeType = contentResolver.getType(uri)
+                        val canWrite = persistMetadataFilePermission(uri = uri, requestWrite = true)
+                        val inspection = MetadataPrivacyManager.inspect(
+                            context = this@MainActivity,
+                            uri = uri,
+                            displayName = metadata.displayName,
+                            sizeBytes = metadata.sizeBytes,
+                            mimeType = mimeType,
+                            kind = MetadataTargetKind.Image,
+                            canWrite = canWrite
+                        )
+                        if (!inspection.editable || !inspection.canWrite) return@runCatching false
+                        MetadataPrivacyManager.cleanJpegInPlace(this@MainActivity, inspection, targets)
+                        true
+                    }.getOrDefault(false)
+                    if (result) scrubbed++ else skipped++
+                }
+                scrubbed to skipped
+            }
+            ConversionTaskStore.showMessage(
+                localizedText(
+                    R.string.text_metadata_message_batch_scrub_summary,
+                    summary.first,
+                    summary.second
+                )
+            )
+        }
+    }
+
     private fun inspectMetadataSelection(
         uri: Uri,
         kind: MetadataTargetKind,
@@ -1557,15 +1638,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun cleanSelectedMetadata(allowMediaWriteRequest: Boolean = true) {
+    private fun cleanSelectedMetadata(
+        allowMediaWriteRequest: Boolean = true,
+        targets: MetadataScrubTargets = activeScrubTargets
+    ) {
         val ready = metadataToolState.value as? MetadataToolState.Ready ?: return
         val inspection = ready.inspection
+        activeScrubTargets = targets
         metadataToolState.value = ready.copy(busy = true, message = null)
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     MetadataPrivacyManager.requireJpegWriteAccess(this@MainActivity, inspection)
-                    MetadataPrivacyManager.cleanJpegInPlace(this@MainActivity, inspection)
+                    MetadataPrivacyManager.cleanJpegInPlace(this@MainActivity, inspection, targets)
                 }
             }
             result.onSuccess { message ->

@@ -307,6 +307,7 @@ import org.zenconverter.app.conversion.VideoContactSheetOptions
 import org.zenconverter.app.metadata.MetadataInspection
 import org.zenconverter.app.metadata.MetadataStatusMessage
 import org.zenconverter.app.metadata.MetadataTargetKind
+import org.zenconverter.app.metadata.MetadataScrubTargets
 import org.zenconverter.app.metadata.MetadataToolState
 import org.zenconverter.app.model.EsrganModelManager
 import org.zenconverter.app.model.EsrganModelSpec
@@ -1088,8 +1089,9 @@ fun ZenConverterApp(
     onClearQueue: () -> Unit,
     onPickMetadataImage: () -> Unit,
     onPickMetadataVideo: () -> Unit,
-    onCleanMetadata: () -> Unit,
+    onCleanMetadata: (MetadataScrubTargets) -> Unit,
     onRestoreMetadata: (String) -> Unit,
+    onBatchScrubMetadata: (MetadataScrubTargets) -> Unit,
     onDownloadEsrganModel: (EsrganModelSpec) -> Unit,
     onCancelEsrganModelDownload: (EsrganModelSpec) -> Unit,
     rifeModelStates: Map<String, RifeModelUiState> = emptyMap(),
@@ -1231,6 +1233,7 @@ fun ZenConverterApp(
                     onPickMetadataVideo = onPickMetadataVideo,
                     onCleanMetadata = onCleanMetadata,
                     onRestoreMetadata = onRestoreMetadata,
+                    onBatchScrubMetadata = onBatchScrubMetadata,
                     onDownloadEsrganModel = onDownloadEsrganModel,
                     onCancelEsrganModelDownload = onCancelEsrganModelDownload,
                     onDownloadRifeModel = onDownloadRifeModel,
@@ -1309,8 +1312,9 @@ private fun ZenConverterContent(
     onClearQueue: () -> Unit,
     onPickMetadataImage: () -> Unit,
     onPickMetadataVideo: () -> Unit,
-    onCleanMetadata: () -> Unit,
+    onCleanMetadata: (MetadataScrubTargets) -> Unit,
     onRestoreMetadata: (String) -> Unit,
+    onBatchScrubMetadata: (MetadataScrubTargets) -> Unit,
     onDownloadEsrganModel: (EsrganModelSpec) -> Unit,
     onCancelEsrganModelDownload: (EsrganModelSpec) -> Unit,
     onDownloadRifeModel: (RifeModelSpec) -> Unit = {},
@@ -1838,6 +1842,7 @@ private fun ZenConverterContent(
                     onPickVideo = onPickMetadataVideo,
                     onClean = onCleanMetadata,
                     onRestore = onRestoreMetadata,
+                    onBatchScrub = onBatchScrubMetadata,
                     onBack = { navigateBack() },
                 )
                 AppScreen.PrivacyPolicy -> PrivacyPolicyScreen(
