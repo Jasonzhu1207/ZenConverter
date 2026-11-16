@@ -67,6 +67,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.zenconverter.app.studio.ConversionHistoryEntry
 import org.zenconverter.app.studio.StudioStore
+import org.zenconverter.app.system.BatteryThermalGuard
 import java.util.UUID
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.cos.COSBase
@@ -211,7 +212,7 @@ class ConversionService : Service() {
                     )
                     else -> startForeground(NOTIFICATION_ID, buildProgressNotification(notificationTitle, 0))
                 }
-                taskIndex = 0
+                taskIndex = ConversionTaskStore.consumeStartIndex() ?: 0
                 customOutputFallbackOccurred = false
                 processNextTask()
             }
@@ -240,8 +241,30 @@ class ConversionService : Service() {
             return
         }
 
+        // Hold the queue when the user asked for a pause. The running task has
+        // already finished by the time this is called, so nothing is interrupted.
+        if (ConversionTaskStore.isQueuePausedNow()) {
+            pauseRun()
+            return
+        }
+
         if (taskIndex >= ConversionTaskStore.taskCount()) {
             finishRun()
+            return
+        }
+
+        // Battery and thermal guard: hold the queue while the device is too hot or
+        // too low on charge, then resume automatically. This is checked between
+        // tasks so a running conversion is never interrupted mid-write.
+        guardPauseReason()?.let { reason ->
+            val message = when (reason) {
+                BatteryThermalGuard.PauseReason.Battery -> localizedText(R.string.guard_paused_battery)
+                BatteryThermalGuard.PauseReason.Thermal -> localizedText(R.string.guard_paused_thermal)
+            }
+            notificationState = NotificationState.Running
+            updateNotification(message, (ConversionTaskStore.aggregateProgress() * 100).toInt())
+            ConversionTaskStore.showMessage(message)
+            handler.postDelayed({ processNextTask() }, GUARD_RETRY_DELAY_MS)
             return
         }
 
@@ -6818,6 +6841,25 @@ class ConversionService : Service() {
         stopSelf()
     }
 
+    /**
+     * Holds the queue without discarding it. The foreground service stays alive so
+     * the user can resume, and no work in flight is interrupted because this runs
+     * between tasks.
+     */
+    private fun pauseRun() {
+        handler.removeCallbacksAndMessages(null)
+        notificationState = NotificationState.Running
+        updateNotification(localizedText(R.string.queue_paused), (ConversionTaskStore.aggregateProgress() * 100).toInt())
+    }
+
+    /** Returns the guard's pause reason, or null when the guard is off or clear. */
+    private fun guardPauseReason(): BatteryThermalGuard.PauseReason? {
+        StudioStore.ensureLoaded(this)
+        if (!StudioStore.guardEnabled.value) return null
+        val guard = BatteryThermalGuard(this, StudioStore.guardBatteryThreshold.value)
+        return guard.shouldPause()
+    }
+
     private fun createTempFileFor(input: ConversionTaskInput, extension: String): File {
         val cacheRoot = externalCacheDir ?: cacheDir
         val tempDirectory = File(cacheRoot, "exports").apply { mkdirs() }
@@ -7758,6 +7800,7 @@ class ConversionService : Service() {
         private const val FFMPEG_LOG_DRAIN_TIMEOUT_MS = 1_000
         private const val FFMPEG_ENCODER_PROBE_TIMEOUT_MS = 2_000
         private const val FFMPEG_MEDIA_INFORMATION_PROBE_TIMEOUT_MS = 3_000
+        private const val GUARD_RETRY_DELAY_MS = 10_000L
         private const val FFMPEG_LOG_TAIL_LINES = 16
         private const val FFMPEG_LOG_LINE_LIMIT = 600
         private const val FFMPEG_VIDEO_ENCODER_H264 = "libx264"

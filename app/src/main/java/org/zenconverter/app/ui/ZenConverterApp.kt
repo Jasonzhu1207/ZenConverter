@@ -106,6 +106,7 @@ import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.PictureAsPdf
+import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PrivacyTip
 import androidx.compose.material.icons.rounded.Security
@@ -238,7 +239,12 @@ import org.zenconverter.app.studio.SmartPresets
 import org.zenconverter.app.studio.FileFacts
 import org.zenconverter.app.studio.SmartSuggestions
 import org.zenconverter.app.studio.SmartSuggestion
+import org.zenconverter.app.studio.PluginPresets
+import org.zenconverter.app.studio.StudioStore
 import org.zenconverter.app.conversion.ConversionMediaCategory
+import org.zenconverter.app.conversion.ConversionService
+import org.zenconverter.app.conversion.ConversionTaskStatus
+import org.zenconverter.app.conversion.ConversionTaskStore
 import org.zenconverter.app.conversion.AudioEchoMode
 import org.zenconverter.app.conversion.AudioExportOptions
 import org.zenconverter.app.conversion.AudioNoiseReductionMode
@@ -1445,6 +1451,37 @@ private fun ZenConverterContent(
                                 QueueHeader(
                                     texts = texts,
                                     fileCount = queuedFiles.size
+                                )
+                            }
+                        }
+
+                        if (isConversionRunning || ConversionTaskStore.isQueuePaused.value) {
+                            item(key = "queue-controls") {
+                                QueueControls(
+                                    texts = texts,
+                                    isPaused = ConversionTaskStore.isQueuePaused.value,
+                                    onPause = { ConversionTaskStore.pauseQueue() },
+                                    onResume = { ConversionTaskStore.resumeQueue() }
+                                )
+                            }
+                        }
+
+                        if (!isConversionRunning && ConversionTaskStore.tasks.any {
+                                it.status == ConversionTaskStatus.Failed || it.status == ConversionTaskStatus.Cancelled
+                            }
+                        ) {
+                            item(key = "queue-retry") {
+                                QueueRetryRow(
+                                    texts = texts,
+                                    failedCount = ConversionTaskStore.tasks.count {
+                                        it.status == ConversionTaskStatus.Failed ||
+                                            it.status == ConversionTaskStatus.Cancelled
+                                    },
+                                    onRetry = { index ->
+                                        if (ConversionTaskStore.requestRetry(index)) {
+                                            ConversionService.start(context)
+                                        }
+                                    }
                                 )
                             }
                         }
@@ -6097,6 +6134,25 @@ private fun AudioEffectsPanel(
             checked = effects.deHum,
             onCheckedChange = { onEffectsChange(effects.copy(deHum = it)) }
         )
+        val pluginPresets = StudioStore.pluginPresets.toList()
+        if (pluginPresets.isNotEmpty()) {
+            Text(
+                text = texts.pluginsTitle(),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+            )
+            InsetGroupCard {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    pluginPresets.forEach { preset ->
+                        OutlinedButton(
+                            onClick = { onEffectsChange(PluginPresets.apply(preset, effects)) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(preset.name) }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -6560,6 +6616,93 @@ private fun QueueActions(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+        }
+    }
+}
+
+@Composable
+private fun QueueControls(
+    texts: UiText,
+    isPaused: Boolean,
+    onPause: () -> Unit,
+    onResume: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        OutlinedButton(
+            onClick = { if (isPaused) onResume() else onPause() },
+            shape = RoundedCornerShape(8.dp),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+            modifier = Modifier
+                .weight(1f)
+                .heightIn(min = 38.dp)
+        ) {
+            AppIcon(
+                icon = if (isPaused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = if (isPaused) texts.queueResume() else texts.queuePause(),
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun QueueRetryRow(
+    texts: UiText,
+    failedCount: Int,
+    onRetry: (Int) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = texts.queueRetry(),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        if (failedCount == 0) return@Column
+        val indices = ConversionTaskStore.tasks.indices.filter { index ->
+            val status = ConversionTaskStore.tasks[index].status
+            status == ConversionTaskStatus.Failed || status == ConversionTaskStatus.Cancelled
+        }
+        indices.forEach { index ->
+            val task = ConversionTaskStore.tasks[index]
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = task.displayName,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                OutlinedButton(
+                    onClick = { onRetry(index) },
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Text(texts.queueRetry(), style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                }
+            }
         }
     }
 }

@@ -356,6 +356,9 @@ object ConversionTaskStore {
     val summaryMessage = mutableStateOf<LocalizedText?>(null)
     val isRunning = mutableStateOf(false)
 
+    /** True while the user has held the queue; the service re-checks it per task. */
+    val isQueuePaused = mutableStateOf(false)
+
     /** The most recent FFmpeg command, surfaced by the studio command-line view. */
     val lastFfmpegCommand = mutableStateOf<String?>(null)
 
@@ -366,8 +369,13 @@ object ConversionTaskStore {
     private val inputs = mutableListOf<ConversionTaskInput>()
     private var cancelled = false
 
+    /** Set when a single task should be re-run without redoing the whole queue. */
+    private var requestedStartIndex: Int? = null
+
     fun prepareRun(nextInputs: List<ConversionTaskInput>) {
         cancelled = false
+        isQueuePaused.value = false
+        requestedStartIndex = null
         inputs.clear()
         inputs.addAll(nextInputs)
         isRunning.value = nextInputs.isNotEmpty()
@@ -385,6 +393,58 @@ object ConversionTaskStore {
                 )
             }
         )
+    }
+
+    fun isQueuePausedNow(): Boolean = isQueuePaused.value
+
+    /** Holds the queue after the running task finishes. */
+    fun pauseQueue() {
+        if (!isRunning.value) return
+        isQueuePaused.value = true
+        summaryMessage.value = localizedText(R.string.queue_paused)
+    }
+
+    fun resumeQueue() {
+        isQueuePaused.value = false
+    }
+
+    /**
+     * Marks the task at [index] for another attempt and asks the service to start
+     * from there. Only tasks that are not currently running can be retried.
+     */
+    fun requestRetry(index: Int): Boolean {
+        val task = tasks.getOrNull(index) ?: return false
+        if (task.status == ConversionTaskStatus.Running) return false
+        updateTask(index) { current ->
+            current.copy(
+                status = ConversionTaskStatus.Queued,
+                progress = 0f,
+                message = localizedText(R.string.ui_waiting),
+                outputUri = null,
+                outputUris = emptyList()
+            )
+        }
+        requestedStartIndex = index
+        cancelled = false
+        isQueuePaused.value = false
+        isRunning.value = true
+        summaryMessage.value = localizedText(R.string.task_processing)
+        return true
+    }
+
+    /** Hands the pending start index to the service and clears it. */
+    fun consumeStartIndex(): Int? = requestedStartIndex.also { requestedStartIndex = null }
+
+    /**
+     * Moves a queued task from [from] to [to], keeping the task list and the
+     * pending inputs in step. Reordering is refused while a run is in flight.
+     */
+    fun moveQueuedTask(from: Int, to: Int): Boolean {
+        if (isRunning.value) return false
+        if (from !in tasks.indices || to !in tasks.indices || from == to) return false
+        tasks.add(to, tasks.removeAt(from))
+        inputs.add(to, inputs.removeAt(from))
+        return true
     }
 
     fun showMessage(message: LocalizedText) {

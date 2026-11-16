@@ -43,12 +43,12 @@ object AudioStudioEngine {
 
         val filterParts = audible.mapIndexed { index, track ->
             val gain = track.volume.coerceIn(0f, 4f)
-            val pan = track.pan.coerceIn(-1f, 1f)
-            // stereo pan: left/right gains derived from a constant-power pan
-            val left = (kotlin.math.cos((pan + 1f) * (Math.PI.toFloat() / 4f)) * gain)
-            val right = (kotlin.math.sin((pan + 1f) * (Math.PI.toFloat() / 4f)) * gain)
+            // Downmix to mono first so the constant-power pan balances the whole
+            // signal rather than scaling one stereo channel of an existing mix.
+            val (left, right) = panGains(track.pan)
             "[$index:a]aformat=channel_layouts=stereo," +
-                "pan=stereo|c0=${formatGain(left)}*c0|c1=${formatGain(right)}*c1[v$index]"
+                "pan=mono|c0=0.5*c0+0.5*c1," +
+                "pan=stereo|c0=${formatGain(left * gain)}*c0|c1=${formatGain(right * gain)}*c0[v$index]"
         }
         val mixInputs = audible.indices.joinToString("") { "[v$it]" }
         val filter = filterParts.joinToString(";") +
@@ -64,6 +64,16 @@ object AudioStudioEngine {
             target.absolutePath
         )
         ReturnCode.isSuccess(FFmpegKit.executeWithArguments(arguments.toTypedArray()).getReturnCode())
+    }
+
+    /**
+     * Constant-power pan gains for a -1 (hard left) to 1 (hard right) position.
+     * Centre yields 0.707 on both sides so the perceived loudness stays even.
+     */
+    fun panGains(pan: Float): Pair<Float, Float> {
+        val clamped = pan.coerceIn(-1f, 1f)
+        val angle = (clamped + 1f) * (Math.PI.toFloat() / 4f)
+        return kotlin.math.cos(angle) to kotlin.math.sin(angle)
     }
 
     /** Trims [startSeconds]..[endSeconds] without re-encoding where possible. */
@@ -214,6 +224,102 @@ object AudioStudioEngine {
         ReturnCode.isSuccess(FFmpegKit.executeWithArguments(arguments).getReturnCode())
     }
 
+    /**
+     * Splits [sourceUri] into four stem files inside [outputDir] using the
+     * offline spectral approximation in [StemFilters]. Returns the rendered
+     * stems in a stable order; the caller owns the output directory.
+     */
+    suspend fun separateStems(
+        context: Context,
+        sourceUri: Uri,
+        outputDir: File
+    ): List<Pair<StemKind, File>> = withContext(Dispatchers.IO) {
+        val input = inputPathFor(context, sourceUri) ?: return@withContext emptyList()
+        if (!outputDir.exists() && !outputDir.mkdirs()) return@withContext emptyList()
+        val graph = StemFilters.graph()
+        val targets = graph.outputs.map { it to File(outputDir, it.kind.fileName) }
+        val arguments = mutableListOf("-hide_banner", "-nostdin", "-i", input, "-filter_complex", graph.filterComplex)
+        targets.forEach { (output, file) ->
+            arguments += listOf("-map", output.label, "-c:a", "pcm_s16le", file.absolutePath)
+        }
+        arguments += "-y"
+        val session = FFmpegKit.executeWithArguments(arguments.toTypedArray())
+        if (!ReturnCode.isSuccess(session.getReturnCode())) return@withContext emptyList()
+        targets.mapNotNull { (output, file) -> file.takeIf { it.isFile && it.length() > 0L }?.let { output.kind to it } }
+    }
+
+    /**
+     * Hard-subs [subtitleUri] onto the video in [sourceUri]. The subtitle file is
+     * copied into the app cache first because the `subtitles` filter reads a real
+     * path rather than a Storage Access Framework descriptor.
+     */
+    suspend fun burnSubtitles(
+        context: Context,
+        sourceUri: Uri,
+        subtitleUri: Uri,
+        target: File,
+        fontSize: Int = 24
+    ): Boolean = withContext(Dispatchers.IO) {
+        val input = inputPathFor(context, sourceUri) ?: return@withContext false
+        val subtitleFile = File(context.cacheDir, "zen-burn-${System.nanoTime()}.srt")
+        val copied = runCatching {
+            context.contentResolver.openInputStream(subtitleUri)?.use { source ->
+                subtitleFile.outputStream().use { destination -> source.copyTo(destination) }
+            }
+            subtitleFile.length() > 0L
+        }.getOrDefault(false)
+        if (!copied) {
+            subtitleFile.delete()
+            return@withContext false
+        }
+        try {
+            val style = "FontSize=$fontSize,Outline=1,Shadow=0,MarginV=24"
+            val filter = "subtitles='${escapeFilterPath(subtitleFile.absolutePath)}':force_style='$style'"
+            val arguments = arrayOf(
+                "-hide_banner", "-nostdin",
+                "-i", input,
+                "-vf", filter,
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+                "-c:a", "copy",
+                "-y", target.absolutePath
+            )
+            ReturnCode.isSuccess(FFmpegKit.executeWithArguments(arguments).getReturnCode())
+        } finally {
+            subtitleFile.delete()
+        }
+    }
+
+    /**
+     * Splits a media file at explicit chapter boundaries. [chapters] must be
+     * ordered start times in seconds; each produced file covers one boundary
+     * range up to the next, or the end of the file.
+     */
+    suspend fun splitAtTimestamps(
+        context: Context,
+        sourceUri: Uri,
+        outputDir: File,
+        chapters: List<Double>,
+        extension: String = "mp3"
+    ): List<File> = withContext(Dispatchers.IO) {
+        val input = inputPathFor(context, sourceUri) ?: return@withContext emptyList()
+        val boundaries = chapters.filter { it >= 0.0 }.distinct().sorted()
+        if (boundaries.isEmpty()) return@withContext emptyList()
+        if (!outputDir.exists() && !outputDir.mkdirs()) return@withContext emptyList()
+        val produced = mutableListOf<File>()
+        boundaries.forEachIndexed { index, start ->
+            val target = File(outputDir, "chapter-%03d.$extension".format(index + 1))
+            val arguments = mutableListOf("-hide_banner", "-nostdin", "-ss", formatSeconds(start), "-i", input)
+            boundaries.getOrNull(index + 1)?.let { next ->
+                arguments += listOf("-t", formatSeconds(next - start))
+            }
+            arguments += listOf("-vn", "-c:a", "libmp3lame", "-b:a", "192k", "-y", target.absolutePath)
+            if (ReturnCode.isSuccess(FFmpegKit.executeWithArguments(arguments.toTypedArray()).getReturnCode())) {
+                if (target.isFile && target.length() > 0L) produced += target
+            }
+        }
+        produced
+    }
+
     /** Applies a chain of FFmpeg audio filters and writes the result to [target]. */
     suspend fun applyEffects(
         context: Context,
@@ -224,7 +330,8 @@ object AudioStudioEngine {
         startSeconds: Double? = null,
         endSeconds: Double? = null,
         fadeInSeconds: Double? = null,
-        fadeOutSeconds: Double? = null
+        fadeOutSeconds: Double? = null,
+        audioCodec: String = "libmp3lame"
     ): Boolean = withContext(Dispatchers.IO) {
         val input = inputPathFor(context, sourceUri) ?: return@withContext false
         val chain = buildList {
@@ -243,7 +350,7 @@ object AudioStudioEngine {
         }
         arguments += listOf("-i", input)
         if (chain.isNotEmpty()) arguments += listOf("-af", chain.joinToString(","))
-        arguments += listOf("-c:a", "libmp3lame", "-b:a", "${audioBitrateKbps}k", "-y", target.absolutePath)
+        arguments += listOf("-c:a", audioCodec, "-b:a", "${audioBitrateKbps}k", "-y", target.absolutePath)
         ReturnCode.isSuccess(FFmpegKit.executeWithArguments(arguments.toTypedArray()).getReturnCode())
     }
 
@@ -260,4 +367,17 @@ object AudioStudioEngine {
 
     private fun formatSeconds(value: Double): String =
         String.format(Locale.US, "%.3f", value)
+
+    /**
+     * Escapes a filesystem path for use inside an FFmpeg filter argument, where
+     * the colon separates filter options and the backslash and quote characters
+     * would otherwise end the option or the argument.
+     */
+    private fun escapeFilterPath(path: String): String =
+        path.replace("\\", "\\\\")
+            .replace(":", "\\:")
+            .replace("'", "\\'")
+            .replace(",", "\\,")
+            .replace("[", "\\[")
+            .replace("]", "\\]")
 }

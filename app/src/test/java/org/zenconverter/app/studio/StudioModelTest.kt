@@ -170,6 +170,49 @@ class RecipeLibraryTest {
     }
 }
 
+class PluginPresetsTest {
+    @Test
+    fun appliesKnownKeysOntoTheBaseEffects() {
+        val preset = PluginPreset(
+            id = "p",
+            name = "Podcast",
+            effects = mapOf(
+                "equalizer" to "Podcast",
+                "loudness" to "Podcast",
+                "deHum" to "true"
+            )
+        )
+        val result = PluginPresets.apply(preset, AudioEffects())
+        assertEquals(org.zenconverter.app.audio.EqualizerPreset.Podcast, result.equalizer)
+        assertEquals(org.zenconverter.app.audio.LoudnessTarget.Podcast, result.loudnessTarget)
+        assertTrue(result.deHum)
+    }
+
+    @Test
+    fun unknownKeysAndValuesLeaveTheBaseUntouched() {
+        val preset = PluginPreset(
+            id = "p",
+            name = "Future",
+            effects = mapOf("unknownKey" to "x", "equalizer" to "NotAPreset")
+        )
+        assertEquals(AudioEffects(), PluginPresets.apply(preset, AudioEffects()))
+    }
+
+    @Test
+    fun toPresetRoundTripsThroughTheCodec() {
+        val effects = AudioEffects(
+            equalizer = org.zenconverter.app.audio.EqualizerPreset.Vocal,
+            reverb = org.zenconverter.app.audio.ReverbPreset.SmallRoom
+        )
+        val preset = PluginPresets.toPreset("id", "Name", "Desc", effects)
+        val decoded = PluginPresetCodec.decodeImported(PluginPresetCodec.encode(listOf(preset)))
+        assertEquals(1, decoded.size)
+        val restored = PluginPresets.apply(decoded.first(), AudioEffects())
+        assertEquals(effects.equalizer, restored.equalizer)
+        assertEquals(effects.reverb, restored.reverb)
+    }
+}
+
 class AudioEffectFiltersTest {
     @Test
     fun disabledEffectsProduceNoFilters() {

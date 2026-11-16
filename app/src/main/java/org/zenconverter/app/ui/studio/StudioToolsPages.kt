@@ -32,7 +32,9 @@ import org.zenconverter.app.audio.TranscribedWord
 import org.zenconverter.app.audio.TranscriptEditing
 import org.zenconverter.app.audio.TranscriptSegment
 import org.zenconverter.app.conversion.ConversionTaskStore
+import org.zenconverter.app.ui.FileCategory
 import org.zenconverter.app.i18n.localizedText
+import org.zenconverter.app.conversion.QueueInbox
 import org.zenconverter.app.system.FolderWatcher
 import org.zenconverter.app.ui.UiText
 import org.zenconverter.app.ui.settings.InsetGroupCard
@@ -152,6 +154,8 @@ internal fun FolderWatchScreen(texts: UiText, onBack: () -> Unit) {
     var detected by remember { mutableStateOf<List<String>>(emptyList()) }
     var treeUri by remember { mutableStateOf<Uri?>(null) }
     var watchJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    val targetOptions = remember { FileCategory.Audio.formats }
+    var targetFormat by remember { mutableStateOf(targetOptions.first()) }
     val pickFolder = rememberFolderPicker { uri ->
         treeUri = uri
         detected = watcher.currentDocuments(uri).map { it.displayName }
@@ -166,6 +170,14 @@ internal fun FolderWatchScreen(texts: UiText, onBack: () -> Unit) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    StudioChoiceRow(
+                        label = texts.folderWatchTargetLabel(),
+                        selected = targetFormat.key,
+                        options = targetOptions.map { it.key },
+                        onSelected = { key ->
+                            targetOptions.firstOrNull { it.key == key }?.let { targetFormat = it }
+                        }
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = pickFolder) { Text(texts.studioPickFolder()) }
                         OutlinedButton(
@@ -176,6 +188,11 @@ internal fun FolderWatchScreen(texts: UiText, onBack: () -> Unit) {
                                 watchJob = scope.launch {
                                     watcher.watch(uri).collect { document ->
                                         detected = detected + document.displayName
+                                        QueueInbox.enqueue(
+                                            document.uri,
+                                            document.mimeType,
+                                            targetFormat.key
+                                        )
                                         ConversionTaskStore.showMessage(
                                             localizedText(
                                                 org.zenconverter.app.R.string.folder_watch_found,

@@ -321,10 +321,10 @@ internal fun AudioRecorderScreen(texts: UiText, onBack: () -> Unit) {
 internal fun AudioMixerScreen(texts: UiText, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var tracks by remember { mutableStateOf(listOf<Triple<android.net.Uri, Float, Float>>()) }
+    var tracks by remember { mutableStateOf(listOf<MixerTrack>()) }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
-    val pickAudio = rememberAudioPicker { uri -> tracks = tracks + Triple(uri, 1f, 0f) }
+    val pickAudio = rememberAudioPicker { uri -> tracks = tracks + MixerTrack(uri) }
 
     SettingsPage(texts.mixerTitle(), texts.studioBack(), onBack) {
         item("mixer-add") {
@@ -344,19 +344,20 @@ internal fun AudioMixerScreen(texts: UiText, onBack: () -> Unit) {
                         Text(texts.mixerTrack(index + 1), style = MaterialTheme.typography.titleSmall)
                         StudioFieldLabel(texts.mixerVolume())
                         Slider(
-                            value = track.second,
-                            onValueChange = { value ->
-                                tracks = tracks.toMutableList().also { it[index] = Triple(track.first, value, track.third) }
-                            },
+                            value = track.volume,
+                            onValueChange = { value -> tracks = tracks.withTrack(index) { it.copy(volume = value) } },
                             valueRange = 0f..2f
                         )
                         StudioFieldLabel(texts.mixerPan())
                         Slider(
-                            value = track.third,
-                            onValueChange = { value ->
-                                tracks = tracks.toMutableList().also { it[index] = Triple(track.first, track.second, value) }
-                            },
+                            value = track.pan,
+                            onValueChange = { value -> tracks = tracks.withTrack(index) { it.copy(pan = value) } },
                             valueRange = -1f..1f
+                        )
+                        StudioSwitchRow(
+                            label = texts.mixerMute(),
+                            checked = track.mute,
+                            onCheckedChange = { value -> tracks = tracks.withTrack(index) { it.copy(mute = value) } }
                         )
                     }
                 }
@@ -367,7 +368,7 @@ internal fun AudioMixerScreen(texts: UiText, onBack: () -> Unit) {
                 InsetGroupCard {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
-                            enabled = !busy,
+                            enabled = !busy && tracks.any { !it.mute },
                             onClick = {
                                 busy = true
                                 scope.launch {
@@ -375,7 +376,7 @@ internal fun AudioMixerScreen(texts: UiText, onBack: () -> Unit) {
                                     val ok = AudioStudioEngine.mix(
                                         context = context,
                                         tracks = tracks.map {
-                                            AudioStudioEngine.MixTrack(it.first, it.second, it.third, mute = false)
+                                            AudioStudioEngine.MixTrack(it.uri, it.volume, it.pan, it.mute)
                                         },
                                         target = temp
                                     )

@@ -105,12 +105,13 @@ object RecipeLibrary {
         ),
         ConversionRecipe(
             id = "whatsapp-share",
-            name = "WhatsApp-ready video",
-            description = "Shrink a clip to a size that shares cleanly on WhatsApp.",
+            name = "Share-ready audio",
+            description = "Trim silence, level the loudness and export a compact M4A.",
             isBuiltIn = true,
             steps = listOf(
-                RecipeStep(RecipeStepType.Convert, "MP4"),
-                RecipeStep(RecipeStepType.Equalizer, "Off")
+                RecipeStep(RecipeStepType.TrimSilence, "Light"),
+                RecipeStep(RecipeStepType.Normalize, "Streaming"),
+                RecipeStep(RecipeStepType.Convert, "M4A")
             )
         ),
         ConversionRecipe(

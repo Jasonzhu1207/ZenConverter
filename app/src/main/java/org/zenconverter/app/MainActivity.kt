@@ -31,6 +31,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.lifecycleScope
@@ -46,6 +47,7 @@ import org.zenconverter.app.conversion.ConversionTaskState
 import org.zenconverter.app.conversion.ConversionTaskStatus
 import org.zenconverter.app.conversion.ConversionTaskStore
 import org.zenconverter.app.conversion.FileBasicInfo
+import org.zenconverter.app.conversion.QueueInbox
 import org.zenconverter.app.conversion.FileBasicInfoReader
 import org.zenconverter.app.conversion.GifFrameExportMode
 import org.zenconverter.app.conversion.ImageExportOptions
@@ -313,6 +315,20 @@ class MainActivity : AppCompatActivity() {
         refreshRifeModelState()
         refreshOfficeFontState()
         setContent {
+            LaunchedEffect(QueueInbox.size) {
+                if (QueueInbox.size == 0) return@LaunchedEffect
+                val pending = QueueInbox.drain()
+                if (pending.isEmpty()) return@LaunchedEffect
+                val uris = pending.map { ExternalImportUri(it.uri, it.mimeType) }
+                val items = withContext(Dispatchers.IO) {
+                    buildExternalImportDocuments(uris)
+                }
+                if (items.isEmpty()) {
+                    ConversionTaskStore.showMessage(localizedText(R.string.message_no_shared_files_were_found))
+                } else {
+                    enqueuePreparedDocuments(items, pending.mapNotNull { it.targetFormatKey })
+                }
+            }
             ZenConverterApp(
                 queuedFiles = queuedFiles,
                 pdfMergeGroups = pdfMergeGroups,
@@ -1257,13 +1273,19 @@ class MainActivity : AppCompatActivity() {
         enqueuePreparedDocuments(prepared)
     }
 
-    private fun enqueuePreparedDocuments(prepared: List<PreparedExternalImportDocument>) {
+    private fun enqueuePreparedDocuments(
+        prepared: List<PreparedExternalImportDocument>,
+        preferredFormatKeys: List<String> = emptyList()
+    ) {
         val pdfCount = prepared.count { it.detectedCategory == FileCategory.Pdf }
+        val preferredKey = preferredFormatKeys.firstOrNull()
         val nextFiles = prepared.mapNotNull { candidate ->
             val category = candidate.detectedCategory ?: return@mapNotNull null
             val targets = externalTargetsFor(category, pdfCount, candidate.extension)
             if (targets.isEmpty()) return@mapNotNull null
-            val defaultTarget = defaultExternalTargetFor(
+            val preferred = preferredKey
+                ?.let { key -> targets.firstOrNull { it.targetFormat.key == key } }
+            val defaultTarget = preferred ?: defaultExternalTargetFor(
                 category = category,
                 extension = candidate.extension,
                 targets = targets

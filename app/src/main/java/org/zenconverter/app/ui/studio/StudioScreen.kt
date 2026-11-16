@@ -1,11 +1,15 @@
 package org.zenconverter.app.ui.studio
 
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.CallSplit
 import androidx.compose.material.icons.rounded.FolderShared
@@ -32,12 +36,21 @@ import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Wifi
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.zenconverter.app.ui.AppScreen
 import org.zenconverter.app.ui.UiText
@@ -152,4 +165,99 @@ internal fun StudioFieldLabel(text: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
+}
+
+/** A row that toggles a boolean setting, shared by the studio mixer and effects. */
+@Composable
+internal fun StudioSwitchRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(role = Role.Switch) { onCheckedChange(!checked) }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Switch(checked = checked, onCheckedChange = null)
+    }
+}
+
+/**
+ * A row that opens a single-choice menu. Used where a full settings dropdown is
+ * overkill, such as picking the output format for watched-folder conversions.
+ */
+@Composable
+internal fun StudioChoiceRow(
+    label: String,
+    selected: String,
+    options: List<String>,
+    onSelected: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { expanded = true }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Box {
+            Text(
+                text = selected,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option) },
+                        onClick = {
+                            expanded = false
+                            onSelected(option)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** A mixer track: the source plus its per-track volume, pan and mute state. */
+internal data class MixerTrack(
+    val uri: android.net.Uri,
+    val volume: Float = 1f,
+    val pan: Float = 0f,
+    val mute: Boolean = false
+)
+
+/** Returns a copy of the list with the track at [index] transformed. */
+internal fun List<MixerTrack>.withTrack(
+    index: Int,
+    transform: (MixerTrack) -> MixerTrack
+): List<MixerTrack> {
+    if (index !in indices) return this
+    return toMutableList().also { it[index] = transform(it[index]) }
 }

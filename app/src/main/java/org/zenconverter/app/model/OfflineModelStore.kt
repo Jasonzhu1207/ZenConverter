@@ -38,6 +38,7 @@ object OfflineModelStore {
     private const val CONNECT_TIMEOUT_MILLIS = 15_000
     private const val READ_TIMEOUT_MILLIS = 120_000
     private const val BUFFER_SIZE = 64 * 1024
+    private const val SHA256_HEX_LENGTH = 64
 
     private fun modelDir(context: Context, category: String): File {
         val dir = File(context.applicationContext.filesDir, "models/$category")
@@ -52,7 +53,9 @@ object OfflineModelStore {
 
     fun isDownloaded(context: Context, category: String, spec: OfflineModelSpec): Boolean {
         val file = modelFile(context, category, spec)
-        return file.isFile && file.length() == spec.sizeBytes
+        if (!file.isFile) return false
+        // An unknown size can only be checked for existence; a known size must match.
+        return if (spec.sizeBytes > 0L) file.length() == spec.sizeBytes else file.length() > 0L
     }
 
     suspend fun download(
@@ -61,6 +64,11 @@ object OfflineModelStore {
         spec: OfflineModelSpec,
         onProgress: (Float) -> Unit
     ): File = withContext(Dispatchers.IO) {
+        // A model without a pinned digest cannot be verified, so refuse it rather
+        // than silently accepting whatever the server returns.
+        if (spec.sha256.length != SHA256_HEX_LENGTH) {
+            throw LocalizedFailure(localizedText(R.string.message_model_1_s_has_no_checksum_to_verify, spec.displayName))
+        }
         val dir = modelDir(context, category)
         val targetFile = File(dir, spec.fileName)
         val tempFile = File(dir, "${spec.fileName}.part")
@@ -70,6 +78,10 @@ object OfflineModelStore {
         onProgress(0f)
         val digest = MessageDigest.getInstance("SHA-256")
         val connection = openConnection(spec.url)
+        // Prefer the server's Content-Length so progress is meaningful even when
+        // the spec does not carry an exact size.
+        val declaredLength = connection.contentLengthLong.takeIf { it > 0L }
+        val expectedTotal = declaredLength ?: spec.sizeBytes.takeIf { it > 0L }
         var downloaded = 0L
         try {
             connection.inputStream.use { input ->
@@ -83,7 +95,9 @@ object OfflineModelStore {
                         output.write(buffer, 0, read)
                         digest.update(buffer, 0, read)
                         downloaded += read
-                        onProgress((downloaded.toFloat() / spec.sizeBytes.toFloat()).coerceIn(0f, 1f))
+                        if (expectedTotal != null) {
+                            onProgress((downloaded.toDouble() / expectedTotal.toDouble()).toFloat().coerceIn(0f, 1f))
+                        }
                     }
                 }
             }
@@ -141,16 +155,16 @@ object OfflineModelStore {
 object WhisperModelManager {
     const val CATEGORY = "whisper"
 
-    // Tiny multilingual Whisper, quantised for NCNN. Pinned by hash so a tampered
-    // download cannot be silently loaded.
+    // whisper.cpp GGML weights, quantised to q5_1 to keep the download small.
+    // Pinned by size and SHA-256 so a tampered download cannot be silently loaded.
     val MODEL_TINY = OfflineModelSpec(
-        id = "whisper-tiny",
-        displayName = "Whisper Tiny (multilingual)",
-        fileName = "whisper-tiny.bin",
-        url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-tiny.tar.bz2",
-        sizeBytes = 0L,
-        sha256 = "",
-        sourceUrl = "https://github.com/k2-fsa/sherpa-onnx"
+        id = "whisper-tiny-q5_1",
+        displayName = "Whisper Tiny q5_1 (multilingual)",
+        fileName = "ggml-tiny-q5_1.bin",
+        url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q5_1.bin",
+        sizeBytes = 32_152_673L,
+        sha256 = "818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7",
+        sourceUrl = "https://github.com/ggerganov/whisper.cpp"
     )
 
     val ALL_MODELS = listOf(MODEL_TINY)
@@ -166,6 +180,13 @@ object WhisperModelManager {
         spec: OfflineModelSpec = MODEL_TINY,
         onProgress: (Float) -> Unit
     ): File = OfflineModelStore.download(context, CATEGORY, spec, onProgress)
+
+    /**
+     * The Whisper runtime is a native library that this build does not bundle, so
+     * a downloaded model cannot be executed yet. The screen reports this instead
+     * of pretending a transcript was produced.
+     */
+    const val INFERENCE_AVAILABLE = false
 }
 
 /** Offline vocal/drum/bass separation model (Demucs/Spleeter-style, via NCNN). */
@@ -195,4 +216,11 @@ object StemSeparationModelManager {
         spec: OfflineModelSpec = MODEL_DEMUCS_LITE,
         onProgress: (Float) -> Unit
     ): File = OfflineModelStore.download(context, CATEGORY, spec, onProgress)
+
+    /**
+     * Upstream Demucs publishes source releases with no downloadable weights and
+     * no pinned digest, so this build cannot offer a verified model download.
+     * The stems screen uses the built-in FFmpeg approximation instead.
+     */
+    const val INFERENCE_AVAILABLE = false
 }

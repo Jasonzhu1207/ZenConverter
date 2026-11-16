@@ -5,6 +5,13 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import org.json.JSONArray
 import org.json.JSONObject
+import org.zenconverter.app.audio.AudioEffects
+import org.zenconverter.app.audio.CompressorPreset
+import org.zenconverter.app.audio.EqualizerPreset
+import org.zenconverter.app.audio.LoudnessTarget
+import org.zenconverter.app.audio.ReverbPreset
+import org.zenconverter.app.audio.SilenceRemovalMode
+import org.zenconverter.app.audio.VoiceChangerPreset
 import org.zenconverter.app.recipe.ConversionRecipe
 import org.zenconverter.app.recipe.RecipeLibrary
 
@@ -220,4 +227,64 @@ object PluginPresetCodec {
             }
         }.getOrDefault(emptyList())
     }
+}
+
+/**
+ * Bridges community [PluginPreset] JSON to the typed [AudioEffects] the converter
+ * consumes. Unknown keys are ignored and unrecognised values leave the previous
+ * setting in place, so a preset from a newer build degrades instead of failing.
+ */
+object PluginPresets {
+    const val KEY_EQUALIZER = "equalizer"
+    const val KEY_LOUDNESS = "loudness"
+    const val KEY_COMPRESSOR = "compressor"
+    const val KEY_REVERB = "reverb"
+    const val KEY_VOICE_CHANGER = "voiceChanger"
+    const val KEY_SILENCE_REMOVAL = "silenceRemoval"
+    const val KEY_DE_HUM = "deHum"
+
+    /** Merges [preset] onto [base], returning the resulting effects chain. */
+    fun apply(preset: PluginPreset, base: AudioEffects): AudioEffects {
+        var effects = base
+        preset.effects.forEach { (key, value) ->
+            effects = when (key) {
+                KEY_EQUALIZER -> resolve(value, EqualizerPreset.entries) { it.labelKey }
+                    ?.let { effects.copy(equalizer = it) } ?: effects
+                KEY_LOUDNESS -> resolve(value, LoudnessTarget.entries) { it.labelKey }
+                    ?.let { effects.copy(loudnessTarget = it) } ?: effects
+                KEY_COMPRESSOR -> resolve(value, CompressorPreset.entries) { it.labelKey }
+                    ?.let { effects.copy(compressor = it) } ?: effects
+                KEY_REVERB -> resolve(value, ReverbPreset.entries) { it.labelKey }
+                    ?.let { effects.copy(reverb = it) } ?: effects
+                KEY_VOICE_CHANGER -> resolve(value, VoiceChangerPreset.entries) { it.labelKey }
+                    ?.let { effects.copy(voiceChanger = it) } ?: effects
+                KEY_SILENCE_REMOVAL -> resolve(value, SilenceRemovalMode.entries) { it.labelKey }
+                    ?.let { effects.copy(silenceRemoval = it) } ?: effects
+                KEY_DE_HUM -> effects.copy(deHum = value.equals("true", ignoreCase = true))
+                else -> effects
+            }
+        }
+        return effects
+    }
+
+    /** Serialises an effects chain into the shareable preset representation. */
+    fun toPreset(id: String, name: String, description: String, effects: AudioEffects): PluginPreset =
+        PluginPreset(
+            id = id,
+            name = name,
+            description = description,
+            effects = mapOf(
+                KEY_EQUALIZER to effects.equalizer.name,
+                KEY_LOUDNESS to effects.loudnessTarget.name,
+                KEY_COMPRESSOR to effects.compressor.name,
+                KEY_REVERB to effects.reverb.name,
+                KEY_VOICE_CHANGER to effects.voiceChanger.name,
+                KEY_SILENCE_REMOVAL to effects.silenceRemoval.name,
+                KEY_DE_HUM to effects.deHum.toString()
+            )
+        )
+
+    private fun <T> resolve(value: String, entries: List<T>, label: (T) -> String): T? =
+        entries.firstOrNull { label(it).equals(value, ignoreCase = true) }
+            ?: entries.firstOrNull { it.toString().equals(value, ignoreCase = true) }
 }

@@ -24,19 +24,18 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import java.io.File
 import kotlinx.coroutines.launch
 import org.zenconverter.app.audio.AudioDecoder
-import org.zenconverter.app.audio.AudioEffects
-import org.zenconverter.app.audio.AudioEffectFilters
 import org.zenconverter.app.audio.AudioStudioEngine
+import org.zenconverter.app.audio.StemKind
 import org.zenconverter.app.audio.StudioOutput
-import org.zenconverter.app.audio.TranscriptEditing
-import org.zenconverter.app.audio.TranscribedWord
+import org.zenconverter.app.audio.SubtitleExport
 import org.zenconverter.app.audio.TranscriptSegment
 import org.zenconverter.app.conversion.ConversionTaskStore
-import org.zenconverter.app.model.StemSeparationModelManager
 import org.zenconverter.app.model.WhisperModelManager
 import org.zenconverter.app.recipe.ConversionRecipe
+import org.zenconverter.app.recipe.RecipeExecutor
 import org.zenconverter.app.recipe.RecipeLibrary
 import org.zenconverter.app.studio.PluginPresetCodec
 import org.zenconverter.app.studio.StudioStore
@@ -51,63 +50,87 @@ internal fun TranscribeScreen(texts: UiText, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var sourceUri by remember { mutableStateOf<Uri?>(null) }
     var transcript by remember { mutableStateOf("") }
-    var segments by remember { mutableStateOf<List<TranscriptSegment>>(emptyList()) }
-    var deleted by remember { mutableStateOf(setOf<Int>()) }
+    var durationSeconds by remember { mutableStateOf(0.0) }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
+    var downloadProgress by remember { mutableStateOf<Float?>(null) }
     var modelReady by remember { mutableStateOf(WhisperModelManager.isDownloaded(context)) }
     val pickAudio = rememberAudioPicker { uri -> sourceUri = uri }
+    val engineAvailable = WhisperModelManager.INFERENCE_AVAILABLE
 
     SettingsPage(texts.transcribeTitle(), texts.studioBack(), onBack) {
-        item("transcribe-pick") {
+        item("transcribe-engine") {
             InsetGroupCard {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = pickAudio) { Text(texts.transcribeLoad()) }
-                        OutlinedButton(
-                            onClick = {
-                                scope.launch {
-                                    runCatching {
-                                        WhisperModelManager.download(context) {}
-                                    }.onSuccess { modelReady = true }
-                                        .onFailure { status = texts.studioFailed() }
-                                }
-                            }
-                        ) { Text(texts.transcribeDownloadModel()) }
-                    }
-                    if (!modelReady) {
+                    if (!engineAvailable) {
                         Text(
-                            texts.transcribeModelNeeded(),
+                            texts.transcribeEngineUnavailable(),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = pickAudio) { Text(texts.transcribeLoad()) }
+                        OutlinedButton(
+                            enabled = !modelReady && downloadProgress == null,
+                            onClick = {
+                                scope.launch {
+                                    downloadProgress = 0f
+                                    runCatching {
+                                        WhisperModelManager.download(context) { downloadProgress = it }
+                                    }.onSuccess {
+                                        modelReady = true
+                                        downloadProgress = null
+                                        status = texts.studioModelReady()
+                                    }.onFailure {
+                                        downloadProgress = null
+                                        status = texts.studioFailed()
+                                    }
+                                }
+                            }
+                        ) { Text(texts.transcribeDownloadModel()) }
+                    }
+                    downloadProgress?.let { progress ->
+                        Text(
+                            texts.transcribeDownloading((progress * 100).toInt()),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Text(
+                        if (modelReady) texts.studioModelReady() else texts.transcribeModelNeeded(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
         item("transcribe-run") {
             InsetGroupCard {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        texts.transcribeManualHint(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = transcript,
+                        onValueChange = { transcript = it },
+                        label = { Text(texts.transcribeTitle()) },
+                        minLines = 4,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     Button(
                         enabled = sourceUri != null && !busy,
                         onClick = {
+                            val uri = sourceUri ?: return@Button
                             busy = true
-                            status = texts.transcribeRunning()
                             scope.launch {
-                                val uri = sourceUri!!
-                                // Decoding keeps the flow local; the on-device
-                                // Whisper runtime is not bundled, so we surface
-                                // the decoded duration as a placeholder result.
+                                // The transcript is typed or pasted; measuring the clip
+                                // gives the exported subtitles a real time range.
                                 val decoded = AudioDecoder.decodeMono(context, uri)
-                                if (decoded == null) {
-                                    status = texts.studioFailed()
-                                } else {
-                                    val duration = decoded.samples.size.toDouble() / decoded.sampleRateHz
-                                    segments = listOf(
-                                        TranscriptSegment(0.0, duration, transcript)
-                                    )
-                                    status = texts.studioModelReady()
-                                }
+                                durationSeconds = decoded?.let { it.samples.size.toDouble() / it.sampleRateHz } ?: 0.0
+                                status = texts.studioModelReady()
                                 busy = false
                             }
                         }
@@ -118,25 +141,21 @@ internal fun TranscribeScreen(texts: UiText, onBack: () -> Unit) {
                 }
             }
         }
-        if (segments.isNotEmpty()) {
+        if (transcript.isNotBlank()) {
+            val segments = listOf(
+                TranscriptSegment(0.0, durationSeconds.coerceAtLeast(0.0), transcript.trim())
+            )
             item("transcribe-edit") {
                 InsetGroupCard {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = transcript,
-                            onValueChange = { transcript = it },
-                            label = { Text(texts.transcribeTitle()) },
-                            minLines = 4,
-                            modifier = Modifier.fillMaxWidth()
-                        )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { exportTranscript(context, texts, transcript, "srt") { status = it } }) {
+                            OutlinedButton(onClick = { exportTranscript(context, texts, segments, "srt") { status = it } }) {
                                 Text(texts.transcribeExportSrt())
                             }
-                            OutlinedButton(onClick = { exportTranscript(context, texts, transcript, "vtt") { status = it } }) {
+                            OutlinedButton(onClick = { exportTranscript(context, texts, segments, "vtt") { status = it } }) {
                                 Text(texts.transcribeExportVtt())
                             }
-                            OutlinedButton(onClick = { exportTranscript(context, texts, transcript, "txt") { status = it } }) {
+                            OutlinedButton(onClick = { exportTranscript(context, texts, segments, "txt") { status = it } }) {
                                 Text(texts.transcribeExportTxt())
                             }
                         }
@@ -150,24 +169,24 @@ internal fun TranscribeScreen(texts: UiText, onBack: () -> Unit) {
 private fun exportTranscript(
     context: android.content.Context,
     texts: UiText,
-    text: String,
+    segments: List<TranscriptSegment>,
     extension: String,
     onStatus: (String) -> Unit
 ) {
-    val payload = when (extension) {
-        "srt" -> "1\n00:00:00,000 --> 00:00:05,000\n${text.trim()}\n"
-        "vtt" -> "WEBVTT\n\n00:00:00.000 --> 00:00:05.000\n${text.trim()}\n"
-        else -> text.trim()
-    }
+    val format = SubtitleExport.Format.entries.firstOrNull { it.extension == extension }
+        ?: SubtitleExport.Format.Text
+    val payload = SubtitleExport.render(segments, format)
     val file = java.io.File(context.cacheDir, "zen-transcript-${System.currentTimeMillis()}.$extension")
-    runCatching { file.writeText(payload) }
-        .onSuccess {
-            StudioOutput.save(
-                context, file, file.name, "text/plain", StudioOutput.Collection.Documents
-            )
-            onStatus(texts.studioSaved())
-        }
-        .onFailure { onStatus(texts.studioFailed()) }
+    val written = runCatching { file.writeText(payload) }.isSuccess
+    if (!written) {
+        file.delete()
+        onStatus(texts.transcribeExportFailed())
+        return
+    }
+    runCatching {
+        StudioOutput.save(context, file, file.name, "text/plain", StudioOutput.Collection.Documents)
+    }.onSuccess { onStatus(texts.studioSaved()) }
+        .onFailure { onStatus(texts.transcribeExportFailed()) }
     file.delete()
 }
 
@@ -175,48 +194,64 @@ private fun exportTranscript(
 internal fun StemSeparationScreen(texts: UiText, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var modelReady by remember { mutableStateOf(StemSeparationModelManager.isDownloaded(context)) }
+    var sourceUri by remember { mutableStateOf<Uri?>(null) }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
+    val pickAudio = rememberAudioPicker { uri -> sourceUri = uri }
 
     SettingsPage(texts.stemsTitle(), texts.studioBack(), onBack) {
-        item("stems-model") {
+        item("stems-note") {
             InsetGroupCard {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = {
-                                scope.launch {
-                                    runCatching {
-                                        StemSeparationModelManager.download(context) {}
-                                    }.onSuccess { modelReady = true }
-                                        .onFailure { status = texts.studioFailed() }
-                                }
-                            }
-                        ) { Text(texts.stemsDownloadModel()) }
-                    }
                     Text(
-                        if (modelReady) texts.studioModelReady() else texts.stemsModelNeeded(),
+                        texts.stemsEngineUnavailable(),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    OutlinedButton(
-                        enabled = modelReady && !busy,
-                        onClick = { status = texts.studioModelReady() }
-                    ) { Text(texts.stemsRun()) }
-                    status?.let {
-                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                    }
+                    Text(
+                        texts.stemsApproximateNote(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
-        item("stems-outputs") {
+        item("stems-run") {
             InsetGroupCard {
-                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(texts.stemsVocals(), style = MaterialTheme.typography.bodyLarge)
-                    Text(texts.stemsDrums(), style = MaterialTheme.typography.bodyLarge)
-                    Text(texts.stemsBass(), style = MaterialTheme.typography.bodyLarge)
-                    Text(texts.stemsOther(), style = MaterialTheme.typography.bodyLarge)
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = pickAudio) { Text(texts.studioPickAudio()) }
+                        OutlinedButton(
+                            enabled = sourceUri != null && !busy,
+                            onClick = {
+                                val uri = sourceUri ?: return@OutlinedButton
+                                busy = true
+                                scope.launch {
+                                    val outputDir = File(context.cacheDir, "zen-stems-${System.currentTimeMillis()}")
+                                    val stems = AudioStudioEngine.separateStems(context, uri, outputDir)
+                                    status = if (stems.isEmpty()) {
+                                        texts.studioFailed()
+                                    } else {
+                                        stems.forEach { (kind, file) ->
+                                            StudioOutput.save(
+                                                context,
+                                                file,
+                                                "zenconverter-${kind.name.lowercase()}.wav",
+                                                "audio/wav",
+                                                StudioOutput.Collection.Music
+                                            )
+                                        }
+                                        texts.stemsDone(stems.size)
+                                    }
+                                    outputDir.deleteRecursively()
+                                    busy = false
+                                }
+                            }
+                        ) { Text(texts.stemsRunOffline()) }
+                    }
+                    status?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
         }
@@ -229,16 +264,62 @@ internal fun RecipesScreen(texts: UiText, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var importText by remember { mutableStateOf("") }
     var status by remember { mutableStateOf<String?>(null) }
+    var sourceUri by remember { mutableStateOf<Uri?>(null) }
+    var busy by remember { mutableStateOf(false) }
     StudioStore.ensureLoaded(context)
     val customRecipes = StudioStore.customRecipes.toList()
+    val pickAudio = rememberAudioPicker { uri -> sourceUri = uri }
+
+    fun runRecipe(recipe: ConversionRecipe) {
+        val uri = sourceUri
+        if (uri == null) {
+            status = texts.studioNeedsFile()
+            return
+        }
+        busy = true
+        scope.launch {
+            val extension = RecipeExecutor.compile(recipe).outputExtension
+            val temp = tempOutput(context, "zen-recipe", extension)
+            val ok = RecipeExecutor.execute(context, uri, recipe, temp)
+            status = if (ok) {
+                StudioOutput.save(
+                    context,
+                    temp,
+                    "zenconverter-${recipe.id}-${System.currentTimeMillis()}.$extension",
+                    "audio/*",
+                    StudioOutput.Collection.Music
+                )
+                temp.delete()
+                texts.recipesRan()
+            } else {
+                temp.delete()
+                texts.recipesNoSteps()
+            }
+            busy = false
+        }
+    }
 
     SettingsPage(texts.recipesTitle(), texts.studioBack(), onBack) {
+        item("recipes-source") {
+            InsetGroupCard {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = pickAudio) { Text(texts.studioPickAudio()) }
+                    }
+                    Text(
+                        if (sourceUri == null) texts.studioNeedsFile() else texts.studioSaved(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
         item("recipes-builtin-header") { SettingsGroupHeader(texts.recipesBuiltin()) }
         item("recipes-builtin") {
             InsetGroupCard {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     RecipeLibrary.builtIn.forEach { recipe ->
-                        RecipeCard(texts, recipe)
+                        RecipeCard(texts, recipe, enabled = sourceUri != null && !busy, onRun = { runRecipe(recipe) })
                     }
                 }
             }
@@ -254,7 +335,9 @@ internal fun RecipesScreen(texts: UiText, onBack: () -> Unit) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
-                        customRecipes.forEach { RecipeCard(texts, it) }
+                        customRecipes.forEach { recipe ->
+                            RecipeCard(texts, recipe, enabled = sourceUri != null && !busy, onRun = { runRecipe(recipe) })
+                        }
                     }
                 }
             }
@@ -305,7 +388,12 @@ internal fun RecipesScreen(texts: UiText, onBack: () -> Unit) {
 }
 
 @Composable
-private fun RecipeCard(texts: UiText, recipe: ConversionRecipe) {
+private fun RecipeCard(
+    texts: UiText,
+    recipe: ConversionRecipe,
+    enabled: Boolean,
+    onRun: () -> Unit
+) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(recipe.name, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
         Text(
@@ -318,6 +406,7 @@ private fun RecipeCard(texts: UiText, recipe: ConversionRecipe) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.primary
         )
+        OutlinedButton(enabled = enabled, onClick = onRun) { Text(texts.recipesRun()) }
     }
 }
 
