@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
@@ -58,6 +59,7 @@ internal fun SettingsScreen(
     onPickOutputDirectory: () -> Unit,
     onNavigateToMetadataSecurity: () -> Unit,
     onNavigateToOfflineEngines: () -> Unit,
+    onNavigateToStudio: () -> Unit,
     onShowHelp: () -> Unit,
     onShowPrivacyPolicy: () -> Unit,
     onShowSupport: () -> Unit,
@@ -129,7 +131,12 @@ internal fun SettingsScreen(
                 SettingsRow(
                     badgeIcon = Icons.Rounded.AutoAwesome, title = texts.settingsOfflineEngines,
                     subtitle = texts.settingsOfflineEnginesDesc, showChevron = true,
-                    showDivider = false, onClick = onNavigateToOfflineEngines
+                    onClick = onNavigateToOfflineEngines
+                )
+                SettingsRow(
+                    badgeIcon = Icons.Rounded.GraphicEq, title = texts.settingsStudioEntry(),
+                    subtitle = texts.settingsStudioEntryDesc(), showChevron = true,
+                    showDivider = false, onClick = onNavigateToStudio
                 )
             }
         }

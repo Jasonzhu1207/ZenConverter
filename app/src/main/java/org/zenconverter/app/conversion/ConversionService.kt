@@ -65,6 +65,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import org.zenconverter.app.studio.ConversionHistoryEntry
+import org.zenconverter.app.studio.StudioStore
+import java.util.UUID
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.cos.COSBase
 import com.tom_roush.pdfbox.cos.COSName
@@ -94,6 +97,7 @@ import org.zenconverter.app.subtitle.LrcCodec
 import org.zenconverter.app.subtitle.SrtCodec
 import org.zenconverter.app.subtitle.SubtitleFormat
 import org.zenconverter.app.subtitle.SubtitleTextDecoder
+import org.zenconverter.app.audio.AudioEffectFilters
 import org.zenconverter.app.model.EsrganModelManager
 import org.zenconverter.app.model.RealEsrganUpscaler
 import org.zenconverter.app.model.RifeModelManager
@@ -1420,6 +1424,7 @@ class ConversionService : Service() {
                     fallbackSizeBytes = tempFileSizeBytes,
                     formatOverride = outputProfile.extension.uppercase(Locale.US)
                 )
+                recordConversionHistory(input, createdOutputUri, outputInfo)
                 tempFile.delete()
                 handler.post {
                     if (ConversionTaskStore.isCancelled()) {
@@ -5358,6 +5363,7 @@ class ConversionService : Service() {
                     )
                 }
             }
+            addAll(AudioEffectFilters.filtersFor(advanced.effects, durationMs))
         }
         return filters.takeIf { it.isNotEmpty() }?.joinToString(separator = ",")
     }
@@ -5454,6 +5460,7 @@ class ConversionService : Service() {
         progressEnd: Float = FFMPEG_MAX_PROGRESS_BEFORE_SAVE
     ): FfmpegRunResult = suspendCancellableCoroutine { continuation ->
         val resumed = AtomicBoolean(false)
+        ConversionTaskStore.recordFfmpegCommand(formatFfmpegArguments(arguments))
         Log.i(
             TAG,
             "Starting FFmpeg compatibility export category=${input.category} " +
@@ -5770,6 +5777,16 @@ class ConversionService : Service() {
             "areverse" -> localizedText(R.string.text_task_message_compatibility_engine_needs_reverse_filters)
             "afftdn" -> localizedText(R.string.text_task_message_compatibility_engine_needs_the_audio_denoise_filter)
             "tmix" -> localizedText(R.string.text_task_message_compatibility_engine_needs_motion_blur_filter)
+            "equalizer",
+            "loudnorm",
+            "acompressor",
+            "alimiter",
+            "silenceremove",
+            "asetrate",
+            "atempo",
+            "highpass",
+            "afftfilt" ->
+                localizedText(R.string.message_compatibility_engine_is_missing_an_audio_effects_filter)
             else -> localizedText(R.string.text_task_message_compatibility_engine_is_missing_an_advanced_filter)
         }
     }
@@ -5876,6 +5893,8 @@ class ConversionService : Service() {
                 ) {
                     add("afade")
                 }
+                AudioEffectFilters.filtersFor(audioAdvanced.effects, null)
+                    .mapNotNullTo(this) { AudioEffectFilters.filterNameOf(it) }
             }
         }
     }
@@ -6547,6 +6566,7 @@ class ConversionService : Service() {
                     fallbackSizeBytes = tempFileSizeBytes,
                     formatOverride = outputProfile.extension.uppercase(Locale.US)
                 )
+                recordConversionHistory(input, createdOutputUri, outputInfo)
                 tempFile.delete()
                 handler.post {
                     if (ConversionTaskStore.isCancelled()) {
@@ -6580,6 +6600,37 @@ class ConversionService : Service() {
                 }
             }
         }.also { it.start() }
+    }
+
+    /**
+     * Keeps a local record of the finished export so the studio can re-run it or
+     * restore the original later. Runs on the copy thread, never on the UI
+     * thread, and stays entirely on the device.
+     */
+    private fun recordConversionHistory(
+        input: ConversionTaskInput,
+        outputUri: Uri,
+        outputInfo: FileBasicInfo?
+    ) {
+        runCatching {
+            StudioStore.recordHistory(
+                this,
+                ConversionHistoryEntry(
+                    id = UUID.randomUUID().toString(),
+                    displayName = input.displayName,
+                    sourceUri = input.inputUri.toString(),
+                    outputUri = outputUri.toString(),
+                    targetFormat = input.targetFormat,
+                    inputBytes = input.inputInfo?.sizeBytes,
+                    outputBytes = outputInfo?.sizeBytes,
+                    timestampMs = System.currentTimeMillis(),
+                    success = true,
+                    ffmpegCommand = ConversionTaskStore.lastFfmpegCommand.value
+                )
+            )
+        }.onFailure { exception ->
+            Log.w(TAG, "Could not record conversion history", exception)
+        }
     }
 
     private fun saveCompletedExportFiles(

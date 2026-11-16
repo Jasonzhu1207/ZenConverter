@@ -200,6 +200,45 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import org.zenconverter.app.conversion.AudioAdvancedOptions
+import org.zenconverter.app.ui.studio.StudioScreen
+import org.zenconverter.app.ui.studio.WaveformEditorScreen
+import org.zenconverter.app.ui.studio.AudioRecorderScreen
+import org.zenconverter.app.ui.studio.AudioMixerScreen
+import org.zenconverter.app.ui.studio.AudioAnalyzeScreen
+import org.zenconverter.app.ui.studio.TagEditorScreen
+import org.zenconverter.app.ui.studio.RingtoneMakerScreen
+import org.zenconverter.app.ui.studio.TextToSpeechScreen
+import org.zenconverter.app.ui.studio.VisualizerScreen
+import org.zenconverter.app.ui.studio.RecipesScreen
+import org.zenconverter.app.ui.studio.AbPlayerScreen
+import org.zenconverter.app.ui.studio.TranscribeScreen
+import org.zenconverter.app.ui.studio.StemSeparationScreen
+import org.zenconverter.app.ui.studio.HistoryScreen
+import org.zenconverter.app.ui.studio.CommandViewScreen
+import org.zenconverter.app.ui.studio.PluginsScreen
+import org.zenconverter.app.ui.studio.WifiTransferScreen
+import org.zenconverter.app.ui.studio.StorageCleanerScreen
+import org.zenconverter.app.ui.studio.GuardScreen
+import org.zenconverter.app.ui.studio.AccessibilityScreen
+import org.zenconverter.app.ui.studio.ArchiveToolsScreen
+import org.zenconverter.app.ui.studio.FolderWatchScreen
+import org.zenconverter.app.ui.studio.SplitSilenceScreen
+import org.zenconverter.app.ui.studio.CutTranscriptScreen
+import org.zenconverter.app.audio.AudioEffects
+import org.zenconverter.app.audio.CompressorPreset
+import org.zenconverter.app.audio.EqualizerPreset
+import org.zenconverter.app.audio.LoudnessTarget
+import org.zenconverter.app.audio.ReverbPreset
+import org.zenconverter.app.audio.SilenceRemovalMode
+import org.zenconverter.app.audio.VoiceChangerPreset
+import org.zenconverter.app.studio.QualityEstimator
+import org.zenconverter.app.studio.SmartPreset
+import org.zenconverter.app.studio.BitrateCalculator
+import org.zenconverter.app.studio.SmartPresets
+import org.zenconverter.app.studio.FileFacts
+import org.zenconverter.app.studio.SmartSuggestions
+import org.zenconverter.app.studio.SmartSuggestion
+import org.zenconverter.app.conversion.ConversionMediaCategory
 import org.zenconverter.app.conversion.AudioEchoMode
 import org.zenconverter.app.conversion.AudioExportOptions
 import org.zenconverter.app.conversion.AudioNoiseReductionMode
@@ -484,7 +523,8 @@ private data class AudioAdvancedUiState(
     val fadeOut: String,
     val volume: String,
     val echo: String,
-    val noiseReduction: String
+    val noiseReduction: String,
+    val effects: AudioEffects = AudioEffects()
 )
 
 internal enum class AppScreen {
@@ -493,7 +533,31 @@ internal enum class AppScreen {
     OfflineEngines,
     MetadataSecurity,
     Help,
-    PrivacyPolicy
+    PrivacyPolicy,
+    Studio,
+    StudioWaveform,
+    StudioRecorder,
+    StudioMixer,
+    StudioAnalyze,
+    StudioTags,
+    StudioRingtone,
+    StudioTts,
+    StudioVisualizer,
+    StudioRecipes,
+    StudioAbPlayer,
+    StudioTranscribe,
+    StudioStems,
+    StudioHistory,
+    StudioCommand,
+    StudioPlugins,
+    StudioWifi,
+    StudioCleaner,
+    StudioGuard,
+    StudioAccessibility,
+    StudioArchive,
+    StudioFolderWatch,
+    StudioSplitSilence,
+    StudioCutTranscript
 }
 
 internal const val ZENCONVERTER_REPOSITORY_URL = "https://github.com/Jasonzhu1207/ZenConverter"
@@ -1563,6 +1627,7 @@ private fun ZenConverterContent(
                     onPickOutputDirectory = onPickOutputDirectory,
                     onNavigateToMetadataSecurity = { navigateTo(AppScreen.MetadataSecurity) },
                     onNavigateToOfflineEngines = { navigateTo(AppScreen.OfflineEngines) },
+                    onNavigateToStudio = { navigateTo(AppScreen.Studio) },
                     onShowHelp = { navigateTo(AppScreen.Help) },
                     onShowPrivacyPolicy = { navigateTo(AppScreen.PrivacyPolicy) },
                     onShowSupport = { showSupport = true },
@@ -1602,6 +1667,34 @@ private fun ZenConverterContent(
                     copy = texts.helpGuide,
                     onBack = { navigateBack() },
                 )
+                AppScreen.Studio -> StudioScreen(
+                    texts = texts,
+                    onNavigate = { navigateTo(it) },
+                    onBack = { navigateBack() },
+                )
+                AppScreen.StudioWaveform -> WaveformEditorScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioRecorder -> AudioRecorderScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioMixer -> AudioMixerScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioAnalyze -> AudioAnalyzeScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioTags -> TagEditorScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioRingtone -> RingtoneMakerScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioTts -> TextToSpeechScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioVisualizer -> VisualizerScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioRecipes -> RecipesScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioAbPlayer -> AbPlayerScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioTranscribe -> TranscribeScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioStems -> StemSeparationScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioHistory -> HistoryScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioCommand -> CommandViewScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioPlugins -> PluginsScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioWifi -> WifiTransferScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioCleaner -> StorageCleanerScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioGuard -> GuardScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioAccessibility -> AccessibilityScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioArchive -> ArchiveToolsScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioFolderWatch -> FolderWatchScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioSplitSilence -> SplitSilenceScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioCutTranscript -> CutTranscriptScreen(texts, onBack = { navigateBack() })
                 AppScreen.Home -> Unit
             }
         }
@@ -4661,6 +4754,7 @@ private fun VideoOptions(
     onAudioVolumeChange: (String) -> Unit,
     onAudioEchoChange: (String) -> Unit,
     onAudioNoiseReductionChange: (String) -> Unit,
+    onAudioEffectsChange: (AudioEffects) -> Unit = {},
     contactSheetOptions: VideoContactSheetOptions = VideoContactSheetOptions(),
     onContactSheetOptionsChange: (VideoContactSheetOptions) -> Unit = {},
     sourceShortSide: Int? = null,
@@ -4898,7 +4992,8 @@ private fun VideoOptions(
                 onFadeOutChange = onAudioFadeOutChange,
                 onVolumeChange = onAudioVolumeChange,
                 onEchoChange = onAudioEchoChange,
-                onNoiseReductionChange = onAudioNoiseReductionChange
+                onNoiseReductionChange = onAudioNoiseReductionChange,
+                onEffectsChange = onAudioEffectsChange
             )
         }
     }
@@ -4935,7 +5030,8 @@ private fun AudioOptions(
     onFadeOutChange: (String) -> Unit,
     onVolumeChange: (String) -> Unit,
     onEchoChange: (String) -> Unit,
-    onNoiseReductionChange: (String) -> Unit
+    onNoiseReductionChange: (String) -> Unit,
+    onEffectsChange: (AudioEffects) -> Unit = {}
 ) {
     OptionGrid {
         MediaTrimOptions(
@@ -5055,7 +5151,8 @@ private fun AudioOptions(
             onFadeOutChange = onFadeOutChange,
             onVolumeChange = onVolumeChange,
             onEchoChange = onEchoChange,
-            onNoiseReductionChange = onNoiseReductionChange
+            onNoiseReductionChange = onNoiseReductionChange,
+            onEffectsChange = onEffectsChange
         )
     }
 }
@@ -5811,7 +5908,8 @@ private fun AudioAdvancedOptionsPanel(
     onFadeOutChange: (String) -> Unit,
     onVolumeChange: (String) -> Unit,
     onEchoChange: (String) -> Unit,
-    onNoiseReductionChange: (String) -> Unit
+    onNoiseReductionChange: (String) -> Unit,
+    onEffectsChange: (AudioEffects) -> Unit = {}
 ) {
     AdvancedOptionsPanel(
         title = texts.audioAdvancedTitle(),
@@ -5881,6 +5979,124 @@ private fun AudioAdvancedOptionsPanel(
                 onSelected = onNoiseReductionChange
             )
         }
+        AudioEffectsPanel(
+            texts = texts,
+            effects = state.effects,
+            menuPrefix = "$menuPrefix audio-effects",
+            openMenuId = openMenuId,
+            onOpenMenuChange = onOpenMenuChange,
+            onEffectsChange = onEffectsChange
+        )
+    }
+}
+
+@Composable
+private fun AudioEffectsPanel(
+    texts: UiText,
+    effects: AudioEffects,
+    menuPrefix: String,
+    openMenuId: String?,
+    onOpenMenuChange: (String?) -> Unit,
+    onEffectsChange: (AudioEffects) -> Unit
+) {
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = texts.audioEffectsTitle(),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp)
+        )
+        InsetGroupCard {
+            OptionDropdown(
+                menuId = "$menuPrefix-eq",
+                label = texts.equalizerLabel(),
+                selected = texts.equalizerPresetLabel(effects.equalizer),
+                options = EqualizerPreset.entries.map { texts.equalizerPresetLabel(it) },
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = true,
+                onSelected = { label ->
+                    EqualizerPreset.entries.firstOrNull { texts.equalizerPresetLabel(it) == label }
+                        ?.let { onEffectsChange(effects.copy(equalizer = it)) }
+                }
+            )
+            OptionDropdown(
+                menuId = "$menuPrefix-loudness",
+                label = texts.loudnessLabel(),
+                selected = texts.loudnessTargetLabel(effects.loudnessTarget),
+                options = LoudnessTarget.entries.map { texts.loudnessTargetLabel(it) },
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = true,
+                onSelected = { label ->
+                    LoudnessTarget.entries.firstOrNull { texts.loudnessTargetLabel(it) == label }
+                        ?.let { onEffectsChange(effects.copy(loudnessTarget = it)) }
+                }
+            )
+            OptionDropdown(
+                menuId = "$menuPrefix-compressor",
+                label = texts.compressorLabel(),
+                selected = texts.compressorPresetLabel(effects.compressor),
+                options = CompressorPreset.entries.map { texts.compressorPresetLabel(it) },
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = true,
+                onSelected = { label ->
+                    CompressorPreset.entries.firstOrNull { texts.compressorPresetLabel(it) == label }
+                        ?.let { onEffectsChange(effects.copy(compressor = it)) }
+                }
+            )
+            OptionDropdown(
+                menuId = "$menuPrefix-reverb",
+                label = texts.reverbLabel(),
+                selected = texts.reverbPresetLabel(effects.reverb),
+                options = ReverbPreset.entries.map { texts.reverbPresetLabel(it) },
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = true,
+                onSelected = { label ->
+                    ReverbPreset.entries.firstOrNull { texts.reverbPresetLabel(it) == label }
+                        ?.let { onEffectsChange(effects.copy(reverb = it)) }
+                }
+            )
+            OptionDropdown(
+                menuId = "$menuPrefix-voice",
+                label = texts.voiceChangerLabel(),
+                selected = texts.voiceChangerPresetLabel(effects.voiceChanger),
+                options = VoiceChangerPreset.entries.map { texts.voiceChangerPresetLabel(it) },
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = true,
+                onSelected = { label ->
+                    VoiceChangerPreset.entries.firstOrNull { texts.voiceChangerPresetLabel(it) == label }
+                        ?.let { onEffectsChange(effects.copy(voiceChanger = it)) }
+                }
+            )
+            OptionDropdown(
+                menuId = "$menuPrefix-silence",
+                label = texts.silenceRemovalLabel(),
+                selected = texts.silenceRemovalModeLabel(effects.silenceRemoval),
+                options = SilenceRemovalMode.entries.map { texts.silenceRemovalModeLabel(it) },
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = false,
+                onSelected = { label ->
+                    SilenceRemovalMode.entries.firstOrNull { texts.silenceRemovalModeLabel(it) == label }
+                        ?.let { onEffectsChange(effects.copy(silenceRemoval = it)) }
+                }
+            )
+        }
+        AdvancedSwitchRow(
+            label = texts.deHumLabel(),
+            checked = effects.deHum,
+            onCheckedChange = { onEffectsChange(effects.copy(deHum = it)) }
+        )
     }
 }
 
@@ -6739,6 +6955,25 @@ private fun QueuedFileOptionsPanel(
     onUpdateFile: (QueuedFile) -> Unit
 ) {
     val menuPrefix = "file-${file.id}-"
+    val targetId = selectedTarget.targetFormat.id
+    val facts = FileFacts(
+        displayName = file.displayName,
+        sizeBytes = file.sizeBytes ?: file.inputInfo?.sizeBytes,
+        category = file.category.mediaCategory,
+        widthPx = file.inputInfo?.width,
+        heightPx = file.inputInfo?.height,
+        durationSeconds = file.inputInfo?.durationMs?.let { it / 1_000.0 },
+        bitrate = file.inputInfo?.bitrateBitsPerSecond?.toInt()
+    )
+    val suggestions = remember(facts) {
+        SmartSuggestions.suggestionsFor(facts).filter { it.preset != null }
+    }
+    val estimateText = remember(file.videoOptions, file.audioOptions, file.inputInfo, file.category) {
+        qualityEstimateTextFor(file, texts)
+    }
+    val durationSeconds = (file.inputInfo?.durationMs ?: 0L) / 1_000.0
+    val targetSizeEligible = durationSeconds > 0.0 &&
+        (file.category == FileCategory.Video || file.category == FileCategory.Audio)
     AnimatedContent(
         targetState = "${file.category.name}-${file.targetFormat}",
         transitionSpec = {
@@ -6936,6 +7171,9 @@ private fun QueuedFileOptionsPanel(
                 },
                 onAudioNoiseReductionChange = { value ->
                     onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(advanced = file.audioOptions.advanced.copy(noiseReduction = audioNoiseReductionModeFor(value)))))
+                },
+                onAudioEffectsChange = { effects ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(advanced = file.audioOptions.advanced.copy(effects = effects))))
                 }
             )
             FileCategory.Audio -> AudioOptions(
@@ -7012,6 +7250,9 @@ private fun QueuedFileOptionsPanel(
                 },
                 onNoiseReductionChange = { value ->
                     onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(advanced = file.audioOptions.advanced.copy(noiseReduction = audioNoiseReductionModeFor(value)))))
+                },
+                onEffectsChange = { effects ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(advanced = file.audioOptions.advanced.copy(effects = effects))))
                 }
             )
             FileCategory.Image -> {
@@ -7093,6 +7334,201 @@ private fun QueuedFileOptionsPanel(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+    if (suggestions.isNotEmpty() || estimateText != null || targetSizeEligible) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (suggestions.isNotEmpty()) {
+                Text(
+                    text = texts.smartPresetSection(),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 4.dp)
+                )
+                CenteredFlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalSpacing = 6.dp,
+                    verticalSpacing = 6.dp
+                ) {
+                    suggestions.forEach { suggestion ->
+                        SuggestionChip(
+                            texts = texts,
+                            suggestion = suggestion,
+                            onApply = {
+                                onUpdateFile(applySmartSuggestion(file, suggestion))
+                            }
+                        )
+                    }
+                }
+            }
+            if (targetSizeEligible) {
+                TargetSizeModeRow(
+                    texts = texts,
+                    onApply = { targetBytes ->
+                        onUpdateFile(applyTargetSize(file, targetBytes, durationSeconds))
+                    }
+                )
+            }
+            estimateText?.let { estimate ->
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
+                ) {
+                    Column(
+                        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = texts.qualityEstimatorTitle(),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = estimate,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TargetSizeModeRow(
+    texts: UiText,
+    onApply: (Long) -> Unit
+) {
+    var megabytes by remember { mutableStateOf("") }
+    val parsed = megabytes.trim().toDoubleOrNull()
+    val isValid = parsed != null && parsed in 1.0..2000.0
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = texts.targetSizeMode(),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = megabytes,
+                    onValueChange = { megabytes = it },
+                    label = { Text(texts.targetSizeHint()) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedButton(
+                    enabled = isValid,
+                    onClick = { parsed?.let { onApply((it * 1024.0 * 1024.0).toLong()) } }
+                ) {
+                    Text(texts.targetSizeApply())
+                }
+            }
+            if (megabytes.isNotBlank() && !isValid) {
+                Text(
+                    text = texts.targetSizeInvalid(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
+}
+
+private fun applyTargetSize(file: QueuedFile, targetBytes: Long, durationSeconds: Double): QueuedFile {
+    val audioBitrate = file.audioOptions.audioBitrate ?: 128_000
+    return if (file.category == FileCategory.Video) {
+        val videoBitrate = BitrateCalculator.videoBitrateFor(targetBytes, durationSeconds, audioBitrate)
+            ?: return file
+        file.copy(videoOptions = file.videoOptions.copy(videoBitrate = videoBitrate))
+    } else {
+        val total = BitrateCalculator.totalBitrate(targetBytes, durationSeconds) ?: return file
+        file.copy(audioOptions = file.audioOptions.copy(audioBitrate = total))
+    }
+}
+
+@Composable
+private fun SuggestionChip(
+    texts: UiText,
+    suggestion: SmartSuggestion,
+    onApply: () -> Unit
+) {
+    val label = "${texts.optionValue(suggestion.titleKey)} · ${texts.optionValue(suggestion.detailKey)}"
+    OutlinedButton(
+        onClick = onApply,
+        modifier = Modifier.heightIn(min = 32.dp),
+        shape = RoundedCornerShape(ZenDimensions.RadiusChip),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
+            contentColor = MaterialTheme.colorScheme.primary
+        ),
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+    ) {
+        Text(text = label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+    }
+}
+
+private fun applySmartSuggestion(
+    file: QueuedFile,
+    suggestion: SmartSuggestion
+): QueuedFile {
+    val preset = suggestion.preset ?: return file
+    var updated = file
+    if (preset.isVideo) {
+        updated = updated.copy(
+            videoOptions = SmartPresets.videoOptions(preset, file.inputInfo?.durationMs?.let { it / 1_000.0 })
+        )
+    }
+    return updated.copy(audioOptions = SmartPresets.audioOptions(preset))
+}
+
+internal val FileCategory.mediaCategory: ConversionMediaCategory
+    get() = when (this) {
+        FileCategory.Video -> ConversionMediaCategory.Video
+        FileCategory.Audio -> ConversionMediaCategory.Audio
+        FileCategory.Image -> ConversionMediaCategory.Image
+        FileCategory.Pdf -> ConversionMediaCategory.Pdf
+        FileCategory.Document -> ConversionMediaCategory.Document
+        FileCategory.Font -> ConversionMediaCategory.Font
+        FileCategory.Subtitle -> ConversionMediaCategory.Subtitle
+    }
+
+private fun qualityEstimateTextFor(file: QueuedFile, texts: UiText): String? {
+    val duration = file.inputInfo?.durationMs?.takeIf { it > 0 }?.let { it / 1_000.0 } ?: return null
+    return when (file.category) {
+        FileCategory.Video -> {
+            val estimate = QualityEstimator.estimateVideo(
+                durationSeconds = duration,
+                width = file.inputInfo?.width,
+                height = file.inputInfo?.height,
+                fps = file.inputInfo?.frameRate?.toDouble(),
+                videoBitrate = file.videoOptions.videoBitrate
+            )
+            val size = estimate.estimatedBytes?.let { formatBytes(it, texts) }
+                ?: return texts.qualityEstimatorQuality(estimate.quality)
+            "${texts.qualityEstimatorSize(size)} · ${texts.qualityEstimatorQuality(estimate.quality)}"
+        }
+        FileCategory.Audio -> {
+            val estimate = QualityEstimator.estimateAudio(duration, file.audioOptions.audioBitrate)
+            val size = estimate.estimatedBytes?.let { formatBytes(it, texts) }
+                ?: return texts.qualityEstimatorQuality(estimate.quality)
+            "${texts.qualityEstimatorSize(size)} · ${texts.qualityEstimatorQuality(estimate.quality)}"
+        }
+        else -> null
     }
 }
 
@@ -8019,7 +8455,8 @@ private fun audioAdvancedUiStateFor(
         fadeOut = fadeLabelFor(advanced.fadeOutSeconds),
         volume = audioVolumeLabelFor(advanced.volume),
         echo = audioEchoLabelFor(advanced.echo),
-        noiseReduction = audioNoiseReductionLabelFor(advanced.noiseReduction)
+        noiseReduction = audioNoiseReductionLabelFor(advanced.noiseReduction),
+        effects = advanced.effects
     )
 }
 

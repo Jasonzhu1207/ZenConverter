@@ -2,6 +2,7 @@ package org.zenconverter.app.conversion
 import org.zenconverter.app.R
 import org.zenconverter.app.i18n.LocalizedText
 import org.zenconverter.app.i18n.localizedText
+import org.zenconverter.app.audio.AudioEffects
 
 
 import android.net.Uri
@@ -208,7 +209,8 @@ data class AudioAdvancedOptions(
     val fadeOutSeconds: Float? = null,
     val volume: AudioVolumeMode = AudioVolumeMode.Original,
     val echo: AudioEchoMode = AudioEchoMode.Off,
-    val noiseReduction: AudioNoiseReductionMode = AudioNoiseReductionMode.Off
+    val noiseReduction: AudioNoiseReductionMode = AudioNoiseReductionMode.Off,
+    val effects: AudioEffects = AudioEffects()
 ) {
     val hasEnabledEffects: Boolean
         get() = reverse ||
@@ -216,7 +218,8 @@ data class AudioAdvancedOptions(
             fadeOutSeconds != null ||
             volume != AudioVolumeMode.Original ||
             echo != AudioEchoMode.Off ||
-            noiseReduction != AudioNoiseReductionMode.Off
+            noiseReduction != AudioNoiseReductionMode.Off ||
+            effects.hasEnabledEffects
 }
 
 enum class VideoMirrorMode {
@@ -352,6 +355,13 @@ object ConversionTaskStore {
     val tasks = mutableStateListOf<ConversionTaskState>()
     val summaryMessage = mutableStateOf<LocalizedText?>(null)
     val isRunning = mutableStateOf(false)
+
+    /** The most recent FFmpeg command, surfaced by the studio command-line view. */
+    val lastFfmpegCommand = mutableStateOf<String?>(null)
+
+    fun recordFfmpegCommand(command: String) {
+        lastFfmpegCommand.value = command
+    }
 
     private val inputs = mutableListOf<ConversionTaskInput>()
     private var cancelled = false

@@ -23,6 +23,14 @@ import org.zenconverter.app.metadata.MetadataMessageKey
 import org.zenconverter.app.metadata.MetadataStatusMessage
 import org.zenconverter.app.metadata.MetadataTargetKind
 import org.zenconverter.app.conversion.TargetId
+import org.zenconverter.app.audio.CompressorPreset
+import org.zenconverter.app.audio.EqualizerPreset
+import org.zenconverter.app.audio.LoudnessTarget
+import org.zenconverter.app.audio.ReverbPreset
+import org.zenconverter.app.audio.SilenceRemovalMode
+import org.zenconverter.app.audio.VoiceChangerPreset
+import org.zenconverter.app.studio.QualityEstimator
+import org.zenconverter.app.studio.SmartPreset
 import org.zenconverter.app.settings.ActionBarPosition
 import org.zenconverter.app.updates.DownloadProgress
 import org.zenconverter.app.updates.UpdateChannel
@@ -832,6 +840,433 @@ internal class UiText(private val context: Context) {
     fun noiseReductionLabel(): String {
         return text(R.string.text_noise_reduction_label)
     }
+
+    fun audioEffectsTitle(): String {
+        return text(R.string.ui_audio_effects_section)
+    }
+
+    fun equalizerLabel(): String {
+        return text(R.string.ui_audio_effects_equalizer)
+    }
+
+    fun loudnessLabel(): String {
+        return text(R.string.ui_audio_effects_loudness)
+    }
+
+    fun compressorLabel(): String {
+        return text(R.string.ui_audio_effects_compressor)
+    }
+
+    fun reverbLabel(): String {
+        return text(R.string.ui_audio_effects_reverb)
+    }
+
+    fun voiceChangerLabel(): String {
+        return text(R.string.ui_audio_effects_voice)
+    }
+
+    fun silenceRemovalLabel(): String {
+        return text(R.string.ui_audio_effects_silence)
+    }
+
+    fun deHumLabel(): String {
+        return text(R.string.ui_audio_effects_de_hum)
+    }
+
+    fun equalizerPresetLabel(preset: EqualizerPreset): String {
+        return text(
+            when (preset) {
+                EqualizerPreset.Off -> R.string.ui_audio_effects_preset_off
+                EqualizerPreset.Flat -> R.string.ui_audio_effects_preset_flat
+                EqualizerPreset.BassBoost -> R.string.ui_audio_effects_preset_bass_boost
+                EqualizerPreset.Podcast -> R.string.ui_audio_effects_preset_podcast
+                EqualizerPreset.Vocal -> R.string.ui_audio_effects_preset_vocal
+                EqualizerPreset.Treble -> R.string.ui_audio_effects_preset_treble
+                EqualizerPreset.Loudness -> R.string.ui_audio_effects_preset_loudness
+            }
+        )
+    }
+
+    fun loudnessTargetLabel(target: LoudnessTarget): String {
+        return text(
+            when (target) {
+                LoudnessTarget.Off -> R.string.ui_audio_effects_preset_off
+                LoudnessTarget.Podcast -> R.string.ui_audio_effects_preset_podcast
+                LoudnessTarget.Streaming -> R.string.ui_audio_effects_preset_streaming
+                LoudnessTarget.YouTube -> R.string.ui_audio_effects_preset_youtube
+                LoudnessTarget.Spotify -> R.string.ui_audio_effects_preset_spotify
+                LoudnessTarget.Broadcast -> R.string.ui_audio_effects_preset_broadcast
+            }
+        )
+    }
+
+    fun compressorPresetLabel(preset: CompressorPreset): String {
+        return text(
+            when (preset) {
+                CompressorPreset.Off -> R.string.ui_audio_effects_preset_off
+                CompressorPreset.Gentle -> R.string.ui_audio_effects_preset_gentle
+                CompressorPreset.Podcast -> R.string.ui_audio_effects_preset_podcast
+                CompressorPreset.Aggressive -> R.string.ui_audio_effects_preset_aggressive
+                CompressorPreset.Limiter -> R.string.ui_audio_effects_preset_limiter
+            }
+        )
+    }
+
+    fun reverbPresetLabel(preset: ReverbPreset): String {
+        return text(
+            when (preset) {
+                ReverbPreset.Off -> R.string.ui_audio_effects_preset_off
+                ReverbPreset.SmallRoom -> R.string.ui_audio_effects_preset_small_room
+                ReverbPreset.LargeHall -> R.string.ui_audio_effects_preset_large_hall
+                ReverbPreset.Cathedral -> R.string.ui_audio_effects_preset_cathedral
+                ReverbPreset.Plate -> R.string.ui_audio_effects_preset_plate
+            }
+        )
+    }
+
+    fun voiceChangerPresetLabel(preset: VoiceChangerPreset): String {
+        return text(
+            when (preset) {
+                VoiceChangerPreset.Off -> R.string.ui_audio_effects_preset_off
+                VoiceChangerPreset.Child -> R.string.ui_audio_effects_preset_child
+                VoiceChangerPreset.Deep -> R.string.ui_audio_effects_preset_deep
+                VoiceChangerPreset.Robot -> R.string.ui_audio_effects_preset_robot
+                VoiceChangerPreset.Chipmunk -> R.string.ui_audio_effects_preset_chipmunk
+                VoiceChangerPreset.Monster -> R.string.ui_audio_effects_preset_monster
+            }
+        )
+    }
+
+    fun silenceRemovalModeLabel(mode: SilenceRemovalMode): String {
+        return text(
+            when (mode) {
+                SilenceRemovalMode.Off -> R.string.ui_audio_effects_preset_off
+                SilenceRemovalMode.Light -> R.string.ui_audio_effects_preset_light
+                SilenceRemovalMode.Standard -> R.string.ui_audio_effects_preset_standard
+                SilenceRemovalMode.Aggressive -> R.string.ui_audio_effects_preset_aggressive
+            }
+        )
+    }
+
+    fun smartPresetLabel(preset: SmartPreset): String {
+        return text(
+            when (preset) {
+                SmartPreset.WhatsApp -> R.string.ui_smart_preset_whatsapp
+                SmartPreset.EmailUnder25Mb -> R.string.ui_smart_preset_email
+                SmartPreset.InstagramReel -> R.string.ui_smart_preset_reel
+                SmartPreset.Podcast -> R.string.ui_smart_preset_podcast
+                SmartPreset.Youtube1080p -> R.string.ui_smart_preset_youtube
+                SmartPreset.Ringtone -> R.string.ui_smart_preset_ringtone
+            }
+        )
+    }
+
+    fun smartPresetSection(): String {
+        return text(R.string.ui_smart_preset_section)
+    }
+
+    fun targetSizeMode(): String {
+        return text(R.string.ui_target_size_mode)
+    }
+
+    fun targetSizeHint(): String {
+        return text(R.string.ui_target_size_hint)
+    }
+
+    fun targetSizeInvalid(): String {
+        return text(R.string.ui_target_size_invalid)
+    }
+
+    fun targetSizeApply(): String {
+        return text(R.string.ui_target_size_apply)
+    }
+
+    fun qualityEstimatorTitle(): String {
+        return text(R.string.ui_quality_estimator)
+    }
+
+    fun qualityEstimatorSize(formattedSize: String): String {
+        return text(R.string.ui_quality_estimator_size, formattedSize)
+    }
+
+    fun qualityEstimatorQuality(band: QualityEstimator.QualityBand): String {
+        val label = text(
+            when (band) {
+                QualityEstimator.QualityBand.High -> R.string.ui_quality_band_high
+                QualityEstimator.QualityBand.Balanced -> R.string.ui_quality_band_balanced
+                QualityEstimator.QualityBand.Reduced -> R.string.ui_quality_band_reduced
+                QualityEstimator.QualityBand.Low -> R.string.ui_quality_band_low
+            }
+        )
+        return text(R.string.ui_quality_estimator_quality, label)
+    }
+
+
+    // Audio & tools studio ---------------------------------------------------
+    fun studioTitle(): String = text(R.string.studio_title)
+    fun studioBack(): String = text(R.string.studio_back)
+    fun studioWaveform(): String = text(R.string.studio_waveform)
+    fun studioWaveformDesc(): String = text(R.string.studio_waveform_desc)
+    fun studioRecorder(): String = text(R.string.studio_recorder)
+    fun studioRecorderDesc(): String = text(R.string.studio_recorder_desc)
+    fun studioMixer(): String = text(R.string.studio_mixer)
+    fun studioMixerDesc(): String = text(R.string.studio_mixer_desc)
+    fun studioTagEditor(): String = text(R.string.studio_tag_editor)
+    fun studioTagEditorDesc(): String = text(R.string.studio_tag_editor_desc)
+    fun studioRingtone(): String = text(R.string.studio_ringtone)
+    fun studioRingtoneDesc(): String = text(R.string.studio_ringtone_desc)
+    fun studioTts(): String = text(R.string.studio_tts)
+    fun studioTtsDesc(): String = text(R.string.studio_tts_desc)
+    fun studioTranscribe(): String = text(R.string.studio_transcribe)
+    fun studioTranscribeDesc(): String = text(R.string.studio_transcribe_desc)
+    fun studioStems(): String = text(R.string.studio_stems)
+    fun studioStemsDesc(): String = text(R.string.studio_stems_desc)
+    fun studioVisualizer(): String = text(R.string.studio_visualizer)
+    fun studioVisualizerDesc(): String = text(R.string.studio_visualizer_desc)
+    fun studioAnalyze(): String = text(R.string.studio_analyze)
+    fun studioAnalyzeDesc(): String = text(R.string.studio_analyze_desc)
+    fun studioRecipes(): String = text(R.string.studio_recipes)
+    fun studioRecipesDesc(): String = text(R.string.studio_recipes_desc)
+    fun studioHistory(): String = text(R.string.studio_history)
+    fun studioHistoryDesc(): String = text(R.string.studio_history_desc)
+    fun studioPlugins(): String = text(R.string.studio_plugins)
+    fun studioPluginsDesc(): String = text(R.string.studio_plugins_desc)
+    fun studioWifi(): String = text(R.string.studio_wifi)
+    fun studioWifiDesc(): String = text(R.string.studio_wifi_desc)
+    fun studioCleaner(): String = text(R.string.studio_storage_cleaner)
+    fun studioCleanerDesc(): String = text(R.string.studio_storage_cleaner_desc)
+    fun studioCommandView(): String = text(R.string.studio_command_view)
+    fun studioCommandViewDesc(): String = text(R.string.studio_command_view_desc)
+    fun studioAccessibility(): String = text(R.string.studio_accessibility)
+    fun studioAccessibilityDesc(): String = text(R.string.studio_accessibility_desc)
+    fun studioSectionAudio(): String = text(R.string.studio_section_audio)
+    fun studioSectionCreative(): String = text(R.string.studio_section_creative)
+    fun studioSectionSmart(): String = text(R.string.studio_section_smart)
+    fun studioSectionPrivacy(): String = text(R.string.studio_section_privacy)
+    fun waveformTitle(): String = text(R.string.waveform_title)
+    fun waveformLoad(): String = text(R.string.waveform_load)
+    fun waveformEmpty(): String = text(R.string.waveform_empty)
+    fun waveformAnalyzing(): String = text(R.string.waveform_analyzing)
+    fun waveformTrimStart(): String = text(R.string.waveform_trim_start)
+    fun waveformTrimEnd(): String = text(R.string.waveform_trim_end)
+    fun waveformSplit(): String = text(R.string.waveform_split)
+    fun waveformFadeIn(): String = text(R.string.waveform_fade_in)
+    fun waveformFadeOut(): String = text(R.string.waveform_fade_out)
+    fun waveformApply(): String = text(R.string.waveform_apply)
+    fun recorderTitle(): String = text(R.string.recorder_title)
+    fun recorderRecord(): String = text(R.string.recorder_record)
+    fun recorderPause(): String = text(R.string.recorder_pause)
+    fun recorderResume(): String = text(R.string.recorder_resume)
+    fun recorderStop(): String = text(R.string.recorder_stop)
+    fun recorderSaveWav(): String = text(R.string.recorder_save_wav)
+    fun recorderSaveFlac(): String = text(R.string.recorder_save_flac)
+    fun recorderSaveM4a(): String = text(R.string.recorder_save_m4a)
+    fun recorderPermissionNeeded(): String = text(R.string.recorder_permission_needed)
+    fun recorderLevel(): String = text(R.string.recorder_level)
+    fun recorderSaved(): String = text(R.string.recorder_saved)
+    fun mixerTitle(): String = text(R.string.mixer_title)
+    fun mixerAddTrack(): String = text(R.string.mixer_add_track)
+    fun mixerVolume(): String = text(R.string.mixer_volume)
+    fun mixerPan(): String = text(R.string.mixer_pan)
+    fun mixerMute(): String = text(R.string.mixer_mute)
+    fun mixerExport(): String = text(R.string.mixer_export)
+    fun mixerEmpty(): String = text(R.string.mixer_empty)
+    fun tagTitle(): String = text(R.string.tag_title)
+    fun tagLoad(): String = text(R.string.tag_load)
+    fun tagTitleField(): String = text(R.string.tag_title_field)
+    fun tagArtist(): String = text(R.string.tag_artist)
+    fun tagAlbum(): String = text(R.string.tag_album)
+    fun tagAlbumArtist(): String = text(R.string.tag_album_artist)
+    fun tagTrack(): String = text(R.string.tag_track)
+    fun tagYear(): String = text(R.string.tag_year)
+    fun tagGenre(): String = text(R.string.tag_genre)
+    fun tagComment(): String = text(R.string.tag_comment)
+    fun tagLyrics(): String = text(R.string.tag_lyrics)
+    fun tagArtwork(): String = text(R.string.tag_artwork)
+    fun tagPickArtwork(): String = text(R.string.tag_pick_artwork)
+    fun tagSave(): String = text(R.string.tag_save)
+    fun tagSaved(): String = text(R.string.tag_saved)
+    fun tagBatchNote(): String = text(R.string.tag_batch_note)
+    fun ringtoneTitle(): String = text(R.string.ringtone_title)
+    fun ringtoneLoad(): String = text(R.string.ringtone_load)
+    fun ringtoneStart(): String = text(R.string.ringtone_start)
+    fun ringtoneEnd(): String = text(R.string.ringtone_end)
+    fun ringtoneSetRingtone(): String = text(R.string.ringtone_set_ringtone)
+    fun ringtoneSetAlarm(): String = text(R.string.ringtone_set_alarm)
+    fun ringtoneSetNotification(): String = text(R.string.ringtone_set_notification)
+    fun ringtoneApplied(): String = text(R.string.ringtone_applied)
+    fun ttsTitle(): String = text(R.string.tts_title)
+    fun ttsTextHint(): String = text(R.string.tts_text_hint)
+    fun ttsSpeak(): String = text(R.string.tts_speak)
+    fun ttsExport(): String = text(R.string.tts_export)
+    fun ttsUnavailable(): String = text(R.string.tts_unavailable)
+    fun ttsExporting(): String = text(R.string.tts_exporting)
+    fun ttsExported(): String = text(R.string.tts_exported)
+    fun transcribeTitle(): String = text(R.string.transcribe_title)
+    fun transcribeLoad(): String = text(R.string.transcribe_load)
+    fun transcribeStart(): String = text(R.string.transcribe_start)
+    fun transcribeModelNeeded(): String = text(R.string.transcribe_model_needed)
+    fun transcribeDownloadModel(): String = text(R.string.transcribe_download_model)
+    fun transcribeRunning(): String = text(R.string.transcribe_running)
+    fun transcribeExportSrt(): String = text(R.string.transcribe_export_srt)
+    fun transcribeExportVtt(): String = text(R.string.transcribe_export_vtt)
+    fun transcribeExportTxt(): String = text(R.string.transcribe_export_txt)
+    fun transcribeCutWords(): String = text(R.string.transcribe_cut_words)
+    fun transcribeEmpty(): String = text(R.string.transcribe_empty)
+    fun stemsTitle(): String = text(R.string.stems_title)
+    fun stemsLoad(): String = text(R.string.stems_load)
+    fun stemsModelNeeded(): String = text(R.string.stems_model_needed)
+    fun stemsDownloadModel(): String = text(R.string.stems_download_model)
+    fun stemsRun(): String = text(R.string.stems_run)
+    fun stemsRunning(): String = text(R.string.stems_running)
+    fun stemsVocals(): String = text(R.string.stems_vocals)
+    fun stemsDrums(): String = text(R.string.stems_drums)
+    fun stemsBass(): String = text(R.string.stems_bass)
+    fun stemsOther(): String = text(R.string.stems_other)
+    fun visualizerTitle(): String = text(R.string.visualizer_title)
+    fun visualizerLoad(): String = text(R.string.visualizer_load)
+    fun visualizerArtwork(): String = text(R.string.visualizer_artwork)
+    fun visualizerRender(): String = text(R.string.visualizer_render)
+    fun visualizerRendering(): String = text(R.string.visualizer_rendering)
+    fun analyzeTitle(): String = text(R.string.analyze_title)
+    fun analyzeLoad(): String = text(R.string.analyze_load)
+    fun analyzeRun(): String = text(R.string.analyze_run)
+    fun analyzeRunning(): String = text(R.string.analyze_running)
+    fun recipesTitle(): String = text(R.string.recipes_title)
+    fun recipesBuiltin(): String = text(R.string.recipes_builtin)
+    fun recipesCustom(): String = text(R.string.recipes_custom)
+    fun recipesApply(): String = text(R.string.recipes_apply)
+    fun recipesImport(): String = text(R.string.recipes_import)
+    fun recipesExport(): String = text(R.string.recipes_export)
+    fun recipesImportFailed(): String = text(R.string.recipes_import_failed)
+    fun recipesExported(): String = text(R.string.recipes_exported)
+    fun historyTitle(): String = text(R.string.history_title)
+    fun historyEmpty(): String = text(R.string.history_empty)
+    fun historyRerun(): String = text(R.string.history_rerun)
+    fun historyRestore(): String = text(R.string.history_restore)
+    fun historyClear(): String = text(R.string.history_clear)
+    fun historyRestored(): String = text(R.string.history_restored)
+    fun abPlayerTitle(): String = text(R.string.ab_player_title)
+    fun abOriginal(): String = text(R.string.ab_original)
+    fun abConverted(): String = text(R.string.ab_converted)
+    fun abNoOutput(): String = text(R.string.ab_no_output)
+    fun privacyScrubTitle(): String = text(R.string.privacy_scrub_title)
+    fun privacyScrubDesc(): String = text(R.string.privacy_scrub_desc)
+    fun privacyScrubRun(): String = text(R.string.privacy_scrub_run)
+    fun privacyScrubDone(): String = text(R.string.privacy_scrub_done)
+    fun guardTitle(): String = text(R.string.guard_title)
+    fun guardDesc(): String = text(R.string.guard_desc)
+    fun guardPausedThermal(): String = text(R.string.guard_paused_thermal)
+    fun guardPausedBattery(): String = text(R.string.guard_paused_battery)
+    fun guardResumed(): String = text(R.string.guard_resumed)
+    fun wifiTitle(): String = text(R.string.wifi_title)
+    fun wifiDesc(): String = text(R.string.wifi_desc)
+    fun wifiStart(): String = text(R.string.wifi_start)
+    fun wifiStop(): String = text(R.string.wifi_stop)
+    fun wifiNoFiles(): String = text(R.string.wifi_no_files)
+    fun wifiRunning(): String = text(R.string.wifi_running)
+    fun pluginsTitle(): String = text(R.string.plugins_title)
+    fun pluginsDesc(): String = text(R.string.plugins_desc)
+    fun pluginsImport(): String = text(R.string.plugins_import)
+    fun pluginsExport(): String = text(R.string.plugins_export)
+    fun pluginsImportFailed(): String = text(R.string.plugins_import_failed)
+    fun pluginsExported(): String = text(R.string.plugins_exported)
+    fun pluginsNone(): String = text(R.string.plugins_none)
+    fun cleanerTitle(): String = text(R.string.cleaner_title)
+    fun cleanerScan(): String = text(R.string.cleaner_scan)
+    fun cleanerScanning(): String = text(R.string.cleaner_scanning)
+    fun cleanerDuplicates(): String = text(R.string.cleaner_duplicates)
+    fun cleanerCompress(): String = text(R.string.cleaner_compress)
+    fun cleanerSaved(): String = text(R.string.cleaner_saved)
+    fun cleanerEmpty(): String = text(R.string.cleaner_empty)
+    fun commandTitle(): String = text(R.string.command_title)
+    fun commandDesc(): String = text(R.string.command_desc)
+    fun commandEmpty(): String = text(R.string.command_empty)
+    fun commandCopy(): String = text(R.string.command_copy)
+    fun commandCopied(): String = text(R.string.command_copied)
+    fun a11ySettingsTitle(): String = text(R.string.a11y_settings_title)
+    fun a11yLargeText(): String = text(R.string.a11y_large_text)
+    fun a11yLargeTextDesc(): String = text(R.string.a11y_large_text_desc)
+    fun a11yAudioDescriptions(): String = text(R.string.a11y_audio_descriptions)
+    fun a11yAudioDescriptionsDesc(): String = text(R.string.a11y_audio_descriptions_desc)
+    fun settingsStudioEntry(): String = text(R.string.settings_studio_entry)
+    fun settingsStudioEntryDesc(): String = text(R.string.settings_studio_entry_desc)
+
+
+    fun waveformSelection(selected: String, total: String): String =
+        text(R.string.waveform_selection, selected, total)
+
+    fun recorderElapsed(elapsed: String): String = text(R.string.recorder_elapsed, elapsed)
+
+    fun mixerTrack(index: Int): String = text(R.string.mixer_track, index)
+
+    fun analyzeBpm(value: String): String = text(R.string.analyze_bpm, value)
+
+    fun analyzeKey(value: String): String = text(R.string.analyze_key, value)
+
+    fun recipesImported(count: Int): String = text(R.string.recipes_imported, count)
+
+    fun recipesStep(index: Int): String = text(R.string.recipes_step, index)
+
+    fun historySaved(value: String): String = text(R.string.history_saved, value)
+
+    fun historyGrew(value: String): String = text(R.string.history_grew, value)
+
+    fun guardBatteryThreshold(percent: Int): String =
+        text(R.string.guard_battery_threshold, percent)
+
+    fun wifiAddress(address: String): String = text(R.string.wifi_address, address)
+
+    fun cleanerFound(count: Int, size: String): String =
+        text(R.string.cleaner_found, count, size)
+
+    fun cleanerDuplicates(count: Int): String = text(R.string.cleaner_duplicates, count)
+
+    fun cleanerSaved(size: String): String = text(R.string.cleaner_saved, size)
+
+    fun pluginsImported(count: Int): String = text(R.string.plugins_imported, count)
+
+    fun targetSizeMbLabel(): String = text(R.string.ui_target_size_mb)
+
+    fun studioPickFolder(): String = text(R.string.studio_pick_folder)
+    fun studioPickAudio(): String = text(R.string.studio_pick_audio)
+    fun studioPickImage(): String = text(R.string.studio_pick_image)
+    fun archiveTitle(): String = text(R.string.archive_title)
+    fun archiveDesc(): String = text(R.string.archive_desc)
+    fun archivePickFiles(): String = text(R.string.archive_pick_files)
+    fun archiveCreate(): String = text(R.string.archive_create)
+    fun archiveExtract(): String = text(R.string.archive_extract)
+    fun archiveCreated(): String = text(R.string.archive_created)
+    fun archiveExtracted(): String = text(R.string.archive_extracted)
+    fun archiveSevenZipNote(): String = text(R.string.archive_seven_zip_note)
+    fun folderWatchTitle(): String = text(R.string.folder_watch_title)
+    fun folderWatchDesc(): String = text(R.string.folder_watch_desc)
+    fun folderWatchStart(): String = text(R.string.folder_watch_start)
+    fun folderWatchStop(): String = text(R.string.folder_watch_stop)
+    fun folderWatchActive(): String = text(R.string.folder_watch_active)
+    fun folderWatchFound(name: String): String = text(R.string.folder_watch_found, name)
+    fun splitSilenceTitle(): String = text(R.string.split_silence_title)
+    fun splitSilenceDesc(): String = text(R.string.split_silence_desc)
+    fun splitSilenceRun(): String = text(R.string.split_silence_run)
+    fun splitSilenceDone(count: Int): String = text(R.string.split_silence_done, count)
+    fun cutTranscriptTitle(): String = text(R.string.cut_transcript_title)
+    fun cutTranscriptDesc(): String = text(R.string.cut_transcript_desc)
+    fun cutTranscriptApply(): String = text(R.string.cut_transcript_apply)
+    fun privacyScrubAudio(): String = text(R.string.privacy_scrub_audio)
+
+    fun studioSaved(): String = text(R.string.studio_saved)
+
+    fun studioFailed(): String = text(R.string.studio_failed)
+
+    fun studioModelReady(): String = text(R.string.studio_model_ready)
+
+    fun studioNeedsFile(): String = text(R.string.studio_needs_file)
+
+    fun studioPlay(): String = text(R.string.studio_play)
+
+    fun studioStop(): String = text(R.string.studio_stop)
+
+    fun studioGuardEnabled(): String = text(R.string.studio_guard_enabled)
 
     fun metadataKindLabel(kind: MetadataTargetKind): String {
         return when (kind) {
