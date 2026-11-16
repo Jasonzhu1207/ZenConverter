@@ -364,9 +364,6 @@ internal class UiText(private val context: Context) {
     val accentColor: String
         get() = text(R.string.ui_accent_color)
 
-    val themeMode: String
-        get() = text(R.string.ui_theme_mode)
-
     val language: String
         get() = text(R.string.ui_language)
 
@@ -1601,13 +1598,7 @@ internal class UiText(private val context: Context) {
 
     fun accentLabel(option: AccentColorOption): String = optionValue(option.englishLabel)
 
-    fun themeModeLabel(option: ThemeModeOption): String {
-        return when (option) {
-            ThemeModeOption.System -> text(R.string.text_theme_mode_label)
-            ThemeModeOption.Light -> text(R.string.text_theme_mode_label_light)
-            ThemeModeOption.Dark -> text(R.string.text_theme_mode_label_dark)
-        }
-    }
+    val followsDeviceTheme: String get() = text(R.string.text_follows_device_theme)
 
     val usePureBlackTheme: String get() = text(R.string.text_use_pure_black_theme)
 

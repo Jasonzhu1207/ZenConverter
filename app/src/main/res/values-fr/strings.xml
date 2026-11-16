@@ -478,9 +478,6 @@
     <string name="text_task_message_trimming_needs_readable_media_duration">Le découpage nécessite une durée de média lisible.</string>
     <string name="text_task_message_unsupported_office_document">Document Office non pris en charge</string>
     <string name="text_task_message_unsupported_subtitle_format">Format de sous-titres non pris en charge</string>
-    <string name="text_theme_mode_label">Système</string>
-    <string name="text_theme_mode_label_dark">Sombre</string>
-    <string name="text_theme_mode_label_light">Clair</string>
     <string name="text_use_pure_black_theme">Utiliser le thème noir pur (OLED)</string>
     <string name="text_trim_duration_hint">Durée %1$s</string>
     <string name="text_update_available_message">Mise à jour de %1$s disponible</string>
@@ -628,7 +625,6 @@
     <string name="ui_support_development">Soutenir le développement</string>
     <string name="ui_tagline">Les fichiers restent sur cet appareil</string>
     <string name="ui_target">Format de sortie</string>
-    <string name="ui_theme_mode">Mode sombre</string>
     <string name="ui_to_prefix">vers</string>
     <string name="ui_trim_add_split_point">Ajouter un point de coupe</string>
     <string name="ui_trim_duration_unknown">Durée inconnue</string>

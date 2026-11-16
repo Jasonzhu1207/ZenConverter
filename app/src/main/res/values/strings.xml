@@ -503,9 +503,7 @@
     <string name="text_task_message_trimming_needs_readable_media_duration">Trimming needs readable media duration</string>
     <string name="text_task_message_unsupported_office_document">Unsupported Office document</string>
     <string name="text_task_message_unsupported_subtitle_format">Unsupported subtitle format</string>
-    <string name="text_theme_mode_label">Follow system</string>
-    <string name="text_theme_mode_label_dark">Dark</string>
-    <string name="text_theme_mode_label_light">Light</string>
+    <string name="text_follows_device_theme">The app follows your device theme. Switch your phone between light and dark to change it.</string>
     <string name="text_use_pure_black_theme">Use pure black dark theme</string>
     <string name="text_trim_duration_hint">Duration %1$s</string>
     <string name="text_update_available_message">Update %1$s is available</string>
@@ -660,7 +658,6 @@
     <string name="ui_support_development">Sponsor development</string>
     <string name="ui_tagline">Files stay on this device</string>
     <string name="ui_target">Target</string>
-    <string name="ui_theme_mode">Dark mode</string>
     <string name="ui_to_prefix">to</string>
     <string name="ui_trim_add_split_point">Add cut point</string>
     <string name="ui_trim_duration_unknown">Duration unknown</string>

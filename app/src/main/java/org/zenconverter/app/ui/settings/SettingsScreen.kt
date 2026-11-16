@@ -44,14 +44,12 @@ import org.zenconverter.app.ui.theme.ZenDimensions
 internal fun SettingsScreen(
     texts: UiText,
     selectedAccent: AccentColorOption,
-    selectedThemeMode: ThemeModeOption,
     isOledDark: Boolean,
     selectedLanguage: LanguageOption,
     selectedActionBarPosition: ActionBarPosition,
     outputLocationMode: OutputLocationMode,
     outputDirectory: OutputDirectory?,
     onAccentSelected: (AccentColorOption) -> Unit,
-    onThemeModeSelected: (ThemeModeOption) -> Unit,
     onOledDarkChange: (Boolean) -> Unit,
     onLanguageSelected: (LanguageOption) -> Unit,
     onActionBarPositionSelected: (ActionBarPosition) -> Unit,
@@ -100,11 +98,12 @@ internal fun SettingsScreen(
         item(key = "appearance") {
             InsetGroupCard {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SettingsChoiceGroup(
-                        options = ThemeModeOption.entries, selectedOption = selectedThemeMode,
-                        onOptionSelected = onThemeModeSelected, labelProvider = texts::themeModeLabel
+                    Text(
+                        text = texts.followsDeviceTheme,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    if (selectedThemeMode != ThemeModeOption.Light) {
+                    if (isDark) {
                         Row(
                             Modifier.fillMaxWidth().heightIn(min = 48.dp)
                                 .toggleable(value = isOledDark, role = Role.Switch, onValueChange = onOledDarkChange),

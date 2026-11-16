@@ -28,7 +28,7 @@ data class SavedOutputDirectory(
 object AppPreferences {
     private const val PREFERENCES_NAME = "zenconverter_preferences"
     private const val KEY_ACCENT_COLOR = "accent_color"
-    private const val KEY_THEME_MODE = "theme_mode"
+    private const val LEGACY_THEME_MODE_KEY = "theme_mode"
     private const val KEY_OLED_DARK_MODE = "oled_dark_mode"
     private const val KEY_ACTION_BAR_POSITION = "action_bar_position"
     private const val KEY_LANGUAGE = "language"
@@ -47,22 +47,13 @@ object AppPreferences {
             .apply()
     }
 
-    fun themeMode(context: Context): String? =
-        preferences(context).getString(KEY_THEME_MODE, null)
-
-    fun setThemeMode(context: Context, themeMode: String) {
-        preferences(context)
-            .edit()
-            .putString(KEY_THEME_MODE, themeMode)
-            .apply()
-    }
-
     fun isOledDarkMode(context: Context): Boolean {
         val prefs = preferences(context)
         if (prefs.contains(KEY_OLED_DARK_MODE)) {
             return prefs.getBoolean(KEY_OLED_DARK_MODE, false)
         }
-        return prefs.getString(KEY_THEME_MODE, null) == "OledDark"
+        // Older builds stored the pure-black choice inside the theme-mode string.
+        return prefs.getString(LEGACY_THEME_MODE_KEY, null) == "OledDark"
     }
 
     fun setOledDarkMode(context: Context, enabled: Boolean) {
