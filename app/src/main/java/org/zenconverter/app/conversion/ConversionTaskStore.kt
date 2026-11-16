@@ -129,7 +129,13 @@ data class VideoExportOptions(
     val compressionMode: VideoCompressionMode = VideoCompressionMode.Standard,
     val frameInterpolation: VideoFrameInterpolationMode = VideoFrameInterpolationMode.Off,
     val trimRange: MediaTrimRange = MediaTrimRange(),
-    val advanced: VideoAdvancedOptions = VideoAdvancedOptions()
+    val advanced: VideoAdvancedOptions = VideoAdvancedOptions(),
+    /**
+     * Use the platform encoder when the linked FFmpeg exposes one. Off by
+     * default so output is byte-reproducible across devices until the user opts
+     * in; the software encoder is always the fallback.
+     */
+    val allowHardwareEncoding: Boolean = false
 ) {
     companion object {
         const val VIDEO_MIME_TYPE_H264 = "video/avc"

@@ -1103,6 +1103,7 @@ class MainActivity : AppCompatActivity() {
     private fun buildConversionInputs(outputDestination: OutputDestination): List<ConversionTaskInput> {
         sanitizePdfMergeGroups()
         sanitizeVideoMergeGroups()
+        val allowHardwareEncoding = AppPreferences.useHardwareEncoding(this)
         val activePdfGroups = pdfMergeGroups
             .mapNotNull { group ->
                 val members = group.memberFileIds.mapNotNull { fileId ->
@@ -1131,10 +1132,16 @@ class MainActivity : AppCompatActivity() {
                 }
                 val videoGroup = videoGroupByFirstMemberId[file.id]
                 if (videoGroup != null) {
-                    add(videoGroup.first.toConversionTaskInput(videoGroup.second, outputDestination))
+                    add(
+                        videoGroup.first.toConversionTaskInput(
+                            videoGroup.second,
+                            outputDestination,
+                            allowHardwareEncoding
+                        )
+                    )
                 }
                 if (file.id !in allGroupedIds) {
-                    add(file.toConversionTaskInput(outputDestination))
+                    add(file.toConversionTaskInput(outputDestination, allowHardwareEncoding))
                 }
             }
         }
@@ -2194,7 +2201,8 @@ private fun QueuedFile.toSelectedDocument(): SelectedDocument {
 }
 
 private fun QueuedFile.toConversionTaskInput(
-    outputDestination: OutputDestination
+    outputDestination: OutputDestination,
+    allowHardwareEncoding: Boolean = false
 ): ConversionTaskInput {
     return ConversionTaskInput(
         fileId = id,
@@ -2205,7 +2213,7 @@ private fun QueuedFile.toConversionTaskInput(
         category = category.toConversionCategory(),
         targetFormat = targetFormat,
         outputDestination = outputDestination,
-        videoOptions = videoOptions,
+        videoOptions = videoOptions.copy(allowHardwareEncoding = allowHardwareEncoding),
         audioOptions = audioOptions,
         imageOptions = imageOptions,
         pdfOptions = pdfOptions,
@@ -2312,7 +2320,8 @@ private fun List<QueuedFile>.toMergedPdfInput(
 
 private fun VideoMergeGroup.toConversionTaskInput(
     members: List<QueuedFile>,
-    outputDestination: OutputDestination
+    outputDestination: OutputDestination,
+    allowHardwareEncoding: Boolean = false
 ): ConversionTaskInput {
     val first = members.first()
     val totalSize = members.mapNotNull { it.sizeBytes }
@@ -2333,7 +2342,7 @@ private fun VideoMergeGroup.toConversionTaskInput(
         category = ConversionMediaCategory.Video,
         targetFormat = targetFormat,
         outputDestination = outputDestination,
-        videoOptions = videoOptions,
+        videoOptions = videoOptions.copy(allowHardwareEncoding = allowHardwareEncoding),
         audioOptions = audioOptions,
         imageOptions = first.imageOptions,
         pdfOptions = PdfExportOptions(),

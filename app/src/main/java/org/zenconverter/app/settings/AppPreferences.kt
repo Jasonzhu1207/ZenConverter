@@ -35,6 +35,7 @@ object AppPreferences {
     private const val KEY_USE_CUSTOM_OUTPUT = "use_custom_output"
     private const val KEY_OUTPUT_DIRECTORY_URI = "output_directory_uri"
     private const val KEY_OUTPUT_DIRECTORY_LABEL = "output_directory_label"
+    private const val KEY_USE_HARDWARE_ENCODING = "use_hardware_encoding"
 
     fun accentColor(context: Context): String? =
         preferences(context).getString(KEY_ACCENT_COLOR, null)
@@ -95,6 +96,21 @@ object AppPreferences {
 
     fun usesCustomOutput(context: Context): Boolean =
         preferences(context).getBoolean(KEY_USE_CUSTOM_OUTPUT, false)
+
+    /**
+     * Whether video exports may use the platform encoder. Defaults to off so the
+     * output is reproducible across devices; the caller still falls back to the
+     * software encoder when FFmpeg reports no hardware codec.
+     */
+    fun useHardwareEncoding(context: Context): Boolean =
+        preferences(context).getBoolean(KEY_USE_HARDWARE_ENCODING, false)
+
+    fun setUseHardwareEncoding(context: Context, enabled: Boolean) {
+        preferences(context)
+            .edit()
+            .putBoolean(KEY_USE_HARDWARE_ENCODING, enabled)
+            .apply()
+    }
 
     fun setUsesCustomOutput(context: Context, usesCustomOutput: Boolean) {
         preferences(context)

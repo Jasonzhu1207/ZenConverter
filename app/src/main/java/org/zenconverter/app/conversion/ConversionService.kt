@@ -4091,13 +4091,18 @@ class ConversionService : Service() {
                     tempFile.absolutePath
                 ))
             } else {
-                encodeArgs.addAll(listOf(
-                    "-c:v", "libx264",
-                    "-crf", "18",
-                    "-preset", "medium",
-                    "-pix_fmt", "yuv420p",
-                    tempFile.absolutePath
-                ))
+                val hardware = videoProfile?.usesTargetBitrate == true
+                encodeArgs.addAll(
+                    buildList {
+                        addAll(listOf("-c:v", videoProfile?.videoCodec ?: "libx264"))
+                        if (hardware) {
+                            addAll(listOf("-b:v", hardwareBitrateFor(input).toString()))
+                        } else {
+                            addAll(listOf("-crf", "18", "-preset", "medium"))
+                        }
+                        addAll(listOf("-pix_fmt", "yuv420p", tempFile.absolutePath))
+                    }
+                )
             }
 
             val encodeResult = executeFfmpeg(
@@ -4262,16 +4267,22 @@ class ConversionService : Service() {
                     add("-preset")
                     add(videoProfile.preset)
                 }
-                input.videoOptions.videoBitrate?.let { bitrate ->
+                if (videoProfile.usesTargetBitrate) {
+                    // Platform encoders use a target bitrate, not CRF.
                     add("-b:v")
-                    add(bitrate.toString())
-                } ?: run {
-                    if (isVpx) {
+                    add(hardwareBitrateFor(input).toString())
+                } else {
+                    input.videoOptions.videoBitrate?.let { bitrate ->
                         add("-b:v")
-                        add("0")
+                        add(bitrate.toString())
+                    } ?: run {
+                        if (isVpx) {
+                            add("-b:v")
+                            add("0")
+                        }
+                        add("-crf")
+                        add(videoProfile.crf)
                     }
-                    add("-crf")
-                    add(videoProfile.crf)
                 }
                 input.videoOptions.maxFrameRate
                     ?.takeIf { it > 0 }
@@ -4935,16 +4946,21 @@ class ConversionService : Service() {
                 add("-preset")
                 add(videoProfile.preset)
             }
-            input.videoOptions.videoBitrate?.let { bitrate ->
+            if (videoProfile.usesTargetBitrate) {
                 add("-b:v")
-                add(bitrate.toString())
-            } ?: run {
-                if (isVpx) {
+                add(hardwareBitrateFor(input).toString())
+            } else {
+                input.videoOptions.videoBitrate?.let { bitrate ->
                     add("-b:v")
-                    add("0")
+                    add(bitrate.toString())
+                } ?: run {
+                    if (isVpx) {
+                        add("-b:v")
+                        add("0")
+                    }
+                    add("-crf")
+                    add(videoProfile.crf)
                 }
-                add("-crf")
-                add(videoProfile.crf)
             }
             ffmpegVideoFilterFor(input, durationMs)?.let { filter ->
                 add("-vf")
@@ -5147,52 +5163,79 @@ class ConversionService : Service() {
 
     private fun ffmpegVideoProfileFor(input: ConversionTaskInput): FfmpegVideoProfile? {
         val targetExtension = videoTargetExtensionFor(input.targetFormat) ?: return null
-        val videoCodec = when (targetExtension) {
+        val preference = if (input.videoOptions.allowHardwareEncoding) {
+            VideoEncoderSelection.Preference.HardwareWhenAvailable
+        } else {
+            VideoEncoderSelection.Preference.Software
+        }
+        val codec = when (targetExtension) {
             "webm" -> {
                 if (input.videoOptions.videoMimeType == VideoExportOptions.VIDEO_MIME_TYPE_VP8) {
-                    FFMPEG_VIDEO_ENCODER_VP8
+                    VideoEncoderSelection.Codec.Vp8
                 } else {
-                    FFMPEG_VIDEO_ENCODER_VP9
+                    VideoEncoderSelection.Codec.Vp9
                 }
             }
             else -> {
                 when (input.videoOptions.videoMimeType) {
-                    VideoExportOptions.VIDEO_MIME_TYPE_H265 -> FFMPEG_VIDEO_ENCODER_H265
-                    else -> FFMPEG_VIDEO_ENCODER_H264
+                    VideoExportOptions.VIDEO_MIME_TYPE_H265 -> VideoEncoderSelection.Codec.H265
+                    else -> VideoEncoderSelection.Codec.H264
                 }
             }
         }
+        val choice = VideoEncoderSelection.select(codec, preference, ::ffmpegEncoderAvailable)
+        val videoCodec = choice.codec
+        val hardware = choice.usesTargetBitrate
         return when (targetExtension) {
             "mp4" -> FfmpegVideoProfile(
                 videoCodec = videoCodec,
                 format = "mp4",
                 useFastStart = true,
                 videoTag = if (videoCodec == FFMPEG_VIDEO_ENCODER_H265) "hvc1" else null,
-                preset = videoPresetFor(input.videoOptions.compressionMode),
-                crf = videoCrfFor(videoCodec, input.videoOptions.compressionMode)
+                preset = if (hardware) null else videoPresetFor(input.videoOptions.compressionMode),
+                crf = videoCrfFor(videoCodec, input.videoOptions.compressionMode),
+                usesTargetBitrate = hardware
             )
             "mov" -> FfmpegVideoProfile(
                 videoCodec = videoCodec,
                 format = "mov",
                 useFastStart = true,
                 videoTag = if (videoCodec == FFMPEG_VIDEO_ENCODER_H265) "hvc1" else null,
-                preset = videoPresetFor(input.videoOptions.compressionMode),
-                crf = videoCrfFor(videoCodec, input.videoOptions.compressionMode)
+                preset = if (hardware) null else videoPresetFor(input.videoOptions.compressionMode),
+                crf = videoCrfFor(videoCodec, input.videoOptions.compressionMode),
+                usesTargetBitrate = hardware
             )
             "mkv" -> FfmpegVideoProfile(
                 videoCodec = videoCodec,
                 format = "matroska",
-                preset = videoPresetFor(input.videoOptions.compressionMode),
-                crf = videoCrfFor(videoCodec, input.videoOptions.compressionMode)
+                preset = if (hardware) null else videoPresetFor(input.videoOptions.compressionMode),
+                crf = videoCrfFor(videoCodec, input.videoOptions.compressionMode),
+                usesTargetBitrate = hardware
             )
             "webm" -> FfmpegVideoProfile(
                 videoCodec = videoCodec,
                 format = "webm",
                 preset = null,
-                crf = videoCrfFor(videoCodec, input.videoOptions.compressionMode)
+                crf = videoCrfFor(videoCodec, input.videoOptions.compressionMode),
+                usesTargetBitrate = hardware
             )
             else -> null
         }
+    }
+
+    /**
+     * The bitrate a platform encoder should target: the caller's explicit choice
+     * when set, otherwise a resolution-scaled default.
+     */
+    private fun hardwareBitrateFor(input: ConversionTaskInput): Int {
+        input.videoOptions.videoBitrate?.takeIf { it > 0 }?.let { return it }
+        val info = input.inputInfo
+        return VideoEncoderSelection.fallbackBitrateFor(
+            width = info?.width,
+            height = info?.height,
+            frameRate = info?.frameRate,
+            compressionMode = input.videoOptions.compressionMode
+        )
     }
 
     private fun videoPresetFor(compressionMode: VideoCompressionMode): String {
@@ -6054,9 +6097,11 @@ class ConversionService : Service() {
             encoder == FFMPEG_MP3_ENCODER &&
                 audioTargetExtensionFor(input.targetFormat) == "mp3" ->
                 localizedText(R.string.text_task_message_compatibility_engine_needs_an_mp3_capable_ffmpeg_package)
-            encoder == FFMPEG_VIDEO_ENCODER_H264 ->
+            encoder == FFMPEG_VIDEO_ENCODER_H264 ||
+                encoder == VideoEncoderSelection.HARDWARE_H264 ->
                 localizedText(R.string.text_task_message_compatibility_engine_needs_an_h_264_capable_ffmpeg_package)
-            encoder == FFMPEG_VIDEO_ENCODER_H265 ->
+            encoder == FFMPEG_VIDEO_ENCODER_H265 ||
+                encoder == VideoEncoderSelection.HARDWARE_H265 ->
                 localizedText(R.string.text_task_message_compatibility_engine_needs_an_h_265_capable_ffmpeg_package)
             encoder == FFMPEG_VIDEO_ENCODER_VP9 ->
                 localizedText(R.string.text_task_message_compatibility_engine_needs_a_vp9_capable_ffmpeg_package)
@@ -7426,7 +7471,12 @@ class ConversionService : Service() {
         val pixelFormat: String = "yuv420p",
         val preset: String? = "veryfast",
         val crf: String,
-        val videoTag: String? = null
+        val videoTag: String? = null,
+        /**
+         * True when [videoCodec] is a platform encoder that only understands a
+         * target bitrate, so `-crf`/`-preset` must not be emitted for it.
+         */
+        val usesTargetBitrate: Boolean = false
     )
 
     private data class FfmpegAudioProfile(
