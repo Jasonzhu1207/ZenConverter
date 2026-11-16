@@ -406,6 +406,9 @@ class MainActivity : AppCompatActivity() {
                 onRemoveFile = { fileId ->
                     removeQueuedFile(fileId)
                 },
+                onMoveQueuedFile = { fileId, delta ->
+                    moveQueuedFile(fileId, delta)
+                },
                 onClearQueue = {
                     queuedFiles.clear()
                     pdfMergeGroups.clear()
@@ -922,6 +925,14 @@ class MainActivity : AppCompatActivity() {
     private fun trimSecondsToMs(seconds: Double): Long? {
         if (!seconds.isFinite() || seconds < 0.0) return null
         return runCatching { Math.round(seconds * 1_000.0) }.getOrNull()
+    }
+
+    private fun moveQueuedFile(fileId: String, delta: Int) {
+        val from = queuedFiles.indexOfFirst { it.id == fileId }
+        if (from < 0) return
+        val to = (from + delta).coerceIn(0, queuedFiles.lastIndex)
+        if (to == from) return
+        queuedFiles.add(to, queuedFiles.removeAt(from))
     }
 
     private fun removeQueuedFile(fileId: String) {

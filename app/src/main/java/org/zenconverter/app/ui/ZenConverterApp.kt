@@ -82,6 +82,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -96,6 +97,8 @@ import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.ExpandMore
@@ -1064,6 +1067,7 @@ fun ZenConverterApp(
     onRemoveFileFromVideoMergeGroup: (String, String) -> Unit = { _, _ -> },
     onPickOutputDirectory: () -> Unit,
     onRemoveFile: (String) -> Unit,
+    onMoveQueuedFile: (String, Int) -> Unit,
     onClearQueue: () -> Unit,
     onPickMetadataImage: () -> Unit,
     onPickMetadataVideo: () -> Unit,
@@ -1209,6 +1213,7 @@ fun ZenConverterApp(
                     onRemoveFileFromVideoMergeGroup = onRemoveFileFromVideoMergeGroup,
                     onPickOutputDirectory = onPickOutputDirectory,
                     onRemoveFile = onRemoveFile,
+                    onMoveQueuedFile = onMoveQueuedFile,
                     onClearQueue = onClearQueue,
                     onPickMetadataImage = onPickMetadataImage,
                     onPickMetadataVideo = onPickMetadataVideo,
@@ -1288,6 +1293,7 @@ private fun ZenConverterContent(
     onRemoveFileFromVideoMergeGroup: (String, String) -> Unit = { _, _ -> },
     onPickOutputDirectory: () -> Unit,
     onRemoveFile: (String) -> Unit,
+    onMoveQueuedFile: (String, Int) -> Unit,
     onClearQueue: () -> Unit,
     onPickMetadataImage: () -> Unit,
     onPickMetadataVideo: () -> Unit,
@@ -1603,7 +1609,7 @@ private fun ZenConverterContent(
                             val videoGroupByFileId = videoMergeGroups.flatMap { group ->
                                 group.memberFileIds.map { id -> id to group }
                             }.toMap()
-                            items(queuedFiles, key = { it.id }) { file ->
+                            itemsIndexed(queuedFiles, key = { _, file -> file.id }) { index, file ->
                                 val effectiveProgress = taskProgressById[file.id]
                                     ?: pdfGroupByFileId[file.id]?.let { taskProgressById[it.id] }
                                     ?: videoGroupByFileId[file.id]?.let { taskProgressById[it.id] }
@@ -1626,6 +1632,9 @@ private fun ZenConverterContent(
                                         expandedFileId = if (expanded) file.id else null
                                         if (!expanded) openMenuId = null
                                     },
+                                    queueIndex = index,
+                                    queueSize = queuedFiles.size,
+                                    onMove = { delta -> onMoveQueuedFile(file.id, delta) },
                                     onRemove = { onRemoveFile(file.id) }
                                 )
                             }
@@ -7054,9 +7063,12 @@ private fun FileRow(
     optionsExpanded: Boolean,
     groupedInPdfMerge: Boolean,
     groupedInVideoMerge: Boolean = false,
+    queueIndex: Int = 0,
+    queueSize: Int = 1,
     onOpenMenuChange: (String?) -> Unit,
     onUpdateFile: (QueuedFile) -> Unit,
     onOptionsExpandedChange: (Boolean) -> Unit,
+    onMove: (Int) -> Unit = {},
     onRemove: () -> Unit
 ) {
     val context = LocalContext.current
@@ -7121,6 +7133,18 @@ private fun FileRow(
                         onClick = { openOutputLocation(context, completedProgress, texts) }
                     )
                 }
+                CompactTaskActionButton(
+                    icon = Icons.Rounded.ArrowUpward,
+                    contentDescription = texts.queueMoveUp(),
+                    enabled = canEdit && queueIndex > 0,
+                    onClick = { onMove(-1) }
+                )
+                CompactTaskActionButton(
+                    icon = Icons.Rounded.ArrowDownward,
+                    contentDescription = texts.queueMoveDown(),
+                    enabled = canEdit && queueIndex < queueSize - 1,
+                    onClick = { onMove(1) }
+                )
                 CompactTaskActionButton(
                     icon = Icons.Rounded.DeleteOutline,
                     contentDescription = texts.remove,
