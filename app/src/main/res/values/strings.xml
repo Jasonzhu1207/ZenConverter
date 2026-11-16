@@ -1529,7 +1529,26 @@
     <string name="visualizer_estimated_size">Estimated size</string>
     <string name="visualizer_share">Share</string>
     <string name="visualizer_shared">Shared.</string>
+
+    <!-- Text to speech enrichment -->
+    <string name="tts_voice">Voice</string>
+    <string name="tts_voice_default">Device default</string>
+    <string name="tts_language">Language</string>
+    <string name="tts_rate">Speed</string>
+    <string name="tts_pitch">Pitch</string>
+    <string name="tts_pause">Pause between sentences</string>
+    <string name="tts_pause_value">%1$d ms</string>
+    <string name="tts_import_text">Import text file</string>
+    <string name="tts_imported">Text imported.</string>
+    <string name="tts_format">Output format</string>
+    <string name="tts_estimated_length">Estimated length</string>
+    <string name="tts_estimated_size">Estimated size</string>
+    <string name="tts_characters">%1$d characters</string>
+    <string name="tts_preview">Preview voice</string>
+    <string name="tts_previewing">Playing preview…</string>
+    <string name="tts_chunk_note">Long text is split into sentences and stitched back together.</string>
 </resources>
+
 
 
 

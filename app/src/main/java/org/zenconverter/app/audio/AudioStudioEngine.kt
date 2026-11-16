@@ -284,6 +284,46 @@ object AudioStudioEngine {
         }
 
     /**
+     * Joins [sources] end to end into [target] with an optional silence gap.
+     * Used by the text-to-speech export to stitch long documents together.
+     */
+    suspend fun concatFiles(sources: List<File>, target: File, gapMs: Long = 0L): Boolean =
+        withContext(Dispatchers.IO) {
+            if (sources.isEmpty()) return@withContext false
+            if (sources.size == 1) {
+                return@withContext runCatching { sources.first().copyTo(target, overwrite = true) }
+                    .isSuccess
+            }
+            val arguments = mutableListOf("-hide_banner", "-nostdin")
+            sources.forEach { arguments += listOf("-i", it.absolutePath) }
+            val filter = buildString {
+                if (gapMs > 0L) {
+                    append("anullsrc=r=44100:cl=mono[gap];")
+                }
+                sources.indices.forEach { index ->
+                    append("[$index:a]aformat=sample_fmts=s16:channel_layouts=mono[c$index];")
+                    if (gapMs > 0L && index < sources.lastIndex) {
+                        append("[c$index][gap]concat=n=2:v=0:a=1[g$index];")
+                    }
+                }
+                val pieces = if (gapMs > 0L) {
+                    sources.indices.flatMap { index ->
+                        if (index < sources.lastIndex) listOf("[g$index]") else listOf("[c$index]")
+                    }
+                } else {
+                    sources.indices.map { "[c$it]" }
+                }
+                append("${pieces.joinToString("")}concat=n=${pieces.size}:v=0:a=1[out]")
+            }
+            arguments += listOf(
+                "-filter_complex", filter,
+                "-map", "[out]",
+                "-y", target.absolutePath
+            )
+            ReturnCode.isSuccess(FFmpegKit.executeWithArguments(arguments.toTypedArray()).getReturnCode())
+        }
+
+    /**
      * Concatenates the surviving [segments] of a source file, used by
      * cut-by-transcript editing. Each segment is decoded to a common format
      * before concatenation so mixed boundaries stay sample accurate.

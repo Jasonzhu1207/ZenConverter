@@ -310,6 +310,7 @@ internal fun RingtoneMakerScreen(texts: UiText, onBack: () -> Unit) {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun TextToSpeechScreen(texts: UiText, onBack: () -> Unit) {
     val context = LocalContext.current
@@ -318,9 +319,31 @@ internal fun TextToSpeechScreen(texts: UiText, onBack: () -> Unit) {
     var text by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
+    var voices by remember { mutableStateOf<List<OfflineTextToSpeech.Voice>>(emptyList()) }
+    var selectedVoice by remember { mutableStateOf<String?>(null) }
+    var rate by remember { mutableStateOf(1f) }
+    var pitch by remember { mutableStateOf(1f) }
+    var pauseMs by remember { mutableStateOf(0L) }
+    var format by remember { mutableStateOf(0) }
     androidx.compose.runtime.DisposableEffect(tts) {
         onDispose { tts.shutdown() }
     }
+    val pickText = rememberFilePicker(listOf("text/plain", "text/*")) { uri ->
+        scope.launch {
+            val loaded = runCatching {
+                context.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() }
+            }.getOrNull()
+            if (loaded != null) {
+                text = loaded
+                status = texts.ttsImported()
+            } else {
+                status = texts.studioFailed()
+            }
+        }
+    }
+    val options = OfflineTextToSpeech.SpeechOptions(rate = rate, pitch = pitch, pauseMs = pauseMs)
+    val estimatedSeconds = tts.estimateSeconds(text, options)
+    val formats = listOf("wav" to "audio/wav", "m4a" to "audio/mp4", "flac" to "audio/flac")
 
     SettingsPage(texts.ttsTitle(), texts.studioBack(), onBack) {
         item("tts-input") {
@@ -334,55 +357,159 @@ internal fun TextToSpeechScreen(texts: UiText, onBack: () -> Unit) {
                         modifier = Modifier.fillMaxWidth()
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = pickText) { Text(texts.ttsImportText()) }
                         OutlinedButton(
                             enabled = text.isNotBlank() && !busy,
                             onClick = {
                                 scope.launch {
-                                    val ready = tts.initialize()
-                                    if (!ready) {
+                                    if (!tts.initialize()) {
                                         status = texts.ttsUnavailable()
                                         return@launch
                                     }
-                                    val temp = tempOutput(context, "zen-tts", "wav")
-                                    val ok = runCatching { tts.synthesizeToFile(text, temp) }.getOrDefault(false)
-                                    if (ok) {
-                                        StudioOutput.save(
-                                            context, temp, "zenconverter-speech-${System.currentTimeMillis()}.wav",
-                                            "audio/wav", StudioOutput.Collection.Music
-                                        )
-                                        status = texts.ttsExported()
-                                    } else {
-                                        status = texts.ttsUnavailable()
+                                    if (voices.isEmpty()) {
+                                        voices = tts.voices()
                                     }
-                                    temp.delete()
+                                    status = texts.ttsPreviewing()
                                 }
                             }
-                        ) { Text(texts.ttsSpeak()) }
+                        ) { Text(texts.ttsPreview()) }
+                    }
+                    Text(
+                        texts.ttsCharacters(text.length),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+        item("tts-voice") {
+            InsetGroupCard {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StudioFieldLabel(texts.ttsVoice())
+                    if (voices.isEmpty()) {
+                        StudioNote(texts.ttsVoiceDefault())
+                    } else {
+                        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            androidx.compose.material3.FilterChip(
+                                selected = selectedVoice == null,
+                                onClick = { selectedVoice = null },
+                                label = { Text(texts.ttsVoiceDefault()) }
+                            )
+                            voices.take(8).forEach { voice ->
+                                androidx.compose.material3.FilterChip(
+                                    selected = selectedVoice == voice.name,
+                                    onClick = {
+                                        selectedVoice = voice.name
+                                        tts.setVoice(voice)
+                                    },
+                                    label = { Text(voice.label) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item("tts-timing") {
+            InsetGroupCard {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StudioFieldLabel("${texts.ttsRate()} · ${"%.2f".format(rate)}x")
+                    Slider(value = rate, onValueChange = { rate = it }, valueRange = 0.5f..2f)
+                    StudioFieldLabel("${texts.ttsPitch()} · ${"%.2f".format(pitch)}x")
+                    Slider(value = pitch, onValueChange = { pitch = it }, valueRange = 0.5f..2f)
+                    StudioFieldLabel("${texts.ttsPause()} · ${texts.ttsPauseValue(pauseMs)}")
+                    Slider(
+                        value = pauseMs.toFloat(),
+                        onValueChange = { pauseMs = it.toLong() },
+                        valueRange = 0f..1000f
+                    )
+                    Text(
+                        texts.ttsChunkNote(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+        item("tts-format") {
+            InsetGroupCard {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StudioFieldLabel(texts.ttsFormat())
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        formats.forEachIndexed { index, (extension, _) ->
+                            androidx.compose.material3.FilterChip(
+                                selected = format == index,
+                                onClick = { format = index },
+                                label = { Text(extension.uppercase()) }
+                            )
+                        }
+                    }
+                    Text(
+                        "${texts.ttsEstimatedLength()}: ${formatClock((estimatedSeconds * 1000).toLong())}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        "${texts.ttsEstimatedSize()}: ${"%.1f".format(estimatedSeconds * 32 / 1024.0)} MB",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             enabled = text.isNotBlank() && !busy,
                             onClick = {
                                 busy = true
                                 status = texts.ttsExporting()
                                 scope.launch {
-                                    val ready = tts.initialize()
-                                    if (!ready) {
+                                    if (!tts.initialize()) {
                                         status = texts.ttsUnavailable()
                                         busy = false
                                         return@launch
                                     }
-                                    val temp = tempOutput(context, "zen-tts", "wav")
-                                    val ok = runCatching { tts.synthesizeToFile(text, temp) }.getOrDefault(false)
-                                    status = if (ok) {
+                                    if (voices.isEmpty()) voices = tts.voices()
+                                    selectedVoice?.let { name ->
+                                        voices.firstOrNull { it.name == name }?.let { tts.setVoice(it) }
+                                    }
+                                    val chunks = tts.splitForSpeech(text)
+                                    val parts = mutableListOf<File>()
+                                    var ok = chunks.isNotEmpty()
+                                    chunks.forEach { chunk ->
+                                        if (!ok) return@forEach
+                                        val part = tempOutput(context, "zen-tts", "wav")
+                                        val spoken = runCatching {
+                                            tts.synthesizeToFile(chunk, part, options)
+                                        }.getOrDefault(false)
+                                        if (spoken) parts += part else ok = false
+                                    }
+                                    val merged = if (ok && parts.isNotEmpty()) {
+                                        tempOutput(context, "zen-tts-merged", "wav")
+                                            .also { AudioStudioEngine.concatFiles(parts, it, pauseMs) }
+                                    } else {
+                                        null
+                                    }
+                                    val (extension, mimeType) = formats[format]
+                                    val encoded = if (merged != null && extension != "wav") {
+                                        tempOutput(context, "zen-tts-out", extension).also { out ->
+                                            AudioStudioEngine.transcodeFile(
+                                                merged, out, if (extension == "flac") "flac" else "aac"
+                                            )
+                                        }
+                                    } else {
+                                        merged
+                                    }
+                                    status = if (ok && encoded != null && encoded.exists()) {
                                         StudioOutput.save(
-                                            context, temp, "zenconverter-speech-${System.currentTimeMillis()}.wav",
-                                            "audio/wav", StudioOutput.Collection.Music
+                                            context, encoded,
+                                            "zenconverter-speech-${System.currentTimeMillis()}.$extension",
+                                            mimeType, StudioOutput.Collection.Music
                                         )
-                                        temp.delete()
                                         texts.ttsExported()
                                     } else {
-                                        temp.delete()
                                         texts.ttsUnavailable()
                                     }
+                                    parts.forEach { it.delete() }
+                                    merged?.delete()
+                                    encoded?.takeIf { it != merged }?.delete()
                                     busy = false
                                 }
                             }
@@ -396,6 +523,7 @@ internal fun TextToSpeechScreen(texts: UiText, onBack: () -> Unit) {
         }
     }
 }
+
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable

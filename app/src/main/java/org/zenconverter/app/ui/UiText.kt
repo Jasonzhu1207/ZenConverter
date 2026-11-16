@@ -2157,4 +2157,22 @@ internal class UiText(private val context: Context) {
     fun visualizerEstimatedSize(): String = text(R.string.visualizer_estimated_size)
     fun visualizerShare(): String = text(R.string.visualizer_share)
     fun visualizerShared(): String = text(R.string.visualizer_shared)
+
+    // Text to speech enrichment
+    fun ttsVoice(): String = text(R.string.tts_voice)
+    fun ttsVoiceDefault(): String = text(R.string.tts_voice_default)
+    fun ttsLanguage(): String = text(R.string.tts_language)
+    fun ttsRate(): String = text(R.string.tts_rate)
+    fun ttsPitch(): String = text(R.string.tts_pitch)
+    fun ttsPause(): String = text(R.string.tts_pause)
+    fun ttsPauseValue(ms: Long): String = text(R.string.tts_pause_value, ms.toInt())
+    fun ttsImportText(): String = text(R.string.tts_import_text)
+    fun ttsImported(): String = text(R.string.tts_imported)
+    fun ttsFormat(): String = text(R.string.tts_format)
+    fun ttsEstimatedLength(): String = text(R.string.tts_estimated_length)
+    fun ttsEstimatedSize(): String = text(R.string.tts_estimated_size)
+    fun ttsCharacters(count: Int): String = text(R.string.tts_characters, count)
+    fun ttsPreview(): String = text(R.string.tts_preview)
+    fun ttsPreviewing(): String = text(R.string.tts_previewing)
+    fun ttsChunkNote(): String = text(R.string.tts_chunk_note)
 }

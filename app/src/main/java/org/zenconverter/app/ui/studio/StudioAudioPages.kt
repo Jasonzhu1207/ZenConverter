@@ -43,7 +43,7 @@ import org.zenconverter.app.ui.settings.SettingsGroupHeader
 import org.zenconverter.app.ui.settings.SettingsPage
 import java.io.File
 
-private fun formatClock(ms: Long): String {
+internal fun formatClock(ms: Long): String {
     val totalSeconds = (ms / 1000).coerceAtLeast(0)
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
