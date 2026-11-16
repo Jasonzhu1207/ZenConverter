@@ -479,6 +479,8 @@
     <string name="text_task_message_unsupported_office_document">Document Office non pris en charge</string>
     <string name="text_task_message_unsupported_subtitle_format">Format de sous-titres non pris en charge</string>
     <string name="text_use_pure_black_theme">Utiliser le thème noir pur (OLED)</string>
+    <string name="text_use_hardware_encoding">Encodage vidéo matériel</string>
+    <string name="text_use_hardware_encoding_desc">Utilise l\'encodeur vidéo du téléphone lorsque cette version en fournit un, sinon l\'encodeur logiciel est utilisé. Désactivé garantit une sortie identique sur tous les appareils.</string>
     <string name="text_trim_duration_hint">Durée %1$s</string>
     <string name="text_update_available_message">Mise à jour de %1$s disponible</string>
     <string name="text_update_failure_message">Impossible de se connecter à GitHub.</string>
@@ -663,6 +665,7 @@
     <string name="ui_settings_title">Paramètres</string>
     <string name="ui_settings_group_general">Général</string>
     <string name="ui_settings_group_appearance">Apparence et thème</string>
+    <string name="ui_settings_group_performance">Performances</string>
     <string name="ui_settings_group_privacy_engines">Outils et ressources</string>
     <string name="ui_settings_group_about_support">À propos et assistance</string>
     <string name="ui_settings_language">Langue de l\'application</string>

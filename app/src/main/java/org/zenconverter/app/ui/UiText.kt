@@ -1602,9 +1602,14 @@ internal class UiText(private val context: Context) {
 
     val usePureBlackTheme: String get() = text(R.string.text_use_pure_black_theme)
 
+    val useHardwareEncoding: String get() = text(R.string.text_use_hardware_encoding)
+
+    val useHardwareEncodingDescription: String get() = text(R.string.text_use_hardware_encoding_desc)
+
     val settingsTitle: String get() = text(R.string.ui_settings_title)
     val settingsGroupGeneral: String get() = text(R.string.ui_settings_group_general)
     val settingsGroupAppearance: String get() = text(R.string.ui_settings_group_appearance)
+    val settingsGroupPerformance: String get() = text(R.string.ui_settings_group_performance)
     val settingsGroupPrivacyEngines: String get() = text(R.string.ui_settings_group_privacy_engines)
     val settingsGroupAboutSupport: String get() = text(R.string.ui_settings_group_about_support)
     val settingsLanguage: String get() = text(R.string.ui_settings_language)

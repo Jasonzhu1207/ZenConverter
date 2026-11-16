@@ -12,14 +12,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.zenconverter.app.studio.HubLayout
 import org.zenconverter.app.ui.AppIcon
-import org.zenconverter.app.ui.theme.bounceClick
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -86,6 +84,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.zenconverter.app.ui.AppScreen
 import org.zenconverter.app.ui.UiText
+import org.zenconverter.app.ui.settings.GlassCard
 import org.zenconverter.app.ui.settings.SettingsGroupHeader
 import org.zenconverter.app.ui.settings.SettingsPage
 
@@ -297,7 +296,7 @@ private fun HubSectionHeader(title: String) {
 /** Leading full-width card for a section: icon, stacked title/sub, optional tag. */
 @Composable
 private fun HubHeroCard(entry: HubEntry, onNavigate: (AppScreen) -> Unit) {
-    GlassSurface(
+    GlassCard(
         onClick = { onNavigate(entry.screen) },
         modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp)
     ) {
@@ -330,7 +329,7 @@ private fun HubHeroCard(entry: HubEntry, onNavigate: (AppScreen) -> Unit) {
 /** Square tile used to fill the descending 6-to-1 rows. */
 @Composable
 private fun HubSquareTile(entry: HubEntry, onNavigate: (AppScreen) -> Unit, modifier: Modifier = Modifier) {
-    GlassSurface(onClick = { onNavigate(entry.screen) }, modifier = modifier.aspectRatio(1f)) {
+    GlassCard(onClick = { onNavigate(entry.screen) }, modifier = modifier.aspectRatio(1f)) {
         Column(
             modifier = Modifier.fillMaxSize().padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -357,7 +356,7 @@ private fun HubSquareTile(entry: HubEntry, onNavigate: (AppScreen) -> Unit, modi
 /** Full-width row: icon, stacked title/sub, trailing tag. */
 @Composable
 private fun HubListRow(entry: HubEntry, onNavigate: (AppScreen) -> Unit) {
-    GlassSurface(
+    GlassCard(
         onClick = { onNavigate(entry.screen) },
         modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp)
     ) {
@@ -417,39 +416,6 @@ private fun HubTag(text: String) {
             .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
             .padding(horizontal = 8.dp, vertical = 3.dp)
     )
-}
-
-/**
- * Translucent card with a hairline border and a soft top sheen, standing in for
- * the preview's backdrop-blurred glass on a real Compose surface.
- */
-@Composable
-private fun GlassSurface(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
-) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.72f))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(18.dp))
-            .bounceClick(onClick = onClick, scaleDown = 0.97f)
-    ) {
-        Box(
-            Modifier
-                .matchParentSize()
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                            Color.Transparent
-                        )
-                    )
-                )
-        )
-        content()
-    }
 }
 
 /** Compact informational row used by studio subpages before a file is chosen. */

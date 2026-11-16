@@ -45,12 +45,14 @@ internal fun SettingsScreen(
     texts: UiText,
     selectedAccent: AccentColorOption,
     isOledDark: Boolean,
+    useHardwareEncoding: Boolean,
     selectedLanguage: LanguageOption,
     selectedActionBarPosition: ActionBarPosition,
     outputLocationMode: OutputLocationMode,
     outputDirectory: OutputDirectory?,
     onAccentSelected: (AccentColorOption) -> Unit,
     onOledDarkChange: (Boolean) -> Unit,
+    onUseHardwareEncodingChange: (Boolean) -> Unit,
     onLanguageSelected: (LanguageOption) -> Unit,
     onActionBarPositionSelected: (ActionBarPosition) -> Unit,
     onOutputLocationModeChange: (OutputLocationMode) -> Unit,
@@ -117,6 +119,20 @@ internal fun SettingsScreen(
                     Text(texts.accentColor, style = MaterialTheme.typography.titleSmall)
                     AccentColorPickerRow(selectedAccent, onAccentSelected, texts, isDark)
                 }
+            }
+        }
+        item(key = "performance-title") { SettingsGroupHeader(texts.settingsGroupPerformance) }
+        item(key = "performance") {
+            InsetGroupCard {
+                SettingsRow(
+                    badgeIcon = Icons.Rounded.Memory,
+                    title = texts.useHardwareEncoding,
+                    subtitle = texts.useHardwareEncodingDescription,
+                    trailingContent = {
+                        Switch(checked = useHardwareEncoding, onCheckedChange = null)
+                    },
+                    onClick = { onUseHardwareEncodingChange(!useHardwareEncoding) }
+                )
             }
         }
         item(key = "tools-title") { SettingsGroupHeader(texts.settingsGroupPrivacyEngines) }

@@ -469,6 +469,8 @@
     <string name="text_task_message_unsupported_office_document">不支持这个 Office 文档</string>
     <string name="text_task_message_unsupported_subtitle_format">不支持这个字幕格式</string>
     <string name="text_use_pure_black_theme">使用纯黑夜间模式 (OLED)</string>
+    <string name="text_use_hardware_encoding">硬件视频编码</string>
+    <string name="text_use_hardware_encoding_desc">当此版本提供硬件编码器时使用手机的视频编码器，否则使用软件编码器。关闭可在不同设备上获得一致的输出。</string>
     <string name="text_trim_duration_hint">时长 %1$s</string>
     <string name="text_update_available_message">发现新版本 %1$s</string>
     <string name="text_update_failure_message">无法连接 GitHub</string>
@@ -656,6 +658,7 @@
     <string name="ui_settings_title">设置</string>
     <string name="ui_settings_group_general">通用</string>
     <string name="ui_settings_group_appearance">外观与主题</string>
+    <string name="ui_settings_group_performance">性能</string>
     <string name="ui_settings_group_privacy_engines">工具与资源</string>
     <string name="ui_settings_group_about_support">关于与支持</string>
     <string name="ui_settings_language">应用语言</string>

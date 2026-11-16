@@ -38,6 +38,7 @@ import org.zenconverter.app.ui.settings.MetadataSecurityScreen
 import org.zenconverter.app.ui.settings.SettingsPage
 import org.zenconverter.app.ui.settings.SubpageHost
 import org.zenconverter.app.ui.settings.MountedHome
+import org.zenconverter.app.ui.settings.GlassBackdrop
 import org.zenconverter.app.ui.settings.UpdateStateHolder
 import org.zenconverter.app.ui.settings.InsetGroupCard
 import org.zenconverter.app.ui.settings.settingsDividerColor
@@ -1109,6 +1110,9 @@ fun ZenConverterApp(
     var isOledDark by remember(context) {
         mutableStateOf(AppPreferences.isOledDarkMode(context))
     }
+    var useHardwareEncoding by remember(context) {
+        mutableStateOf(AppPreferences.useHardwareEncoding(context))
+    }
     val languageOption = AppLanguages.selectedOption(context, configuration)
     val resourceContext = remember(context, configuration, languageRevision) { AppLanguages.localizedContext(context) }
     val texts = remember(resourceContext) { UiText(resourceContext) }
@@ -1187,6 +1191,11 @@ fun ZenConverterApp(
                         isOledDark = enabled
                         AppPreferences.setOledDarkMode(context, enabled)
                     },
+                    useHardwareEncoding = useHardwareEncoding,
+                    onUseHardwareEncodingChange = { enabled ->
+                        useHardwareEncoding = enabled
+                        AppPreferences.setUseHardwareEncoding(context, enabled)
+                    },
                     onLanguageSelected = {
                         AppLanguages.select(it)
                     },
@@ -1250,6 +1259,7 @@ fun ZenConverterApp(
 private fun ZenConverterContent(
     accent: AccentColorOption,
     isOledDark: Boolean,
+    useHardwareEncoding: Boolean,
     languageOption: LanguageOption,
     texts: UiText,
     queuedFiles: List<QueuedFile>,
@@ -1267,6 +1277,7 @@ private fun ZenConverterContent(
     officeFontStates: Map<String, OfficeFontUiState>,
     onAccentSelected: (AccentColorOption) -> Unit,
     onOledDarkChange: (Boolean) -> Unit,
+    onUseHardwareEncodingChange: (Boolean) -> Unit,
     onLanguageSelected: (LanguageOption) -> Unit,
     onOutputLocationModeChange: (OutputLocationMode) -> Unit,
     onPickFiles: () -> Unit,
@@ -1383,9 +1394,10 @@ private fun ZenConverterContent(
     Box(modifier = Modifier.fillMaxSize()) {
         MountedHome(visible = currentScreen == AppScreen.Home) {
             NoOverscroll {
-                Scaffold(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    contentWindowInsets = WindowInsets.safeDrawing,
+                GlassBackdrop {
+                    Scaffold(
+                        containerColor = Color.Transparent,
+                        contentWindowInsets = WindowInsets.safeDrawing,
                     bottomBar = {
                         if (actionBarPosition == ActionBarPosition.Bottom && queuedFiles.isNotEmpty()) {
                             BottomQueueActionBar(
@@ -1741,6 +1753,7 @@ private fun ZenConverterContent(
                 )
             }
             }
+            }
         }
 
         SubpageHost(screen = currentScreen, returning = returning) { destination ->
@@ -1749,12 +1762,14 @@ private fun ZenConverterContent(
                     texts = texts,
                     selectedAccent = accent,
                     isOledDark = isOledDark,
+                    useHardwareEncoding = useHardwareEncoding,
                     selectedLanguage = languageOption,
                     selectedActionBarPosition = actionBarPosition,
                     outputLocationMode = outputLocationMode,
                     outputDirectory = outputDirectory,
                     onAccentSelected = onAccentSelected,
                     onOledDarkChange = onOledDarkChange,
+                    onUseHardwareEncodingChange = onUseHardwareEncodingChange,
                     onLanguageSelected = onLanguageSelected,
                     onActionBarPositionSelected = { newPos ->
                         actionBarPosition = newPos

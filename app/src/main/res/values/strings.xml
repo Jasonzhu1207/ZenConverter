@@ -505,6 +505,8 @@
     <string name="text_task_message_unsupported_subtitle_format">Unsupported subtitle format</string>
     <string name="text_follows_device_theme">The app follows your device theme. Switch your phone between light and dark to change it.</string>
     <string name="text_use_pure_black_theme">Use pure black dark theme</string>
+    <string name="text_use_hardware_encoding">Hardware video encoding</string>
+    <string name="text_use_hardware_encoding_desc">Use the phone\'s video encoder when this build provides one, otherwise the software encoder runs. Off keeps output identical across devices.</string>
     <string name="text_trim_duration_hint">Duration %1$s</string>
     <string name="text_update_available_message">Update %1$s is available</string>
     <string name="text_update_failure_message">Could not connect to GitHub</string>
@@ -700,6 +702,7 @@
     <string name="ui_settings_title">Settings</string>
     <string name="ui_settings_group_general">General</string>
     <string name="ui_settings_group_appearance">Appearance</string>
+    <string name="ui_settings_group_performance">Performance</string>
     <string name="ui_settings_group_privacy_engines">Tools &amp; resources</string>
     <string name="ui_settings_group_about_support">About &amp; Support</string>
     <string name="ui_settings_language">Language</string>
