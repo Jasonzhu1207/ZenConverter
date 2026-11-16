@@ -1259,8 +1259,6 @@ internal class UiText(private val context: Context) {
 
     fun pluginsImported(count: Int): String = text(R.string.plugins_imported, count)
 
-    fun targetSizeMbLabel(): String = text(R.string.ui_target_size_mb)
-
     fun studioPickFolder(): String = text(R.string.studio_pick_folder)
     fun studioPickAudio(): String = text(R.string.studio_pick_audio)
     fun studioPickImage(): String = text(R.string.studio_pick_image)

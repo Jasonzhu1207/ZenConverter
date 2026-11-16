@@ -378,7 +378,7 @@ private fun WaveformControls(
             OutlinedButton(onClick = onPaste) { Text(texts.waveformPaste()) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onSplit) { Text(texts.waveformSplitAt()) }
+            OutlinedButton(onClick = onSplit) { Text(texts.waveformSplit()) }
             OutlinedButton(enabled = canUndo, onClick = onUndo) { Text(texts.waveformUndo()) }
             OutlinedButton(onClick = onReset) { Text(texts.waveformReset()) }
         }
@@ -660,8 +660,11 @@ internal fun AudioAnalyzeScreen(texts: UiText, onBack: () -> Unit) {
     SettingsPage(texts.analyzeTitle(), texts.studioBack(), onBack) {
         item("analyze-pick") {
             InsetGroupCard {
-                Row(Modifier.fillMaxWidth().padding(14.dp)) {
+                Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = pickAudio) { Text(texts.analyzeLoad()) }
+                    OutlinedButton(enabled = result != null && !busy, onClick = { pickAudio() }) {
+                        Text(texts.analyzeRun())
+                    }
                 }
             }
         }
