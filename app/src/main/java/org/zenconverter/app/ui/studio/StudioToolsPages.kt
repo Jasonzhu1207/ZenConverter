@@ -30,8 +30,10 @@ import org.zenconverter.app.archive.ArchiveEngine
 import org.zenconverter.app.audio.AudioStudioEngine
 import org.zenconverter.app.audio.StudioOutput
 import org.zenconverter.app.audio.TranscribedWord
+import org.zenconverter.app.audio.TranscriptionEngine
 import org.zenconverter.app.audio.TranscriptEditing
 import org.zenconverter.app.audio.TranscriptSegment
+import org.zenconverter.app.model.WhisperModelManager
 import org.zenconverter.app.conversion.ConversionTaskStore
 import org.zenconverter.app.ui.FileCategory
 import org.zenconverter.app.i18n.localizedText
@@ -332,7 +334,14 @@ internal fun CutTranscriptScreen(texts: UiText, onBack: () -> Unit) {
     var deletedIndexes by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
-    val pickAudio = rememberAudioPicker { uri -> sourceUri = uri }
+    var transcribing by remember { mutableStateOf(false) }
+    var words by remember { mutableStateOf<List<TranscribedWord>>(emptyList()) }
+    val engineAvailable = WhisperModelManager.INFERENCE_AVAILABLE
+    val pickAudio = rememberAudioPicker { uri ->
+        sourceUri = uri
+        words = emptyList()
+        deletedIndexes = ""
+    }
 
     SettingsPage(texts.cutTranscriptTitle(), texts.studioBack(), onBack) {
         item("cut-body") {
@@ -344,9 +353,35 @@ internal fun CutTranscriptScreen(texts: UiText, onBack: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     OutlinedButton(onClick = pickAudio) { Text(texts.studioPickAudio()) }
+                    if (engineAvailable) {
+                        OutlinedButton(
+                            enabled = sourceUri != null && !transcribing && !busy,
+                            onClick = {
+                                val uri = sourceUri ?: return@OutlinedButton
+                                transcribing = true
+                                status = null
+                                scope.launch {
+                                    val segments = TranscriptionEngine.transcribe(context, uri)
+                                    words = segments.flatMap { it.words }
+                                    wordInput = words.joinToString("\n") { word ->
+                                        "${word.startSeconds} ${word.endSeconds} ${word.text}"
+                                    }
+                                    status = if (words.isEmpty()) {
+                                        texts.transcribeEngineUnavailable()
+                                    } else {
+                                        texts.cutTranscriptTranscribed(words.size)
+                                    }
+                                    transcribing = false
+                                }
+                            }
+                        ) { Text(texts.cutTranscriptTranscribe()) }
+                    }
                     OutlinedTextField(
                         value = wordInput,
-                        onValueChange = { wordInput = it },
+                        onValueChange = {
+                            wordInput = it
+                            words = parseWords(it)
+                        },
                         label = { Text("start end word") },
                         minLines = 4,
                         modifier = Modifier.fillMaxWidth()
@@ -364,13 +399,13 @@ internal fun CutTranscriptScreen(texts: UiText, onBack: () -> Unit) {
                             val uri = sourceUri ?: return@Button
                             busy = true
                             scope.launch {
-                                val words = parseWords(wordInput)
+                                val parsed = words.ifEmpty { parseWords(wordInput) }
                                 val segments = listOf(
                                     TranscriptSegment(
-                                        startSeconds = words.firstOrNull()?.startSeconds ?: 0.0,
-                                        endSeconds = words.lastOrNull()?.endSeconds ?: 0.0,
-                                        text = words.joinToString(" ") { it.text },
-                                        words = words
+                                        startSeconds = parsed.firstOrNull()?.startSeconds ?: 0.0,
+                                        endSeconds = parsed.lastOrNull()?.endSeconds ?: 0.0,
+                                        text = parsed.joinToString(" ") { it.text },
+                                        words = parsed
                                     )
                                 )
                                 val deleted = deletedIndexes.split(',').mapNotNull { it.trim().toIntOrNull() }
@@ -393,6 +428,13 @@ internal fun CutTranscriptScreen(texts: UiText, onBack: () -> Unit) {
                             }
                         }
                     ) { Text(texts.cutTranscriptApply()) }
+                    if (transcribing) {
+                        Text(
+                            texts.transcribeRunning(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                     status?.let {
                         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     }

@@ -19,8 +19,8 @@ enum class StemKind(val fileName: String) {
  * the low band becomes the bass, a mid band with the centre channel emphasised
  * becomes the vocals, the remaining mid band becomes the drums and the stereo
  * side signal becomes the accompaniment. It runs offline on any device with no
- * model download, which is why it is offered as the default. A model-based split
- * would need a native runtime that this build does not bundle.
+ * model download, which is why it is the fallback when the neural separator in
+ * [StemSplitter] is unavailable.
  *
  * Pure Kotlin so the graph can be asserted in JVM tests.
  */
