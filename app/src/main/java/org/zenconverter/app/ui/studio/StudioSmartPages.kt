@@ -26,6 +26,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import java.io.File
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.zenconverter.app.audio.AudioDecoder
 import org.zenconverter.app.audio.AudioStudioEngine
 import org.zenconverter.app.audio.StemKind
@@ -36,6 +37,7 @@ import org.zenconverter.app.audio.TranscriptSegment
 import org.zenconverter.app.audio.TranscriptionEngine
 import org.zenconverter.app.audio.WhisperTranscriptParser
 import org.zenconverter.app.conversion.ConversionTaskStore
+import org.zenconverter.app.conversion.QueueInbox
 import org.zenconverter.app.model.StemNative
 import org.zenconverter.app.model.StemSeparationModelManager
 import org.zenconverter.app.model.WhisperModelManager
@@ -480,9 +482,33 @@ private fun RecipeCard(
 @Composable
 internal fun HistoryScreen(texts: UiText, onBack: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     StudioStore.ensureLoaded(context)
     val entries = StudioStore.history.toList()
     val player = rememberStudioPlayer()
+    var status by remember { mutableStateOf<String?>(null) }
+
+    fun rerun(entry: org.zenconverter.app.studio.ConversionHistoryEntry) {
+        val uri = runCatching { Uri.parse(entry.sourceUri) }.getOrNull()
+        if (uri == null) {
+            status = texts.studioFailed()
+            return
+        }
+        QueueInbox.enqueue(uri, null, entry.targetFormat)
+        status = texts.historyRerun()
+    }
+
+    fun restoreOriginal(entry: org.zenconverter.app.studio.ConversionHistoryEntry) {
+        val output = entry.outputUri ?: return
+        scope.launch {
+            val removed = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.delete(Uri.parse(output), null, null)
+                }.getOrDefault(0) > 0
+            }
+            status = if (removed) texts.historyRestored() else texts.studioFailed()
+        }
+    }
 
     SettingsPage(texts.historyTitle(), texts.studioBack(), onBack) {
         item("history-list") {
@@ -511,12 +537,23 @@ internal fun HistoryScreen(texts: UiText, onBack: () -> Unit) {
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                 }
-                                entry.outputUri?.let { uri ->
-                                    OutlinedButton(
-                                        onClick = { player.play(Uri.parse(uri), entry.displayName) }
-                                    ) { Text(texts.studioPlay()) }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    entry.outputUri?.let { uri ->
+                                        OutlinedButton(
+                                            onClick = { player.play(Uri.parse(uri), entry.displayName) }
+                                        ) { Text(texts.studioPlay()) }
+                                    }
+                                    OutlinedButton(onClick = { rerun(entry) }) { Text(texts.historyRerun()) }
+                                    if (entry.outputUri != null) {
+                                        OutlinedButton(onClick = { restoreOriginal(entry) }) {
+                                            Text(texts.historyRestore())
+                                        }
+                                    }
                                 }
                             }
+                        }
+                        status?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                         }
                         Button(onClick = { StudioStore.clearHistory(context) }) { Text(texts.historyClear()) }
                     }

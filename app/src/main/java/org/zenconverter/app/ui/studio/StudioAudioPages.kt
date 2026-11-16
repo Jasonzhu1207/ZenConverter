@@ -430,20 +430,33 @@ internal fun AudioRecorderScreen(texts: UiText, onBack: () -> Unit) {
     var permissionGranted by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var recorded by remember { mutableStateOf<File?>(null) }
     val requestPermission = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { granted -> permissionGranted = granted }
 
+    fun stopRecording() {
+        scope.launch {
+            busy = true
+            recorded = recorder.stop()
+            busy = false
+        }
+    }
+
     fun saveAs(extension: String, mimeType: String, collection: StudioOutput.Collection) {
         scope.launch {
             busy = true
-            val recorded = recorder.stop() ?: return@launch
-            val target = if (extension == "wav") recorded else File(context.cacheDir, "zen-rec-${System.currentTimeMillis()}.$extension")
+            val source = recorded ?: recorder.stop()
+            if (source == null) {
+                busy = false
+                return@launch
+            }
+            val target = if (extension == "wav") source else File(context.cacheDir, "zen-rec-${System.currentTimeMillis()}.$extension")
             val ok = if (extension == "wav") {
                 true
             } else {
                 AudioStudioEngine.transcodeFile(
-                    source = recorded,
+                    source = source,
                     target = target,
                     codec = if (extension == "flac") "flac" else "aac"
                 )
@@ -456,8 +469,9 @@ internal fun AudioRecorderScreen(texts: UiText, onBack: () -> Unit) {
             } else {
                 status = texts.studioFailed()
             }
-            target.delete()
-            recorded.delete()
+            if (target != source) target.delete()
+            source.delete()
+            recorded = null
             busy = false
         }
     }
@@ -479,7 +493,7 @@ internal fun AudioRecorderScreen(texts: UiText, onBack: () -> Unit) {
             InsetGroupCard {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        formatClock(elapsed),
+                        texts.recorderElapsed(formatClock(elapsed)),
                         style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -493,9 +507,10 @@ internal fun AudioRecorderScreen(texts: UiText, onBack: () -> Unit) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         when (state) {
                             AudioRecorder.State.Idle -> Button(
-                                enabled = permissionGranted,
+                                enabled = permissionGranted && !busy,
                                 onClick = {
                                     status = null
+                                    recorded = null
                                     scope.launch {
                                         runCatching {
                                             recorder.start(File(context.cacheDir, "zen-recording.wav"))
@@ -511,17 +526,21 @@ internal fun AudioRecorderScreen(texts: UiText, onBack: () -> Unit) {
                             }
                         }
                         OutlinedButton(
-                            enabled = state != AudioRecorder.State.Idle,
+                            enabled = state != AudioRecorder.State.Idle && !busy,
+                            onClick = { stopRecording() }
+                        ) { Text(texts.recorderStop()) }
+                        OutlinedButton(
+                            enabled = (state != AudioRecorder.State.Idle || recorded != null) && !busy,
                             onClick = { saveAs("wav", "audio/wav", StudioOutput.Collection.Music) }
                         ) { Text(texts.recorderSaveWav()) }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(
-                            enabled = state != AudioRecorder.State.Idle && !busy,
+                            enabled = (state != AudioRecorder.State.Idle || recorded != null) && !busy,
                             onClick = { saveAs("flac", "audio/flac", StudioOutput.Collection.Music) }
                         ) { Text(texts.recorderSaveFlac()) }
                         OutlinedButton(
-                            enabled = state != AudioRecorder.State.Idle && !busy,
+                            enabled = (state != AudioRecorder.State.Idle || recorded != null) && !busy,
                             onClick = { saveAs("m4a", "audio/mp4", StudioOutput.Collection.Music) }
                         ) { Text(texts.recorderSaveM4a()) }
                     }
