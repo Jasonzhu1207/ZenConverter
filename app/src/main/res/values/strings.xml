@@ -1068,6 +1068,8 @@
     <string name="cut_transcript_apply">Rebuild audio</string>
     <string name="cut_transcript_transcribe">Transcribe and list words</string>
     <string name="cut_transcript_transcribed">Transcribed %1$d words. Delete the ones you want removed.</string>
+    <string name="cut_transcript_tap_hint">Tap a word to mark it for deletion. Tap again to keep it.</string>
+    <string name="cut_transcript_deleted_count">%1$d word(s) marked for deletion.</string>
     <string name="privacy_scrub_audio">Scrub audio metadata</string>
     <string name="message_model_1_s_has_no_checksum_to_verify">%1$s cannot be downloaded because it has no checksum to verify.</string>
     <string name="transcribe_engine_unavailable">The on-device Whisper runtime is not available on this device, so transcription falls back to a typed transcript.</string>

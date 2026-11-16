@@ -1287,6 +1287,9 @@ internal class UiText(private val context: Context) {
     fun cutTranscriptTranscribe(): String = text(R.string.cut_transcript_transcribe)
     fun cutTranscriptTranscribed(count: Int): String =
         text(R.string.cut_transcript_transcribed, count)
+    fun cutTranscriptTapHint(): String = text(R.string.cut_transcript_tap_hint)
+    fun cutTranscriptDeletedCount(count: Int): String =
+        text(R.string.cut_transcript_deleted_count, count)
     fun privacyScrubAudio(): String = text(R.string.privacy_scrub_audio)
 
     fun transcribeEngineUnavailable(): String = text(R.string.transcribe_engine_unavailable)

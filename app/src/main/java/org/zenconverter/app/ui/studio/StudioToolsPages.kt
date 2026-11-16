@@ -3,6 +3,8 @@ package org.zenconverter.app.ui.studio
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -325,6 +327,7 @@ internal fun SplitSilenceScreen(texts: UiText, onBack: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun CutTranscriptScreen(texts: UiText, onBack: () -> Unit) {
     val context = LocalContext.current
@@ -336,10 +339,14 @@ internal fun CutTranscriptScreen(texts: UiText, onBack: () -> Unit) {
     var status by remember { mutableStateOf<String?>(null) }
     var transcribing by remember { mutableStateOf(false) }
     var words by remember { mutableStateOf<List<TranscribedWord>>(emptyList()) }
+    var deleted by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var downloadProgress by remember { mutableStateOf<Float?>(null) }
+    var modelReady by remember { mutableStateOf(WhisperModelManager.isDownloaded(context)) }
     val engineAvailable = WhisperModelManager.INFERENCE_AVAILABLE
     val pickAudio = rememberAudioPicker { uri ->
         sourceUri = uri
         words = emptyList()
+        deleted = emptySet()
         deletedIndexes = ""
     }
 
@@ -353,7 +360,34 @@ internal fun CutTranscriptScreen(texts: UiText, onBack: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     OutlinedButton(onClick = pickAudio) { Text(texts.studioPickAudio()) }
-                    if (engineAvailable) {
+                    if (engineAvailable && !modelReady) {
+                        OutlinedButton(
+                            enabled = downloadProgress == null,
+                            onClick = {
+                                scope.launch {
+                                    downloadProgress = 0f
+                                    runCatching {
+                                        WhisperModelManager.download(context) { downloadProgress = it }
+                                    }.onSuccess {
+                                        modelReady = true
+                                        downloadProgress = null
+                                        status = texts.studioModelReady()
+                                    }.onFailure {
+                                        downloadProgress = null
+                                        status = texts.studioFailed()
+                                    }
+                                }
+                            }
+                        ) { Text(texts.transcribeDownloadModel()) }
+                    }
+                    downloadProgress?.let { progress ->
+                        Text(
+                            texts.transcribeDownloading((progress * 100).toInt()),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    if (engineAvailable && modelReady) {
                         OutlinedButton(
                             enabled = sourceUri != null && !transcribing && !busy,
                             onClick = {
@@ -381,14 +415,50 @@ internal fun CutTranscriptScreen(texts: UiText, onBack: () -> Unit) {
                         onValueChange = {
                             wordInput = it
                             words = parseWords(it)
+                            deleted = emptySet()
+                            deletedIndexes = ""
                         },
                         label = { Text("start end word") },
                         minLines = 4,
                         modifier = Modifier.fillMaxWidth()
                     )
+                    if (words.isNotEmpty()) {
+                        Text(
+                            texts.cutTranscriptTapHint(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            words.forEachIndexed { index, word ->
+                                val marked = (index + 1) in deleted
+                                FilterChip(
+                                    selected = marked,
+                                    onClick = {
+                                        deleted = if (marked) deleted - (index + 1) else deleted + (index + 1)
+                                        deletedIndexes = deleted.sorted().joinToString(",")
+                                    },
+                                    label = { Text(word.text) }
+                                )
+                            }
+                        }
+                        if (deleted.isNotEmpty()) {
+                            Text(
+                                texts.cutTranscriptDeletedCount(deleted.size),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                     OutlinedTextField(
                         value = deletedIndexes,
-                        onValueChange = { deletedIndexes = it },
+                        onValueChange = {
+                            deletedIndexes = it
+                            deleted = it.split(',').mapNotNull { part -> part.trim().toIntOrNull() }
+                                .filter { it > 0 }.toSet()
+                        },
                         label = { Text("1,3,5") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -408,9 +478,7 @@ internal fun CutTranscriptScreen(texts: UiText, onBack: () -> Unit) {
                                         words = parsed
                                     )
                                 )
-                                val deleted = deletedIndexes.split(',').mapNotNull { it.trim().toIntOrNull() }
-                                    .map { it - 1 }.toSet()
-                                val plan = TranscriptEditing.plan(segments, deleted)
+                                val plan = TranscriptEditing.plan(segments, deleted.map { it - 1 }.toSet())
                                 val temp = tempOutput(context, "zen-cut", "mp3")
                                 val ok = AudioStudioEngine.cutSegments(context, uri, plan.keepSegments, temp)
                                 status = if (ok) {
