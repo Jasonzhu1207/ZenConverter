@@ -30,8 +30,10 @@ import org.zenconverter.app.studio.StudioStore
 import org.zenconverter.app.system.BatteryThermalGuard
 import org.zenconverter.app.system.CrashReporter
 import org.zenconverter.app.system.LocalTransferServer
+import org.zenconverter.app.system.MediaShrinker
 import org.zenconverter.app.system.StorageCleaner
 import org.zenconverter.app.ui.UiText
+import org.zenconverter.app.ui.formatBytes
 import org.zenconverter.app.ui.settings.InsetGroupCard
 import org.zenconverter.app.ui.settings.SettingsPage
 import org.zenconverter.app.ui.settings.SettingsRow
@@ -131,14 +133,48 @@ internal fun StorageCleanerScreen(texts: UiText, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var result by remember { mutableStateOf<StorageCleaner.ScanResult?>(null) }
     var scanning by remember { mutableStateOf(false) }
+    var compressingUri by remember { mutableStateOf<String?>(null) }
+    var savedBytes by remember { mutableStateOf(0L) }
+    var status by remember { mutableStateOf<String?>(null) }
     val cleaner = remember { StorageCleaner(context) }
     val pickFolder = rememberFolderPicker { treeUri ->
         scanning = true
+        status = null
+        savedBytes = 0L
         scope.launch {
             result = withContext(Dispatchers.IO) {
                 runCatching { cleaner.scan(treeUri) }.getOrNull()
             }
             scanning = false
+        }
+    }
+
+    fun compressVideo(file: StorageCleaner.LargeFile) {
+        compressingUri = file.uri.toString()
+        status = null
+        scope.launch {
+            val temp = File(context.cacheDir, "zen-cleaner-${System.currentTimeMillis()}.mp4")
+            val shrink = withContext(Dispatchers.IO) {
+                runCatching {
+                    MediaShrinker.shrinkVideo(context, file.uri, temp, file.sizeBytes)
+                }.getOrNull()
+            }
+            val label = if (shrink != null && shrink.savedBytes > 0L) {
+                StudioOutput.save(
+                    context,
+                    shrink.output,
+                    "zenconverter-compressed-${System.currentTimeMillis()}.mp4",
+                    "video/mp4",
+                    StudioOutput.Collection.Movies
+                )
+                savedBytes += shrink.savedBytes
+                texts.cleanerSaved(formatBytes(shrink.savedBytes, texts))
+            } else {
+                texts.studioFailed()
+            }
+            temp.delete()
+            status = label
+            compressingUri = null
         }
     }
 
@@ -168,12 +204,31 @@ internal fun StorageCleanerScreen(texts: UiText, onBack: () -> Unit) {
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        current.largeFiles.take(10).forEach { file ->
+                        if (savedBytes > 0L) {
                             Text(
-                                "${file.displayName} · ${file.sizeBytes / (1024 * 1024)} MB",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                texts.cleanerSaved(formatBytes(savedBytes, texts)),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary
                             )
+                        }
+                        current.largeFiles.take(10).forEach { file ->
+                            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(
+                                    "${file.displayName} · ${formatBytes(file.sizeBytes, texts)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (file.mimeType?.startsWith("video/") == true) {
+                                    val busy = compressingUri == file.uri.toString()
+                                    OutlinedButton(
+                                        enabled = compressingUri == null,
+                                        onClick = { compressVideo(file) }
+                                    ) { Text(if (busy) texts.cleanerScanning() else texts.cleanerCompress()) }
+                                }
+                            }
+                        }
+                        status?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
