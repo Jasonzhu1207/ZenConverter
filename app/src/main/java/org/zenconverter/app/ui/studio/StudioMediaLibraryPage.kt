@@ -1,16 +1,13 @@
 package org.zenconverter.app.ui.studio
 
 import android.net.Uri
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.Description
@@ -31,11 +28,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -44,11 +39,13 @@ import org.zenconverter.app.conversion.ConversionTaskStore
 import org.zenconverter.app.conversion.QueueInbox
 import org.zenconverter.app.i18n.localizedText
 import org.zenconverter.app.system.FolderWatcher
+import org.zenconverter.app.system.MediaKinds
 import org.zenconverter.app.system.MediaLibrary
 import org.zenconverter.app.ui.AppIcon
 import org.zenconverter.app.ui.UiText
 import org.zenconverter.app.ui.settings.InsetGroupCard
 import org.zenconverter.app.ui.settings.SettingsPage
+import org.zenconverter.app.ui.settings.SettingsRow
 
 /**
  * Shows every file the app can act on: the device MediaStore plus the app's own
@@ -107,10 +104,17 @@ internal fun MediaLibraryScreen(texts: UiText, onBack: () -> Unit) {
                                 scope.launch {
                                     watcher.watchChanges(treeUri!!).collect { change ->
                                         refresh()
-                                        if (change.kind != FolderWatcher.ChangeKind.Removed) {
+                                        // A file that appears while watching is exactly the
+                                        // "just saved it, convert it" case, so queue it.
+                                        if (change.kind == FolderWatcher.ChangeKind.Added) {
+                                            QueueInbox.enqueue(
+                                                change.document.uri,
+                                                change.document.mimeType
+                                            )
                                             ConversionTaskStore.showMessage(
                                                 localizedText(
-                                                    org.zenconverter.app.R.string.library_app_output
+                                                    org.zenconverter.app.R.string.library_added_to_queue,
+                                                    change.document.displayName
                                                 )
                                             )
                                         }
@@ -162,70 +166,41 @@ private fun androidx.compose.foundation.lazy.LazyListScope.libraryGroup(
     if (items.isEmpty()) return
     item(key = "library-$title-header") {
         Text(
-            text = "$title · ${texts.libraryFilesCount(items.size)}",
+            text = "$title \u00b7 ${texts.libraryFilesCount(items.size)}",
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 4.dp, top = 14.dp, bottom = 4.dp)
         )
     }
-    items(items, key = { "library-${it.uri}" }) { item ->
-        MediaLibraryRow(item, texts, onSendToQueue)
-    }
-}
-
-@Composable
-private fun MediaLibraryRow(
-    item: MediaLibrary.MediaItem,
-    texts: UiText,
-    onSendToQueue: (Uri, String?) -> Unit
-) {
-    InsetGroupCard {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onSendToQueue(item.uri, item.mimeType) }
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Box(
-                Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                AppIcon(iconForKind(item.kind), null, MaterialTheme.colorScheme.primary, Modifier.size(22.dp))
-            }
-            Column(Modifier.weight(1f)) {
-                Text(
-                    item.displayName,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    buildString {
-                        append(item.mimeType ?: item.kind.name)
-                        if (item.sizeBytes > 0) append(" · ${formatBytes(item.sizeBytes)}")
-                        if (item.isAppOutput) append(" · ${texts.libraryAppOutput()}")
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+    item(key = "library-$title-card") {
+        InsetGroupCard {
+            items.forEachIndexed { index, item ->
+                SettingsRow(
+                    badgeIcon = iconForKind(item.kind),
+                    title = item.displayName,
+                    subtitle = subtitleFor(item, texts),
+                    showChevron = true,
+                    showDivider = index != items.lastIndex,
+                    onClick = { onSendToQueue(item.uri, item.mimeType) }
                 )
             }
         }
     }
 }
 
-private fun iconForKind(kind: MediaLibrary.MediaItem.Kind): ImageVector = when (kind) {
-    MediaLibrary.MediaItem.Kind.Audio -> Icons.Rounded.AudioFile
-    MediaLibrary.MediaItem.Kind.Video -> Icons.Rounded.Movie
-    MediaLibrary.MediaItem.Kind.Image -> Icons.Rounded.Image
-    MediaLibrary.MediaItem.Kind.Document -> Icons.Rounded.Description
-    MediaLibrary.MediaItem.Kind.Other -> Icons.Rounded.FolderOpen
+private fun subtitleFor(item: MediaLibrary.MediaItem, texts: UiText): String = buildString {
+    append(item.mimeType ?: item.kind.name)
+    if (item.sizeBytes > 0) append(" \u00b7 ${formatBytes(item.sizeBytes)}")
+    if (item.isAppOutput) append(" \u00b7 ${texts.libraryAppOutput()}")
+}
+
+private fun iconForKind(kind: MediaKinds.Kind): ImageVector = when (kind) {
+    MediaKinds.Kind.Audio -> Icons.Rounded.AudioFile
+    MediaKinds.Kind.Video -> Icons.Rounded.Movie
+    MediaKinds.Kind.Image -> Icons.Rounded.Image
+    MediaKinds.Kind.Document -> Icons.Rounded.Description
+    MediaKinds.Kind.Other -> Icons.Rounded.FolderOpen
 }
 
 private fun formatBytes(bytes: Long): String {

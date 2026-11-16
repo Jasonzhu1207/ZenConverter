@@ -870,6 +870,7 @@
     <string name="library_send_to_queue">Send to queue</string>
     <string name="library_files_count">%1$d files</string>
     <string name="library_app_output">Saved by ZenConverter</string>
+    <string name="library_added_to_queue">%1$s added to the queue</string>
     <string name="studio_audio_converter">Audio converter</string>
     <string name="studio_audio_converter_desc">MP3, Opus and FLAC with tags and artwork</string>
     <string name="studio_tag_new">New</string>

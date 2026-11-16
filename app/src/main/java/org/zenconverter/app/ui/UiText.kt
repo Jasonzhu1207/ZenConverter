@@ -1043,6 +1043,7 @@ internal class UiText(private val context: Context) {
     fun librarySendToQueue(): String = text(R.string.library_send_to_queue)
     fun libraryFilesCount(count: Int): String = text(R.string.library_files_count, count)
     fun libraryAppOutput(): String = text(R.string.library_app_output)
+    fun libraryAddedToQueue(name: String): String = text(R.string.library_added_to_queue, name)
     fun studioTagNew(): String = text(R.string.studio_tag_new)
     fun studioTagFixed(): String = text(R.string.studio_tag_fixed)
     fun studioRecorder(): String = text(R.string.studio_recorder)

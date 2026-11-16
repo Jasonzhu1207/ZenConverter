@@ -2,6 +2,7 @@ package org.zenconverter.app.system
 
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.provider.MediaStore
 
 /**
@@ -20,13 +21,11 @@ class MediaLibrary(private val context: Context) {
         val sizeBytes: Long,
         val dateModifiedMs: Long,
         val relativePath: String?,
-        val kind: Kind,
+        val kind: MediaKinds.Kind,
         /** True when the file was produced by a ZenConverter export. */
         val isAppOutput: Boolean
     ) {
-        enum class Kind { Audio, Video, Image, Document, Other }
-
-        val isMedia: Boolean get() = kind == Kind.Audio || kind == Kind.Video || kind == Kind.Image
+        val isMedia: Boolean get() = kind == MediaKinds.Kind.Audio || kind == MediaKinds.Kind.Video || kind == MediaKinds.Kind.Image
     }
 
     /** Buckets the library is grouped into for the UI. */
@@ -55,21 +54,21 @@ class MediaLibrary(private val context: Context) {
         if (includeAudio) {
             results += queryCollection(
                 MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                MediaItem.Kind.Audio,
+                MediaKinds.Kind.Audio,
                 limitPerKind
             )
         }
         if (includeVideo) {
             results += queryCollection(
                 MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                MediaItem.Kind.Video,
+                MediaKinds.Kind.Video,
                 limitPerKind
             )
         }
         if (includeImages) {
             results += queryCollection(
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                MediaItem.Kind.Image,
+                MediaKinds.Kind.Image,
                 limitPerKind
             )
         }
@@ -78,17 +77,22 @@ class MediaLibrary(private val context: Context) {
 
     private fun queryCollection(
         collection: Uri,
-        kind: MediaItem.Kind,
+        kind: MediaKinds.Kind,
         limit: Int
     ): List<MediaItem> {
-        val projection = arrayOf(
+        // RELATIVE_PATH only exists from API 29; asking for it on older devices
+        // makes the whole query throw, which would silently empty the library.
+        val columns = mutableListOf(
             MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.DISPLAY_NAME,
             MediaStore.MediaColumns.MIME_TYPE,
             MediaStore.MediaColumns.SIZE,
-            MediaStore.MediaColumns.DATE_MODIFIED,
-            MediaStore.MediaColumns.RELATIVE_PATH
+            MediaStore.MediaColumns.DATE_MODIFIED
         )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            columns += MediaStore.MediaColumns.RELATIVE_PATH
+        }
+        val projection = columns.toTypedArray()
         val items = mutableListOf<MediaItem>()
         runCatching {
             context.contentResolver.query(
@@ -103,10 +107,10 @@ class MediaLibrary(private val context: Context) {
                 val mimeColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
                 val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
                 val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
-                val pathColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.RELATIVE_PATH)
+                val pathColumn = cursor.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
                 while (cursor.moveToNext() && items.size < limit) {
                     val id = cursor.getLong(idColumn)
-                    val relativePath = cursor.getString(pathColumn)
+                    val relativePath = if (pathColumn >= 0) cursor.getString(pathColumn) else null
                     items += MediaItem(
                         uri = Uri.withAppendedPath(collection, id.toString()),
                         displayName = cursor.getString(nameColumn) ?: continue,
@@ -139,7 +143,7 @@ class MediaLibrary(private val context: Context) {
                     sizeBytes = 0L,
                     dateModifiedMs = 0L,
                     relativePath = null,
-                    kind = kindForMime(document.mimeType, document.displayName),
+                    kind = MediaKinds.of(document.mimeType, document.displayName),
                     isAppOutput = true
                 )
             }
@@ -152,41 +156,15 @@ class MediaLibrary(private val context: Context) {
         val outputs = appOutputs(treeUri)
         val combined = (media + outputs).distinctBy { it.uri.toString() }
         return Snapshot(
-            audio = combined.filter { it.kind == MediaItem.Kind.Audio },
-            video = combined.filter { it.kind == MediaItem.Kind.Video },
-            images = combined.filter { it.kind == MediaItem.Kind.Image },
-            documents = combined.filter { it.kind == MediaItem.Kind.Document }
+            audio = combined.filter { it.kind == MediaKinds.Kind.Audio },
+            video = combined.filter { it.kind == MediaKinds.Kind.Video },
+            images = combined.filter { it.kind == MediaKinds.Kind.Image },
+            documents = combined.filter { it.kind == MediaKinds.Kind.Document }
         )
     }
 
     companion object {
         const val DEFAULT_LIMIT = 500
         const val OUTPUT_DIRECTORY = "ZenConverter"
-
-        fun kindForMime(mimeType: String?, displayName: String): MediaItem.Kind {
-            val mime = mimeType?.lowercase()
-            val extension = displayName.substringAfterLast('.', "").lowercase()
-            return when {
-                mime?.startsWith("audio/") == true || extension in AUDIO_EXTENSIONS -> MediaItem.Kind.Audio
-                mime?.startsWith("video/") == true || extension in VIDEO_EXTENSIONS -> MediaItem.Kind.Video
-                mime?.startsWith("image/") == true || extension in IMAGE_EXTENSIONS -> MediaItem.Kind.Image
-                mime?.startsWith("text/") == true || extension in DOCUMENT_EXTENSIONS -> MediaItem.Kind.Document
-                else -> MediaItem.Kind.Other
-            }
-        }
-
-        private val AUDIO_EXTENSIONS = setOf(
-            "mp3", "m4a", "aac", "wav", "flac", "ogg", "opus", "alac", "aiff", "amr", "wma", "mka"
-        )
-        private val VIDEO_EXTENSIONS = setOf(
-            "mp4", "mkv", "webm", "avi", "mov", "3gp", "flv", "m4v", "ts", "gif"
-        )
-        private val IMAGE_EXTENSIONS = setOf(
-            "jpg", "jpeg", "png", "webp", "heic", "heif", "avif", "bmp", "tiff", "svg"
-        )
-        private val DOCUMENT_EXTENSIONS = setOf(
-            "pdf", "txt", "md", "html", "htm", "doc", "docx", "ppt", "pptx", "xls", "xlsx",
-            "epub", "srt", "vtt", "lrc", "json", "zip", "7z", "tar", "gz", "csv", "rtf"
-        )
     }
 }
