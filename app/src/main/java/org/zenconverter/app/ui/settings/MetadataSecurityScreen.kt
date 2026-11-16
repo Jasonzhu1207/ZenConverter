@@ -1,5 +1,6 @@
 package org.zenconverter.app.ui.settings
 
+import androidx.compose.ui.res.stringResource
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
@@ -45,13 +46,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import org.zenconverter.app.R
 import org.zenconverter.app.metadata.MetadataBackupInfo
 import org.zenconverter.app.metadata.MetadataInspection
-import org.zenconverter.app.metadata.MetadataScrubTargets
 import org.zenconverter.app.metadata.MetadataMessageKey
+import org.zenconverter.app.metadata.MetadataScrubTargets
 import org.zenconverter.app.metadata.MetadataStatusMessage
 import org.zenconverter.app.metadata.MetadataTargetKind
 import org.zenconverter.app.metadata.MetadataToolState
+import org.zenconverter.app.ui.formatBytes
 import org.zenconverter.app.ui.AppIcon
 import org.zenconverter.app.ui.SmallTag
 import org.zenconverter.app.ui.StatusLine
@@ -300,6 +303,7 @@ internal fun MetadataSecurityScreen(
                             MetadataInspectionWorkbenchCard(
                                 texts = texts,
                                 state = targetState,
+                                scrubTargets = scrubTargets,
                                 onClean = { onClean(scrubTargets) },
                                 onRestore = onRestore,
                             )
@@ -316,6 +320,7 @@ internal fun MetadataSecurityScreen(
 private fun MetadataInspectionWorkbenchCard(
     texts: UiText,
     state: MetadataToolState.Ready,
+    scrubTargets: MetadataScrubTargets,
     onClean: () -> Unit,
     onRestore: (String) -> Unit,
 ) {
@@ -377,6 +382,11 @@ private fun MetadataInspectionWorkbenchCard(
                     }
                 }
             }
+
+            // Found metadata, with what each field's fate will be
+            MetadataFoundList(
+                rows = metadataFoundRows(inspection, texts, scrubTargets),
+            )
 
             // Key-Value Attributes
             MetadataCompactRows(
@@ -652,5 +662,109 @@ private fun MetadataFormatRow(name: String, verdict: String) {
             modifier = Modifier.weight(1f)
         )
         SmallTag(verdict)
+    }
+}
+
+/** One metadata field with the decision the current switches imply for it. */
+private data class MetadataFoundRow(
+    val label: String,
+    val value: String,
+    val willRemove: Boolean,
+)
+
+private fun metadataFoundRows(
+    inspection: MetadataInspection,
+    texts: UiText,
+    targets: MetadataScrubTargets,
+): List<MetadataFoundRow> {
+    if (inspection.kind != MetadataTargetKind.Image) {
+        return listOf(
+            MetadataFoundRow(
+                texts.metadataLabel("GPS"),
+                texts.yesNo(inspection.hasGps),
+                targets.gps && inspection.hasGps
+            ),
+            MetadataFoundRow(
+                texts.metadataLabel("Removable"),
+                "${inspection.removableSegmentCount} · ${formatBytes(inspection.removableBytes, texts)}",
+                inspection.hasRemovableMetadata
+            ),
+        )
+    }
+    return buildList {
+        add(MetadataFoundRow(texts.metadataLabel("GPS"), texts.yesNo(inspection.hasGps), targets.gps && inspection.hasGps))
+        inspection.capturedAt?.let {
+            add(MetadataFoundRow(texts.metadataLabel("Captured"), it, targets.timestamps))
+        }
+        inspection.camera?.let {
+            add(MetadataFoundRow(texts.metadataLabel("Camera"), it, targets.device))
+        }
+        inspection.software?.let {
+            add(MetadataFoundRow(texts.metadataLabel("Software"), it, targets.device))
+        }
+        inspection.artist?.let {
+            add(MetadataFoundRow(texts.metadataLabel("Artist"), it, targets.author))
+        }
+        inspection.copyright?.let {
+            add(MetadataFoundRow(texts.metadataLabel("Copyright"), it, targets.author))
+        }
+        inspection.description?.let {
+            add(MetadataFoundRow(texts.metadataLabel("Description"), it, targets.author))
+        }
+        add(
+            MetadataFoundRow(
+                texts.metadataLabel("Orientation"),
+                texts.metadataOrientationLabel(inspection.orientation),
+                false
+            )
+        )
+        if (inspection.width != null && inspection.height != null) {
+            add(MetadataFoundRow(texts.metadataLabel("Dimensions"), "${inspection.width}x${inspection.height}", false))
+        }
+    }
+}
+
+@Composable
+private fun MetadataFoundList(rows: List<MetadataFoundRow>) {
+    if (rows.isEmpty()) return
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.ui_metadata_found),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        rows.forEach { row ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = row.label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = row.value,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                SmallTag(
+                    if (row.willRemove) {
+                        stringResource(R.string.ui_metadata_will_remove)
+                    } else {
+                        stringResource(R.string.ui_metadata_keep)
+                    }
+                )
+            }
+        }
     }
 }

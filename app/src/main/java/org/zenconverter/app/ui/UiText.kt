@@ -2257,4 +2257,6 @@ internal class UiText(private val context: Context) {
     fun metadataFormatJpegClean(): String = text(R.string.ui_metadata_formats_jpeg_clean)
     fun metadataFormatClean(): String = text(R.string.ui_metadata_formats_clean)
     fun metadataFormatViewOnly(): String = text(R.string.ui_metadata_formats_view_only)
+    fun metadataWillRemove(): String = text(R.string.ui_metadata_will_remove)
+    fun metadataKeep(): String = text(R.string.ui_metadata_keep)
 }

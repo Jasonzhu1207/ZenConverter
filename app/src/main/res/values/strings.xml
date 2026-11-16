@@ -1631,6 +1631,8 @@
     <string name="ui_metadata_formats_clean">Clean</string>
     <string name="ui_metadata_formats_view_only">View only</string>
     <string name="text_metadata_message_batch_scrub_summary">Scrubbed %1$d file(s), skipped %2$d.</string>
+    <string name="ui_metadata_will_remove">Will remove</string>
+    <string name="ui_metadata_keep">Keep</string>
 </resources>
 
 
