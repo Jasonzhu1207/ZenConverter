@@ -403,7 +403,7 @@ internal fun CutTranscriptScreen(texts: UiText, onBack: () -> Unit) {
                                         "${word.startSeconds} ${word.endSeconds} ${word.text}"
                                     }
                                     status = if (words.isEmpty()) {
-                                        texts.transcribeEngineUnavailable()
+                                        texts.transcribeEmpty()
                                     } else {
                                         texts.cutTranscriptTranscribed(words.size)
                                     }

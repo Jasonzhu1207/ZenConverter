@@ -132,6 +132,7 @@ class ConversionService : Service() {
 
     private var taskIndex = 0
     private var notificationState = NotificationState.Idle
+    private var guardHolding = false
     private var notificationTitle: LocalizedText = localizedText(R.string.message_preparing)
     private var notificationProgress = 0
     private var activeFfmpegSession: FFmpegSession? = null
@@ -264,8 +265,13 @@ class ConversionService : Service() {
             notificationState = NotificationState.Running
             updateNotification(message, (ConversionTaskStore.aggregateProgress() * 100).toInt())
             ConversionTaskStore.showMessage(message)
+            guardHolding = true
             handler.postDelayed({ processNextTask() }, GUARD_RETRY_DELAY_MS)
             return
+        }
+        if (guardHolding) {
+            guardHolding = false
+            ConversionTaskStore.showMessage(localizedText(R.string.guard_resumed))
         }
 
         val input = ConversionTaskStore.inputAt(taskIndex)

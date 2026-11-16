@@ -4927,7 +4927,7 @@ private fun QueueHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = texts.queue,
+            text = texts.queueTitle(),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold
         )
@@ -6384,6 +6384,7 @@ private fun AudioEffectsPanel(
             onCheckedChange = { onEffectsChange(effects.copy(deHum = it)) }
         )
         val pluginPresets = StudioStore.pluginPresets.toList()
+        var appliedPreset by remember { mutableStateOf<String?>(null) }
         if (pluginPresets.isNotEmpty()) {
             Text(
                 text = texts.pluginsTitle(),
@@ -6395,9 +6396,21 @@ private fun AudioEffectsPanel(
                 Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     pluginPresets.forEach { preset ->
                         OutlinedButton(
-                            onClick = { onEffectsChange(PluginPresets.apply(preset, effects)) },
+                            onClick = {
+                                onEffectsChange(PluginPresets.apply(preset, effects))
+                                appliedPreset = preset.name
+                            },
                             modifier = Modifier.fillMaxWidth()
-                        ) { Text(preset.name) }
+                        ) {
+                            Text(texts.pluginsApply() + " · " + preset.name)
+                        }
+                    }
+                    appliedPreset?.let {
+                        Text(
+                            texts.pluginsApplied(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }
@@ -6914,6 +6927,16 @@ private fun QueueControls(
                 style = MaterialTheme.typography.labelLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (isPaused) {
+            Text(
+                text = texts.queuePaused(),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
             )
         }
     }

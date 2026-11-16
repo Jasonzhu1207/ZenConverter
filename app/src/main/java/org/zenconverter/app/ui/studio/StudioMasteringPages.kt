@@ -520,6 +520,13 @@ internal fun SpectrumAnalyzerScreen(texts: UiText, state: MasteringUiState, onBa
                         balance = state.analysis?.balance,
                         modifier = Modifier.fillMaxWidth().height(180.dp)
                     )
+                    if (state.analysis == null) {
+                        Text(
+                            texts.masteringSpectrumEmpty(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     Legend(texts)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(enabled = state.sourceUri != null && !busy, onClick = { analyze() }) {
@@ -640,7 +647,7 @@ private fun EqBandRow(texts: UiText, band: EqBand, onChange: (EqBand) -> Unit) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(texts.masteringBandLabel(band.band), style = MaterialTheme.typography.labelLarge)
             Text(
-                "${band.hz.toInt()} Hz · ${signedDecimal(band.gainDb)} dB",
+                "${band.hz.toInt()} Hz · " + texts.masteringEqGain(signedDecimal(band.gainDb)),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -752,13 +759,13 @@ private fun LoudnessGauges(texts: UiText, report: MasteringModel.Report?) {
             texts.masteringLoudnessIntegrated(),
             report?.let { texts.masteringLoudnessIntegratedHint(formatDecimal(it.target.lufs)) }
                 ?: texts.masteringLoudnessPlaceholder(),
-            report?.let { "${formatDecimal(it.integratedLufs)} LUFS" } ?: texts.masteringLoudnessPlaceholder()
+            report?.let { texts.masteringTargetLufs(formatDecimal(it.integratedLufs)) } ?: texts.masteringLoudnessPlaceholder()
         )
         GaugeRow(
             texts.masteringLoudnessTruePeak(),
             report?.let { texts.masteringLoudnessTruePeakHint(formatDecimal(it.target.truePeakDb)) }
                 ?: texts.masteringLoudnessPlaceholder(),
-            report?.let { "${formatDecimal(it.truePeakDb)} dBTP" } ?: texts.masteringLoudnessPlaceholder()
+            report?.let { texts.masteringTargetPeak(formatDecimal(it.truePeakDb)) } ?: texts.masteringLoudnessPlaceholder()
         )
         GaugeRow(
             texts.masteringLoudnessRange(),
@@ -790,6 +797,11 @@ private fun WaveformShapeBlock(texts: UiText, peaks: FloatArray, report: Masteri
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(texts.masteringShapeTitle(), style = MaterialTheme.typography.labelLarge)
         WaveformShapeCanvas(peaks, Modifier.fillMaxWidth().height(70.dp))
+        Text(
+            texts.masteringShapeDesc(),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         report?.let {
             val shape = MasteringModel.shapeFor(it)
             Text(texts.masteringShapeLabel(shape), style = MaterialTheme.typography.labelLarge)

@@ -222,7 +222,11 @@ internal fun StemSeparationScreen(texts: UiText, onBack: () -> Unit) {
     var status by remember { mutableStateOf<String?>(null) }
     var downloadProgress by remember { mutableStateOf<Float?>(null) }
     var modelReady by remember { mutableStateOf(StemSeparationModelManager.isDownloaded(context)) }
-    val pickAudio = rememberAudioPicker { uri -> sourceUri = uri }
+    var separatedKinds by remember { mutableStateOf<List<StemKind>>(emptyList()) }
+    val pickAudio = rememberAudioPicker { uri ->
+        sourceUri = uri
+        separatedKinds = emptyList()
+    }
     val runtimeAvailable = StemNative.ensureLoaded()
 
     SettingsPage(texts.stemsTitle(), texts.studioBack(), onBack) {
@@ -293,6 +297,7 @@ internal fun StemSeparationScreen(texts: UiText, onBack: () -> Unit) {
                                 scope.launch {
                                     val outputDir = File(context.cacheDir, "zen-stems-${System.currentTimeMillis()}")
                                     val result = StemSplitter.separate(context, uri, outputDir)
+                                    separatedKinds = result.stems.map { it.first }
                                     status = if (result.stems.isEmpty()) {
                                         texts.studioFailed()
                                     } else {
@@ -316,7 +321,18 @@ internal fun StemSeparationScreen(texts: UiText, onBack: () -> Unit) {
                                     busy = false
                                 }
                             }
-                        ) { Text(texts.stemsRunOffline()) }
+                        ) { Text(if (busy) texts.stemsRunning() else texts.stemsRun()) }
+                    }
+                    if (separatedKinds.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            separatedKinds.forEach { kind ->
+                                Text(
+                                    texts.stemLabel(kind),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
                     status?.let {
                         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
@@ -470,12 +486,16 @@ private fun RecipeCard(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Text(
-            recipe.steps.mapIndexed { index, step -> "${index + 1}. ${step.type.labelKey}" }.joinToString("  "),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.primary
-        )
-        OutlinedButton(enabled = enabled, onClick = onRun) { Text(texts.recipesRun()) }
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            recipe.steps.forEachIndexed { index, step ->
+                Text(
+                    texts.recipesStep(index + 1) + " · " + step.type.labelKey,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+        OutlinedButton(enabled = enabled, onClick = onRun) { Text(texts.recipesApply()) }
     }
 }
 
