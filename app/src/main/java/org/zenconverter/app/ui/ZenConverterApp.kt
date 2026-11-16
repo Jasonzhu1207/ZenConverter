@@ -91,6 +91,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image as BrandImage
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.material.icons.rounded.Add
@@ -566,13 +567,15 @@ private data class AudioAdvancedUiState(
 )
 
 internal enum class AppScreen {
+    /** The glass hub; the app opens here. */
     Home,
+    /** The file converter and queue, opened from the hub's "Audio converter" card. */
+    Converter,
     Settings,
     OfflineEngines,
     MetadataSecurity,
     Help,
     PrivacyPolicy,
-    Studio,
     StudioWaveform,
     StudioRecorder,
     StudioMixer,
@@ -1344,6 +1347,26 @@ private fun ZenConverterContent(
         }
     }
 
+    /** Returns to the hub without stacking another copy of it underneath. */
+    fun navigateHome() {
+        if (screenStack.size > 1) {
+            returning = true
+            screenStack = listOf(AppScreen.Home.name)
+        }
+    }
+
+    // Files arrive either from the converter's own import sheet or from a share intent handled
+    // in MainActivity. If the queue grows while the hub is showing, surface it by opening the
+    // converter, so a shared file is never queued invisibly behind the hub.
+    var lastQueueSize by remember { mutableStateOf(queuedFiles.size) }
+    LaunchedEffect(queuedFiles.size) {
+        val grew = queuedFiles.size > lastQueueSize
+        lastQueueSize = queuedFiles.size
+        if (grew && currentScreen == AppScreen.Home) {
+            navigateTo(AppScreen.Converter)
+        }
+    }
+
     // One mastering session shared by the hub, the auto-master screen and every
     // sub-tool, so a change in one place is visible in all of them.
     val masteringState = remember { MasteringUiState() }
@@ -1392,7 +1415,9 @@ private fun ZenConverterContent(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        MountedHome(visible = currentScreen == AppScreen.Home) {
+        // The converter keeps its composition (and the morph animation) alive even while the
+        // hub covers it, exactly as it did when it was the root screen.
+        MountedHome(visible = currentScreen == AppScreen.Converter) {
             NoOverscroll {
                 GlassBackdrop {
                     Scaffold(
@@ -1658,6 +1683,7 @@ private fun ZenConverterContent(
                             texts = texts,
                             hasFiles = hasFiles,
                             isSettingsActive = currentScreen == AppScreen.Settings,
+                            onBackToHub = { navigateBack() },
                             onOpenSettings = {
                                 openMenuId = null
                                 if (currentScreen == AppScreen.Settings) {
@@ -1779,7 +1805,7 @@ private fun ZenConverterContent(
                     onPickOutputDirectory = onPickOutputDirectory,
                     onNavigateToMetadataSecurity = { navigateTo(AppScreen.MetadataSecurity) },
                     onNavigateToOfflineEngines = { navigateTo(AppScreen.OfflineEngines) },
-                    onNavigateToStudio = { navigateTo(AppScreen.Studio) },
+                    onNavigateToStudio = { navigateHome() },
                     onShowHelp = { navigateTo(AppScreen.Help) },
                     onShowPrivacyPolicy = { navigateTo(AppScreen.PrivacyPolicy) },
                     onShowSupport = { showSupport = true },
@@ -1819,10 +1845,10 @@ private fun ZenConverterContent(
                     copy = texts.helpGuide,
                     onBack = { navigateBack() },
                 )
-                AppScreen.Studio -> StudioScreen(
+                AppScreen.Home -> StudioScreen(
                     texts = texts,
                     onNavigate = { navigateTo(it) },
-                    onBack = { navigateBack() },
+                    onOpenSettings = { navigateTo(AppScreen.Settings) },
                 )
                 AppScreen.StudioWaveform -> WaveformEditorScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioRecorder -> AudioRecorderScreen(texts, onBack = { navigateBack() })
@@ -1868,7 +1894,7 @@ private fun ZenConverterContent(
                 AppScreen.StudioCutTranscript -> CutTranscriptScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioBurnSubs -> SubtitleBurnScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioChapterSplit -> ChapterSplitScreen(texts, onBack = { navigateBack() })
-                AppScreen.Home -> Unit
+                AppScreen.Converter -> Unit
             }
         }
     }
@@ -2180,6 +2206,7 @@ private fun Header(
     hasFiles: Boolean,
     isSettingsActive: Boolean,
     onOpenSettings: () -> Unit,
+    onBackToHub: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val spacerWidth by animateDpAsState(
@@ -2199,6 +2226,14 @@ private fun Header(
                 .semantics(mergeDescendants = true) {},
             verticalAlignment = Alignment.CenterVertically
         ) {
+            IconButton(onClick = onBackToHub, modifier = Modifier.size(HeaderButtonSize)) {
+                Icon(
+                    Icons.AutoMirrored.Rounded.ArrowBack,
+                    contentDescription = texts.studioBack(),
+                    tint = MaterialTheme.colorScheme.onBackground
+                )
+            }
+            Spacer(modifier = Modifier.width(2.dp))
             BrandImage(
                 painter = painterResource(id = R.drawable.zenconverter),
                 contentDescription = null,

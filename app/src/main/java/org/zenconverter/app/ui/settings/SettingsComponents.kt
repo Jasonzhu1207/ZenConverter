@@ -57,6 +57,10 @@ internal fun SettingsPage(
     listState: LazyListState = rememberLazyListState(),
     /** Widen the content column on large screens; off by default. */
     allowWideContent: Boolean = false,
+    /** Root pages such as the hub drop the back arrow; sub-pages keep it. */
+    showBack: Boolean = true,
+    /** Optional trailing controls in the top bar, shown after the title. */
+    actions: @Composable RowScope.() -> Unit = {},
     content: LazyListScope.() -> Unit
 ) {
     GlassBackdrop(modifier) {
@@ -72,14 +76,17 @@ internal fun SettingsPage(
                     Modifier.fillMaxWidth().heightIn(min = 56.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = backLabel)
+                    if (showBack) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = backLabel)
+                        }
                     }
                     Text(
                         title, modifier = Modifier.weight(1f).semantics { heading() },
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold
                     )
+                    actions()
                 }
                 LazyColumn(
                     state = listState,

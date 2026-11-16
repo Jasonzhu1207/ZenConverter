@@ -58,6 +58,7 @@ import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.RecordVoiceOver
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SettingsVoice
 import androidx.compose.material.icons.rounded.Speaker
 import androidx.compose.material.icons.rounded.Speed
@@ -68,6 +69,8 @@ import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -98,10 +101,21 @@ import org.zenconverter.app.ui.settings.SettingsPage
 internal fun StudioScreen(
     texts: UiText,
     onNavigate: (AppScreen) -> Unit,
-    onBack: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    SettingsPage(texts.studioTitle(), texts.studioBack(), onBack, modifier = modifier) {
+    SettingsPage(
+        title = texts.studioTitle(),
+        backLabel = texts.studioBack(),
+        onBack = {},
+        modifier = modifier,
+        showBack = false,
+        actions = {
+            IconButton(onClick = onOpenSettings) {
+                Icon(Icons.Rounded.Settings, contentDescription = texts.openSettings)
+            }
+        }
+    ) {
         studioSections(texts).forEach { section ->
             item(key = "hub-header-${section.title}") { HubSectionHeader(section.title) }
             section.hero?.let { hero ->
@@ -153,7 +167,7 @@ private fun studioSections(texts: UiText): List<HubSection> = listOf(
         title = texts.studioSectionAudio(),
         hero = HubEntry(
             texts.studioAudioConverter(), texts.studioAudioConverterDesc(),
-            Icons.Rounded.AudioFile, AppScreen.Home
+            Icons.Rounded.AudioFile, AppScreen.Converter
         ),
         tiles = listOf(
             HubEntry(texts.studioWaveform(), texts.studioWaveformDesc(), Icons.Rounded.GraphicEq, AppScreen.StudioWaveform),
@@ -182,7 +196,7 @@ private fun studioSections(texts: UiText): List<HubSection> = listOf(
             Icons.Rounded.Radio, AppScreen.StudioMastering
         ),
         tiles = listOf(
-            HubEntry(texts.studioStems(), texts.studioStemsDesc(), Icons.Rounded.Bolt, AppScreen.StudioMasteringStems),
+            HubEntry(texts.studioStems(), texts.studioStemsDesc(), Icons.Rounded.Bolt, AppScreen.StudioStems),
             HubEntry(texts.studioStemBalance(), texts.studioStemBalanceDesc(), Icons.Rounded.Balance, AppScreen.StudioMasteringStems),
             HubEntry(texts.studioEq(), texts.studioEqDesc(), Icons.Rounded.Tune, AppScreen.StudioMasteringEq),
             HubEntry(texts.studioSpectrum(), texts.studioSpectrumDesc(), Icons.Rounded.GraphicEq, AppScreen.StudioMasteringSpectrum),
