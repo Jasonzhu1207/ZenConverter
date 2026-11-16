@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.FFmpegKitConfig
+import com.arthenica.ffmpegkit.FFprobeKit
 import com.arthenica.ffmpegkit.ReturnCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -394,6 +395,23 @@ object AudioStudioEngine {
         arguments += listOf("-c:a", audioCodec, "-b:a", "${audioBitrateKbps}k", "-y", target.absolutePath)
         ReturnCode.isSuccess(FFmpegKit.executeWithArguments(arguments.toTypedArray()).getReturnCode())
     }
+
+    /**
+     * Reads the embedded chapter start times (in seconds) from [sourceUri] via
+     * FFprobe. Returns an empty list when the container has no chapters.
+     */
+    suspend fun readChapterStarts(context: Context, sourceUri: Uri): List<Double> =
+        withContext(Dispatchers.IO) {
+            val path = inputPathFor(context, sourceUri) ?: return@withContext emptyList()
+            val information = runCatching {
+                FFprobeKit.getMediaInformation(path).getMediaInformation()
+            }.getOrNull() ?: return@withContext emptyList()
+            information.getChapters().orEmpty()
+                .mapNotNull { chapter -> chapter.getStartTime()?.toDoubleOrNull() }
+                .filter { it >= 0.0 }
+                .distinct()
+                .sorted()
+        }
 
     private fun inputPathFor(context: Context, uri: Uri): String? {
         return runCatching {

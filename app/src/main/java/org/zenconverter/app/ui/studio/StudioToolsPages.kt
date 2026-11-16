@@ -13,6 +13,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -30,6 +31,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.zenconverter.app.archive.ArchiveEngine
 import org.zenconverter.app.audio.AudioStudioEngine
+import org.zenconverter.app.audio.ChapterTimestamps
 import org.zenconverter.app.audio.StudioOutput
 import org.zenconverter.app.audio.TranscribedWord
 import org.zenconverter.app.audio.TranscriptionEngine
@@ -737,6 +739,195 @@ internal fun EpubToolsScreen(texts: UiText, onBack: () -> Unit) {
                             }
                         ) { Text(texts.epubExtractAction()) }
                     }
+                    status?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun SubtitleBurnScreen(texts: UiText, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var videoUri by remember { mutableStateOf<Uri?>(null) }
+    var subtitleUri by remember { mutableStateOf<Uri?>(null) }
+    var fontSize by remember { mutableStateOf(24f) }
+    var busy by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf<String?>(null) }
+    val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) videoUri = uri
+    }
+    val pickSubtitle = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) subtitleUri = uri
+    }
+
+    SettingsPage(texts.burnSubsTitle(), texts.studioBack(), onBack) {
+        item("burn-body") {
+            InsetGroupCard {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        texts.burnSubsDesc(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { pickVideo.launch(arrayOf("video/*")) }) {
+                            Text(texts.burnSubsPickVideo())
+                        }
+                        OutlinedButton(onClick = { pickSubtitle.launch(arrayOf("application/x-subrip", "text/*", "*/*")) }) {
+                            Text(texts.burnSubsPickSubtitle())
+                        }
+                    }
+                    Text(
+                        listOfNotNull(
+                            videoUri?.lastPathSegment,
+                            subtitleUri?.lastPathSegment
+                        ).joinToString("  ·  "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    StudioFieldLabel(texts.burnSubsFontSize())
+                    Slider(
+                        value = fontSize,
+                        onValueChange = { fontSize = it },
+                        valueRange = 12f..48f,
+                        steps = 8
+                    )
+                    Button(
+                        enabled = videoUri != null && subtitleUri != null && !busy,
+                        onClick = {
+                            val video = videoUri ?: return@Button
+                            val subtitle = subtitleUri ?: return@Button
+                            busy = true
+                            scope.launch {
+                                val temp = tempOutput(context, "zen-burn", "mp4")
+                                val ok = AudioStudioEngine.burnSubtitles(
+                                    context = context,
+                                    sourceUri = video,
+                                    subtitleUri = subtitle,
+                                    target = temp,
+                                    fontSize = fontSize.toInt()
+                                )
+                                status = if (ok) {
+                                    StudioOutput.save(
+                                        context, temp,
+                                        "zenconverter-subbed-${System.currentTimeMillis()}.mp4",
+                                        "video/mp4", StudioOutput.Collection.Movies
+                                    )
+                                    temp.delete()
+                                    texts.burnSubsDone()
+                                } else {
+                                    temp.delete()
+                                    texts.studioFailed()
+                                }
+                                busy = false
+                            }
+                        }
+                    ) { Text(texts.burnSubsRun()) }
+                    status?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun ChapterSplitScreen(texts: UiText, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var sourceUri by remember { mutableStateOf<Uri?>(null) }
+    var manual by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf<String?>(null) }
+    val pickAudio = rememberAudioPicker { uri ->
+        sourceUri = uri
+        status = null
+        scope.launch {
+            val embedded = AudioStudioEngine.readChapterStarts(context, uri)
+            if (embedded.isNotEmpty()) {
+                manual = embedded.joinToString("\n") { ChapterTimestamps.format(it) }
+                status = texts.chapterSplitDone(embedded.size)
+            }
+        }
+    }
+
+    SettingsPage(texts.chapterSplitTitle(), texts.studioBack(), onBack) {
+        item("chapter-body") {
+            InsetGroupCard {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        texts.chapterSplitDesc(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = pickAudio) { Text(texts.studioPickAudio()) }
+                        OutlinedButton(
+                            enabled = sourceUri != null && !busy,
+                            onClick = {
+                                val uri = sourceUri ?: return@OutlinedButton
+                                busy = true
+                                scope.launch {
+                                    val embedded = AudioStudioEngine.readChapterStarts(context, uri)
+                                    if (embedded.isEmpty()) {
+                                        status = texts.chapterSplitNone()
+                                    } else {
+                                        manual = embedded.joinToString("\n") { ChapterTimestamps.format(it) }
+                                        status = texts.chapterSplitDone(embedded.size)
+                                    }
+                                    busy = false
+                                }
+                            }
+                        ) { Text(texts.chapterSplitUseEmbedded()) }
+                    }
+                    OutlinedTextField(
+                        value = manual,
+                        onValueChange = { manual = it },
+                        label = { Text(texts.chapterSplitRun()) },
+                        minLines = 3,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    val parsed = ChapterTimestamps.parse(manual)
+                    if (parsed.starts.isNotEmpty()) {
+                        Text(
+                            parsed.starts.joinToString("  ·  ") { ChapterTimestamps.format(it) },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Button(
+                        enabled = sourceUri != null && parsed.starts.isNotEmpty() && !busy,
+                        onClick = {
+                            val uri = sourceUri ?: return@Button
+                            busy = true
+                            scope.launch {
+                                val outputDir = File(context.cacheDir, "zen-chapters-${System.currentTimeMillis()}")
+                                val parts = AudioStudioEngine.splitAtTimestamps(
+                                    context = context,
+                                    sourceUri = uri,
+                                    outputDir = outputDir,
+                                    chapters = parsed.starts
+                                )
+                                status = if (parts.isEmpty()) {
+                                    texts.studioFailed()
+                                } else {
+                                    parts.forEach { part ->
+                                        StudioOutput.save(
+                                            context, part, part.name, "audio/mpeg", StudioOutput.Collection.Music
+                                        )
+                                    }
+                                    texts.chapterSplitDone(parts.size)
+                                }
+                                outputDir.deleteRecursively()
+                                busy = false
+                            }
+                        }
+                    ) { Text(texts.chapterSplitRun()) }
                     status?.let {
                         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     }

@@ -1132,6 +1132,7 @@
     <string name="burn_subs_pick_subtitle">Choose subtitles</string>
     <string name="burn_subs_run">Burn in</string>
     <string name="burn_subs_done">Subtitles burned in.</string>
+    <string name="burn_subs_font_size">Subtitle size</string>
     <string name="chapter_split_title">Split by chapters</string>
     <string name="chapter_split_desc">Split a file at chapter marks or at custom timestamps.</string>
     <string name="chapter_split_run">Split</string>

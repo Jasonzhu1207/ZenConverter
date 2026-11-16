@@ -204,7 +204,9 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import org.zenconverter.app.conversion.AudioAdvancedOptions
 import org.zenconverter.app.conversion.AudioBitDepth
+import org.zenconverter.app.ui.studio.ChapterSplitScreen
 import org.zenconverter.app.ui.studio.StudioScreen
+import org.zenconverter.app.ui.studio.SubtitleBurnScreen
 import org.zenconverter.app.ui.studio.WaveformEditorScreen
 import org.zenconverter.app.ui.studio.AudioRecorderScreen
 import org.zenconverter.app.ui.studio.AudioMixerScreen
@@ -583,6 +585,8 @@ internal enum class AppScreen {
     StudioFolderWatch,
     StudioSplitSilence,
     StudioCutTranscript,
+    StudioBurnSubs,
+    StudioChapterSplit,
     StudioPdfSplit,
     StudioPdfCreate,
     StudioEpub,
@@ -1844,6 +1848,8 @@ private fun ZenConverterContent(
                 AppScreen.StudioMasteringLoudnessNorm -> LoudnessNormalizationScreen(texts, masteringState, onBack = { navigateBack() })
                 AppScreen.StudioMasteringExciter -> HarmonicExciterScreen(texts, masteringState, onBack = { navigateBack() })
                 AppScreen.StudioCutTranscript -> CutTranscriptScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioBurnSubs -> SubtitleBurnScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioChapterSplit -> ChapterSplitScreen(texts, onBack = { navigateBack() })
                 AppScreen.Home -> Unit
             }
         }

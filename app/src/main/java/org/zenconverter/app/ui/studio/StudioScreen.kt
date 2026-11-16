@@ -21,6 +21,7 @@ import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.Balance
 import androidx.compose.material.icons.rounded.BatterySaver
+import androidx.compose.material.icons.rounded.Bookmarks
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.PictureAsPdf
@@ -38,6 +39,7 @@ import androidx.compose.material.icons.rounded.RecordVoiceOver
 import androidx.compose.material.icons.rounded.SettingsVoice
 import androidx.compose.material.icons.rounded.Speaker
 import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material.icons.rounded.Tune
@@ -121,6 +123,8 @@ internal fun StudioScreen(
                 StudioEntry(Icons.Rounded.Bolt, texts.studioStems(), texts.studioStemsDesc(), AppScreen.StudioStems, onNavigate)
                 StudioEntry(Icons.Rounded.ContentCut, texts.cutTranscriptTitle(), texts.cutTranscriptDesc(), AppScreen.StudioCutTranscript, onNavigate)
                 StudioEntry(Icons.AutoMirrored.Rounded.CallSplit, texts.splitSilenceTitle(), texts.splitSilenceDesc(), AppScreen.StudioSplitSilence, onNavigate)
+                StudioEntry(Icons.Rounded.Subtitles, texts.burnSubsTitle(), texts.burnSubsDesc(), AppScreen.StudioBurnSubs, onNavigate)
+                StudioEntry(Icons.Rounded.Bookmarks, texts.chapterSplitTitle(), texts.chapterSplitDesc(), AppScreen.StudioChapterSplit, onNavigate)
                 StudioEntry(Icons.Rounded.History, texts.studioHistory(), texts.studioHistoryDesc(), AppScreen.StudioHistory, onNavigate)
                 StudioEntry(Icons.Rounded.Terminal, texts.studioCommandView(), texts.studioCommandViewDesc(), AppScreen.StudioCommand, onNavigate, showDivider = false)
             }

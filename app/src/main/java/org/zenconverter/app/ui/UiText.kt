@@ -1342,6 +1342,7 @@ internal class UiText(private val context: Context) {
     fun burnSubsPickSubtitle(): String = text(R.string.burn_subs_pick_subtitle)
     fun burnSubsRun(): String = text(R.string.burn_subs_run)
     fun burnSubsDone(): String = text(R.string.burn_subs_done)
+    fun burnSubsFontSize(): String = text(R.string.burn_subs_font_size)
     fun chapterSplitTitle(): String = text(R.string.chapter_split_title)
     fun chapterSplitDesc(): String = text(R.string.chapter_split_desc)
     fun chapterSplitRun(): String = text(R.string.chapter_split_run)
