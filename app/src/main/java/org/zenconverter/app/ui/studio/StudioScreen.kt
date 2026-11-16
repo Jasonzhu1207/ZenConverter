@@ -18,10 +18,13 @@ import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.Accessibility
 import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material.icons.rounded.Balance
 import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.PictureAsPdf
+import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Compare
 import androidx.compose.material.icons.rounded.DeleteSweep
@@ -83,6 +86,21 @@ internal fun StudioScreen(
                 StudioEntry(Icons.Rounded.Equalizer, texts.studioAnalyze(), texts.studioAnalyzeDesc(), AppScreen.StudioAnalyze, onNavigate)
                 StudioEntry(Icons.Rounded.AudioFile, texts.studioTagEditor(), texts.studioTagEditorDesc(), AppScreen.StudioTags, onNavigate)
                 StudioEntry(Icons.Rounded.NotificationsActive, texts.studioRingtone(), texts.studioRingtoneDesc(), AppScreen.StudioRingtone, onNavigate, showDivider = false)
+            }
+        }
+
+        item(key = "studio-mastering-header") { SettingsGroupHeader(texts.studioSectionMastering()) }
+        item(key = "studio-mastering") {
+            InsetGroupCard {
+                StudioEntry(Icons.Rounded.AutoAwesome, texts.studioMastering(), texts.studioMasteringDesc(), AppScreen.StudioMastering, onNavigate)
+                StudioEntry(Icons.Rounded.Bolt, texts.studioStems(), texts.studioStemsDesc(), AppScreen.StudioMasteringStems, onNavigate)
+                StudioEntry(Icons.Rounded.Balance, texts.studioStemBalance(), texts.studioStemBalanceDesc(), AppScreen.StudioMasteringStems, onNavigate)
+                StudioEntry(Icons.Rounded.Tune, texts.studioEq(), texts.studioEqDesc(), AppScreen.StudioMasteringEq, onNavigate)
+                StudioEntry(Icons.Rounded.GraphicEq, texts.studioSpectrum(), texts.studioSpectrumDesc(), AppScreen.StudioMasteringSpectrum, onNavigate)
+                StudioEntry(Icons.Rounded.Equalizer, texts.studioLoudness(), texts.studioLoudnessDesc(), AppScreen.StudioMasteringLoudness, onNavigate)
+                StudioEntry(Icons.Rounded.Radio, texts.studioRadioReady(), texts.studioRadioReadyDesc(), AppScreen.StudioMasteringCheck, onNavigate)
+                StudioEntry(Icons.Rounded.Speaker, texts.studioLoudnessNorm(), texts.studioLoudnessNormDesc(), AppScreen.StudioMasteringLoudnessNorm, onNavigate)
+                StudioEntry(Icons.Rounded.AutoFixHigh, texts.studioExciter(), texts.studioExciterDesc(), AppScreen.StudioMasteringExciter, onNavigate, showDivider = false)
             }
         }
 

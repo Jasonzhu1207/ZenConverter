@@ -231,6 +231,15 @@ import org.zenconverter.app.ui.studio.PdfSplitScreen
 import org.zenconverter.app.ui.studio.PdfCreateScreen
 import org.zenconverter.app.ui.studio.EpubToolsScreen
 import org.zenconverter.app.ui.studio.CrashReportScreen
+import org.zenconverter.app.ui.studio.AutoMasteringScreen
+import org.zenconverter.app.ui.studio.HarmonicExciterScreen
+import org.zenconverter.app.ui.studio.LoudnessDynamicsScreen
+import org.zenconverter.app.ui.studio.LoudnessNormalizationScreen
+import org.zenconverter.app.ui.studio.MasteringEqScreen
+import org.zenconverter.app.ui.studio.MasteringUiState
+import org.zenconverter.app.ui.studio.RadioReadyCheckScreen
+import org.zenconverter.app.ui.studio.SpectrumAnalyzerScreen
+import org.zenconverter.app.ui.studio.StemBalanceScreen
 import org.zenconverter.app.audio.AudioEffects
 import org.zenconverter.app.audio.CompressorPreset
 import org.zenconverter.app.audio.EqualizerPreset
@@ -574,7 +583,15 @@ internal enum class AppScreen {
     StudioPdfSplit,
     StudioPdfCreate,
     StudioEpub,
-    StudioCrashReports
+    StudioCrashReports,
+    StudioMastering,
+    StudioMasteringStems,
+    StudioMasteringEq,
+    StudioMasteringSpectrum,
+    StudioMasteringLoudness,
+    StudioMasteringCheck,
+    StudioMasteringLoudnessNorm,
+    StudioMasteringExciter
 }
 
 internal const val ZENCONVERTER_REPOSITORY_URL = "https://github.com/Jasonzhu1207/ZenConverter"
@@ -1254,6 +1271,10 @@ private fun ZenConverterContent(
         }
     }
 
+    // One mastering session shared by the hub, the auto-master screen and every
+    // sub-tool, so a change in one place is visible in all of them.
+    val masteringState = remember { MasteringUiState() }
+
     var showSupport by remember { mutableStateOf(false) }
     var showImportSourceSheet by rememberSaveable { mutableStateOf(false) }
     var showAlbumSourceDialog by rememberSaveable { mutableStateOf(false) }
@@ -1756,6 +1777,14 @@ private fun ZenConverterContent(
                 AppScreen.StudioPdfCreate -> PdfCreateScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioEpub -> EpubToolsScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioCrashReports -> CrashReportScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioMastering -> AutoMasteringScreen(texts, masteringState, onBack = { navigateBack() })
+                AppScreen.StudioMasteringStems -> StemBalanceScreen(texts, masteringState, onBack = { navigateBack() })
+                AppScreen.StudioMasteringEq -> MasteringEqScreen(texts, masteringState, onBack = { navigateBack() })
+                AppScreen.StudioMasteringSpectrum -> SpectrumAnalyzerScreen(texts, masteringState, onBack = { navigateBack() })
+                AppScreen.StudioMasteringLoudness -> LoudnessDynamicsScreen(texts, masteringState, onBack = { navigateBack() })
+                AppScreen.StudioMasteringCheck -> RadioReadyCheckScreen(texts, masteringState, onBack = { navigateBack() })
+                AppScreen.StudioMasteringLoudnessNorm -> LoudnessNormalizationScreen(texts, masteringState, onBack = { navigateBack() })
+                AppScreen.StudioMasteringExciter -> HarmonicExciterScreen(texts, masteringState, onBack = { navigateBack() })
                 AppScreen.StudioCutTranscript -> CutTranscriptScreen(texts, onBack = { navigateBack() })
                 AppScreen.Home -> Unit
             }
