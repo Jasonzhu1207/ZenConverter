@@ -48,6 +48,7 @@ import androidx.compose.material.icons.rounded.AvTimer
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Compare
 import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Lyrics
@@ -237,7 +238,7 @@ private fun studioSections(texts: UiText): List<HubSection> = listOf(
     ),
     HubSection(
         title = texts.studioSectionPrivacy(),
-        hero = null,
+        hero = HubEntry(texts.docTitle(), texts.docDesc(), Icons.Rounded.Description, AppScreen.StudioDocumentConverter),
         tiles = listOf(
             HubEntry(texts.studioPlugins(), texts.studioPluginsDesc(), Icons.Rounded.RecordVoiceOver, AppScreen.StudioPlugins),
             HubEntry(texts.studioWifi(), texts.studioWifiDesc(), Icons.Rounded.Wifi, AppScreen.StudioWifi),

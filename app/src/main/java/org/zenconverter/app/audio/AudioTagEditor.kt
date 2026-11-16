@@ -27,7 +27,11 @@ object AudioTagEditor {
         Year("date"),
         Genre("genre"),
         Comment("comment"),
-        Lyrics("lyrics")
+        Lyrics("lyrics"),
+        Composer("composer"),
+        InitialKey("initial_key"),
+        Bpm("bpm"),
+        Language("language")
     }
 
     data class Tags(
@@ -40,6 +44,10 @@ object AudioTagEditor {
         val genre: String = "",
         val comment: String = "",
         val lyrics: String = "",
+        val composer: String = "",
+        val initialKey: String = "",
+        val bpm: String = "",
+        val language: String = "",
         val hasArtwork: Boolean = false
     ) {
         fun valueOf(field: Field): String = when (field) {
@@ -52,6 +60,10 @@ object AudioTagEditor {
             Field.Genre -> genre
             Field.Comment -> comment
             Field.Lyrics -> lyrics
+            Field.Composer -> composer
+            Field.InitialKey -> initialKey
+            Field.Bpm -> bpm
+            Field.Language -> language
         }
 
         fun with(field: Field, value: String): Tags = when (field) {
@@ -64,6 +76,10 @@ object AudioTagEditor {
             Field.Genre -> copy(genre = value)
             Field.Comment -> copy(comment = value)
             Field.Lyrics -> copy(lyrics = value)
+            Field.Composer -> copy(composer = value)
+            Field.InitialKey -> copy(initialKey = value)
+            Field.Bpm -> copy(bpm = value)
+            Field.Language -> copy(language = value)
         }
     }
 
@@ -93,6 +109,10 @@ object AudioTagEditor {
             genre = tags["genre"].orEmpty(),
             comment = tags["comment"].orEmpty(),
             lyrics = tags["lyrics"] ?: tags["unsyncedlyrics"].orEmpty(),
+            composer = tags["composer"].orEmpty(),
+            initialKey = tags["initial_key"] ?: tags["tkey"].orEmpty(),
+            bpm = tags["bpm"] ?: tags["tbpm"].orEmpty(),
+            language = tags["language"] ?: tags["lang"].orEmpty(),
             hasArtwork = streams.any { stream ->
                 if (stream.getType().equals("video", true)) return@any true
                 val streamTags = stream.getTags() ?: return@any false
@@ -150,6 +170,37 @@ object AudioTagEditor {
 
         val session = FFmpegKit.executeWithArguments(arguments.toTypedArray())
         ReturnCode.isSuccess(session.getReturnCode())
+    }
+
+    /**
+     * Removes every metadata field (and any attached artwork) by re-muxing the
+     * streams with `-map_metadata -1`. Audio is copied, so quality is untouched.
+     */
+    suspend fun stripAll(context: Context, sourceUri: Uri, target: File): Boolean =
+        withContext(Dispatchers.IO) {
+            val input = inputPathFor(context, sourceUri) ?: return@withContext false
+            val arguments = arrayOf(
+                "-hide_banner", "-nostdin", "-i", input,
+                "-map", "0:a", "-c:a", "copy",
+                "-map_metadata", "-1",
+                "-y", target.absolutePath
+            )
+            val session = FFmpegKit.executeWithArguments(arguments)
+            ReturnCode.isSuccess(session.getReturnCode())
+        }
+
+    /** Expands a rename pattern like `%artist% - %title%` into a file name. */
+    fun resolveNamePattern(pattern: String, tags: Tags, fallback: String): String {
+        val resolved = pattern
+            .replace("%artist%", tags.artist.ifBlank { "Unknown artist" })
+            .replace("%album%", tags.album.ifBlank { "Unknown album" })
+            .replace("%albumartist%", tags.albumArtist.ifBlank { tags.artist.ifBlank { "Unknown artist" } })
+            .replace("%title%", tags.title.ifBlank { fallback })
+            .replace("%track%", tags.track.ifBlank { "0" })
+            .replace("%year%", tags.year.ifBlank { "0000" })
+            .replace("%genre%", tags.genre)
+            .replace("%composer%", tags.composer)
+        return resolved.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifBlank { fallback }
     }
 
     private fun inputPathFor(context: Context, uri: Uri): String? {

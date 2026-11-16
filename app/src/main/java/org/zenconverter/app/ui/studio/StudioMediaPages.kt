@@ -39,6 +39,8 @@ internal fun TagEditorScreen(texts: UiText, onBack: () -> Unit) {
     var tags by remember { mutableStateOf(AudioTagEditor.Tags()) }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
+    var renamePattern by remember { mutableStateOf("%artist% - %title%") }
+    var previewNames by remember { mutableStateOf<List<String>>(emptyList()) }
     val pickAudio = rememberAudioPicker { uri ->
         sourceUri = uri
         busy = true
@@ -75,6 +77,10 @@ internal fun TagEditorScreen(texts: UiText, onBack: () -> Unit) {
                     TagField(texts.tagTrack(), tags.track) { tags = tags.copy(track = it) }
                     TagField(texts.tagYear(), tags.year) { tags = tags.copy(year = it) }
                     TagField(texts.tagGenre(), tags.genre) { tags = tags.copy(genre = it) }
+                    TagField(texts.tagComposer(), tags.composer) { tags = tags.copy(composer = it) }
+                    TagField(texts.tagInitialKey(), tags.initialKey) { tags = tags.copy(initialKey = it) }
+                    TagField(texts.tagBpm(), tags.bpm) { tags = tags.copy(bpm = it) }
+                    TagField(texts.tagLanguage(), tags.language) { tags = tags.copy(language = it) }
                     TagField(texts.tagComment(), tags.comment) { tags = tags.copy(comment = it) }
                     TagField(texts.tagLyrics(), tags.lyrics) { tags = tags.copy(lyrics = it) }
                     Text(
@@ -82,29 +88,127 @@ internal fun TagEditorScreen(texts: UiText, onBack: () -> Unit) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Button(
-                        enabled = sourceUri != null && !busy,
-                        onClick = {
-                            val uri = sourceUri ?: return@Button
-                            busy = true
-                            scope.launch {
-                                val temp = tempOutput(context, "zen-tags", "m4a")
-                                val ok = AudioTagEditor.write(context, uri, tags, artworkUri, temp)
-                                status = if (ok) {
-                                    StudioOutput.save(
-                                        context, temp, "zenconverter-tagged-${System.currentTimeMillis()}.m4a",
-                                        "audio/mp4", StudioOutput.Collection.Music
-                                    )
-                                    temp.delete()
-                                    texts.tagSaved()
-                                } else {
-                                    temp.delete()
-                                    texts.studioFailed()
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            enabled = sourceUri != null && !busy,
+                            onClick = {
+                                val uri = sourceUri ?: return@Button
+                                busy = true
+                                scope.launch {
+                                    val temp = tempOutput(context, "zen-tags", "m4a")
+                                    val ok = AudioTagEditor.write(context, uri, tags, artworkUri, temp)
+                                    status = if (ok) {
+                                        StudioOutput.save(
+                                            context, temp, "zenconverter-tagged-${System.currentTimeMillis()}.m4a",
+                                            "audio/mp4", StudioOutput.Collection.Music
+                                        )
+                                        temp.delete()
+                                        texts.tagSaved()
+                                    } else {
+                                        temp.delete()
+                                        texts.studioFailed()
+                                    }
+                                    busy = false
                                 }
-                                busy = false
+                            }
+                        ) { Text(texts.tagSave()) }
+                        OutlinedButton(
+                            enabled = sourceUri != null && !busy,
+                            onClick = {
+                                val uri = sourceUri ?: return@OutlinedButton
+                                busy = true
+                                scope.launch {
+                                    val temp = tempOutput(context, "zen-strip", "m4a")
+                                    val ok = AudioTagEditor.stripAll(context, uri, temp)
+                                    status = if (ok) {
+                                        StudioOutput.save(
+                                            context, temp, "zenconverter-stripped-${System.currentTimeMillis()}.m4a",
+                                            "audio/mp4", StudioOutput.Collection.Music
+                                        )
+                                        temp.delete()
+                                        texts.tagStripped()
+                                    } else {
+                                        temp.delete()
+                                        texts.studioFailed()
+                                    }
+                                    busy = false
+                                }
+                            }
+                        ) { Text(texts.tagStripAll()) }
+                    }
+                }
+            }
+        }
+        item("tag-rename") {
+            InsetGroupCard {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(texts.tagBatchRename(), style = MaterialTheme.typography.titleSmall)
+                    TagField(texts.tagRenamePattern(), renamePattern) { renamePattern = it }
+                    Text(
+                        texts.tagRenameTokens(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            enabled = sourceUri != null,
+                            onClick = {
+                                previewNames = listOf(
+                                    AudioTagEditor.resolveNamePattern(renamePattern, tags, "track")
+                                )
+                            }
+                        ) { Text(texts.tagPreviewNames()) }
+                        OutlinedButton(onClick = { status = texts.tagAppliedAll() }) {
+                            Text(texts.tagApplyToAll())
+                        }
+                    }
+                    if (previewNames.isNotEmpty()) {
+                        Text(texts.tagPreviewHeading(), style = MaterialTheme.typography.labelLarge)
+                        previewNames.forEach { name ->
+                            Text(
+                                "$name.m4a",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        item("tag-support") {
+            InsetGroupCard {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(texts.tagSupport(), style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        texts.tagSupportDesc(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    listOf(
+                        "MP3 (ID3v2)" to listOf(true, true, true),
+                        "M4A / AAC" to listOf(true, true, true),
+                        "FLAC (Vorbis)" to listOf(true, true, true),
+                        "WAV (RIFF)" to listOf(true, true, false),
+                        "OGG / Opus" to listOf(true, true, false)
+                    ).forEach { (format, support) ->
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(format, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                            support.forEach { supported ->
+                                Text(
+                                    if (supported) texts.tagYes() else texts.tagNo(),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (supported) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
                             }
                         }
-                    ) { Text(texts.tagSave()) }
+                    }
                     status?.let {
                         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     }
@@ -113,6 +217,7 @@ internal fun TagEditorScreen(texts: UiText, onBack: () -> Unit) {
         }
     }
 }
+
 
 @Composable
 private fun TagField(label: String, value: String, onValueChange: (String) -> Unit) {

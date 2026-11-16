@@ -210,6 +210,7 @@ import androidx.compose.ui.window.PopupProperties
 import org.zenconverter.app.conversion.AudioAdvancedOptions
 import org.zenconverter.app.conversion.AudioBitDepth
 import org.zenconverter.app.ui.studio.ChapterSplitScreen
+import org.zenconverter.app.ui.studio.DocumentConverterScreen
 import org.zenconverter.app.ui.studio.StudioScreen
 import org.zenconverter.app.ui.studio.SubtitleBurnScreen
 import org.zenconverter.app.ui.studio.WaveformEditorScreen
@@ -619,7 +620,8 @@ internal enum class AppScreen {
     StudioLyricShift,
     StudioKaraoke,
     StudioLyricsEditor,
-    StudioMediaLibrary
+    StudioMediaLibrary,
+    StudioDocumentConverter
 }
 
 internal const val ZENCONVERTER_REPOSITORY_URL = "https://github.com/Jasonzhu1207/ZenConverter"
@@ -1874,6 +1876,7 @@ private fun ZenConverterContent(
                 AppScreen.StudioLyricShift -> LyricShiftScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioKaraoke -> KaraokeScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioMediaLibrary -> MediaLibraryScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioDocumentConverter -> DocumentConverterScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioLyricsEditor -> LyricsEditorScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioAccessibility -> AccessibilityScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioArchive -> ArchiveToolsScreen(texts, onBack = { navigateBack() })
