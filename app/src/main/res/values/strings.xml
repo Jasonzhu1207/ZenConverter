@@ -353,6 +353,14 @@
     <string name="text_option_value_bit_depth_16">16-bit</string>
     <string name="text_option_value_bit_depth_24">24-bit</string>
     <string name="text_option_value_bit_depth_32">32-bit</string>
+    <string name="text_option_value_gif_fps_15">15 fps</string>
+    <string name="text_option_value_gif_fps_20">20 fps</string>
+    <string name="text_option_value_gif_fps_25">25 fps</string>
+    <string name="text_option_value_gif_fps_30">30 fps</string>
+    <string name="text_option_value_gif_colors_256">256 colors</string>
+    <string name="text_option_value_gif_colors_128">128 colors</string>
+    <string name="text_option_value_gif_colors_64">64 colors</string>
+    <string name="text_option_value_gif_colors_32">32 colors</string>
     <string name="text_option_value_off_manual">Off (manual)</string>
     <string name="text_option_value_office_to_pdf">Office to PDF</string>
     <string name="text_option_value_one_file_per_input">One file per input</string>
@@ -632,6 +640,8 @@
     <string name="ui_rife_model_purpose">Deep-learning optical flow frame interpolator (2× FPS enhancement, Experimental)</string>
     <string name="ui_sample_rate">Sample rate</string>
     <string name="ui_bit_depth">Bit depth</string>
+    <string name="ui_gif_frame_rate">GIF frame rate</string>
+    <string name="ui_gif_colors">GIF colors</string>
     <string name="ui_selected_suffix">selected</string>
     <string name="ui_share_output">Share output</string>
     <string name="ui_share_output_failed">No app can share this output</string>

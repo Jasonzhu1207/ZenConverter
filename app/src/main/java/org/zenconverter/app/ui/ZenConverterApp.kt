@@ -670,6 +670,28 @@ private val VIDEO_GIF_RESOLUTION_OPTIONS = listOf(
     VIDEO_RESOLUTION_ORIGINAL
 )
 
+internal const val GIF_FRAME_RATE_15 = "GIF 15 fps"
+internal const val GIF_FRAME_RATE_20 = "GIF 20 fps"
+internal const val GIF_FRAME_RATE_25 = "GIF 25 fps"
+internal const val GIF_FRAME_RATE_30 = "GIF 30 fps"
+private val GIF_FRAME_RATE_OPTIONS = listOf(
+    GIF_FRAME_RATE_30,
+    GIF_FRAME_RATE_25,
+    GIF_FRAME_RATE_20,
+    GIF_FRAME_RATE_15
+)
+
+internal const val GIF_COLORS_256 = "GIF 256 colors"
+internal const val GIF_COLORS_128 = "GIF 128 colors"
+internal const val GIF_COLORS_64 = "GIF 64 colors"
+internal const val GIF_COLORS_32 = "GIF 32 colors"
+private val GIF_COLORS_OPTIONS = listOf(
+    GIF_COLORS_256,
+    GIF_COLORS_128,
+    GIF_COLORS_64,
+    GIF_COLORS_32
+)
+
 internal const val VIDEO_COMPRESSION_STANDARD = "Video compression standard"
 internal const val VIDEO_COMPRESSION_VISUAL_LOSSLESS = "Video compression visual lossless"
 internal const val VIDEO_COMPRESSION_BALANCED = "Video compression balanced"
@@ -3479,6 +3501,43 @@ private fun BatchVideoTargetOptions(
                 }
             }
 
+            if (isGifTarget) {
+                OptionDropdown(
+                    menuId = "batch-video-gif-frame-rate",
+                    label = texts.gifFrameRate,
+                    selected = commonBatchLabel(files) { gifFrameRateLabelFor(it.videoOptions.gifFrameRate) },
+                    options = GIF_FRAME_RATE_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = true
+                ) { value ->
+                    onOpenMenuChange(null)
+                    onUpdateFiles(
+                        files.map { file ->
+                            file.copy(videoOptions = file.videoOptions.copy(gifFrameRate = gifFrameRateFor(value)))
+                        }
+                    )
+                }
+                OptionDropdown(
+                    menuId = "batch-video-gif-colors",
+                    label = texts.gifColors,
+                    selected = commonBatchLabel(files) { gifColorsLabelFor(it.videoOptions.gifMaxColors) },
+                    options = GIF_COLORS_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = false
+                ) { value ->
+                    onOpenMenuChange(null)
+                    onUpdateFiles(
+                        files.map { file ->
+                            file.copy(videoOptions = file.videoOptions.copy(gifMaxColors = gifColorsFor(value)))
+                        }
+                    )
+                }
+            }
+
             if (!isGifTarget && !isInterpolationActive && (standardCompressionActive || mixedCompression)) {
                 OptionDropdown(
                     menuId = "batch-video-bitrate",
@@ -4880,6 +4939,8 @@ private fun VideoOptions(
     trimInputMode: TrimInputMode,
     frameInterpolation: String = VIDEO_INTERPOLATION_OFF,
     isRifeModelDownloaded: Boolean = false,
+    gifFrameRate: String = GIF_FRAME_RATE_30,
+    gifColors: String = GIF_COLORS_256,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onTrimInputModeChange: (TrimInputMode) -> Unit,
@@ -4888,6 +4949,8 @@ private fun VideoOptions(
     onTrimRangeChange: (MediaTrimRange) -> Unit,
     onFrameInterpolationChange: (String) -> Unit = {},
     onResolutionChange: (String) -> Unit,
+    onGifFrameRateChange: (String) -> Unit = {},
+    onGifColorsChange: (String) -> Unit = {},
     onCompressionModeChange: (String) -> Unit,
     onBitrateChange: (String) -> Unit,
     onCodecChange: (String) -> Unit,
@@ -5006,6 +5069,30 @@ private fun VideoOptions(
                     showDivider = !isGifTarget && isStandardCompression,
                     onSelected = onResolutionChange
                 )
+                if (isGifTarget) {
+                    OptionDropdown(
+                        menuId = "${menuPrefix}video-gif-frame-rate",
+                        label = texts.gifFrameRate,
+                        selected = gifFrameRate,
+                        options = GIF_FRAME_RATE_OPTIONS,
+                        texts = texts,
+                        openMenuId = openMenuId,
+                        onOpenMenuChange = onOpenMenuChange,
+                        showDivider = true,
+                        onSelected = onGifFrameRateChange
+                    )
+                    OptionDropdown(
+                        menuId = "${menuPrefix}video-gif-colors",
+                        label = texts.gifColors,
+                        selected = gifColors,
+                        options = GIF_COLORS_OPTIONS,
+                        texts = texts,
+                        openMenuId = openMenuId,
+                        onOpenMenuChange = onOpenMenuChange,
+                        showDivider = false,
+                        onSelected = onGifColorsChange
+                    )
+                }
             }
             if (!isGifTarget && !isInterpolationActive && isStandardCompression) {
                 OptionDropdown(
@@ -7288,6 +7375,8 @@ private fun QueuedFileOptionsPanel(
                 audioBitrate = audioBitrateLabelFor(file.audioOptions.audioBitrate),
                 audioSampleRate = audioSampleRateLabelFor(file.audioOptions.sampleRateHz),
                 audioChannels = audioChannelsLabelFor(file.audioOptions.channelCount),
+                gifFrameRate = gifFrameRateLabelFor(file.videoOptions.gifFrameRate),
+                gifColors = gifColorsLabelFor(file.videoOptions.gifMaxColors),
                 videoAdvanced = videoAdvancedUiStateFor(file.videoOptions.advanced, videoAdvancedExpanded),
                 audioAdvanced = audioAdvancedUiStateFor(file.audioOptions.advanced, audioAdvancedExpanded),
                 targetFormat = selectedTarget.targetFormat,
@@ -7372,6 +7461,12 @@ private fun QueuedFileOptionsPanel(
                             )
                         )
                     )
+                },
+                onGifFrameRateChange = { value ->
+                    onUpdateFile(file.copy(videoOptions = file.videoOptions.copy(gifFrameRate = gifFrameRateFor(value))))
+                },
+                onGifColorsChange = { value ->
+                    onUpdateFile(file.copy(videoOptions = file.videoOptions.copy(gifMaxColors = gifColorsFor(value))))
                 },
                 onCompressionModeChange = { value ->
                     val mode = videoCompressionModeFor(value)
@@ -8638,6 +8733,42 @@ private fun audioOptionsForTarget(
         }
     }
     return result
+}
+
+private fun gifFrameRateLabelFor(value: Int): String {
+    return when (value) {
+        15 -> GIF_FRAME_RATE_15
+        20 -> GIF_FRAME_RATE_20
+        25 -> GIF_FRAME_RATE_25
+        else -> GIF_FRAME_RATE_30
+    }
+}
+
+private fun gifFrameRateFor(value: String): Int {
+    return when (value) {
+        GIF_FRAME_RATE_15 -> 15
+        GIF_FRAME_RATE_20 -> 20
+        GIF_FRAME_RATE_25 -> 25
+        else -> VideoExportOptions.DEFAULT_GIF_FRAME_RATE
+    }
+}
+
+private fun gifColorsLabelFor(value: Int): String {
+    return when (value) {
+        32 -> GIF_COLORS_32
+        64 -> GIF_COLORS_64
+        128 -> GIF_COLORS_128
+        else -> GIF_COLORS_256
+    }
+}
+
+private fun gifColorsFor(value: String): Int {
+    return when (value) {
+        GIF_COLORS_32 -> 32
+        GIF_COLORS_64 -> 64
+        GIF_COLORS_128 -> 128
+        else -> VideoExportOptions.DEFAULT_GIF_MAX_COLORS
+    }
 }
 
 private fun videoResolutionLabelFor(options: VideoExportOptions): String {

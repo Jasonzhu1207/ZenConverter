@@ -5154,10 +5154,11 @@ class ConversionService : Service() {
             add("-an")
             add("-sn")
             add("-dn")
+            val maxColors = input.videoOptions.gifMaxColors.coerceIn(2, 256)
             add("-filter_complex")
             add(
                 "[0:v:0]${ffmpegVideoGifFilterChainFor(input)},split[gifsrc][palette_src];" +
-                    "[palette_src]palettegen=max_colors=256[palette];" +
+                    "[palette_src]palettegen=max_colors=$maxColors[palette];" +
                     "[gifsrc][palette]paletteuse=dither=sierra2_4a[gif]"
             )
             add("-map")
@@ -5174,7 +5175,8 @@ class ConversionService : Service() {
 
     private fun ffmpegVideoGifFilterChainFor(input: ConversionTaskInput): String {
         return buildList {
-            add("fps=$FFMPEG_VIDEO_GIF_FRAME_RATE")
+            val frameRate = input.videoOptions.gifFrameRate.coerceIn(5, 50)
+            add("fps=$frameRate")
             ffmpegVideoGifScaleFilterFor(input)?.let { add(it) }
         }.joinToString(separator = ",")
     }

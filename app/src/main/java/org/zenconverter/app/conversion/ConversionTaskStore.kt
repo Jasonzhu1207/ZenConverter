@@ -131,6 +131,16 @@ data class VideoExportOptions(
     val trimRange: MediaTrimRange = MediaTrimRange(),
     val advanced: VideoAdvancedOptions = VideoAdvancedOptions(),
     /**
+     * GIF frame rate cap. Lower values shrink the file and are the main
+     * lever for the GIF/sticker size optimizer.
+     */
+    val gifFrameRate: Int = DEFAULT_GIF_FRAME_RATE,
+    /**
+     * GIF palette size. Fewer colours mean a smaller file; 256 keeps full
+     * fidelity while 32/64/128 trade colour depth for size.
+     */
+    val gifMaxColors: Int = DEFAULT_GIF_MAX_COLORS,
+    /**
      * Use the platform encoder when the linked FFmpeg exposes one. Off by
      * default so output is byte-reproducible across devices until the user opts
      * in; the software encoder is always the fallback.
@@ -142,6 +152,9 @@ data class VideoExportOptions(
         const val VIDEO_MIME_TYPE_H265 = "video/hevc"
         const val VIDEO_MIME_TYPE_VP9 = "video/x-vnd.on2.vp9"
         const val VIDEO_MIME_TYPE_VP8 = "video/x-vnd.on2.vp8"
+
+        const val DEFAULT_GIF_FRAME_RATE = 30
+        const val DEFAULT_GIF_MAX_COLORS = 256
     }
 }
 

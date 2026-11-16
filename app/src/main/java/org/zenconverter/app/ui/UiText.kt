@@ -601,6 +601,12 @@ internal class UiText(private val context: Context) {
     val bitDepth: String
         get() = text(R.string.ui_bit_depth)
 
+    val gifFrameRate: String
+        get() = text(R.string.ui_gif_frame_rate)
+
+    val gifColors: String
+        get() = text(R.string.ui_gif_colors)
+
     val opusSampleRateHint: String
         get() = text(R.string.ui_opus_sample_rate_hint)
 
@@ -1626,6 +1632,14 @@ internal class UiText(private val context: Context) {
             AUDIO_BIT_DEPTH_16 -> text(R.string.text_option_value_bit_depth_16)
             AUDIO_BIT_DEPTH_24 -> text(R.string.text_option_value_bit_depth_24)
             AUDIO_BIT_DEPTH_32 -> text(R.string.text_option_value_bit_depth_32)
+            GIF_FRAME_RATE_15 -> text(R.string.text_option_value_gif_fps_15)
+            GIF_FRAME_RATE_20 -> text(R.string.text_option_value_gif_fps_20)
+            GIF_FRAME_RATE_25 -> text(R.string.text_option_value_gif_fps_25)
+            GIF_FRAME_RATE_30 -> text(R.string.text_option_value_gif_fps_30)
+            GIF_COLORS_256 -> text(R.string.text_option_value_gif_colors_256)
+            GIF_COLORS_128 -> text(R.string.text_option_value_gif_colors_128)
+            GIF_COLORS_64 -> text(R.string.text_option_value_gif_colors_64)
+            GIF_COLORS_32 -> text(R.string.text_option_value_gif_colors_32)
             ADVANCED_FADE_OFF -> text(R.string.text_option_value_off)
             ADVANCED_FADE_HALF_SECOND,
             ADVANCED_FADE_ONE_SECOND,
