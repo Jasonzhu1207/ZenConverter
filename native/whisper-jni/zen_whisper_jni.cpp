@@ -123,6 +123,34 @@ double centisecondsToSeconds(int64_t value) {
     return static_cast<double>(value) / 100.0;
 }
 
+constexpr int kWhisperSampleRate = 16000;
+
+// whisper.cpp only accepts 16 kHz mono and aborts on inputs shorter than its
+// 1-second window, so both are normalised here rather than trusted from Kotlin.
+std::vector<float> preparePcm(const float *samples, int sampleCount, int sampleRateHz) {
+    std::vector<float> mono;
+    if (sampleRateHz == kWhisperSampleRate || sampleRateHz <= 0) {
+        mono.assign(samples, samples + sampleCount);
+    } else {
+        const double ratio = static_cast<double>(kWhisperSampleRate) / static_cast<double>(sampleRateHz);
+        const int outCount = static_cast<int>(static_cast<double>(sampleCount) * ratio);
+        mono.resize(static_cast<size_t>(outCount));
+        for (int i = 0; i < outCount; ++i) {
+            const double position = i / ratio;
+            const int index = static_cast<int>(position);
+            const float fraction = static_cast<float>(position - index);
+            const float a = samples[index < sampleCount ? index : sampleCount - 1];
+            const int next = index + 1;
+            const float b = samples[next < sampleCount ? next : sampleCount - 1];
+            mono[static_cast<size_t>(i)] = a + (b - a) * fraction;
+        }
+    }
+    if (mono.size() < static_cast<size_t>(kWhisperSampleRate)) {
+        mono.resize(static_cast<size_t>(kWhisperSampleRate), 0.0f);
+    }
+    return mono;
+}
+
 bool isSpecialToken(const char *text) {
     if (text == nullptr) {
         return true;
@@ -180,6 +208,7 @@ Java_org_zenconverter_app_model_WhisperNative_nativeTranscribe(
     }
     std::vector<float> pcm(static_cast<size_t>(sampleCount));
     env->GetFloatArrayRegion(samples, 0, sampleCount, pcm.data());
+    std::vector<float> prepared = preparePcm(pcm.data(), static_cast<int>(sampleCount), sampleRateHz);
 
     const std::string model = toUtf8(env, modelPath);
     const std::string languageCode = toUtf8(env, language);
@@ -222,7 +251,7 @@ Java_org_zenconverter_app_model_WhisperNative_nativeTranscribe(
     params.abort_callback_user_data = &callbacks;
 
     std::string json;
-    const int result = whisper_full(context, params, pcm.data(), sampleCount);
+    const int result = whisper_full(context, params, prepared.data(), static_cast<int>(prepared.size()));
     if (result == 0) {
         json += "{\"segments\":[";
         const int segmentCount = whisper_full_n_segments(context);
