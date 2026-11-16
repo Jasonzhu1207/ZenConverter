@@ -320,6 +320,47 @@ object AudioStudioEngine {
         produced
     }
 
+    /**
+     * Renders an [AudioEditList] segment sequence from [sourceUri] by trimming
+     * each range and concatenating the results, so the waveform editor's cut,
+     * copy, paste and split operations stay non-destructive.
+     */
+    suspend fun renderEditList(
+        context: Context,
+        sourceUri: Uri,
+        segments: List<AudioSegment>,
+        target: File,
+        audioBitrateKbps: Int = 192,
+        audioCodec: String = "libmp3lame",
+        fadeInSeconds: Double? = null,
+        fadeOutSeconds: Double? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        val input = inputPathFor(context, sourceUri) ?: return@withContext false
+        val filter = AudioEditList.ffmpegFilter(segments) ?: return@withContext false
+        val total = AudioEditList.totalDuration(AudioEditList.normalized(segments))
+        val chain = buildList {
+            add(filter)
+            fadeInSeconds?.takeIf { it > 0.0 }?.let { add("afade=t=in:st=0:d=${formatSeconds(it)}") }
+            fadeOutSeconds?.takeIf { it > 0.0 }?.let { duration ->
+                add("afade=t=out:st=${formatSeconds((total - duration).coerceAtLeast(0.0))}:d=${formatSeconds(duration)}")
+            }
+        }
+        val arguments = mutableListOf("-hide_banner", "-nostdin", "-i", input)
+        if (chain.size == 1) {
+            arguments += listOf("-af", chain.first())
+        } else {
+            // Two filter chains would clash on the `[out]` label, so the fades
+            // are appended to the trim chain and mapped explicitly.
+            arguments += listOf(
+                "-filter_complex",
+                chain.first().removeSuffix("[out]") + "," + chain.drop(1).joinToString(",") + "[out]",
+                "-map", "[out]"
+            )
+        }
+        arguments += listOf("-c:a", audioCodec, "-b:a", "${audioBitrateKbps}k", "-y", target.absolutePath)
+        ReturnCode.isSuccess(FFmpegKit.executeWithArguments(arguments.toTypedArray()).getReturnCode())
+    }
+
     /** Applies a chain of FFmpeg audio filters and writes the result to [target]. */
     suspend fun applyEffects(
         context: Context,

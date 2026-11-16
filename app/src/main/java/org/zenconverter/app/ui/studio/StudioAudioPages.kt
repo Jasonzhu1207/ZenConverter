@@ -31,7 +31,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import org.zenconverter.app.audio.AudioAnalysis
 import org.zenconverter.app.audio.AudioDecoder
+import org.zenconverter.app.audio.AudioEditList
 import org.zenconverter.app.audio.AudioRecorder
+import org.zenconverter.app.audio.AudioSegment
 import org.zenconverter.app.audio.AudioStudioEngine
 import org.zenconverter.app.audio.StudioOutput
 import org.zenconverter.app.audio.WaveformAnalyzer
@@ -57,18 +59,33 @@ internal fun WaveformEditorScreen(texts: UiText, onBack: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var startFraction by remember { mutableStateOf(0f) }
     var endFraction by remember { mutableStateOf(1f) }
+    var playheadFraction by remember { mutableStateOf(0.5f) }
     var fadeIn by remember { mutableStateOf(false) }
     var fadeOut by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     var previewBusy by remember { mutableStateOf(false) }
     var previewFile by remember { mutableStateOf<java.io.File?>(null) }
+    var segments by remember { mutableStateOf<List<AudioSegment>>(emptyList()) }
+    var undoStack by remember { mutableStateOf<List<List<AudioSegment>>>(emptyList()) }
+    var clipboard by remember { mutableStateOf<List<AudioSegment>>(emptyList()) }
     val player = rememberStudioPlayer()
     val previewPlaying = player.isPlaying
+    val originalDuration = peaks?.durationSeconds ?: 0.0
+
+    fun edit(next: List<AudioSegment>) {
+        undoStack = undoStack + listOf(segments)
+        segments = next
+    }
+
     val pickAudio = rememberAudioPicker { uri ->
         sourceUri = uri
         peaks = null
         startFraction = 0f
         endFraction = 1f
+        playheadFraction = 0.5f
+        segments = emptyList()
+        undoStack = emptyList()
+        clipboard = emptyList()
         player.stop()
         previewFile?.delete()
         previewFile = null
@@ -78,6 +95,7 @@ internal fun WaveformEditorScreen(texts: UiText, onBack: () -> Unit) {
             peaks = decoded?.let {
                 WaveformAnalyzer.peaksFromSamples(it.samples, it.channelCount, it.sampleRateHz)
             }
+            peaks?.let { segments = listOf(AudioSegment(0.0, it.durationSeconds)) }
             busy = false
         }
     }
@@ -85,6 +103,11 @@ internal fun WaveformEditorScreen(texts: UiText, onBack: () -> Unit) {
     DisposableEffect(Unit) {
         onDispose { previewFile?.delete() }
     }
+
+    val editedDuration = if (segments.isEmpty()) 0.0 else AudioEditList.totalDuration(segments)
+    val selectionStart = originalDuration * startFraction
+    val selectionEnd = originalDuration * endFraction
+    val playheadSeconds = originalDuration * playheadFraction
 
     SettingsPage(texts.waveformTitle(), texts.studioBack(), onBack, allowWideContent = true) {
         item("waveform-pick") {
@@ -112,6 +135,7 @@ internal fun WaveformEditorScreen(texts: UiText, onBack: () -> Unit) {
                                 peaks = current,
                                 startFraction = startFraction,
                                 endFraction = endFraction,
+                                playheadFraction = playheadFraction,
                                 selectionColor = MaterialTheme.colorScheme.primary
                             )
                         }
@@ -119,14 +143,55 @@ internal fun WaveformEditorScreen(texts: UiText, onBack: () -> Unit) {
                             WaveformControls(
                                 texts = texts,
                                 durationSeconds = current.durationSeconds,
+                                editedDurationSeconds = editedDuration,
                                 startFraction = startFraction,
                                 endFraction = endFraction,
+                                playheadFraction = playheadFraction,
+                                clipboardCount = clipboard.size,
+                                canUndo = undoStack.isNotEmpty(),
                                 onStartChange = { startFraction = it.coerceAtMost(endFraction - 0.01f) },
                                 onEndChange = { endFraction = it.coerceAtLeast(startFraction + 0.01f) },
+                                onPlayheadChange = { playheadFraction = it },
                                 fadeIn = fadeIn,
                                 fadeOut = fadeOut,
                                 onToggleFadeIn = { fadeIn = !fadeIn },
                                 onToggleFadeOut = { fadeOut = !fadeOut },
+                                onCut = {
+                                    edit(AudioEditList.cut(segments, selectionStart, selectionEnd))
+                                    status = null
+                                },
+                                onCopy = {
+                                    clipboard = AudioEditList.extract(segments, selectionStart, selectionEnd)
+                                    status = null
+                                },
+                                onPaste = {
+                                    if (clipboard.isEmpty()) {
+                                        status = texts.waveformClipboardEmpty()
+                                    } else {
+                                        edit(AudioEditList.paste(segments, clipboard, playheadSeconds))
+                                        status = null
+                                    }
+                                },
+                                onSplit = {
+                                    val next = AudioEditList.splitAt(segments, playheadSeconds)
+                                    if (next.size == segments.size) {
+                                        status = texts.waveformNothingToSplit()
+                                    } else {
+                                        edit(next)
+                                        status = null
+                                    }
+                                },
+                                onUndo = {
+                                    val previous = undoStack.lastOrNull()
+                                    if (previous != null) {
+                                        segments = previous
+                                        undoStack = undoStack.dropLast(1)
+                                    }
+                                },
+                                onReset = {
+                                    edit(listOf(AudioSegment(0.0, current.durationSeconds)))
+                                    status = null
+                                },
                                 previewPlaying = previewPlaying,
                                 previewBusy = previewBusy,
                                 onPreview = {
@@ -137,13 +202,11 @@ internal fun WaveformEditorScreen(texts: UiText, onBack: () -> Unit) {
                                             player.stop()
                                             previewFile?.delete()
                                             val temp = tempOutput(context, "zen-waveform-preview", "m4a")
-                                            val ok = AudioStudioEngine.applyEffects(
+                                            val ok = AudioStudioEngine.renderEditList(
                                                 context = context,
                                                 sourceUri = uri,
-                                                filters = emptyList(),
+                                                segments = segments,
                                                 target = temp,
-                                                startSeconds = current.durationSeconds * startFraction,
-                                                endSeconds = current.durationSeconds * endFraction,
                                                 fadeInSeconds = if (fadeIn) 1.0 else null,
                                                 fadeOutSeconds = if (fadeOut) 1.0 else null
                                             )
@@ -170,13 +233,11 @@ internal fun WaveformEditorScreen(texts: UiText, onBack: () -> Unit) {
                                         busy = true
                                         scope.launch {
                                             val temp = tempOutput(context, "zen-waveform", "mp3")
-                                            val ok = AudioStudioEngine.applyEffects(
+                                            val ok = AudioStudioEngine.renderEditList(
                                                 context = context,
                                                 sourceUri = uri,
-                                                filters = emptyList(),
+                                                segments = segments,
                                                 target = temp,
-                                                startSeconds = current.durationSeconds * startFraction,
-                                                endSeconds = current.durationSeconds * endFraction,
                                                 fadeInSeconds = if (fadeIn) 1.0 else null,
                                                 fadeOutSeconds = if (fadeOut) 1.0 else null
                                             )
@@ -220,6 +281,7 @@ private fun WaveformCanvas(
     peaks: WaveformAnalyzer.Peaks,
     startFraction: Float,
     endFraction: Float,
+    playheadFraction: Float,
     selectionColor: Color
 ) {
     Canvas(Modifier.fillMaxWidth().height(140.dp).padding(horizontal = 14.dp)) {
@@ -246,6 +308,13 @@ private fun WaveformCanvas(
                 strokeWidth = barWidth.coerceAtLeast(1f)
             )
         }
+        val playheadX = size.width * playheadFraction
+        drawLine(
+            color = selectionColor,
+            start = Offset(playheadX, 0f),
+            end = Offset(playheadX, size.height),
+            strokeWidth = 2f
+        )
     }
 }
 
@@ -253,14 +322,25 @@ private fun WaveformCanvas(
 private fun WaveformControls(
     texts: UiText,
     durationSeconds: Double,
+    editedDurationSeconds: Double,
     startFraction: Float,
     endFraction: Float,
+    playheadFraction: Float,
+    clipboardCount: Int,
+    canUndo: Boolean,
     onStartChange: (Float) -> Unit,
     onEndChange: (Float) -> Unit,
+    onPlayheadChange: (Float) -> Unit,
     fadeIn: Boolean,
     fadeOut: Boolean,
     onToggleFadeIn: () -> Unit,
     onToggleFadeOut: () -> Unit,
+    onCut: () -> Unit,
+    onCopy: () -> Unit,
+    onPaste: () -> Unit,
+    onSplit: () -> Unit,
+    onUndo: () -> Unit,
+    onReset: () -> Unit,
     previewPlaying: Boolean,
     previewBusy: Boolean,
     onPreview: () -> Unit,
@@ -282,6 +362,32 @@ private fun WaveformControls(
         Slider(value = startFraction, onValueChange = onStartChange, valueRange = 0f..1f)
         StudioFieldLabel(texts.waveformTrimEnd())
         Slider(value = endFraction, onValueChange = onEndChange, valueRange = 0f..1f)
+        StudioFieldLabel(texts.waveformPlayhead())
+        Slider(value = playheadFraction, onValueChange = onPlayheadChange, valueRange = 0f..1f)
+        Text(
+            texts.waveformEditedDuration(
+                formatClock((editedDurationSeconds * 1000).toLong()),
+                formatClock((durationSeconds * 1000).toLong())
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onCut) { Text(texts.waveformCut()) }
+            OutlinedButton(onClick = onCopy) { Text(texts.waveformCopy()) }
+            OutlinedButton(onClick = onPaste) { Text(texts.waveformPaste()) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onSplit) { Text(texts.waveformSplitAt()) }
+            OutlinedButton(enabled = canUndo, onClick = onUndo) { Text(texts.waveformUndo()) }
+            OutlinedButton(onClick = onReset) { Text(texts.waveformReset()) }
+        }
+        Text(
+            if (clipboardCount == 0) texts.waveformClipboardEmpty()
+            else texts.waveformClipboardReady(clipboardCount),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onToggleFadeIn) {
                 Text("${texts.waveformFadeIn()}${if (fadeIn) " ✓" else ""}")

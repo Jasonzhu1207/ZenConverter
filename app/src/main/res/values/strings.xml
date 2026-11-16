@@ -873,6 +873,17 @@
     <string name="waveform_preview">Preview edit</string>
     <string name="waveform_preview_busy">Rendering preview…</string>
     <string name="waveform_selection">Selected %1$s of %2$s</string>
+    <string name="waveform_cut">Cut selection</string>
+    <string name="waveform_copy">Copy selection</string>
+    <string name="waveform_paste">Paste at playhead</string>
+    <string name="waveform_split_at">Split at playhead</string>
+    <string name="waveform_undo">Undo</string>
+    <string name="waveform_reset">Reset edits</string>
+    <string name="waveform_edited_duration">Edited length %1$s (original %2$s)</string>
+    <string name="waveform_clipboard_empty">Nothing copied yet.</string>
+    <string name="waveform_clipboard_ready">%1$d clip(s) ready to paste.</string>
+    <string name="waveform_nothing_to_split">Move the playhead inside the audio to split.</string>
+    <string name="waveform_playhead">Playhead</string>
     <!-- Recorder -->
     <string name="recorder_title">Audio recorder</string>
     <string name="recorder_record">Record</string>

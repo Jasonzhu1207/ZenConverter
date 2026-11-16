@@ -1216,6 +1216,18 @@ internal class UiText(private val context: Context) {
 
     fun waveformSelection(selected: String, total: String): String =
         text(R.string.waveform_selection, selected, total)
+    fun waveformCut(): String = text(R.string.waveform_cut)
+    fun waveformCopy(): String = text(R.string.waveform_copy)
+    fun waveformPaste(): String = text(R.string.waveform_paste)
+    fun waveformSplitAt(): String = text(R.string.waveform_split_at)
+    fun waveformUndo(): String = text(R.string.waveform_undo)
+    fun waveformReset(): String = text(R.string.waveform_reset)
+    fun waveformEditedDuration(edited: String, original: String): String =
+        text(R.string.waveform_edited_duration, edited, original)
+    fun waveformClipboardEmpty(): String = text(R.string.waveform_clipboard_empty)
+    fun waveformClipboardReady(count: Int): String = text(R.string.waveform_clipboard_ready, count)
+    fun waveformNothingToSplit(): String = text(R.string.waveform_nothing_to_split)
+    fun waveformPlayhead(): String = text(R.string.waveform_playhead)
 
     fun recorderElapsed(elapsed: String): String = text(R.string.recorder_elapsed, elapsed)
 
