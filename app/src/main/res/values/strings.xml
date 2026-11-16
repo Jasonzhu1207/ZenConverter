@@ -1448,8 +1448,8 @@
     <string name="tag_stripped">All tags removed. Audio quality unchanged.</string>
     <string name="tag_batch_rename">Batch rename</string>
     <string name="tag_rename_pattern">Rename pattern</string>
-    <string name="tag_rename_pattern_hint">%artist% - %title%</string>
-    <string name="tag_rename_tokens">Tokens: %artist% %album% %albumartist% %title% %track% %year% %genre% %composer%</string>
+    <string name="tag_rename_pattern_hint">%%artist%% - %%title%%</string>
+    <string name="tag_rename_tokens">Tokens: %%artist%% %%album%% %%albumartist%% %%title%% %%track%% %%year%% %%genre%% %%composer%%</string>
     <string name="tag_preview_names">Preview names</string>
     <string name="tag_preview_heading">Renamed files</string>
     <string name="tag_apply_to_all">Apply to all</string>
