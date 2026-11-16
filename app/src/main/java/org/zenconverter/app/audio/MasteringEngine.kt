@@ -43,7 +43,9 @@ object MasteringEngine {
         val balance: SpectrumAnalyzer.Balance,
         val sampleRateHz: Int,
         val channelCount: Int,
-        val durationSeconds: Double
+        val durationSeconds: Double,
+        /** Per-bucket amplitude of the whole track, for the shape drawing. */
+        val peaks: FloatArray
     ) {
         fun report(target: MasteringTarget): MasteringModel.Report =
             LoudnessAnalyzer.reportFor(measurement, target)
@@ -60,20 +62,35 @@ object MasteringEngine {
      * when the file cannot be decoded or is too short to gate.
      */
     suspend fun analyze(context: Context, uri: Uri): Analysis? = withContext(Dispatchers.IO) {
-        val decoded = decodeForAnalysis(context, uri) ?: return@withContext null
+        val input = inputPathFor(context, uri) ?: return@withContext null
+        analyzeInput(context, input)
+    }
+
+    /** Measures an intermediate file the pipeline produced itself (e.g. a mix). */
+    suspend fun analyzeFile(context: Context, file: File): Analysis? = withContext(Dispatchers.IO) {
+        if (!file.isFile || file.length() == 0L) return@withContext null
+        analyzeInput(context, file.absolutePath)
+    }
+
+    private fun analyzeInput(context: Context, input: String): Analysis? {
+        val decoded = decodeToPcm(context, input) ?: return null
         val measurement = LoudnessAnalyzer.measure(
             decoded.samples, decoded.sampleRateHz, decoded.channelCount
-        ) ?: return@withContext null
+        ) ?: return null
         val balance = SpectrumAnalyzer.analyze(
             decoded.samples, decoded.sampleRateHz, decoded.channelCount
         )
-        Analysis(
+        val peaks = WaveformAnalyzer.peaksFromSamples(
+            decoded.samples, decoded.channelCount, decoded.sampleRateHz, bucketCount = 160
+        )
+        return Analysis(
             measurement = measurement,
             balance = balance,
             sampleRateHz = decoded.sampleRateHz,
             channelCount = decoded.channelCount,
             durationSeconds = decoded.samples.size.toDouble() /
-                (decoded.channelCount * decoded.sampleRateHz)
+                (decoded.channelCount * decoded.sampleRateHz),
+            peaks = peaks.maxima
         )
     }
 
@@ -86,7 +103,7 @@ object MasteringEngine {
         val stems = AudioStudioEngine.separateStems(context, uri, outputDir)
         if (stems.isEmpty()) return@withContext emptyList()
         stems.mapNotNull { (kind, file) ->
-            val decoded = decodeFile(file, context) ?: return@mapNotNull null
+            val decoded = decodeToPcm(context, file.absolutePath) ?: return@mapNotNull null
             val measurement = LoudnessAnalyzer.measure(
                 decoded.samples, decoded.sampleRateHz, decoded.channelCount
             ) ?: return@mapNotNull null
@@ -141,6 +158,30 @@ object MasteringEngine {
         measured: LoudnessAnalyzer.Measurement? = null
     ): LoudnessAnalyzer.Measurement? = withContext(Dispatchers.IO) {
         val input = inputPathFor(context, sourceUri) ?: return@withContext null
+        masterInput(context, input, plan, target, format, measured)
+    }
+
+    /** Masters an intermediate file (e.g. the balanced stem mix) directly. */
+    suspend fun masterFile(
+        context: Context,
+        source: File,
+        plan: MasteringPlan,
+        target: File,
+        format: ExportFormat = ExportFormat.Wav,
+        measured: LoudnessAnalyzer.Measurement? = null
+    ): LoudnessAnalyzer.Measurement? = withContext(Dispatchers.IO) {
+        if (!source.isFile || source.length() == 0L) return@withContext null
+        masterInput(context, source.absolutePath, plan, target, format, measured)
+    }
+
+    private fun masterInput(
+        context: Context,
+        input: String,
+        plan: MasteringPlan,
+        target: File,
+        format: ExportFormat,
+        measured: LoudnessAnalyzer.Measurement?
+    ): LoudnessAnalyzer.Measurement? {
         val firstPass = loudnormFirstPass(input, plan) ?: measured
         val chain = MasteringModel.filterChain(plan, firstPass)
         val arguments = mutableListOf(
@@ -153,9 +194,9 @@ object MasteringEngine {
         val ok = ReturnCode.isSuccess(
             FFmpegKit.executeWithArguments(arguments.toTypedArray()).getReturnCode()
         )
-        if (!ok) return@withContext null
+        if (!ok) return null
         // Report what actually landed, so the gauges are real and not the target.
-        decodeFile(target, context)?.let { decoded ->
+        return decodeToPcm(context, target.absolutePath)?.let { decoded ->
             LoudnessAnalyzer.measure(decoded.samples, decoded.sampleRateHz, decoded.channelCount)
         } ?: firstPass
     }
@@ -212,9 +253,8 @@ object MasteringEngine {
         return token.toDoubleOrNull()
     }
 
-    /** Decodes an audio [uri] to interleaved float PCM at 48 kHz, up to stereo. */
-    private suspend fun decodeForAnalysis(context: Context, uri: Uri): DecodedPcm? {
-        val input = inputPathFor(context, uri) ?: return null
+    /** Decodes any input to interleaved float PCM at 48 kHz, up to stereo. */
+    private fun decodeToPcm(context: Context, input: String): DecodedPcm? {
         val temp = File.createTempFile("zen-master-", ".wav", context.cacheDir)
         return try {
             val ok = ReturnCode.isSuccess(
@@ -222,27 +262,6 @@ object MasteringEngine {
                     arrayOf(
                         "-hide_banner", "-nostdin",
                         "-i", input,
-                        "-vn", "-ac", "2", "-ar", MasteringModel.SAMPLE_RATE_HZ.toString(),
-                        "-f", "wav", "-c:a", "pcm_f32le",
-                        "-y", temp.absolutePath
-                    )
-                ).getReturnCode()
-            )
-            if (!ok) null else readPcm(temp)
-        } finally {
-            temp.delete()
-        }
-    }
-
-    private fun decodeFile(file: File, context: Context): DecodedPcm? {
-        if (!file.isFile || file.length() == 0L) return null
-        val temp = File.createTempFile("zen-measure-", ".wav", context.cacheDir)
-        return try {
-            val ok = ReturnCode.isSuccess(
-                FFmpegKit.executeWithArguments(
-                    arrayOf(
-                        "-hide_banner", "-nostdin",
-                        "-i", file.absolutePath,
                         "-vn", "-ac", "2", "-ar", MasteringModel.SAMPLE_RATE_HZ.toString(),
                         "-f", "wav", "-c:a", "pcm_f32le",
                         "-y", temp.absolutePath

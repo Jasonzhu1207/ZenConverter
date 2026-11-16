@@ -95,4 +95,21 @@ class MasteringEngineTest {
         assertTrue(MasteringEngine.ExportFormat.Wav.isLossless)
         assertTrue(!MasteringEngine.ExportFormat.Mp3.isLossless)
     }
+
+    @Test
+    fun analysisCarriesPeaksForTheShapeDrawing() {
+        // A silent-then-loud payload should produce a shape with a loud tail, so
+        // the master screen can draw the same picture the report describes.
+        val frames = IntArray(128) { index -> if (index < 64) 0 else 32767 }
+        val payload = ByteArray(frames.size * 2)
+        val buffer = ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN)
+        frames.forEach { buffer.putShort(it.toShort()) }
+        val decoded = MasteringEngine.readPcm(wavFile(1, 48_000, 16, payload))!!
+        val peaks = WaveformAnalyzer.peaksFromSamples(
+            decoded.samples, decoded.channelCount, decoded.sampleRateHz, bucketCount = 64
+        ).maxima
+        assertEquals(64, peaks.size)
+        assertTrue(peaks.first() < 0.01f)
+        assertTrue(peaks.last() > 0.9f)
+    }
 }
