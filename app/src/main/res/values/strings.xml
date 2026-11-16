@@ -1502,7 +1502,35 @@
     <string name="mixer_normalize">Normalize mix</string>
     <string name="mixer_command">Show FFmpeg command</string>
     <string name="mixer_command_title">Generated command</string>
+
+    <!-- Visualizer enrichment -->
+    <string name="visualizer_style">Style</string>
+    <string name="visualizer_style_waveform">Waveform</string>
+    <string name="visualizer_style_bars">Bars</string>
+    <string name="visualizer_style_circle">Circle</string>
+    <string name="visualizer_style_spectrum">Spectrum</string>
+    <string name="visualizer_style_particles">Particles</string>
+    <string name="visualizer_palette">Palette</string>
+    <string name="visualizer_palette_frost">Frost</string>
+    <string name="visualizer_palette_ember">Ember</string>
+    <string name="visualizer_palette_aurora">Aurora</string>
+    <string name="visualizer_palette_mono">Mono</string>
+    <string name="visualizer_background">Background</string>
+    <string name="visualizer_background_artwork">Artwork</string>
+    <string name="visualizer_background_blur">Blurred artwork</string>
+    <string name="visualizer_background_solid">Solid</string>
+    <string name="visualizer_background_gradient">Gradient</string>
+    <string name="visualizer_resolution">Resolution</string>
+    <string name="visualizer_aspect">Aspect ratio</string>
+    <string name="visualizer_frame_rate">Frame rate</string>
+    <string name="visualizer_fps_value">%1$d fps</string>
+    <string name="visualizer_show_title">Show track title</string>
+    <string name="visualizer_show_progress">Show progress bar</string>
+    <string name="visualizer_estimated_size">Estimated size</string>
+    <string name="visualizer_share">Share</string>
+    <string name="visualizer_shared">Shared.</string>
 </resources>
+
 
 
 

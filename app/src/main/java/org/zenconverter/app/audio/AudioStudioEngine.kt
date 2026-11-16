@@ -126,34 +126,63 @@ object AudioStudioEngine {
      * artwork. The audio is drawn as a `showwaves` overlay on a solid or image
      * background, producing a shareable MP4.
      */
+    /** Visualizer look: which FFmpeg show* filter draws the moving shape. */
+    enum class VisualizerStyle(val filter: String) {
+        Waveform("showwaves=mode=cline"),
+        Bars("showspectrum=mode=combined:color=intensity"),
+        Circle("showcqt"),
+        Spectrum("showspectrumpic=s=1920x1080:legend=disabled"),
+        Particles("avectorscope=mode=lissajous")
+    }
+
+    /** Colour treatment applied to the moving shape. */
+    enum class VisualizerPalette(val colors: String) {
+        Frost("white"),
+        Ember("0xFF6B35|0xFFD166"),
+        Aurora("0x2EC4B6|0x8338EC"),
+        Mono("0x9E9E9E")
+    }
+
+    /** What sits behind the shape. */
+    enum class VisualizerBackground { Artwork, Blur, Solid, Gradient }
+
+    /** Everything the visualizer screen can vary, so the render stays one call. */
+    data class VisualizerOptions(
+        val style: VisualizerStyle = VisualizerStyle.Waveform,
+        val palette: VisualizerPalette = VisualizerPalette.Frost,
+        val background: VisualizerBackground = VisualizerBackground.Artwork,
+        val width: Int = 1280,
+        val height: Int = 720,
+        val frameRate: Int = 25,
+        val showTitle: Boolean = false,
+        val showProgress: Boolean = false,
+        val title: String = ""
+    )
+
     suspend fun renderVisualizer(
         context: Context,
         audioUri: Uri,
         artworkUri: Uri?,
         target: File,
         width: Int = 1280,
-        height: Int = 720
+        height: Int = 720,
+        options: VisualizerOptions = VisualizerOptions(width = width, height = height)
     ): Boolean = withContext(Dispatchers.IO) {
         val audioPath = inputPathFor(context, audioUri) ?: return@withContext false
         val artworkPath = artworkUri?.let { inputPathFor(context, it) }
-
         val arguments = mutableListOf("-hide_banner", "-nostdin")
-        if (artworkPath != null) {
+        val useArtwork = artworkPath != null &&
+            options.background in setOf(VisualizerBackground.Artwork, VisualizerBackground.Blur)
+        if (useArtwork) {
             arguments += listOf("-loop", "1", "-i", artworkPath, "-i", audioPath)
         } else {
             arguments += listOf("-i", audioPath)
         }
-
-        val filter = if (artworkPath != null) {
-            "[0:v]scale=$width:$height:force_original_aspect_ratio=increase," +
-                "crop=$width:$height[bg];" +
-                "[1:a]showwaves=s=${width}x$height:mode=cline:rate=25:colors=white[wave];" +
-                "[bg][wave]overlay=format=auto,format=yuv420p[v]"
-        } else {
-            "[0:a]showwaves=s=${width}x$height:mode=cline:rate=25:colors=white,format=yuv420p[v]"
-        }
-        arguments += listOf("-filter_complex", filter, "-map", "[v]", "-map", if (artworkPath != null) "1:a" else "0:a")
         arguments += listOf(
+            "-filter_complex",
+            buildVisualizerFilter(options, useArtwork, artworkPath != null),
+            "-map", "[v]",
+            "-map", if (useArtwork) "1:a" else "0:a",
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
             "-c:a", "aac", "-b:a", "192k",
             "-shortest",
@@ -161,6 +190,50 @@ object AudioStudioEngine {
         )
         ReturnCode.isSuccess(FFmpegKit.executeWithArguments(arguments.toTypedArray()).getReturnCode())
     }
+
+    /**
+     * Builds the visualizer filter graph. Pure string work so it can be shown to
+     * the user and unit tested without running FFmpeg.
+     */
+    fun buildVisualizerFilter(
+        options: VisualizerOptions,
+        useArtwork: Boolean,
+        artworkAvailable: Boolean
+    ): String {
+        val w = options.width
+        val h = options.height
+        val fps = options.frameRate
+        val colors = options.palette.colors
+        val shape = "[1:a]${options.style.filter}:s=${w}x$h:rate=$fps:colors=$colors[wave]"
+        val shapeNoArt = "[0:a]${options.style.filter}:s=${w}x$h:rate=$fps:colors=$colors"
+
+        val background = when {
+            useArtwork -> "[0:v]scale=$w:$h:force_original_aspect_ratio=increase,crop=$w:$h" +
+                (if (options.background == VisualizerBackground.Blur) ",boxblur=20:2" else "") + "[bg];"
+            options.background == VisualizerBackground.Gradient ->
+                "color=c=0x101014:s=${w}x$h:d=1,geq=r='128+96*Y/H':g='110+70*Y/H':b='180-40*Y/H'[bg];"
+            else -> "color=c=0x101014:s=${w}x$h:d=1[bg];"
+        }
+
+        val overlay = if (useArtwork || options.background != VisualizerBackground.Artwork) {
+            "${background}${shape};[bg][wave]overlay=format=auto"
+        } else {
+            shapeNoArt
+        }
+
+        val decorations = buildString {
+            if (options.showTitle && options.title.isNotBlank()) {
+                append(",drawtext=text='${escapeDrawText(options.title)}':x=40:y=40:fontsize=36:fontcolor=white")
+            }
+            if (options.showProgress) {
+                append(",drawbox=x=0:y=ih-8:w=iw*t/duration:h=8:color=white@0.85:t=fill")
+            }
+        }
+        return "$overlay$decorations,format=yuv420p[v]"
+    }
+
+    private fun escapeDrawText(text: String): String =
+        text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
 
     /**
      * Splits [sourceUri] into segments on silence using FFmpeg's

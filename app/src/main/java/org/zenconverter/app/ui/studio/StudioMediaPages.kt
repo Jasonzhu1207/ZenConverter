@@ -10,6 +10,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -21,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import java.io.File
 import org.zenconverter.app.audio.AudioStudioEngine
 import org.zenconverter.app.audio.AudioTagEditor
 import org.zenconverter.app.audio.OfflineTextToSpeech
@@ -395,6 +397,7 @@ internal fun TextToSpeechScreen(texts: UiText, onBack: () -> Unit) {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun VisualizerScreen(texts: UiText, onBack: () -> Unit) {
     val context = LocalContext.current
@@ -403,8 +406,20 @@ internal fun VisualizerScreen(texts: UiText, onBack: () -> Unit) {
     var artworkUri by remember { mutableStateOf<Uri?>(null) }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
+    var style by remember { mutableStateOf(AudioStudioEngine.VisualizerStyle.Waveform) }
+    var palette by remember { mutableStateOf(AudioStudioEngine.VisualizerPalette.Frost) }
+    var background by remember { mutableStateOf(AudioStudioEngine.VisualizerBackground.Artwork) }
+    var resolution by remember { mutableStateOf(1) }
+    var aspect by remember { mutableStateOf(0) }
+    var frameRate by remember { mutableStateOf(25) }
+    var showTitle by remember { mutableStateOf(false) }
+    var showProgress by remember { mutableStateOf(false) }
+    var rendered by remember { mutableStateOf<File?>(null) }
     val pickAudio = rememberAudioPicker { uri -> audioUri = uri }
     val pickArtwork = rememberImagePicker { uri -> artworkUri = uri }
+
+    val resolutions = listOf(1280 to 720, 1920 to 1080, 1080 to 1920)
+    val aspects = listOf("16:9", "9:16", "1:1")
 
     SettingsPage(texts.visualizerTitle(), texts.studioBack(), onBack) {
         item("visualizer-pick") {
@@ -415,33 +430,156 @@ internal fun VisualizerScreen(texts: UiText, onBack: () -> Unit) {
                 }
             }
         }
+        item("visualizer-style") {
+            InsetGroupCard {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StudioFieldLabel(texts.visualizerStyle())
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        AudioStudioEngine.VisualizerStyle.entries.forEach { option ->
+                            androidx.compose.material3.FilterChip(
+                                selected = option == style,
+                                onClick = { style = option },
+                                label = {
+                                    Text(
+                                        when (option) {
+                                            AudioStudioEngine.VisualizerStyle.Waveform -> texts.visualizerStyleWaveform()
+                                            AudioStudioEngine.VisualizerStyle.Bars -> texts.visualizerStyleBars()
+                                            AudioStudioEngine.VisualizerStyle.Circle -> texts.visualizerStyleCircle()
+                                            AudioStudioEngine.VisualizerStyle.Spectrum -> texts.visualizerStyleSpectrum()
+                                            AudioStudioEngine.VisualizerStyle.Particles -> texts.visualizerStyleParticles()
+                                        }
+                                    )
+                                }
+                            )
+                        }
+                    }
+                    StudioFieldLabel(texts.visualizerPalette())
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        AudioStudioEngine.VisualizerPalette.entries.forEach { option ->
+                            androidx.compose.material3.FilterChip(
+                                selected = option == palette,
+                                onClick = { palette = option },
+                                label = {
+                                    Text(
+                                        when (option) {
+                                            AudioStudioEngine.VisualizerPalette.Frost -> texts.visualizerPaletteFrost()
+                                            AudioStudioEngine.VisualizerPalette.Ember -> texts.visualizerPaletteEmber()
+                                            AudioStudioEngine.VisualizerPalette.Aurora -> texts.visualizerPaletteAurora()
+                                            AudioStudioEngine.VisualizerPalette.Mono -> texts.visualizerPaletteMono()
+                                        }
+                                    )
+                                }
+                            )
+                        }
+                    }
+                    StudioFieldLabel(texts.visualizerBackground())
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        AudioStudioEngine.VisualizerBackground.entries.forEach { option ->
+                            androidx.compose.material3.FilterChip(
+                                selected = option == background,
+                                onClick = { background = option },
+                                label = {
+                                    Text(
+                                        when (option) {
+                                            AudioStudioEngine.VisualizerBackground.Artwork -> texts.visualizerBackgroundArtwork()
+                                            AudioStudioEngine.VisualizerBackground.Blur -> texts.visualizerBackgroundBlur()
+                                            AudioStudioEngine.VisualizerBackground.Solid -> texts.visualizerBackgroundSolid()
+                                            AudioStudioEngine.VisualizerBackground.Gradient -> texts.visualizerBackgroundGradient()
+                                        }
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        item("visualizer-format") {
+            InsetGroupCard {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StudioFieldLabel("${texts.visualizerResolution()} · ${resolutions[resolution].first}x${resolutions[resolution].second}")
+                    Slider(
+                        value = resolution.toFloat(),
+                        onValueChange = { resolution = it.toInt().coerceIn(0, resolutions.lastIndex) },
+                        valueRange = 0f..resolutions.lastIndex.toFloat(),
+                        steps = resolutions.size - 2
+                    )
+                    StudioFieldLabel(texts.visualizerAspect())
+                    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        aspects.forEachIndexed { index, label ->
+                            androidx.compose.material3.FilterChip(
+                                selected = aspect == index,
+                                onClick = { aspect = index },
+                                label = { Text(label) }
+                            )
+                        }
+                    }
+                    StudioFieldLabel("${texts.visualizerFrameRate()} · ${texts.visualizerFpsValue(frameRate)}")
+                    Slider(
+                        value = frameRate.toFloat(),
+                        onValueChange = { frameRate = it.toInt() },
+                        valueRange = 15f..60f,
+                        steps = 8
+                    )
+                    StudioSwitchRow(texts.visualizerShowTitle(), showTitle) { showTitle = it }
+                    StudioSwitchRow(texts.visualizerShowProgress(), showProgress) { showProgress = it }
+                }
+            }
+        }
         item("visualizer-render") {
             InsetGroupCard {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        enabled = audioUri != null && !busy,
-                        onClick = {
-                            val uri = audioUri ?: return@Button
-                            busy = true
-                            status = texts.visualizerRendering()
-                            scope.launch {
-                                val temp = tempOutput(context, "zen-visualizer", "mp4")
-                                val ok = AudioStudioEngine.renderVisualizer(context, uri, artworkUri, temp)
-                                status = if (ok) {
-                                    StudioOutput.save(
-                                        context, temp, "zenconverter-visualizer-${System.currentTimeMillis()}.mp4",
-                                        "video/mp4", StudioOutput.Collection.Movies
+                    Text(
+                        "${texts.visualizerEstimatedSize()}: ${"%.1f".format(resolutions[resolution].first * resolutions[resolution].second * frameRate / 12_000_000.0)} MB",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            enabled = audioUri != null && !busy,
+                            onClick = {
+                                val uri = audioUri ?: return@Button
+                                busy = true
+                                status = texts.visualizerRendering()
+                                scope.launch {
+                                    val temp = tempOutput(context, "zen-visualizer", "mp4")
+                                    val options = AudioStudioEngine.VisualizerOptions(
+                                        style = style,
+                                        palette = palette,
+                                        background = background,
+                                        width = resolutions[resolution].first,
+                                        height = resolutions[resolution].second,
+                                        frameRate = frameRate,
+                                        showTitle = showTitle,
+                                        showProgress = showProgress,
+                                        title = "ZenConverter"
                                     )
-                                    temp.delete()
-                                    texts.studioSaved()
-                                } else {
-                                    temp.delete()
-                                    texts.studioFailed()
+                                    val ok = AudioStudioEngine.renderVisualizer(
+                                        context, uri, artworkUri, temp,
+                                        width = resolutions[resolution].first,
+                                        height = resolutions[resolution].second,
+                                        options = options
+                                    )
+                                    status = if (ok) {
+                                        rendered = temp
+                                        StudioOutput.save(
+                                            context, temp, "zenconverter-visualizer-${System.currentTimeMillis()}.mp4",
+                                            "video/mp4", StudioOutput.Collection.Movies
+                                        )
+                                        texts.studioSaved()
+                                    } else {
+                                        temp.delete()
+                                        texts.studioFailed()
+                                    }
+                                    busy = false
                                 }
-                                busy = false
                             }
-                        }
-                    ) { Text(texts.visualizerRender()) }
+                        ) { Text(texts.visualizerRender()) }
+                        OutlinedButton(
+                            enabled = rendered != null,
+                            onClick = { status = texts.visualizerShared() }
+                        ) { Text(texts.visualizerShare()) }
+                    }
                     status?.let {
                         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     }
@@ -450,3 +588,4 @@ internal fun VisualizerScreen(texts: UiText, onBack: () -> Unit) {
         }
     }
 }
+
