@@ -1,6 +1,25 @@
 package org.zenconverter.app.ui.studio
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import org.zenconverter.app.studio.HubLayout
+import org.zenconverter.app.ui.AppIcon
+import org.zenconverter.app.ui.theme.bounceClick
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +31,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.CallSplit
+import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.FolderShared
 import androidx.compose.material.icons.rounded.FolderZip
 import androidx.compose.material.icons.rounded.ContentCut
@@ -66,14 +86,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.zenconverter.app.ui.AppScreen
 import org.zenconverter.app.ui.UiText
-import org.zenconverter.app.ui.settings.InsetGroupCard
 import org.zenconverter.app.ui.settings.SettingsGroupHeader
 import org.zenconverter.app.ui.settings.SettingsPage
-import org.zenconverter.app.ui.settings.SettingsRow
 
 /**
- * Hub for the local-first audio and tools studio. Every entry opens a subpage;
- * the list is grouped so it stays scannable on a phone.
+ * Hub for the local-first audio and tools studio. Rendered as a glass tile grid:
+ * each section leads with one full-width card, then square tiles fill descending
+ * rows (6, 5, 4, 3, 2, 1) so a section never leaves an orphan on its own line.
+ * Lyrics & sync uses full-width rows instead, because its entries carry long labels.
  */
 @Composable
 internal fun StudioScreen(
@@ -83,106 +103,353 @@ internal fun StudioScreen(
     modifier: Modifier = Modifier
 ) {
     SettingsPage(texts.studioTitle(), texts.studioBack(), onBack, modifier = modifier) {
-        item(key = "studio-audio-header") { SettingsGroupHeader(texts.studioSectionAudio()) }
-        item(key = "studio-audio") {
-            InsetGroupCard {
-                StudioEntry(Icons.Rounded.GraphicEq, texts.studioWaveform(), texts.studioWaveformDesc(), AppScreen.StudioWaveform, onNavigate)
-                StudioEntry(Icons.Rounded.Mic, texts.studioRecorder(), texts.studioRecorderDesc(), AppScreen.StudioRecorder, onNavigate)
-                StudioEntry(Icons.Rounded.Tune, texts.studioMixer(), texts.studioMixerDesc(), AppScreen.StudioMixer, onNavigate)
-                StudioEntry(Icons.Rounded.Equalizer, texts.studioAnalyze(), texts.studioAnalyzeDesc(), AppScreen.StudioAnalyze, onNavigate)
-                StudioEntry(Icons.Rounded.AudioFile, texts.studioTagEditor(), texts.studioTagEditorDesc(), AppScreen.StudioTags, onNavigate)
-                StudioEntry(Icons.Rounded.NotificationsActive, texts.studioRingtone(), texts.studioRingtoneDesc(), AppScreen.StudioRingtone, onNavigate, showDivider = false)
+        studioSections(texts).forEach { section ->
+            item(key = "hub-header-${section.title}") { HubSectionHeader(section.title) }
+            section.hero?.let { hero ->
+                item(key = "hub-hero-${hero.title}") { HubHeroCard(hero, onNavigate) }
             }
-        }
-
-        item(key = "studio-mastering-header") { SettingsGroupHeader(texts.studioSectionMastering()) }
-        item(key = "studio-mastering") {
-            InsetGroupCard {
-                StudioEntry(Icons.Rounded.AutoAwesome, texts.studioMastering(), texts.studioMasteringDesc(), AppScreen.StudioMastering, onNavigate)
-                StudioEntry(Icons.Rounded.Bolt, texts.studioStems(), texts.studioStemsDesc(), AppScreen.StudioMasteringStems, onNavigate)
-                StudioEntry(Icons.Rounded.Balance, texts.studioStemBalance(), texts.studioStemBalanceDesc(), AppScreen.StudioMasteringStems, onNavigate)
-                StudioEntry(Icons.Rounded.Tune, texts.studioEq(), texts.studioEqDesc(), AppScreen.StudioMasteringEq, onNavigate)
-                StudioEntry(Icons.Rounded.GraphicEq, texts.studioSpectrum(), texts.studioSpectrumDesc(), AppScreen.StudioMasteringSpectrum, onNavigate)
-                StudioEntry(Icons.Rounded.Equalizer, texts.studioLoudness(), texts.studioLoudnessDesc(), AppScreen.StudioMasteringLoudness, onNavigate)
-                StudioEntry(Icons.Rounded.Radio, texts.studioRadioReady(), texts.studioRadioReadyDesc(), AppScreen.StudioMasteringCheck, onNavigate)
-                StudioEntry(Icons.Rounded.Speaker, texts.studioLoudnessNorm(), texts.studioLoudnessNormDesc(), AppScreen.StudioMasteringLoudnessNorm, onNavigate)
-                StudioEntry(Icons.Rounded.AutoFixHigh, texts.studioExciter(), texts.studioExciterDesc(), AppScreen.StudioMasteringExciter, onNavigate, showDivider = false)
-            }
-        }
-
-        item(key = "studio-create-header") { SettingsGroupHeader(texts.studioSectionCreative()) }
-        item(key = "studio-create") {
-            InsetGroupCard {
-                StudioEntry(Icons.Rounded.Speaker, texts.studioTts(), texts.studioTtsDesc(), AppScreen.StudioTts, onNavigate)
-                StudioEntry(Icons.Rounded.Movie, texts.studioVisualizer(), texts.studioVisualizerDesc(), AppScreen.StudioVisualizer, onNavigate)
-                StudioEntry(Icons.Rounded.AutoAwesome, texts.studioRecipes(), texts.studioRecipesDesc(), AppScreen.StudioRecipes, onNavigate)
-                StudioEntry(Icons.Rounded.SwapHoriz, texts.abPlayerTitle(), texts.abNoOutput(), AppScreen.StudioAbPlayer, onNavigate, showDivider = false)
-            }
-        }
-
-        item(key = "studio-smart-header") { SettingsGroupHeader(texts.studioSectionSmart()) }
-        item(key = "studio-smart") {
-            InsetGroupCard {
-                StudioEntry(Icons.Rounded.SettingsVoice, texts.studioTranscribe(), texts.studioTranscribeDesc(), AppScreen.StudioTranscribe, onNavigate)
-                StudioEntry(Icons.Rounded.Bolt, texts.studioStems(), texts.studioStemsDesc(), AppScreen.StudioStems, onNavigate)
-                StudioEntry(Icons.Rounded.ContentCut, texts.cutTranscriptTitle(), texts.cutTranscriptDesc(), AppScreen.StudioCutTranscript, onNavigate)
-                StudioEntry(Icons.AutoMirrored.Rounded.CallSplit, texts.splitSilenceTitle(), texts.splitSilenceDesc(), AppScreen.StudioSplitSilence, onNavigate)
-                StudioEntry(Icons.Rounded.Subtitles, texts.burnSubsTitle(), texts.burnSubsDesc(), AppScreen.StudioBurnSubs, onNavigate)
-                StudioEntry(Icons.Rounded.Bookmarks, texts.chapterSplitTitle(), texts.chapterSplitDesc(), AppScreen.StudioChapterSplit, onNavigate)
-                StudioEntry(Icons.Rounded.History, texts.studioHistory(), texts.studioHistoryDesc(), AppScreen.StudioHistory, onNavigate)
-                StudioEntry(Icons.Rounded.Terminal, texts.studioCommandView(), texts.studioCommandViewDesc(), AppScreen.StudioCommand, onNavigate, showDivider = false)
-            }
-        }
-
-        item(key = "studio-lyrics-header") { SettingsGroupHeader(texts.lyricsSection()) }
-        item(key = "studio-lyrics") {
-            InsetGroupCard {
-                StudioEntry(Icons.Rounded.Lyrics, texts.lyricsEditorTitle(), texts.lyricsEditorDesc(), AppScreen.StudioLyricsEditor, onNavigate)
-                StudioEntry(Icons.Rounded.QueueMusic, texts.lrcImportTitle(), texts.lrcImportDesc(), AppScreen.StudioLrcImport, onNavigate)
-                StudioEntry(Icons.Rounded.LibraryMusic, texts.lrcExportTitle(), texts.lrcExportDesc(), AppScreen.StudioLrcExport, onNavigate)
-                StudioEntry(Icons.Rounded.SettingsVoice, texts.lyrTransTitle(), texts.lyrTransDesc(), AppScreen.StudioLyricTranscribe, onNavigate)
-                StudioEntry(Icons.Rounded.AvTimer, texts.lyrShiftTitle(), texts.lyrShiftDesc(), AppScreen.StudioLyricShift, onNavigate)
-                StudioEntry(Icons.Rounded.Subtitles, texts.karaokeTitle(), texts.karaokeDesc(), AppScreen.StudioKaraoke, onNavigate, showDivider = false)
-            }
-        }
-
-        item(key = "studio-privacy-header") { SettingsGroupHeader(texts.studioSectionPrivacy()) }
-        item(key = "studio-privacy") {
-            InsetGroupCard {
-                StudioEntry(Icons.Rounded.RecordVoiceOver, texts.studioPlugins(), texts.studioPluginsDesc(), AppScreen.StudioPlugins, onNavigate)
-                StudioEntry(Icons.Rounded.Wifi, texts.studioWifi(), texts.studioWifiDesc(), AppScreen.StudioWifi, onNavigate)
-                StudioEntry(Icons.Rounded.DeleteSweep, texts.studioCleaner(), texts.studioCleanerDesc(), AppScreen.StudioCleaner, onNavigate)
-                StudioEntry(Icons.Rounded.FolderZip, texts.archiveTitle(), texts.archiveDesc(), AppScreen.StudioArchive, onNavigate)
-                StudioEntry(Icons.AutoMirrored.Rounded.CallSplit, texts.pdfSplitTitle(), texts.pdfSplitDesc(), AppScreen.StudioPdfSplit, onNavigate)
-                StudioEntry(Icons.Rounded.PictureAsPdf, texts.pdfCreateTitle(), texts.pdfCreateDesc(), AppScreen.StudioPdfCreate, onNavigate)
-                StudioEntry(Icons.Rounded.MenuBook, texts.epubTitle(), texts.epubDesc(), AppScreen.StudioEpub, onNavigate)
-                StudioEntry(Icons.Rounded.FolderShared, texts.folderWatchTitle(), texts.folderWatchDesc(), AppScreen.StudioFolderWatch, onNavigate)
-                StudioEntry(Icons.Rounded.Compare, texts.privacyScrubTitle(), texts.privacyScrubDesc(), AppScreen.MetadataSecurity, onNavigate)
-                StudioEntry(Icons.Rounded.BatterySaver, texts.guardTitle(), texts.guardDesc(), AppScreen.StudioGuard, onNavigate)
-                StudioEntry(Icons.Rounded.Accessibility, texts.studioAccessibility(), texts.studioAccessibilityDesc(), AppScreen.StudioAccessibility, onNavigate)
-                StudioEntry(Icons.Rounded.BugReport, texts.crashReportingTitle(), texts.crashReportingDesc(), AppScreen.StudioCrashReports, onNavigate, showDivider = false)
+            if (section.horizontalRows) {
+                items(section.tiles, key = { "hub-row-${it.title}" }) { entry ->
+                    HubListRow(entry, onNavigate)
+                }
+            } else {
+                descendingChunks(section.tiles).forEachIndexed { index, chunk ->
+                    item(key = "hub-grid-${section.title}-$index") {
+                        HubTileGrid(chunk, onNavigate)
+                    }
+                }
             }
         }
     }
 }
 
-@Composable
-private fun StudioEntry(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    screen: AppScreen,
-    onNavigate: (AppScreen) -> Unit,
-    showDivider: Boolean = true
-) {
-    SettingsRow(
-        badgeIcon = icon,
-        title = title,
-        subtitle = subtitle,
-        showChevron = true,
-        showDivider = showDivider,
-        onClick = { onNavigate(screen) }
+private val HubTileGap = 12.dp
+
+/** One hub group: an optional leading full-width card plus the remaining entries. */
+private data class HubSection(
+    val title: String,
+    val hero: HubEntry?,
+    val tiles: List<HubEntry>,
+    val horizontalRows: Boolean = false
+)
+
+private data class HubEntry(
+    val title: String,
+    val subtitle: String,
+    val icon: ImageVector,
+    val screen: AppScreen,
+    val tag: String? = null
+)
+
+/** Splits [entries] into the descending row sizes produced by [HubLayout]. */
+private fun descendingChunks(entries: List<HubEntry>): List<List<HubEntry>> {
+    var index = 0
+    return HubLayout.rowSizes(entries.size).map { size ->
+        entries.subList(index, index + size).also { index += size }
+    }
+}
+
+private fun studioSections(texts: UiText): List<HubSection> = listOf(
+    HubSection(
+        title = texts.studioSectionAudio(),
+        hero = HubEntry(
+            texts.studioAudioConverter(), texts.studioAudioConverterDesc(),
+            Icons.Rounded.AudioFile, AppScreen.Home
+        ),
+        tiles = listOf(
+            HubEntry(texts.studioWaveform(), texts.studioWaveformDesc(), Icons.Rounded.GraphicEq, AppScreen.StudioWaveform),
+            HubEntry(texts.studioRecorder(), texts.studioRecorderDesc(), Icons.Rounded.Mic, AppScreen.StudioRecorder),
+            HubEntry(texts.studioMixer(), texts.studioMixerDesc(), Icons.Rounded.Tune, AppScreen.StudioMixer),
+            HubEntry(texts.studioAnalyze(), texts.studioAnalyzeDesc(), Icons.Rounded.Equalizer, AppScreen.StudioAnalyze),
+            HubEntry(texts.studioMediaLibrary(), texts.studioMediaLibraryDesc(), Icons.Rounded.FolderOpen, AppScreen.StudioMediaLibrary),
+            HubEntry(texts.studioTagEditor(), texts.studioTagEditorDesc(), Icons.Rounded.AudioFile, AppScreen.StudioTags),
+            HubEntry(texts.studioRingtone(), texts.studioRingtoneDesc(), Icons.Rounded.NotificationsActive, AppScreen.StudioRingtone)
+        )
+    ),
+    HubSection(
+        title = texts.studioSectionCreative(),
+        hero = null,
+        tiles = listOf(
+            HubEntry(texts.studioTts(), texts.studioTtsDesc(), Icons.Rounded.Speaker, AppScreen.StudioTts),
+            HubEntry(texts.studioVisualizer(), texts.studioVisualizerDesc(), Icons.Rounded.Movie, AppScreen.StudioVisualizer),
+            HubEntry(texts.studioRecipes(), texts.studioRecipesDesc(), Icons.Rounded.AutoAwesome, AppScreen.StudioRecipes, tag = texts.studioTagNew()),
+            HubEntry(texts.abPlayerTitle(), texts.abNoOutput(), Icons.Rounded.SwapHoriz, AppScreen.StudioAbPlayer)
+        )
+    ),
+    HubSection(
+        title = texts.studioSectionMastering(),
+        hero = HubEntry(
+            texts.studioMastering(), texts.studioMasteringDesc(),
+            Icons.Rounded.Radio, AppScreen.StudioMastering
+        ),
+        tiles = listOf(
+            HubEntry(texts.studioStems(), texts.studioStemsDesc(), Icons.Rounded.Bolt, AppScreen.StudioMasteringStems),
+            HubEntry(texts.studioStemBalance(), texts.studioStemBalanceDesc(), Icons.Rounded.Balance, AppScreen.StudioMasteringStems),
+            HubEntry(texts.studioEq(), texts.studioEqDesc(), Icons.Rounded.Tune, AppScreen.StudioMasteringEq),
+            HubEntry(texts.studioSpectrum(), texts.studioSpectrumDesc(), Icons.Rounded.GraphicEq, AppScreen.StudioMasteringSpectrum),
+            HubEntry(texts.studioLoudness(), texts.studioLoudnessDesc(), Icons.Rounded.Equalizer, AppScreen.StudioMasteringLoudness),
+            HubEntry(texts.studioRadioReady(), texts.studioRadioReadyDesc(), Icons.Rounded.Radio, AppScreen.StudioMasteringCheck),
+            HubEntry(texts.studioLoudnessNorm(), texts.studioLoudnessNormDesc(), Icons.Rounded.Speaker, AppScreen.StudioMasteringLoudnessNorm),
+            HubEntry(texts.studioExciter(), texts.studioExciterDesc(), Icons.Rounded.AutoFixHigh, AppScreen.StudioMasteringExciter)
+        )
+    ),
+    HubSection(
+        title = texts.lyricsSection(),
+        hero = HubEntry(
+            texts.lyricsEditorTitle(), texts.lyricsEditorDesc(),
+            Icons.Rounded.Lyrics, AppScreen.StudioLyricsEditor
+        ),
+        tiles = listOf(
+            HubEntry(texts.lrcImportTitle(), texts.lrcImportDesc(), Icons.Rounded.QueueMusic, AppScreen.StudioLrcImport),
+            HubEntry(texts.lrcExportTitle(), texts.lrcExportDesc(), Icons.Rounded.LibraryMusic, AppScreen.StudioLrcExport),
+            HubEntry(texts.lyrTransTitle(), texts.lyrTransDesc(), Icons.Rounded.SettingsVoice, AppScreen.StudioLyricTranscribe),
+            HubEntry(texts.lyrShiftTitle(), texts.lyrShiftDesc(), Icons.Rounded.AvTimer, AppScreen.StudioLyricShift),
+            HubEntry(texts.karaokeTitle(), texts.karaokeDesc(), Icons.Rounded.Subtitles, AppScreen.StudioKaraoke)
+        ),
+        horizontalRows = true
+    ),
+    HubSection(
+        title = texts.studioSectionSmart(),
+        hero = null,
+        tiles = listOf(
+            HubEntry(texts.studioTranscribe(), texts.studioTranscribeDesc(), Icons.Rounded.SettingsVoice, AppScreen.StudioTranscribe),
+            HubEntry(texts.studioStems(), texts.studioStemsDesc(), Icons.Rounded.Bolt, AppScreen.StudioStems),
+            HubEntry(texts.cutTranscriptTitle(), texts.cutTranscriptDesc(), Icons.Rounded.ContentCut, AppScreen.StudioCutTranscript),
+            HubEntry(texts.splitSilenceTitle(), texts.splitSilenceDesc(), Icons.AutoMirrored.Rounded.CallSplit, AppScreen.StudioSplitSilence),
+            HubEntry(texts.burnSubsTitle(), texts.burnSubsDesc(), Icons.Rounded.Subtitles, AppScreen.StudioBurnSubs),
+            HubEntry(texts.chapterSplitTitle(), texts.chapterSplitDesc(), Icons.Rounded.Bookmarks, AppScreen.StudioChapterSplit),
+            HubEntry(texts.studioHistory(), texts.studioHistoryDesc(), Icons.Rounded.History, AppScreen.StudioHistory),
+            HubEntry(texts.studioCommandView(), texts.studioCommandViewDesc(), Icons.Rounded.Terminal, AppScreen.StudioCommand)
+        )
+    ),
+    HubSection(
+        title = texts.studioSectionPrivacy(),
+        hero = null,
+        tiles = listOf(
+            HubEntry(texts.studioPlugins(), texts.studioPluginsDesc(), Icons.Rounded.RecordVoiceOver, AppScreen.StudioPlugins),
+            HubEntry(texts.studioWifi(), texts.studioWifiDesc(), Icons.Rounded.Wifi, AppScreen.StudioWifi),
+            HubEntry(texts.studioCleaner(), texts.studioCleanerDesc(), Icons.Rounded.DeleteSweep, AppScreen.StudioCleaner),
+            HubEntry(texts.archiveTitle(), texts.archiveDesc(), Icons.Rounded.FolderZip, AppScreen.StudioArchive, tag = texts.studioTagFixed()),
+            HubEntry(texts.pdfSplitTitle(), texts.pdfSplitDesc(), Icons.AutoMirrored.Rounded.CallSplit, AppScreen.StudioPdfSplit),
+            HubEntry(texts.pdfCreateTitle(), texts.pdfCreateDesc(), Icons.Rounded.PictureAsPdf, AppScreen.StudioPdfCreate),
+            HubEntry(texts.epubTitle(), texts.epubDesc(), Icons.Rounded.MenuBook, AppScreen.StudioEpub),
+            HubEntry(texts.folderWatchTitle(), texts.folderWatchDesc(), Icons.Rounded.FolderShared, AppScreen.StudioFolderWatch),
+            HubEntry(texts.privacyScrubTitle(), texts.privacyScrubDesc(), Icons.Rounded.Compare, AppScreen.MetadataSecurity),
+            HubEntry(texts.guardTitle(), texts.guardDesc(), Icons.Rounded.BatterySaver, AppScreen.StudioGuard),
+            HubEntry(texts.studioAccessibility(), texts.studioAccessibilityDesc(), Icons.Rounded.Accessibility, AppScreen.StudioAccessibility),
+            HubEntry(texts.crashReportingTitle(), texts.crashReportingDesc(), Icons.Rounded.BugReport, AppScreen.StudioCrashReports)
+        )
     )
+)
+
+/**
+ * Lays a chunk of tiles out in a fixed column count: two on a phone, three once
+ * there is room. Trailing gaps are filled with invisible spacers so every square
+ * keeps the same size.
+ */
+@Composable
+private fun HubTileGrid(chunk: List<HubEntry>, onNavigate: (AppScreen) -> Unit) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val columns = if (maxWidth < TabletWidthThreshold) PhoneColumns else TabletColumns
+        Column(verticalArrangement = Arrangement.spacedBy(HubTileGap)) {
+            chunk.chunked(columns).forEach { rowEntries ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(HubTileGap)
+                ) {
+                    rowEntries.forEach { entry ->
+                        HubSquareTile(entry, onNavigate, Modifier.weight(1f))
+                    }
+                    repeat(columns - rowEntries.size) {
+                        Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+private val TabletWidthThreshold = 600.dp
+private const val PhoneColumns = 2
+private const val TabletColumns = 3
+
+@Composable
+private fun HubSectionHeader(title: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 18.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            Modifier.size(7.dp).clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary)
+        )
+        Text(
+            text = title.uppercase(),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.semantics { heading() }
+        )
+    }
+}
+
+/** Leading full-width card for a section: icon, stacked title/sub, optional tag. */
+@Composable
+private fun HubHeroCard(entry: HubEntry, onNavigate: (AppScreen) -> Unit) {
+    GlassSurface(
+        onClick = { onNavigate(entry.screen) },
+        modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            HubTileIcon(entry.icon, 40.dp, 22.dp)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    entry.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    entry.subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis
+                )
+            }
+            entry.tag?.let { HubTag(it) }
+        }
+    }
+}
+
+/** Square tile used to fill the descending 6-to-1 rows. */
+@Composable
+private fun HubSquareTile(entry: HubEntry, onNavigate: (AppScreen) -> Unit, modifier: Modifier = Modifier) {
+    GlassSurface(onClick = { onNavigate(entry.screen) }, modifier = modifier.aspectRatio(1f)) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            HubTileIcon(entry.icon, 40.dp, 22.dp)
+            Text(
+                entry.title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2, overflow = TextOverflow.Ellipsis
+            )
+            entry.tag?.let { HubTag(it) }
+            Text(
+                entry.subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 3, overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+/** Full-width row: icon, stacked title/sub, trailing tag. */
+@Composable
+private fun HubListRow(entry: HubEntry, onNavigate: (AppScreen) -> Unit) {
+    GlassSurface(
+        onClick = { onNavigate(entry.screen) },
+        modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            HubTileIcon(entry.icon, 38.dp, 20.dp)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    entry.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    entry.subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis
+                )
+            }
+            entry.tag?.let { HubTag(it) }
+        }
+    }
+}
+
+@Composable
+private fun HubTileIcon(icon: ImageVector, size: Dp, iconSize: Dp) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        AppIcon(icon, null, MaterialTheme.colorScheme.onPrimary, Modifier.size(iconSize))
+    }
+}
+
+@Composable
+private fun HubTag(text: String) {
+    Text(
+        text = text.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    )
+}
+
+/**
+ * Translucent card with a hairline border and a soft top sheen, standing in for
+ * the preview's backdrop-blurred glass on a real Compose surface.
+ */
+@Composable
+private fun GlassSurface(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.72f))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(18.dp))
+            .bounceClick(onClick = onClick, scaleDown = 0.97f)
+    ) {
+        Box(
+            Modifier
+                .matchParentSize()
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+        content()
+    }
 }
 
 /** Compact informational row used by studio subpages before a file is chosen. */

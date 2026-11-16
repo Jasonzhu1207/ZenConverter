@@ -215,6 +215,7 @@ import org.zenconverter.app.ui.studio.AudioRecorderScreen
 import org.zenconverter.app.ui.studio.AudioMixerScreen
 import org.zenconverter.app.ui.studio.AudioAnalyzeScreen
 import org.zenconverter.app.ui.studio.KaraokeScreen
+import org.zenconverter.app.ui.studio.MediaLibraryScreen
 import org.zenconverter.app.ui.studio.LyricsEditorScreen
 import org.zenconverter.app.ui.studio.LrcExportScreen
 import org.zenconverter.app.ui.studio.LrcImportScreen
@@ -613,7 +614,8 @@ internal enum class AppScreen {
     StudioLyricTranscribe,
     StudioLyricShift,
     StudioKaraoke,
-    StudioLyricsEditor
+    StudioLyricsEditor,
+    StudioMediaLibrary
 }
 
 internal const val ZENCONVERTER_REPOSITORY_URL = "https://github.com/Jasonzhu1207/ZenConverter"
@@ -643,6 +645,7 @@ internal enum class AccentColorOption(
     val darkColor: Color,
     val darkContentColor: Color
 ) {
+    Glass("Glass", Color(0xFF2563EB), Color.White, Color(0xFF3B82F6), Color.White),
     Dynamic("Material You", Color(0xFF6750A4), Color.White, Color(0xFFD0BCFF), Color(0xFF381E72)),
     Charcoal("Charcoal", Color(0xFF111111), Color.White, Color(0xFFE5E7EB), Color(0xFF111111)),
     DeepNavy("Deep Navy", Color(0xFF36454F), Color.White, Color(0xFF93C5FD), Color(0xFF0F172A)),
@@ -1857,6 +1860,7 @@ private fun ZenConverterContent(
                 AppScreen.StudioLyricTranscribe -> LyricTranscribeScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioLyricShift -> LyricShiftScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioKaraoke -> KaraokeScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioMediaLibrary -> MediaLibraryScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioLyricsEditor -> LyricsEditorScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioAccessibility -> AccessibilityScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioArchive -> ArchiveToolsScreen(texts, onBack = { navigateBack() })
@@ -8460,9 +8464,61 @@ private fun zenConverterColorScheme(
         }
     }
 
+    val glass = accent == AccentColorOption.Glass
     val safeAccent = if (accent == AccentColorOption.Dynamic) AccentColorOption.Charcoal else accent
     val primary = safeAccent.color(isDark)
     val onPrimary = safeAccent.contentColor(isDark)
+
+    // Glass themes use the accent as-is in both modes: blue for light, ruby for dark.
+    if (glass) {
+        // Glass is one system: blue in light, ruby on polished black in dark.
+        val accentColor = if (isDark) Color(0xFFE11D48) else Color(0xFF2563EB)
+        return if (!isDark) {
+            lightColorScheme(
+                primary = accentColor,
+                onPrimary = Color.White,
+                secondary = Color(0xFF3B82F6),
+                onSecondary = Color.White,
+                background = Color(0xFFEEF2FB),
+                onBackground = Color(0xFF0B1220),
+                surface = Color(0xFFFFFFFF),
+                onSurface = Color(0xFF0B1220),
+                surfaceVariant = Color(0xFFE6ECF7),
+                onSurfaceVariant = Color(0xFF5B6577),
+                surfaceContainerLowest = Color(0xFFFFFFFF),
+                surfaceContainerLow = Color(0xFFF7F9FE),
+                surfaceContainer = Color(0xFFEFF3FB),
+                surfaceContainerHigh = Color(0xFFE7EDF8),
+                surfaceContainerHighest = Color(0xFFDDE5F3),
+                outline = Color(0xFFC9D3E4),
+                outlineVariant = Color(0xFFE1E8F4),
+                error = Color(0xFFB3261E),
+                onError = Color.White
+            )
+        } else {
+            darkColorScheme(
+                primary = accentColor,
+                onPrimary = Color.White,
+                secondary = Color(0xFFFB7185),
+                onSecondary = Color.White,
+                background = if (isOled) Color(0xFF000000) else Color(0xFF07080B),
+                onBackground = Color(0xFFF4F5F7),
+                surface = if (isOled) Color(0xFF000000) else Color(0xFF16171C),
+                onSurface = Color(0xFFF4F5F7),
+                surfaceVariant = if (isOled) Color(0xFF141414) else Color(0xFF262830),
+                onSurfaceVariant = Color(0xFF9AA2B1),
+                surfaceContainerLowest = if (isOled) Color(0xFF000000) else Color(0xFF0C0D11),
+                surfaceContainerLow = if (isOled) Color(0xFF0C0C0C) else Color(0xFF141519),
+                surfaceContainer = if (isOled) Color(0xFF141414) else Color(0xFF1B1C22),
+                surfaceContainerHigh = if (isOled) Color(0xFF1C1C1C) else Color(0xFF22242C),
+                surfaceContainerHighest = if (isOled) Color(0xFF242424) else Color(0xFF2A2D37),
+                outline = if (isOled) Color(0xFF282828) else Color(0xFF3A3D47),
+                outlineVariant = if (isOled) Color(0xFF1C1C1C) else Color(0xFF2B2E38),
+                error = Color(0xFFEF4444),
+                onError = Color.White
+            )
+        }
+    }
 
     return if (!isDark) {
         lightColorScheme(
@@ -8568,7 +8624,7 @@ private fun accentColorFromPreference(value: String?): AccentColorOption {
         return AccentColorOption.Charcoal
     }
     return AccentColorOption.entries.firstOrNull { it.name == value }
-        ?: AccentColorOption.Charcoal
+        ?: AccentColorOption.Glass
 }
 
 private fun themeModeFromPreference(value: String?): ThemeModeOption {
