@@ -1547,7 +1547,42 @@
     <string name="tts_preview">Preview voice</string>
     <string name="tts_previewing">Playing preview…</string>
     <string name="tts_chunk_note">Long text is split into sentences and stitched back together.</string>
+
+    <!-- Archive enrichment -->
+    <string name="archive_mode">Mode</string>
+    <string name="archive_format">Archive format</string>
+    <string name="archive_mode_create">Create</string>
+    <string name="archive_mode_extract">Extract</string>
+    <string name="archive_level">Compression level</string>
+    <string name="archive_level_store">Store</string>
+    <string name="archive_level_fast">Fast</string>
+    <string name="archive_level_normal">Normal</string>
+    <string name="archive_level_maximum">Maximum</string>
+    <string name="archive_password_protect">Password protect (AES-256)</string>
+    <string name="archive_password">Password</string>
+    <string name="archive_password_hint">Enter a password</string>
+    <string name="archive_password_note">Only ZIP supports encryption; TAR and 7z are written without it.</string>
+    <string name="archive_split">Split into volumes</string>
+    <string name="archive_volume_size">Volume size</string>
+    <string name="archive_add_folder">Add folder</string>
+    <string name="archive_contents">Contents</string>
+    <string name="archive_total">Total</string>
+    <string name="archive_total_value">%1$d files · %2$s</string>
+    <string name="archive_estimated">Est. archive</string>
+    <string name="archive_safety">Safety checks</string>
+    <string name="archive_path_guard">Path traversal guard</string>
+    <string name="archive_expand_cap">Expand-size cap</string>
+    <string name="archive_entry_cap">Entry-count cap</string>
+    <string name="archive_overwrite">Overwrite policy</string>
+    <string name="archive_overwrite_ask">Ask each time</string>
+    <string name="archive_encrypted">Encrypted archive — enter the password to extract.</string>
+    <string name="archive_password_wrong">That password did not work.</string>
+    <string name="archive_recent">Recent archives</string>
+    <string name="archive_none_yet">No archives yet.</string>
+    <string name="archive_on">On</string>
+    <string name="archive_size_value">%1$s</string>
 </resources>
+
 
 
 

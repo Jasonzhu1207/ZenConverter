@@ -48,29 +48,75 @@ import org.zenconverter.app.ui.settings.InsetGroupCard
 import org.zenconverter.app.ui.settings.SettingsPage
 import java.io.File
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ArchiveToolsScreen(texts: UiText, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var sources by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    var createMode by remember { mutableStateOf(true) }
+    var sources by remember { mutableStateOf<List<File>>(emptyList()) }
     var status by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var format by remember { mutableStateOf(ArchiveEngine.Format.Zip) }
+    var level by remember { mutableStateOf(ArchiveEngine.Level.Normal) }
+    var passwordEnabled by remember { mutableStateOf(false) }
+    var password by remember { mutableStateOf("") }
+    var splitEnabled by remember { mutableStateOf(false) }
+    var volumeIndex by remember { mutableStateOf(0) }
+    var extractPassword by remember { mutableStateOf("") }
+    var recent by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    val volumeSizes = listOf(100L, 700L, 1024L)
+
     val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isNotEmpty()) sources = uris
+        if (uris.isNotEmpty()) {
+            sources = sources + uris.mapNotNull { uri ->
+                runCatching { copyToCache(context, uri, "zen-archive-${System.nanoTime()}") }.getOrNull()
+            }
+        }
+    }
+    val pickFolder = rememberFolderPicker { uri ->
+        busy = true
+        scope.launch {
+            status = withContext(Dispatchers.IO) {
+                runCatching {
+                    val treeName = displayName(context, uri).ifBlank { "folder" }
+                    val folder = File(context.cacheDir, "zen-folder-${System.nanoTime()}")
+                    folder.mkdirs()
+                    val folderFile = File(folder, treeName).also { it.mkdirs() }
+                    copyTree(context, uri, folderFile)
+                    sources = sources + folderFile
+                }.fold(
+                    onSuccess = { texts.archiveAddFolder() },
+                    onFailure = { texts.studioFailed() }
+                )
+            }
+            busy = false
+        }
     }
     val pickArchive = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         busy = true
         scope.launch {
-            // Keep the original extension so ArchiveEngine can tell TAR and 7z
-            // apart from ZIP when it picks the extractor.
             val name = displayName(context, uri)
-            val archive = copyToCache(context, uri, "zen-archive-input-${System.nanoTime()}${name.substringAfterLast('.', "").let { if (it.isBlank()) ".zip" else ".$it" }}")
+            val archive = copyToCache(
+                context, uri,
+                "zen-archive-input-${System.nanoTime()}" +
+                    name.substringAfterLast('.', "").let { if (it.isBlank()) ".zip" else ".$it" }
+            )
             val targetDir = File(context.cacheDir, "zen-extract-${System.currentTimeMillis()}")
+            val encrypted = withContext(Dispatchers.IO) { ArchiveEngine.isEncrypted(archive) }
+            if (encrypted && extractPassword.isBlank()) {
+                status = texts.archiveEncrypted()
+                busy = false
+                return@launch
+            }
             status = withContext(Dispatchers.IO) {
                 runCatching {
-                    ArchiveEngine.extract(archive, targetDir)
+                    if (encrypted) {
+                        ArchiveEngine.extractZipWithPassword(archive, targetDir, extractPassword)
+                    } else {
+                        ArchiveEngine.extract(archive, targetDir)
+                    }
                 }.fold(
                     onSuccess = {
                         targetDir.listFiles().orEmpty().forEach { file ->
@@ -78,9 +124,10 @@ internal fun ArchiveToolsScreen(texts: UiText, onBack: () -> Unit) {
                                 context, file, file.name, "application/octet-stream", StudioOutput.Collection.Downloads
                             )
                         }
+                        recent = (listOf(name to texts.archiveExtracted()) + recent).take(5)
                         texts.archiveExtracted()
                     },
-                    onFailure = { texts.studioFailed() }
+                    onFailure = { if (encrypted) texts.archivePasswordWrong() else texts.studioFailed() }
                 )
             }
             archive.delete()
@@ -88,81 +135,283 @@ internal fun ArchiveToolsScreen(texts: UiText, onBack: () -> Unit) {
             busy = false
         }
     }
-    val pickTarget = rememberFolderPicker { _ ->
-        busy = true
-        scope.launch {
-            val archive = File(context.cacheDir, "zen-created-${System.currentTimeMillis()}.${format.extension}")
-            status = withContext(Dispatchers.IO) {
-                runCatching {
-                    val files = sources.mapNotNull { copyToCache(context, it, "zen-archive-${System.nanoTime()}") }
-                    ArchiveEngine.create(format, files, archive)
-                    files.forEach { it.delete() }
-                }.fold(
-                    onSuccess = {
-                        StudioOutput.save(
-                            context, archive, archive.name, "application/octet-stream", StudioOutput.Collection.Downloads
-                        )
-                        texts.archiveCreated()
-                    },
-                    onFailure = { texts.studioFailed() }
-                )
-            }
-            archive.delete()
-            busy = false
-        }
-    }
 
     SettingsPage(texts.archiveTitle(), texts.studioBack(), onBack) {
-        item("archive-body") {
+        item("archive-mode") {
             InsetGroupCard {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        texts.archiveDesc(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        texts.archiveSevenZipNote(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { pickFiles.launch(arrayOf("*/*")) }) {
-                            Text(texts.archivePickFiles())
-                        }
-                        OutlinedButton(enabled = sources.isNotEmpty() && !busy, onClick = { pickTarget() }) {
-                            Text(texts.archiveCreate())
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ArchiveEngine.Format.entries.forEach { option ->
-                            FilterChip(
-                                selected = format == option,
-                                onClick = { format = option },
-                                label = { Text(option.extension.uppercase()) }
-                            )
-                        }
-                    }
-                    Text(
-                        "${sources.size}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    OutlinedButton(enabled = !busy, onClick = {
-                        pickArchive.launch(
-                            arrayOf(
-                                "application/zip",
-                                "application/x-zip-compressed",
-                                "application/x-tar",
-                                "application/x-7z-compressed",
-                                "application/octet-stream"
-                            )
+                    StudioNote(texts.archiveDesc())
+                    StudioFieldLabel(texts.archiveMode())
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        FilterChip(
+                            selected = createMode,
+                            onClick = { createMode = true },
+                            label = { Text(texts.archiveModeCreate()) }
                         )
-                    }) {
-                        Text(texts.archiveExtract())
+                        FilterChip(
+                            selected = !createMode,
+                            onClick = { createMode = false },
+                            label = { Text(texts.archiveModeExtract()) }
+                        )
+                    }
+                }
+            }
+        }
+        if (createMode) {
+            item("archive-format") {
+                InsetGroupCard {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        StudioFieldLabel(texts.archiveFormat())
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ArchiveEngine.Format.entries.forEach { option ->
+                                FilterChip(
+                                    selected = format == option,
+                                    onClick = { format = option },
+                                    label = { Text(option.extension.uppercase()) }
+                                )
+                            }
+                        }
+                        StudioFieldLabel("${texts.archiveLevel()} · ${levelLabel(texts, level)}")
+                        Slider(
+                            value = level.ordinal.toFloat(),
+                            onValueChange = { level = ArchiveEngine.Level.entries[it.toInt().coerceIn(0, 3)] },
+                            valueRange = 0f..3f,
+                            steps = 2
+                        )
+                        if (format == ArchiveEngine.Format.Zip) {
+                            StudioSwitchRow(texts.archivePasswordProtect(), passwordEnabled) { passwordEnabled = it }
+                            if (passwordEnabled) {
+                                OutlinedTextField(
+                                    value = password,
+                                    onValueChange = { password = it },
+                                    label = { Text(texts.archivePassword()) },
+                                    placeholder = { Text(texts.archivePasswordHint()) },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                            StudioSwitchRow(texts.archiveSplit(), splitEnabled) { splitEnabled = it }
+                            if (splitEnabled) {
+                                StudioFieldLabel(texts.archiveVolumeSize())
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    volumeSizes.forEachIndexed { index, size ->
+                                        FilterChip(
+                                            selected = volumeIndex == index,
+                                            onClick = { volumeIndex = index },
+                                            label = { Text(if (size >= 1024) "${size / 1024} GB" else "$size MB") }
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            StudioNote(texts.archivePasswordNote())
+                        }
+                    }
+                }
+            }
+            item("archive-contents") {
+                InsetGroupCard {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(texts.archiveContents(), style = MaterialTheme.typography.titleSmall)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { pickFiles.launch(arrayOf("*/*")) }) {
+                                Text(texts.archivePickFiles())
+                            }
+                            OutlinedButton(onClick = { pickFolder() }) {
+                                Text(texts.archiveAddFolder())
+                            }
+                        }
+                        sources.forEach { source ->
+                            Text(
+                                source.name,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        val rawBytes = sources.sumOf { sizeOfFile(it) }
+                        Text(
+                            "${texts.archiveTotal()}: ${texts.archiveTotalValue(sources.size, archiveFormatBytes(rawBytes))}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            "${texts.archiveEstimated()}: " +
+                                archiveFormatBytes(ArchiveEngine.estimateArchiveBytes(sources, level)),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                enabled = sources.isNotEmpty() && !busy,
+                                onClick = {
+                                    busy = true
+                                    scope.launch {
+                                        val target = File(
+                                            context.cacheDir,
+                                            "zen-created-${System.currentTimeMillis()}.${format.extension}"
+                                        )
+                                        val options = ArchiveEngine.Options(
+                                            level = level,
+                                            password = password.takeIf { passwordEnabled && it.isNotBlank() },
+                                            splitVolumeBytes = if (splitEnabled) {
+                                                volumeSizes[volumeIndex] * 1024L * 1024L
+                                            } else {
+                                                0L
+                                            }
+                                        )
+                                        status = withContext(Dispatchers.IO) {
+                                            runCatching {
+                                                if (format == ArchiveEngine.Format.Zip) {
+                                                    ArchiveEngine.createZipWithOptions(sources, target, options)
+                                                } else {
+                                                    ArchiveEngine.create(format, sources, target)
+                                                }
+                                            }.fold(
+                                                onSuccess = {
+                                                    StudioOutput.save(
+                                                        context, target, target.name,
+                                                        "application/octet-stream", StudioOutput.Collection.Downloads
+                                                    )
+                                                    recent = (listOf(target.name to texts.archiveCreated()) + recent).take(5)
+                                                    texts.archiveCreated()
+                                                },
+                                                onFailure = { texts.studioFailed() }
+                                            )
+                                        }
+                                        target.delete()
+                                        busy = false
+                                    }
+                                }
+                            ) { Text(texts.archiveCreate()) }
+                            OutlinedButton(enabled = !busy, onClick = {
+                                pickArchive.launch(
+                                    arrayOf(
+                                        "application/zip",
+                                        "application/x-zip-compressed",
+                                        "application/x-tar",
+                                        "application/x-7z-compressed",
+                                        "application/octet-stream"
+                                    )
+                                )
+                            }) { Text(texts.archiveExtract()) }
+                        }
+                    }
+                }
+            }
+        } else {
+            item("archive-extract") {
+                InsetGroupCard {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        StudioNote(texts.archiveEncrypted())
+                        OutlinedTextField(
+                            value = extractPassword,
+                            onValueChange = { extractPassword = it },
+                            label = { Text(texts.archivePassword()) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedButton(enabled = !busy, onClick = {
+                            pickArchive.launch(
+                                arrayOf(
+                                    "application/zip",
+                                    "application/x-zip-compressed",
+                                    "application/x-tar",
+                                    "application/x-7z-compressed",
+                                    "application/octet-stream"
+                                )
+                            )
+                        }) { Text(texts.archiveExtract()) }
+                    }
+                }
+            }
+        }
+        item("archive-safety") {
+            InsetGroupCard {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(texts.archiveSafety(), style = MaterialTheme.typography.titleSmall)
+                    listOf(
+                        texts.archivePathGuard() to texts.archiveOn(),
+                        texts.archiveExpandCap() to "2 GB",
+                        texts.archiveEntryCap() to "10,000",
+                        texts.archiveOverwrite() to texts.archiveOverwriteAsk()
+                    ).forEach { (label, value) ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                            Text(
+                                value,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        item("archive-recent") {
+            InsetGroupCard {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(texts.archiveRecent(), style = MaterialTheme.typography.titleSmall)
+                    if (recent.isEmpty()) {
+                        StudioNote(texts.archiveNoneYet())
+                    } else {
+                        recent.forEach { (name, note) ->
+                            Text(
+                                "$name · $note",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                     status?.let {
                         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun levelLabel(texts: UiText, level: ArchiveEngine.Level): String = when (level) {
+    ArchiveEngine.Level.Store -> texts.archiveLevelStore()
+    ArchiveEngine.Level.Fast -> texts.archiveLevelFast()
+    ArchiveEngine.Level.Normal -> texts.archiveLevelNormal()
+    ArchiveEngine.Level.Maximum -> texts.archiveLevelMaximum()
+}
+
+private fun sizeOfFile(file: File): Long =
+    if (file.isDirectory) file.listFiles().orEmpty().sumOf { sizeOfFile(it) } else file.length()
+
+internal fun archiveFormatBytes(bytes: Long): String = when {
+    bytes >= 1024L * 1024L * 1024L -> "%.1f GB".format(bytes / (1024.0 * 1024.0 * 1024.0))
+    bytes >= 1024L * 1024L -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
+    bytes >= 1024L -> "%.1f KB".format(bytes / 1024.0)
+    else -> "$bytes B"
+}
+
+/** Copies a picked folder tree into [target], one level at a time. */
+private fun copyTree(context: android.content.Context, treeUri: Uri, target: File) {
+    val childrenUri = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(
+        treeUri,
+        android.provider.DocumentsContract.getTreeDocumentId(treeUri)
+    )
+    val projection = arrayOf(
+        android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+        android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+        android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE
+    )
+    context.contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
+        while (cursor.moveToNext()) {
+            val documentId = cursor.getString(0)
+            val name = cursor.getString(1) ?: continue
+            val mimeType = cursor.getString(2)
+            val childUri = android.provider.DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId)
+            if (mimeType == android.provider.DocumentsContract.Document.MIME_TYPE_DIR) {
+                val childDir = File(target, name).also { it.mkdirs() }
+                copyTree(context, childUri, childDir)
+            } else {
+                runCatching {
+                    context.contentResolver.openInputStream(childUri)?.use { input ->
+                        File(target, name).outputStream().use { output -> input.copyTo(output) }
                     }
                 }
             }

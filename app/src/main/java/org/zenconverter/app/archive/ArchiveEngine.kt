@@ -1,5 +1,10 @@
 package org.zenconverter.app.archive
 
+import net.lingala.zip4j.ZipFile as Zip4jFile
+import net.lingala.zip4j.model.ZipParameters
+import net.lingala.zip4j.model.enums.AesKeyStrength
+import net.lingala.zip4j.model.enums.CompressionMethod
+import net.lingala.zip4j.model.enums.EncryptionMethod
 import org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry
 import org.apache.commons.compress.archivers.sevenz.SevenZFile
 import org.apache.commons.compress.archivers.sevenz.SevenZOutputFile
@@ -37,6 +42,86 @@ object ArchiveEngine {
         else -> Format.Zip
     }
 
+    /** How hard ZIP/7z should try to shrink the payload. */
+    enum class Level { Store, Fast, Normal, Maximum }
+
+    /**
+     * Everything the archive screen can vary. [password] enables AES-256 ZIP
+     * encryption, [splitVolumeBytes] writes a multi-volume ZIP, and [level]
+     * trades time for size.
+     */
+    data class Options(
+        val level: Level = Level.Normal,
+        val password: String? = null,
+        val splitVolumeBytes: Long = 0L
+    )
+
+    /** True when [archive] is a ZIP that needs a password to read. */
+    fun isEncrypted(archive: File): Boolean = runCatching {
+        if (formatFor(archive.name) != Format.Zip) return@runCatching false
+        Zip4jFile(archive).isEncrypted
+    }.getOrDefault(false)
+
+    /**
+     * Lists a ZIP's entries, including encrypted ones. Sizes come from the
+     * central directory, so no decryption is needed just to inspect it.
+     */
+    fun listZipEntriesIncludingEncrypted(archive: File): List<Entry> = runCatching {
+        Zip4jFile(archive).fileHeaders.map { header ->
+            Entry(header.fileName, header.uncompressedSize, header.isDirectory)
+        }
+    }.getOrElse { listZipEntries(archive) }
+
+    /** Rough size of the archive [sources] would produce at [level]. */
+    fun estimateArchiveBytes(sources: List<File>, level: Level): Long {
+        val raw = sources.sumOf { sizeOf(it) }
+        val ratio = when (level) {
+            Level.Store -> 1.0
+            Level.Fast -> 0.85
+            Level.Normal -> 0.7
+            Level.Maximum -> 0.55
+        }
+        return (raw * ratio).toLong()
+    }
+
+    private fun sizeOf(file: File): Long =
+        if (file.isDirectory) file.listFiles().orEmpty().sumOf { sizeOf(it) } else file.length()
+
+    /**
+     * Creates a ZIP with the given [options]. Uses zip4j so AES-256 encryption
+     * and split volumes work; without either, the plain in-process writer is
+     * used so the common path stays dependency-light.
+     */
+    fun createZipWithOptions(sources: List<File>, target: File, options: Options) {
+        val password = options.password?.takeIf { it.isNotBlank() }
+        if (password == null && options.splitVolumeBytes <= 0L) {
+            createZip(sources, target, options.level)
+            return
+        }
+        val parameters = ZipParameters().apply {
+            compressionMethod = CompressionMethod.DEFLATE
+            compressionLevel = when (options.level) {
+                Level.Store -> net.lingala.zip4j.model.enums.CompressionLevel.NO_COMPRESSION
+                Level.Fast -> net.lingala.zip4j.model.enums.CompressionLevel.FAST
+                Level.Normal -> net.lingala.zip4j.model.enums.CompressionLevel.NORMAL
+                Level.Maximum -> net.lingala.zip4j.model.enums.CompressionLevel.MAXIMUM
+            }
+            if (password != null) {
+                isEncryptFiles = true
+                encryptionMethod = EncryptionMethod.AES
+                aesKeyStrength = AesKeyStrength.KEY_STRENGTH_256
+            }
+        }
+        val zip = if (password != null) Zip4jFile(target, password.toCharArray()) else Zip4jFile(target)
+        if (options.splitVolumeBytes > 0L) {
+            zip.createSplitZipFile(sources, parameters, true, options.splitVolumeBytes)
+        } else {
+            sources.forEach { source ->
+                if (source.isDirectory) zip.addFolder(source, parameters) else zip.addFiles(listOf(source), parameters)
+            }
+        }
+    }
+
     /** Creates an archive of [sources] in the requested [format]. */
     fun create(format: Format, sources: List<File>, target: File) {
         when (format) {
@@ -58,8 +143,16 @@ object ArchiveEngine {
         Format.SevenZip -> extractSevenZip(archive, targetDir, maxTotalBytes, maxEntries)
     }
 
-    fun createZip(sources: List<File>, target: File) {
+    fun createZip(sources: List<File>, target: File, level: Level = Level.Normal) {
         ZipOutputStream(FileOutputStream(target).buffered()).use { output ->
+            output.setLevel(
+                when (level) {
+                    Level.Store -> java.util.zip.Deflater.NO_COMPRESSION
+                    Level.Fast -> java.util.zip.Deflater.BEST_SPEED
+                    Level.Normal -> java.util.zip.Deflater.DEFAULT_COMPRESSION
+                    Level.Maximum -> java.util.zip.Deflater.BEST_COMPRESSION
+                }
+            )
             sources.forEach { source -> addToZip(output, source, source.name) }
         }
     }
@@ -191,6 +284,42 @@ object ArchiveEngine {
                     FileOutputStream(destination).buffered().use { output ->
                         guard.copySevenZip(input, output)
                     }
+                }
+            }
+        }
+    }
+
+    /**
+     * Extracts a ZIP that may be encrypted. [password] is only needed for
+     * protected archives; unencrypted ones go through the hardened stream path.
+     */
+    fun extractZipWithPassword(
+        archive: File,
+        targetDir: File,
+        password: String?,
+        maxTotalBytes: Long = DEFAULT_MAX_TOTAL_BYTES,
+        maxEntries: Int = DEFAULT_MAX_ENTRIES
+    ) {
+        if (password.isNullOrBlank() || !isEncrypted(archive)) {
+            extractZip(archive, targetDir, maxTotalBytes, maxEntries)
+            return
+        }
+        val guard = ExtractionGuard(targetDir, maxTotalBytes, maxEntries)
+        val zip = Zip4jFile(archive, password.toCharArray())
+        val headers = zip.fileHeaders
+        if (headers.size > maxEntries) {
+            throw LocalizedFailure(localizedText(R.string.archive_too_large))
+        }
+        var total = 0L
+        headers.forEach { header ->
+            val destination = guard.beginEntry(header.fileName, header.isDirectory)
+            if (!header.isDirectory) {
+                total += header.uncompressedSize
+                if (total > maxTotalBytes) {
+                    throw LocalizedFailure(localizedText(R.string.archive_too_large))
+                }
+                zip.getInputStream(header).buffered().use { input ->
+                    FileOutputStream(destination).buffered().use { output -> input.copyTo(output) }
                 }
             }
         }
