@@ -26,10 +26,13 @@ import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.PictureAsPdf
 import androidx.compose.material.icons.rounded.Radio
+import androidx.compose.material.icons.rounded.AvTimer
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Compare
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Equalizer
+import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Mic
@@ -127,6 +130,17 @@ internal fun StudioScreen(
                 StudioEntry(Icons.Rounded.Bookmarks, texts.chapterSplitTitle(), texts.chapterSplitDesc(), AppScreen.StudioChapterSplit, onNavigate)
                 StudioEntry(Icons.Rounded.History, texts.studioHistory(), texts.studioHistoryDesc(), AppScreen.StudioHistory, onNavigate)
                 StudioEntry(Icons.Rounded.Terminal, texts.studioCommandView(), texts.studioCommandViewDesc(), AppScreen.StudioCommand, onNavigate, showDivider = false)
+            }
+        }
+
+        item(key = "studio-lyrics-header") { SettingsGroupHeader(texts.lyricsSection()) }
+        item(key = "studio-lyrics") {
+            InsetGroupCard {
+                StudioEntry(Icons.Rounded.Lyrics, texts.lrcImportTitle(), texts.lrcImportDesc(), AppScreen.StudioLrcImport, onNavigate)
+                StudioEntry(Icons.Rounded.LibraryMusic, texts.lrcExportTitle(), texts.lrcExportDesc(), AppScreen.StudioLrcExport, onNavigate)
+                StudioEntry(Icons.Rounded.SettingsVoice, texts.lyrTransTitle(), texts.lyrTransDesc(), AppScreen.StudioLyricTranscribe, onNavigate)
+                StudioEntry(Icons.Rounded.AvTimer, texts.lyrShiftTitle(), texts.lyrShiftDesc(), AppScreen.StudioLyricShift, onNavigate)
+                StudioEntry(Icons.Rounded.Subtitles, texts.karaokeTitle(), texts.karaokeDesc(), AppScreen.StudioKaraoke, onNavigate, showDivider = false)
             }
         }
 

@@ -214,6 +214,11 @@ import org.zenconverter.app.ui.studio.WaveformEditorScreen
 import org.zenconverter.app.ui.studio.AudioRecorderScreen
 import org.zenconverter.app.ui.studio.AudioMixerScreen
 import org.zenconverter.app.ui.studio.AudioAnalyzeScreen
+import org.zenconverter.app.ui.studio.KaraokeScreen
+import org.zenconverter.app.ui.studio.LrcExportScreen
+import org.zenconverter.app.ui.studio.LrcImportScreen
+import org.zenconverter.app.ui.studio.LyricShiftScreen
+import org.zenconverter.app.ui.studio.LyricTranscribeScreen
 import org.zenconverter.app.ui.studio.TagEditorScreen
 import org.zenconverter.app.ui.studio.RingtoneMakerScreen
 import org.zenconverter.app.ui.studio.TextToSpeechScreen
@@ -601,7 +606,12 @@ internal enum class AppScreen {
     StudioMasteringLoudness,
     StudioMasteringCheck,
     StudioMasteringLoudnessNorm,
-    StudioMasteringExciter
+    StudioMasteringExciter,
+    StudioLrcImport,
+    StudioLrcExport,
+    StudioLyricTranscribe,
+    StudioLyricShift,
+    StudioKaraoke
 }
 
 internal const val ZENCONVERTER_REPOSITORY_URL = "https://github.com/Jasonzhu1207/ZenConverter"
@@ -1840,6 +1850,11 @@ private fun ZenConverterContent(
                 AppScreen.StudioWifi -> WifiTransferScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioCleaner -> StorageCleanerScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioGuard -> GuardScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioLrcImport -> LrcImportScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioLrcExport -> LrcExportScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioLyricTranscribe -> LyricTranscribeScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioLyricShift -> LyricShiftScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioKaraoke -> KaraokeScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioAccessibility -> AccessibilityScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioArchive -> ArchiveToolsScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioFolderWatch -> FolderWatchScreen(texts, onBack = { navigateBack() })

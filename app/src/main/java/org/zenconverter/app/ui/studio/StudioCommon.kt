@@ -41,6 +41,15 @@ internal fun rememberImagePicker(onPicked: (Uri) -> Unit): () -> Unit {
     }
 }
 
+/** Remembers a picker limited to the given MIME types, for text-like files. */
+@Composable
+internal fun rememberFilePicker(mimeTypes: List<String>, onPicked: (Uri) -> Unit): () -> Unit {
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) onPicked(uri)
+    }
+    return remember(launcher) { { launcher.launch(mimeTypes.toTypedArray()) } }
+}
+
 @Composable
 internal fun rememberFolderPicker(onPicked: (Uri) -> Unit): () -> Unit {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
