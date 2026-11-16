@@ -1057,6 +1057,8 @@ internal class UiText(private val context: Context) {
     fun waveformFadeIn(): String = text(R.string.waveform_fade_in)
     fun waveformFadeOut(): String = text(R.string.waveform_fade_out)
     fun waveformApply(): String = text(R.string.waveform_apply)
+    fun waveformPreview(): String = text(R.string.waveform_preview)
+    fun waveformPreviewBusy(): String = text(R.string.waveform_preview_busy)
     fun recorderTitle(): String = text(R.string.recorder_title)
     fun recorderRecord(): String = text(R.string.recorder_record)
     fun recorderPause(): String = text(R.string.recorder_pause)

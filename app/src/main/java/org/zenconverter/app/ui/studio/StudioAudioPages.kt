@@ -14,6 +14,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,6 +26,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import android.net.Uri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import org.zenconverter.app.audio.AudioAnalysis
@@ -58,11 +60,18 @@ internal fun WaveformEditorScreen(texts: UiText, onBack: () -> Unit) {
     var fadeIn by remember { mutableStateOf(false) }
     var fadeOut by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
+    var previewBusy by remember { mutableStateOf(false) }
+    var previewFile by remember { mutableStateOf<java.io.File?>(null) }
+    val player = rememberStudioPlayer()
+    val previewPlaying = player.isPlaying
     val pickAudio = rememberAudioPicker { uri ->
         sourceUri = uri
         peaks = null
         startFraction = 0f
         endFraction = 1f
+        player.stop()
+        previewFile?.delete()
+        previewFile = null
         busy = true
         scope.launch {
             val decoded = AudioDecoder.decodeMono(context, uri)
@@ -71,6 +80,10 @@ internal fun WaveformEditorScreen(texts: UiText, onBack: () -> Unit) {
             }
             busy = false
         }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { previewFile?.delete() }
     }
 
     SettingsPage(texts.waveformTitle(), texts.studioBack(), onBack, allowWideContent = true) {
@@ -114,6 +127,41 @@ internal fun WaveformEditorScreen(texts: UiText, onBack: () -> Unit) {
                                 fadeOut = fadeOut,
                                 onToggleFadeIn = { fadeIn = !fadeIn },
                                 onToggleFadeOut = { fadeOut = !fadeOut },
+                                previewPlaying = previewPlaying,
+                                previewBusy = previewBusy,
+                                onPreview = {
+                                    val uri = sourceUri
+                                    if (uri != null) {
+                                        previewBusy = true
+                                        scope.launch {
+                                            player.stop()
+                                            previewFile?.delete()
+                                            val temp = tempOutput(context, "zen-waveform-preview", "m4a")
+                                            val ok = AudioStudioEngine.applyEffects(
+                                                context = context,
+                                                sourceUri = uri,
+                                                filters = emptyList(),
+                                                target = temp,
+                                                startSeconds = current.durationSeconds * startFraction,
+                                                endSeconds = current.durationSeconds * endFraction,
+                                                fadeInSeconds = if (fadeIn) 1.0 else null,
+                                                fadeOutSeconds = if (fadeOut) 1.0 else null
+                                            )
+                                            if (ok) {
+                                                previewFile = temp
+                                                player.play(
+                                                    Uri.fromFile(temp),
+                                                    texts.waveformPreview()
+                                                ) { status = texts.studioFailed() }
+                                            } else {
+                                                temp.delete()
+                                                status = texts.studioFailed()
+                                            }
+                                            previewBusy = false
+                                        }
+                                    }
+                                },
+                                onStopPreview = { player.stop() },
                                 busy = busy,
                                 status = status,
                                 onApply = {
@@ -213,6 +261,10 @@ private fun WaveformControls(
     fadeOut: Boolean,
     onToggleFadeIn: () -> Unit,
     onToggleFadeOut: () -> Unit,
+    previewPlaying: Boolean,
+    previewBusy: Boolean,
+    onPreview: () -> Unit,
+    onStopPreview: () -> Unit,
     busy: Boolean,
     status: String?,
     onApply: () -> Unit
@@ -236,6 +288,18 @@ private fun WaveformControls(
             }
             OutlinedButton(onClick = onToggleFadeOut) {
                 Text("${texts.waveformFadeOut()}${if (fadeOut) " ✓" else ""}")
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (previewPlaying) {
+                OutlinedButton(onClick = onStopPreview) { Text(texts.studioStop()) }
+            } else {
+                OutlinedButton(
+                    enabled = !previewBusy,
+                    onClick = onPreview
+                ) {
+                    Text(if (previewBusy) texts.waveformPreviewBusy() else texts.waveformPreview())
+                }
             }
         }
         Button(

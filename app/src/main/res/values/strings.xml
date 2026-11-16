@@ -844,6 +844,8 @@
     <string name="waveform_fade_in">Fade in (s)</string>
     <string name="waveform_fade_out">Fade out (s)</string>
     <string name="waveform_apply">Add to queue</string>
+    <string name="waveform_preview">Preview edit</string>
+    <string name="waveform_preview_busy">Rendering preview…</string>
     <string name="waveform_selection">Selected %1$s of %2$s</string>
     <!-- Recorder -->
     <string name="recorder_title">Audio recorder</string>
