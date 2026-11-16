@@ -3,25 +3,27 @@ package org.zenconverter.app.model
 import android.util.Log
 
 /**
- * JNI bridge to the offline Demucs-style stem separator.
+ * JNI bridge to the offline Demucs source separator.
  *
- * The separator runs on the NCNN runtime that `libzen_ncnn.so` already links
- * (see `native/ncnn-jni`), so this loads the same library as [NcnnNative]. The
- * separator symbols are added by the same build; when they are absent the
- * library still loads for the other NCNN features and [ensureLoaded] reports
- * that separation is unavailable.
+ * The separator is its own library (`libzen_demucs.so`, built from
+ * `native/demucs-jni`) because the Demucs hybrid transformer runs on ggml/Eigen
+ * rather than NCNN. It is optional, so [ensureLoaded] reports whether this build
+ * can separate; callers fall back to the built-in FFmpeg approximation when it
+ * cannot.
  *
- * The model itself is a `.param`/`.bin` pair downloaded at runtime and verified
- * by [org.zenconverter.app.model.StemSeparationModelManager].
+ * The model is a single ggml weight file downloaded and verified at runtime by
+ * [StemSeparationModelManager].
  */
 object StemNative {
     private const val TAG = "StemNative"
 
     private val isLoaded: Boolean by lazy {
         try {
-            System.loadLibrary("zen_ncnn")
+            // demucs.cpp is built with OpenMP, so libomp.so must be present too.
+            System.loadLibrary("omp")
+            System.loadLibrary("zen_demucs")
             val initResult = nativeStemInit()
-            Log.i(TAG, "Stem separator native symbols loaded. init=$initResult")
+            Log.i(TAG, "Demucs native library loaded. init=$initResult")
             initResult == 0
         } catch (t: Throwable) {
             Log.i(TAG, "Stem separator not bundled: ${t.message}")
@@ -42,14 +44,14 @@ object StemNative {
 
     /**
      * Separates [samples] (mono float PCM in `[-1, 1]` at [sampleRateHz]) into
-     * the four stems, writing 16-bit PCM WAV files into [outputDir]. Returns the
+     * the four stems, writing 16-bit PCM WAV files named `vocals.wav`,
+     * `drums.wav`, `bass.wav` and `other.wav` into [outputDir]. Returns the
      * number of stems written, or a negative value on failure.
      */
     fun separate(
         samples: FloatArray,
         sampleRateHz: Int,
-        paramPath: String,
-        binPath: String,
+        modelPath: String,
         outputDir: String,
         progressCallback: ProgressCallback?,
         cancelCheck: CancelCheck?
@@ -59,8 +61,7 @@ object StemNative {
             nativeStemSeparate(
                 samples,
                 sampleRateHz,
-                paramPath,
-                binPath,
+                modelPath,
                 outputDir,
                 progressCallback,
                 cancelCheck
@@ -75,8 +76,7 @@ object StemNative {
     external fun nativeStemSeparate(
         samples: FloatArray,
         sampleRateHz: Int,
-        paramPath: String,
-        binPath: String,
+        modelPath: String,
         outputDir: String,
         progressCallback: ProgressCallback?,
         cancelCheck: CancelCheck?

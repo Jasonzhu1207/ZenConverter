@@ -194,17 +194,19 @@ object WhisperModelManager {
         get() = org.zenconverter.app.model.WhisperNative.ensureLoaded()
 }
 
-/** Offline vocal/drum/bass separation model (Demucs/Spleeter-style, via NCNN). */
+/** Offline vocal/drum/bass/other separation (Demucs v4 hybrid transformer). */
 object StemSeparationModelManager {
     const val CATEGORY = "stems"
 
+    // Demucs v4 htdemucs 4-source weights in demucs.cpp's ggml format, pinned by
+    // size and SHA-256 so a tampered download cannot be silently loaded.
     val MODEL_DEMUCS_LITE = OfflineModelSpec(
-        id = "demucs-lite",
-        displayName = "Demucs Lite 4-stem",
-        fileName = "demucs-lite.bin",
-        url = "https://github.com/sevagh/demucs.cpp/releases/latest/download/demucs-lite.bin",
-        sizeBytes = 0L,
-        sha256 = "",
+        id = "htdemucs-4s-f16",
+        displayName = "Demucs v4 htdemucs 4-stem",
+        fileName = "ggml-model-htdemucs-4s-f16.bin",
+        url = "https://huggingface.co/datasets/Retrobear/demucs.cpp/resolve/main/ggml-model-htdemucs-4s-f16.bin",
+        sizeBytes = 83_994_361L,
+        sha256 = "72b17c42d308982ddb5069bc3bf48b81a5aac4cb6516e4366c0fa7cef6df0064",
         sourceUrl = "https://github.com/sevagh/demucs.cpp"
     )
 

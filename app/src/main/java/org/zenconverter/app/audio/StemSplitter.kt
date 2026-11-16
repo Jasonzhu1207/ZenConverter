@@ -13,8 +13,8 @@ import java.io.File
  *
  * Two backends sit behind one entry point:
  *
- * - a neural separator (`libzen_ncnn.so` plus a downloaded Demucs-style model),
- *   used when [isNeuralAvailable] reports it is present; and
+ * - a neural separator (`libzen_demucs.so` plus a downloaded Demucs model), used
+ *   when [isNeuralAvailable] reports it is present; and
  * - the built-in FFmpeg spectral approximation in [StemFilters], which always
  *   works offline and is the fallback.
  *
@@ -73,8 +73,7 @@ object StemSplitter {
         val written = StemNative.separate(
             samples = decoded.samples,
             sampleRateHz = decoded.sampleRateHz,
-            paramPath = modelFile.absolutePath,
-            binPath = modelFile.absolutePath,
+            modelPath = modelFile.absolutePath,
             outputDir = outputDir.absolutePath,
             progressCallback = null,
             cancelCheck = null
