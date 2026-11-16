@@ -33,6 +33,7 @@ import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Lyrics
+import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Mic
@@ -136,7 +137,8 @@ internal fun StudioScreen(
         item(key = "studio-lyrics-header") { SettingsGroupHeader(texts.lyricsSection()) }
         item(key = "studio-lyrics") {
             InsetGroupCard {
-                StudioEntry(Icons.Rounded.Lyrics, texts.lrcImportTitle(), texts.lrcImportDesc(), AppScreen.StudioLrcImport, onNavigate)
+                StudioEntry(Icons.Rounded.Lyrics, texts.lyricsEditorTitle(), texts.lyricsEditorDesc(), AppScreen.StudioLyricsEditor, onNavigate)
+                StudioEntry(Icons.Rounded.QueueMusic, texts.lrcImportTitle(), texts.lrcImportDesc(), AppScreen.StudioLrcImport, onNavigate)
                 StudioEntry(Icons.Rounded.LibraryMusic, texts.lrcExportTitle(), texts.lrcExportDesc(), AppScreen.StudioLrcExport, onNavigate)
                 StudioEntry(Icons.Rounded.SettingsVoice, texts.lyrTransTitle(), texts.lyrTransDesc(), AppScreen.StudioLyricTranscribe, onNavigate)
                 StudioEntry(Icons.Rounded.AvTimer, texts.lyrShiftTitle(), texts.lyrShiftDesc(), AppScreen.StudioLyricShift, onNavigate)

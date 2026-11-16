@@ -67,6 +67,42 @@ object LyricStudio {
         return active
     }
 
+    /**
+     * Splits pasted lyrics into timed lines. When [durationMs] is known the
+     * lines are spread evenly across the clip, which is the "auto-spread"
+     * starting point the user then nudges line by line.
+     */
+    fun addLines(text: String, durationMs: Long): Document {
+        val rows = text.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
+        if (rows.isEmpty()) return EMPTY
+        val spread = if (durationMs > 0L) durationMs / rows.size else DEFAULT_LINE_GAP_MS
+        return Document(
+            title = null,
+            lines = rows.mapIndexed { index, row -> Line(index * spread, row) }
+        )
+    }
+
+    /** Re-spaces existing lines evenly across [durationMs], keeping the text order. */
+    fun autoSpread(document: Document, durationMs: Long): Document {
+        if (document.lines.isEmpty() || durationMs <= 0L) return document
+        val spread = durationMs / document.lines.size
+        return document.copy(lines = document.lines.mapIndexed { index, line -> line.copy(startMs = index * spread) })
+    }
+
+    /** Rounds every line to the nearest beat of a [bpm] grid, useful after a nudge. */
+    fun snapToBeat(document: Document, bpm: Double): Document {
+        if (document.lines.isEmpty() || bpm <= 0.0) return document
+        val beatMs = 60_000.0 / bpm
+        return document.copy(
+            lines = document.lines.map { line ->
+                val beats = Math.round(line.startMs / beatMs)
+                line.copy(startMs = (beats * beatMs).toLong().coerceAtLeast(0L))
+            }
+        )
+    }
+
+    private const val DEFAULT_LINE_GAP_MS = 4_000L
+
     fun formatTimecode(ms: Long): String {
         val total = ms.coerceAtLeast(0L)
         val minutes = total / 60_000L

@@ -83,4 +83,50 @@ class LyricStudioTest {
         assertEquals("0:01.00", LyricStudio.formatTimecode(1000L))
         assertEquals("1:03.40", LyricStudio.formatTimecode(63_400L))
     }
+
+    @Test
+    fun `addLines spreads pasted rows across the clip`() {
+        val document = LyricStudio.addLines("one\ntwo\nthree", 90_000L)
+        assertEquals(3, document.lines.size)
+        assertEquals(0L, document.lines[0].startMs)
+        assertEquals(30_000L, document.lines[1].startMs)
+        assertEquals(60_000L, document.lines[2].startMs)
+        assertEquals("three", document.lines[2].text)
+    }
+
+    @Test
+    fun `addLines ignores blank rows`() {
+        val document = LyricStudio.addLines("  \nfirst\n\nsecond\n ", 0L)
+        assertEquals(2, document.lines.size)
+        assertEquals("first", document.lines[0].text)
+    }
+
+    @Test
+    fun `autoSpread re-spaces existing lines`() {
+        val document = LyricStudio.Document(
+            title = null,
+            lines = listOf(LyricStudio.Line(0L, "a"), LyricStudio.Line(9_999L, "b"))
+        )
+        val spread = LyricStudio.autoSpread(document, 40_000L)
+        assertEquals(0L, spread.lines[0].startMs)
+        assertEquals(20_000L, spread.lines[1].startMs)
+    }
+
+    @Test
+    fun `snapToBeat rounds to the nearest beat grid`() {
+        val document = LyricStudio.Document(
+            title = null,
+            lines = listOf(LyricStudio.Line(520L, "a"), LyricStudio.Line(2_600L, "b"))
+        )
+        // 120 BPM -> 500 ms per beat
+        val snapped = LyricStudio.snapToBeat(document, 120.0)
+        assertEquals(500L, snapped.lines[0].startMs)
+        assertEquals(2_500L, snapped.lines[1].startMs)
+    }
+
+    @Test
+    fun `snapToBeat is a no-op without a tempo`() {
+        val document = LyricStudio.Document(null, listOf(LyricStudio.Line(520L, "a")))
+        assertEquals(document, LyricStudio.snapToBeat(document, 0.0))
+    }
 }
