@@ -18,6 +18,8 @@ object WhisperNative {
 
     private val isLoaded: Boolean by lazy {
         try {
+            // whisper.cpp's ggml uses OpenMP, so libomp.so must be present too.
+            System.loadLibrary("omp")
             System.loadLibrary("zen_whisper")
             val initResult = nativeInit()
             Log.i(TAG, "Whisper native library loaded. init=$initResult")
