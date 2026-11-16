@@ -215,6 +215,11 @@ internal fun FolderWatchScreen(texts: UiText, onBack: () -> Unit) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Text(
+                        texts.folderWatchConvertDesc(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     StudioChoiceRow(
                         label = texts.folderWatchTargetLabel(),
                         selected = targetFormat.key,
@@ -240,7 +245,7 @@ internal fun FolderWatchScreen(texts: UiText, onBack: () -> Unit) {
                                         )
                                         ConversionTaskStore.showMessage(
                                             localizedText(
-                                                org.zenconverter.app.R.string.folder_watch_found,
+                                                org.zenconverter.app.R.string.folder_watch_queued,
                                                 document.displayName
                                             )
                                         )
@@ -358,6 +363,11 @@ internal fun CutTranscriptScreen(texts: UiText, onBack: () -> Unit) {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         texts.cutTranscriptDesc(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        texts.transcribeCutWords(),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

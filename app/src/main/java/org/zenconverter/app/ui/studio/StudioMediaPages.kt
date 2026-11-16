@@ -54,7 +54,14 @@ internal fun TagEditorScreen(texts: UiText, onBack: () -> Unit) {
             InsetGroupCard {
                 Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = pickAudio) { Text(texts.tagLoad()) }
-                    OutlinedButton(onClick = pickArtwork) { Text(texts.tagPickArtwork()) }
+                    OutlinedButton(onClick = pickArtwork) { Text(texts.studioPickImage()) }
+                    if (artworkUri != null) {
+                        Text(
+                            texts.tagArtwork(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
         }
