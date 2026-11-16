@@ -226,9 +226,9 @@ object StemSeparationModelManager {
 
     /**
      * Whether this build can run a model-backed separation. The separator is
-     * compiled into `libzen_ncnn.so` (see `native/ncnn-jni`); when those symbols
-     * are absent the screen keeps the built-in FFmpeg approximation instead of
-     * failing.
+     * compiled into `libzen_demucs.so` (see `native/demucs-jni`); when the
+     * library or its model is absent the screen keeps the built-in FFmpeg
+     * approximation instead of failing.
      */
     val INFERENCE_AVAILABLE: Boolean
         get() = org.zenconverter.app.model.StemNative.ensureLoaded()

@@ -36,6 +36,8 @@ import org.zenconverter.app.audio.TranscriptSegment
 import org.zenconverter.app.audio.TranscriptionEngine
 import org.zenconverter.app.audio.WhisperTranscriptParser
 import org.zenconverter.app.conversion.ConversionTaskStore
+import org.zenconverter.app.model.StemNative
+import org.zenconverter.app.model.StemSeparationModelManager
 import org.zenconverter.app.model.WhisperModelManager
 import org.zenconverter.app.recipe.ConversionRecipe
 import org.zenconverter.app.recipe.RecipeExecutor
@@ -216,14 +218,16 @@ internal fun StemSeparationScreen(texts: UiText, onBack: () -> Unit) {
     var sourceUri by remember { mutableStateOf<Uri?>(null) }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
+    var downloadProgress by remember { mutableStateOf<Float?>(null) }
+    var modelReady by remember { mutableStateOf(StemSeparationModelManager.isDownloaded(context)) }
     val pickAudio = rememberAudioPicker { uri -> sourceUri = uri }
-    val neuralAvailable = StemSplitter.isNeuralAvailable(context)
+    val runtimeAvailable = StemNative.ensureLoaded()
 
     SettingsPage(texts.stemsTitle(), texts.studioBack(), onBack) {
         item("stems-note") {
             InsetGroupCard {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (!neuralAvailable) {
+                    if (!runtimeAvailable) {
                         Text(
                             texts.stemsEngineUnavailable(),
                             style = MaterialTheme.typography.bodySmall,
@@ -231,6 +235,40 @@ internal fun StemSeparationScreen(texts: UiText, onBack: () -> Unit) {
                         )
                         Text(
                             texts.stemsApproximateNote(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = pickAudio) { Text(texts.stemsLoad()) }
+                            OutlinedButton(
+                                enabled = !modelReady && downloadProgress == null,
+                                onClick = {
+                                    scope.launch {
+                                        downloadProgress = 0f
+                                        runCatching {
+                                            StemSeparationModelManager.download(context) { downloadProgress = it }
+                                        }.onSuccess {
+                                            modelReady = true
+                                            downloadProgress = null
+                                            status = texts.studioModelReady()
+                                        }.onFailure {
+                                            downloadProgress = null
+                                            status = texts.studioFailed()
+                                        }
+                                    }
+                                }
+                            ) { Text(texts.stemsDownloadModel()) }
+                        }
+                        downloadProgress?.let { progress ->
+                            Text(
+                                texts.transcribeDownloading((progress * 100).toInt()),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Text(
+                            if (modelReady) texts.studioModelReady() else texts.stemsModelNeeded(),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -242,9 +280,11 @@ internal fun StemSeparationScreen(texts: UiText, onBack: () -> Unit) {
             InsetGroupCard {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = pickAudio) { Text(texts.studioPickAudio()) }
+                        if (!runtimeAvailable) {
+                            Button(onClick = pickAudio) { Text(texts.studioPickAudio()) }
+                        }
                         OutlinedButton(
-                            enabled = sourceUri != null && !busy,
+                            enabled = sourceUri != null && !busy && (!runtimeAvailable || modelReady),
                             onClick = {
                                 val uri = sourceUri ?: return@OutlinedButton
                                 busy = true
@@ -263,7 +303,12 @@ internal fun StemSeparationScreen(texts: UiText, onBack: () -> Unit) {
                                                 StudioOutput.Collection.Music
                                             )
                                         }
-                                        texts.stemsDone(result.stems.size)
+                                        val label = if (result.backend == StemSplitter.StemBackend.Neural) {
+                                            texts.stemsDone(result.stems.size)
+                                        } else {
+                                            texts.stemsDoneApproximate(result.stems.size)
+                                        }
+                                        label
                                     }
                                     outputDir.deleteRecursively()
                                     busy = false

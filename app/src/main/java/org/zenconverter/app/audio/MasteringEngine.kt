@@ -95,7 +95,10 @@ object MasteringEngine {
         uri: Uri,
         outputDir: File
     ): List<StemAnalysis> = withContext(Dispatchers.IO) {
-        val stems = AudioStudioEngine.separateStems(context, uri, outputDir)
+        // Routed through StemSplitter so mastering gets the neural separator
+        // when the runtime and model are present, and the labelled FFmpeg
+        // approximation otherwise.
+        val stems = StemSplitter.separate(context, uri, outputDir).stems
         if (stems.isEmpty()) return@withContext emptyList()
         stems.mapNotNull { (kind, file) ->
             val decoded = decodeToPcm(context, file.absolutePath) ?: return@mapNotNull null

@@ -1074,6 +1074,7 @@
     <string name="stems_approximate_note">This split is a spectral approximation, not a neural one: bass is the low band, vocals the centred mid band, drums the remaining mid band and other the stereo side signal.</string>
     <string name="stems_run_offline">Separate stems (offline)</string>
     <string name="stems_done">Separated %1$d stems.</string>
+    <string name="stems_done_approximate">Separated %1$d stems using the offline filter approximation.</string>
     <string name="recipes_run">Run recipe</string>
     <string name="recipes_ran">Recipe applied.</string>
     <string name="recipes_no_steps">This recipe has no steps that can run without a source file.</string>

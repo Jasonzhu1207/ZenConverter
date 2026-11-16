@@ -1292,6 +1292,7 @@ internal class UiText(private val context: Context) {
     fun stemsApproximateNote(): String = text(R.string.stems_approximate_note)
     fun stemsRunOffline(): String = text(R.string.stems_run_offline)
     fun stemsDone(count: Int): String = text(R.string.stems_done, count)
+    fun stemsDoneApproximate(count: Int): String = text(R.string.stems_done_approximate, count)
     fun recipesRun(): String = text(R.string.recipes_run)
     fun recipesRan(): String = text(R.string.recipes_ran)
     fun recipesNoSteps(): String = text(R.string.recipes_no_steps)
