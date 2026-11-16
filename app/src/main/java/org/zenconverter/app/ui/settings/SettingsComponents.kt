@@ -30,6 +30,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -108,7 +109,7 @@ internal fun GlassCard(
     Box(
         modifier = modifier
             .clip(shape)
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = GlassSurfaceAlpha))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = glassSurfaceAlpha()))
             .border(ZenDimensions.BorderWidth, MaterialTheme.colorScheme.outlineVariant, shape)
             .then(if (onClick != null) Modifier.bounceClick(onClick = onClick, scaleDown = 0.97f) else Modifier)
     ) {
@@ -130,11 +131,23 @@ internal fun GlassCard(
 
 internal val GlassCardShape = RoundedCornerShape(18.dp)
 
-/** Card fill opacity: high enough to keep text legible over the backdrop. */
-private const val GlassSurfaceAlpha = 0.72f
-
 /** Opacity of the top sheen that fakes the preview's blurred highlight. */
 private const val GlassSheenAlpha = 0.55f
+
+/**
+ * Card fill opacity, matched to the reference design per mode: lighter in light,
+ * a touch more open in dark, and denser on OLED black so the card stays readable
+ * there without a glow behind it.
+ */
+@Composable
+private fun glassSurfaceAlpha(): Float {
+    val background = MaterialTheme.colorScheme.background.luminance()
+    return when {
+        background > 0.5f -> 0.62f
+        background < 0.001f -> 0.72f
+        else -> 0.55f
+    }
+}
 
 /**
  * Paints the soft radial glows the preview uses behind the glass cards. Without
