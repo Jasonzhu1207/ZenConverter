@@ -99,7 +99,7 @@ object AudioAnalysis {
         while (offset + fftSize <= mono.size && frames < 64) {
             for (index in 0 until fftSize) real[index] = (mono[offset + index] * window[index]).toDouble()
             java.util.Arrays.fill(imaginary, 0.0)
-            fft(real, imaginary)
+            Fft.transform(real, imaginary)
             val binHz = sampleRateHz.toDouble() / fftSize
             for (bin in 1 until fftSize / 2) {
                 val frequency = bin * binHz
@@ -154,49 +154,5 @@ object AudioAnalysis {
         }
         val denominator = sqrt(chromaVariance * profileVariance)
         return if (denominator <= 1e-12) 0.0 else numerator / denominator
-    }
-
-    /** In-place iterative radix-2 Cooley-Tukey FFT. */
-    private fun fft(real: DoubleArray, imaginary: DoubleArray) {
-        val n = real.size
-        var j = 0
-        for (i in 1 until n) {
-            var bit = n shr 1
-            while (j and bit != 0) {
-                j = j xor bit
-                bit = bit shr 1
-            }
-            j = j or bit
-            if (i < j) {
-                real[i] = real[j].also { real[j] = real[i] }
-                imaginary[i] = imaginary[j].also { imaginary[j] = imaginary[i] }
-            }
-        }
-        var length = 2
-        while (length <= n) {
-            val angle = -2.0 * Math.PI / length
-            val wReal = kotlin.math.cos(angle)
-            val wImaginary = kotlin.math.sin(angle)
-            var i = 0
-            while (i < n) {
-                var currentReal = 1.0
-                var currentImaginary = 0.0
-                for (k in 0 until length / 2) {
-                    val evenIndex = i + k
-                    val oddIndex = i + k + length / 2
-                    val oddReal = real[oddIndex] * currentReal - imaginary[oddIndex] * currentImaginary
-                    val oddImaginary = real[oddIndex] * currentImaginary + imaginary[oddIndex] * currentReal
-                    real[oddIndex] = real[evenIndex] - oddReal
-                    imaginary[oddIndex] = imaginary[evenIndex] - oddImaginary
-                    real[evenIndex] += oddReal
-                    imaginary[evenIndex] += oddImaginary
-                    val nextReal = currentReal * wReal - currentImaginary * wImaginary
-                    currentImaginary = currentReal * wImaginary + currentImaginary * wReal
-                    currentReal = nextReal
-                }
-                i += length
-            }
-            length = length shl 1
-        }
     }
 }
