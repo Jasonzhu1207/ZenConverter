@@ -26,8 +26,12 @@ import org.zenconverter.app.conversion.TargetId
 import org.zenconverter.app.audio.CompressorPreset
 import org.zenconverter.app.audio.EqualizerPreset
 import org.zenconverter.app.audio.LoudnessTarget
+import org.zenconverter.app.audio.MasteringBand
+import org.zenconverter.app.audio.MasteringModel
+import org.zenconverter.app.audio.MasteringTarget
 import org.zenconverter.app.audio.ReverbPreset
 import org.zenconverter.app.audio.SilenceRemovalMode
+import org.zenconverter.app.audio.StemKind
 import org.zenconverter.app.audio.VoiceChangerPreset
 import org.zenconverter.app.studio.QualityEstimator
 import org.zenconverter.app.studio.SmartPreset
@@ -1715,5 +1719,174 @@ internal class UiText(private val context: Context) {
             "Styled subtitle" -> text(R.string.text_option_value_styled_subtitle)
             else -> value
         }
+    }
+
+    // Mastering --------------------------------------------------------------
+    fun studioSectionMastering(): String = text(R.string.studio_section_mastering)
+    fun studioMastering(): String = text(R.string.studio_mastering)
+    fun studioMasteringDesc(): String = text(R.string.studio_mastering_desc)
+    fun studioStemBalance(): String = text(R.string.studio_stem_balance)
+    fun studioStemBalanceDesc(): String = text(R.string.studio_stem_balance_desc)
+    fun studioEq(): String = text(R.string.studio_eq)
+    fun studioEqDesc(): String = text(R.string.studio_eq_desc)
+    fun studioSpectrum(): String = text(R.string.studio_spectrum)
+    fun studioSpectrumDesc(): String = text(R.string.studio_spectrum_desc)
+    fun studioLoudness(): String = text(R.string.studio_loudness)
+    fun studioLoudnessDesc(): String = text(R.string.studio_loudness_desc)
+    fun studioRadioReady(): String = text(R.string.studio_radio_ready)
+    fun studioRadioReadyDesc(): String = text(R.string.studio_radio_ready_desc)
+    fun studioLoudnessNorm(): String = text(R.string.studio_loudness_norm)
+    fun studioLoudnessNormDesc(): String = text(R.string.studio_loudness_norm_desc)
+    fun studioExciter(): String = text(R.string.studio_exciter)
+    fun studioExciterDesc(): String = text(R.string.studio_exciter_desc)
+
+    fun masteringTitle(): String = text(R.string.mastering_title)
+    fun masteringLoad(): String = text(R.string.mastering_load)
+    fun masteringEmpty(): String = text(R.string.mastering_empty)
+    fun masteringStart(): String = text(R.string.mastering_start)
+    fun masteringStop(): String = text(R.string.mastering_stop)
+    fun masteringReset(): String = text(R.string.mastering_reset)
+    fun masteringTarget(): String = text(R.string.mastering_target)
+    fun masteringRunning(): String = text(R.string.mastering_running)
+    fun masteringAnalyzing(): String = text(R.string.mastering_analyzing)
+    fun masteringSeparating(): String = text(R.string.mastering_separating)
+    fun masteringBalancing(): String = text(R.string.mastering_balancing)
+    fun masteringEqStep(): String = text(R.string.mastering_eq)
+    fun masteringDynamicsStep(): String = text(R.string.mastering_dynamics)
+    fun masteringLoudnessStep(): String = text(R.string.mastering_loudness_step)
+    fun masteringDone(lufs: String, truePeak: String): String =
+        text(R.string.mastering_done, lufs, truePeak)
+    fun masteringFailed(): String = text(R.string.mastering_failed)
+    fun masteringStopped(): String = text(R.string.mastering_stopped)
+    fun masteringExport(): String = text(R.string.mastering_export)
+    fun masteringExported(): String = text(R.string.mastering_exported)
+    fun masteringAb(): String = text(R.string.mastering_ab)
+    fun masteringShowCommand(): String = text(R.string.mastering_show_command)
+    fun masteringHideCommand(): String = text(R.string.mastering_hide_command)
+    fun masteringStepUpload(): String = text(R.string.mastering_step_upload)
+    fun masteringStepUploadDesc(): String = text(R.string.mastering_step_upload_desc)
+    fun masteringStepStems(): String = text(R.string.mastering_step_stems)
+    fun masteringStepStemsDesc(): String = text(R.string.mastering_step_stems_desc)
+    fun masteringStepBalance(): String = text(R.string.mastering_step_balance)
+    fun masteringStepBalanceDesc(): String = text(R.string.mastering_step_balance_desc)
+    fun masteringStepEq(): String = text(R.string.mastering_step_eq)
+    fun masteringStepEqDesc(): String = text(R.string.mastering_step_eq_desc)
+    fun masteringStepDynamics(): String = text(R.string.mastering_step_dynamics)
+    fun masteringStepDynamicsDesc(): String = text(R.string.mastering_step_dynamics_desc)
+    fun masteringStepLoudness(): String = text(R.string.mastering_step_loudness)
+    fun masteringStepLoudnessDesc(): String = text(R.string.mastering_step_loudness_desc)
+    fun masteringStemsTitle(): String = text(R.string.mastering_stems_title)
+    fun masteringStemsDesc(): String = text(R.string.mastering_stems_desc)
+    fun masteringStemsEmpty(): String = text(R.string.mastering_stems_empty)
+    fun masteringStemsRun(): String = text(R.string.mastering_stems_run)
+    fun masteringAutoBalance(): String = text(R.string.mastering_auto_balance)
+    fun masteringResetBalance(): String = text(R.string.mastering_reset_balance)
+    fun masteringBalanceNote(): String = text(R.string.mastering_balance_note)
+    fun masteringSpectrumTitle(): String = text(R.string.mastering_spectrum_title)
+    fun masteringSpectrumAnalyze(): String = text(R.string.mastering_spectrum_analyze)
+    fun masteringSpectrumFlatten(): String = text(R.string.mastering_spectrum_flatten)
+    fun masteringSpectrumBalanced(): String = text(R.string.mastering_spectrum_balanced)
+    fun masteringSpectrumEmpty(): String = text(R.string.mastering_spectrum_empty)
+    fun masteringSpectrumLegendAudio(): String = text(R.string.mastering_spectrum_legend_audio)
+    fun masteringSpectrumLegendReference(): String = text(R.string.mastering_spectrum_legend_reference)
+    fun masteringSpectrumLegendPeak(): String = text(R.string.mastering_spectrum_legend_peak)
+    fun masteringEqTitle(): String = text(R.string.mastering_eq_title)
+    fun masteringEqDesc(): String = text(R.string.mastering_eq_desc)
+    fun masteringEqAuto(): String = text(R.string.mastering_eq_auto)
+    fun masteringEqFlat(): String = text(R.string.mastering_eq_flat)
+    fun masteringEqGain(value: String): String = text(R.string.mastering_eq_gain, value)
+    fun masteringEqQ(value: String): String = text(R.string.mastering_eq_q, value)
+    fun masteringLoudnessTitle(): String = text(R.string.mastering_loudness_title)
+    fun masteringLoudnessIntegrated(): String = text(R.string.mastering_loudness_integrated)
+    fun masteringLoudnessIntegratedHint(value: String): String =
+        text(R.string.mastering_loudness_integrated_hint, value)
+    fun masteringLoudnessTruePeak(): String = text(R.string.mastering_loudness_true_peak)
+    fun masteringLoudnessTruePeakHint(value: String): String =
+        text(R.string.mastering_loudness_true_peak_hint, value)
+    fun masteringLoudnessRange(): String = text(R.string.mastering_loudness_range)
+    fun masteringLoudnessRangeHint(): String = text(R.string.mastering_loudness_range_hint)
+    fun masteringLoudnessDynamics(): String = text(R.string.mastering_loudness_dynamics)
+    fun masteringLoudnessDynamicsHint(): String = text(R.string.mastering_loudness_dynamics_hint)
+    fun masteringLoudnessPlaceholder(): String = text(R.string.mastering_loudness_placeholder)
+    fun masteringCeilingLabel(value: String): String = text(R.string.mastering_ceiling_label, value)
+    fun masteringLoudnessCeiling(value: String): String = text(R.string.mastering_loudness_ceiling, value)
+    fun masteringClipGuard(): String = text(R.string.mastering_clip_guard)
+    fun masteringAdaptiveLimiting(): String = text(R.string.mastering_adaptive_limiting)
+    fun masteringDeEsser(): String = text(R.string.mastering_de_esser)
+    fun masteringExciterSwitch(): String = text(R.string.mastering_exciter_switch)
+    fun masteringMonoCheck(): String = text(R.string.mastering_mono_check)
+    fun masteringShapeTitle(): String = text(R.string.mastering_shape_title)
+    fun masteringShapeDesc(): String = text(R.string.mastering_shape_desc)
+    fun masteringCheckTitle(): String = text(R.string.mastering_check_title)
+    fun masteringCheckLoudness(): String = text(R.string.mastering_check_loudness)
+    fun masteringCheckTruePeak(): String = text(R.string.mastering_check_true_peak)
+    fun masteringCheckRange(): String = text(R.string.mastering_check_range)
+    fun masteringCheckClipping(): String = text(R.string.mastering_check_clipping)
+    fun masteringCheckPhase(): String = text(R.string.mastering_check_phase)
+    fun masteringCheckSampleRate(): String = text(R.string.mastering_check_sample_rate)
+    fun masteringCheckClippingYes(): String = text(R.string.mastering_check_clipping_yes)
+    fun masteringCheckClippingNo(): String = text(R.string.mastering_check_clipping_no)
+    fun masteringCheckMonoSafe(): String = text(R.string.mastering_check_mono_safe)
+    fun masteringCheckKept(value: String): String = text(R.string.mastering_check_kept, value)
+    fun masteringCheckValue(actual: String, target: String): String =
+        text(R.string.mastering_check_value, actual, target)
+
+    fun masteringBandLabel(band: MasteringBand): String = when (band) {
+        MasteringBand.HighPass -> text(R.string.mastering_band_high_pass)
+        MasteringBand.Body -> text(R.string.mastering_band_body)
+        MasteringBand.MudCut -> text(R.string.mastering_band_mud_cut)
+        MasteringBand.Warmth -> text(R.string.mastering_band_warmth)
+        MasteringBand.Presence -> text(R.string.mastering_band_presence)
+        MasteringBand.Air -> text(R.string.mastering_band_air)
+    }
+
+    fun masteringTargetLabel(target: MasteringTarget): String = when (target) {
+        MasteringTarget.Streaming -> text(R.string.ui_audio_effects_preset_streaming)
+        MasteringTarget.Club -> text(R.string.mastering_target_club)
+        MasteringTarget.Podcast -> text(R.string.ui_audio_effects_preset_podcast)
+        MasteringTarget.AppleDigital -> text(R.string.mastering_target_apple)
+    }
+
+    fun masteringTargetNote(target: MasteringTarget): String = when (target) {
+        MasteringTarget.Streaming -> text(R.string.mastering_target_streaming_note)
+        MasteringTarget.Club -> text(R.string.mastering_target_club_note)
+        MasteringTarget.Podcast -> text(R.string.mastering_target_podcast_note)
+        MasteringTarget.AppleDigital -> text(R.string.mastering_target_apple_note)
+    }
+
+    fun masteringShapeLabel(shape: MasteringModel.WaveformShape): String = when (shape) {
+        MasteringModel.WaveformShape.Thick -> text(R.string.mastering_shape_thick)
+        MasteringModel.WaveformShape.Dynamic -> text(R.string.mastering_shape_dynamic)
+        MasteringModel.WaveformShape.Sparse -> text(R.string.mastering_shape_sparse)
+    }
+
+    fun masteringShapeNote(shape: MasteringModel.WaveformShape): String = when (shape) {
+        MasteringModel.WaveformShape.Thick -> text(R.string.mastering_shape_thick_note)
+        MasteringModel.WaveformShape.Dynamic -> text(R.string.mastering_shape_dynamic_note)
+        MasteringModel.WaveformShape.Sparse -> text(R.string.mastering_shape_sparse_note)
+    }
+
+    fun masteringVerdictLabel(verdict: MasteringModel.Verdict): String = when (verdict) {
+        MasteringModel.Verdict.Healthy -> text(R.string.mastering_verdict_healthy)
+        MasteringModel.Verdict.Clipping -> text(R.string.mastering_verdict_clipping)
+        MasteringModel.Verdict.TooQuiet -> text(R.string.mastering_verdict_too_quiet)
+        MasteringModel.Verdict.OverCompressed -> text(R.string.mastering_verdict_over_compressed)
+    }
+
+    fun masteringVerdictNote(verdict: MasteringModel.Verdict): String = when (verdict) {
+        MasteringModel.Verdict.Healthy -> text(R.string.mastering_verdict_healthy_note)
+        MasteringModel.Verdict.Clipping -> text(R.string.mastering_verdict_clipping_note)
+        MasteringModel.Verdict.TooQuiet -> text(R.string.mastering_verdict_too_quiet_note)
+        MasteringModel.Verdict.OverCompressed -> text(R.string.mastering_verdict_over_compressed_note)
+    }
+
+    fun masteringTargetLufs(value: String): String = text(R.string.mastering_target_lufs_value, value)
+    fun masteringTargetPeak(value: String): String = text(R.string.mastering_target_peak_value, value)
+
+    fun stemLabel(kind: StemKind): String = when (kind) {
+        StemKind.Vocals -> stemsVocals()
+        StemKind.Drums -> stemsDrums()
+        StemKind.Bass -> text(R.string.stems_bass)
+        StemKind.Other -> text(R.string.stems_other)
     }
 }
