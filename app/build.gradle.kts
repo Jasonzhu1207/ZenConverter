@@ -179,6 +179,8 @@ dependencies {
         )
     )
     implementation(files(ffmpegKitLocalAar))
+    implementation("org.apache.commons:commons-compress:1.27.1")
+    implementation("org.tukaani:xz:1.10")
     if (smartExceptionCommonLocalJar.isFile && smartExceptionJavaLocalJar.isFile) {
         implementation(files(smartExceptionCommonLocalJar, smartExceptionJavaLocalJar))
     } else {

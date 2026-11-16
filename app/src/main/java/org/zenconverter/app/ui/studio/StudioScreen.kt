@@ -19,6 +19,9 @@ import androidx.compose.material.icons.rounded.Accessibility
 import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BatterySaver
+import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.material.icons.rounded.MenuBook
+import androidx.compose.material.icons.rounded.PictureAsPdf
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Compare
 import androidx.compose.material.icons.rounded.DeleteSweep
@@ -112,10 +115,14 @@ internal fun StudioScreen(
                 StudioEntry(Icons.Rounded.Wifi, texts.studioWifi(), texts.studioWifiDesc(), AppScreen.StudioWifi, onNavigate)
                 StudioEntry(Icons.Rounded.DeleteSweep, texts.studioCleaner(), texts.studioCleanerDesc(), AppScreen.StudioCleaner, onNavigate)
                 StudioEntry(Icons.Rounded.FolderZip, texts.archiveTitle(), texts.archiveDesc(), AppScreen.StudioArchive, onNavigate)
+                StudioEntry(Icons.AutoMirrored.Rounded.CallSplit, texts.pdfSplitTitle(), texts.pdfSplitDesc(), AppScreen.StudioPdfSplit, onNavigate)
+                StudioEntry(Icons.Rounded.PictureAsPdf, texts.pdfCreateTitle(), texts.pdfCreateDesc(), AppScreen.StudioPdfCreate, onNavigate)
+                StudioEntry(Icons.Rounded.MenuBook, texts.epubTitle(), texts.epubDesc(), AppScreen.StudioEpub, onNavigate)
                 StudioEntry(Icons.Rounded.FolderShared, texts.folderWatchTitle(), texts.folderWatchDesc(), AppScreen.StudioFolderWatch, onNavigate)
                 StudioEntry(Icons.Rounded.Compare, texts.privacyScrubTitle(), texts.privacyScrubDesc(), AppScreen.MetadataSecurity, onNavigate)
                 StudioEntry(Icons.Rounded.BatterySaver, texts.guardTitle(), texts.guardDesc(), AppScreen.StudioGuard, onNavigate)
-                StudioEntry(Icons.Rounded.Accessibility, texts.studioAccessibility(), texts.studioAccessibilityDesc(), AppScreen.StudioAccessibility, onNavigate, showDivider = false)
+                StudioEntry(Icons.Rounded.Accessibility, texts.studioAccessibility(), texts.studioAccessibilityDesc(), AppScreen.StudioAccessibility, onNavigate)
+                StudioEntry(Icons.Rounded.BugReport, texts.crashReportingTitle(), texts.crashReportingDesc(), AppScreen.StudioCrashReports, onNavigate, showDivider = false)
             }
         }
     }

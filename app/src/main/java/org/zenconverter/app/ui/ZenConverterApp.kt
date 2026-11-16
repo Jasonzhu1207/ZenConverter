@@ -127,6 +127,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -184,6 +185,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -225,6 +227,10 @@ import org.zenconverter.app.ui.studio.ArchiveToolsScreen
 import org.zenconverter.app.ui.studio.FolderWatchScreen
 import org.zenconverter.app.ui.studio.SplitSilenceScreen
 import org.zenconverter.app.ui.studio.CutTranscriptScreen
+import org.zenconverter.app.ui.studio.PdfSplitScreen
+import org.zenconverter.app.ui.studio.PdfCreateScreen
+import org.zenconverter.app.ui.studio.EpubToolsScreen
+import org.zenconverter.app.ui.studio.CrashReportScreen
 import org.zenconverter.app.audio.AudioEffects
 import org.zenconverter.app.audio.CompressorPreset
 import org.zenconverter.app.audio.EqualizerPreset
@@ -332,6 +338,7 @@ enum class FileCategory(
             TargetFormat(TargetId.Mp3, "mp3", "Re-encode"),
             TargetFormat(TargetId.Wav, "wav", "Re-encode"),
             TargetFormat(TargetId.Flac, "flac", "Re-encode"),
+            TargetFormat(TargetId.Alac, "alac", "Apple lossless"),
             TargetFormat(TargetId.Wma, "wma", "Re-encode"),
             TargetFormat(TargetId.Opus, "opus", "Re-encode")
         )
@@ -563,7 +570,11 @@ internal enum class AppScreen {
     StudioArchive,
     StudioFolderWatch,
     StudioSplitSilence,
-    StudioCutTranscript
+    StudioCutTranscript,
+    StudioPdfSplit,
+    StudioPdfCreate,
+    StudioEpub,
+    StudioCrashReports
 }
 
 internal const val ZENCONVERTER_REPOSITORY_URL = "https://github.com/Jasonzhu1207/ZenConverter"
@@ -1051,7 +1062,17 @@ fun ZenConverterApp(
             androidx.compose.ui.unit.LayoutDirection.Ltr
         }
     ) {
-        MaterialTheme(colorScheme = zenConverterColorScheme(context, accent, isDark, isOled)) {
+        val baseTypography = MaterialTheme.typography
+        val largeText = StudioStore.largeText.value
+        val typography = if (largeText) {
+            remember(baseTypography) { scaledTypography(baseTypography, LARGE_TEXT_SCALE) }
+        } else {
+            baseTypography
+        }
+        MaterialTheme(
+            colorScheme = zenConverterColorScheme(context, accent, isDark, isOled),
+            typography = typography
+        ) {
             Surface(
                 modifier = Modifier.fillMaxSize(),
                 color = MaterialTheme.colorScheme.background
@@ -1731,6 +1752,10 @@ private fun ZenConverterContent(
                 AppScreen.StudioArchive -> ArchiveToolsScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioFolderWatch -> FolderWatchScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioSplitSilence -> SplitSilenceScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioPdfSplit -> PdfSplitScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioPdfCreate -> PdfCreateScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioEpub -> EpubToolsScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioCrashReports -> CrashReportScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioCutTranscript -> CutTranscriptScreen(texts, onBack = { navigateBack() })
                 AppScreen.Home -> Unit
             }
@@ -8197,6 +8222,36 @@ private fun zenConverterColorScheme(
             onError = Color.White
         )
     }
+}
+
+/** Multiplier applied to every text style when the large-text preference is on. */
+private const val LARGE_TEXT_SCALE = 1.25f
+
+/**
+ * Returns a copy of [base] with each text style's size and line height scaled by
+ * [scale]. Used by the accessibility "large text" preference so the whole UI
+ * grows, not just the studio pages.
+ */
+private fun scaledTypography(base: Typography, scale: Float): Typography {
+    fun TextStyle.scaled(): TextStyle =
+        copy(fontSize = fontSize * scale, lineHeight = lineHeight * scale)
+    return Typography(
+        displayLarge = base.displayLarge.scaled(),
+        displayMedium = base.displayMedium.scaled(),
+        displaySmall = base.displaySmall.scaled(),
+        headlineLarge = base.headlineLarge.scaled(),
+        headlineMedium = base.headlineMedium.scaled(),
+        headlineSmall = base.headlineSmall.scaled(),
+        titleLarge = base.titleLarge.scaled(),
+        titleMedium = base.titleMedium.scaled(),
+        titleSmall = base.titleSmall.scaled(),
+        bodyLarge = base.bodyLarge.scaled(),
+        bodyMedium = base.bodyMedium.scaled(),
+        bodySmall = base.bodySmall.scaled(),
+        labelLarge = base.labelLarge.scaled(),
+        labelMedium = base.labelMedium.scaled(),
+        labelSmall = base.labelSmall.scaled()
+    )
 }
 
 private fun accentColorFromPreference(value: String?): AccentColorOption {

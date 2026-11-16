@@ -1,6 +1,8 @@
 package org.zenconverter.app.ui.studio
 
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,6 +28,7 @@ import kotlinx.coroutines.withContext
 import org.zenconverter.app.audio.StudioOutput
 import org.zenconverter.app.studio.StudioStore
 import org.zenconverter.app.system.BatteryThermalGuard
+import org.zenconverter.app.system.CrashReporter
 import org.zenconverter.app.system.LocalTransferServer
 import org.zenconverter.app.system.StorageCleaner
 import org.zenconverter.app.ui.UiText
@@ -35,6 +38,7 @@ import org.zenconverter.app.ui.settings.SettingsRow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Accessibility
 import androidx.compose.material.icons.rounded.BatterySaver
+import androidx.compose.material.icons.rounded.BugReport
 import java.io.File
 
 @Composable
@@ -262,6 +266,76 @@ internal fun AccessibilityScreen(texts: UiText, onBack: () -> Unit) {
                         },
                         showDivider = false
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun CrashReportScreen(texts: UiText, onBack: () -> Unit) {
+    val context = LocalContext.current
+    var enabled by remember { mutableStateOf(CrashReporter.isEnabled(context)) }
+    var reportCount by remember { mutableStateOf(CrashReporter.reports(context).size) }
+    var status by remember { mutableStateOf<String?>(null) }
+    val shareLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
+
+    SettingsPage(texts.crashReportingTitle(), texts.studioBack(), onBack) {
+        item("crash-body") {
+            InsetGroupCard {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        texts.crashReportingDesc(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    SettingsRow(
+                        badgeIcon = Icons.Rounded.BugReport,
+                        title = texts.crashReportingEnable(),
+                        trailingContent = {
+                            androidx.compose.material3.Switch(
+                                checked = enabled,
+                                onCheckedChange = {
+                                    enabled = it
+                                    CrashReporter.setEnabled(context, it)
+                                }
+                            )
+                        },
+                        showDivider = false
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            enabled = reportCount > 0,
+                            onClick = {
+                                val latest = CrashReporter.reports(context).firstOrNull() ?: return@OutlinedButton
+                                val uri = androidx.core.content.FileProvider.getUriForFile(
+                                    context, "${context.packageName}.fileprovider", latest
+                                )
+                                val share = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                shareLauncher.launch(android.content.Intent.createChooser(share, texts.crashReportingShare()))
+                            }
+                        ) { Text(texts.crashReportingShare()) }
+                        OutlinedButton(
+                            enabled = reportCount > 0,
+                            onClick = {
+                                CrashReporter.deleteAll(context)
+                                reportCount = 0
+                                status = texts.crashReportingNone()
+                            }
+                        ) { Text(texts.crashReportingDelete()) }
+                    }
+                    Text(
+                        if (reportCount == 0) texts.crashReportingNone() else texts.crashReportingCount(reportCount),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    status?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
         }

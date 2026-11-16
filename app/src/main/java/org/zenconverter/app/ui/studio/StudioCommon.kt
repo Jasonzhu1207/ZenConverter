@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import org.zenconverter.app.studio.StudioStore
 import java.io.File
 
 /** Remembers a single-file picker restricted to audio. */
@@ -114,3 +115,28 @@ internal fun rememberStudioPlayer(): StudioPlayer {
 
 internal fun tempOutput(context: android.content.Context, prefix: String, extension: String): File =
     File.createTempFile(prefix, ".$extension", context.cacheDir)
+
+/**
+ * Speaks short result messages when the accessibility "audio descriptions"
+ * preference is on, so a screen reader user hears what an edit produced without
+ * having to hunt for the status line. A no-op when the preference is off.
+ */
+@Composable
+internal fun rememberResultAnnouncer(): (String) -> Unit {
+    val context = LocalContext.current
+    val tts = remember {
+        runCatching { android.speech.tts.TextToSpeech(context) { } }.getOrNull()
+    }
+    DisposableEffect(tts) {
+        onDispose { runCatching { tts?.shutdown() } }
+    }
+    return remember(tts) {
+        { message ->
+            if (StudioStore.audioDescriptions.value && message.isNotBlank()) {
+                runCatching {
+                    tts?.speak(message, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "zen-result")
+                }
+            }
+        }
+    }
+}

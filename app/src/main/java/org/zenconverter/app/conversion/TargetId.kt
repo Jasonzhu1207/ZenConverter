@@ -12,6 +12,7 @@ enum class TargetId(val key: String) {
     Mp3("MP3"),
     Wav("WAV"),
     Flac("FLAC"),
+    Alac("ALAC"),
     Wma("WMA"),
     Opus("OPUS"),
     Jpg("JPG"),

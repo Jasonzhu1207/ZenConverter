@@ -314,6 +314,7 @@ class MainActivity : AppCompatActivity() {
         refreshEsrganModelState()
         refreshRifeModelState()
         refreshOfficeFontState()
+        org.zenconverter.app.system.CrashReporter.installIfEnabled(this)
         setContent {
             LaunchedEffect(QueueInbox.size) {
                 if (QueueInbox.size == 0) return@LaunchedEffect

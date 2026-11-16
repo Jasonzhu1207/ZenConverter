@@ -5459,6 +5459,14 @@ class ConversionService : Service() {
                 requiredEncoder = FFMPEG_FLAC_ENCODER,
                 supportsAttachedPicture = true
             )
+            "alac" -> FfmpegAudioProfile(
+                codec = FFMPEG_ALAC_ENCODER,
+                format = "ipod",
+                useFastStart = true,
+                supportsBitrate = false,
+                requiredEncoder = FFMPEG_ALAC_ENCODER,
+                supportsAttachedPicture = true
+            )
             "wma" -> FfmpegAudioProfile(
                 codec = FFMPEG_WMA_ENCODER,
                 format = "asf",
@@ -7253,6 +7261,7 @@ class ConversionService : Service() {
                     "m4a" -> OutputProfile(extension = "m4a", mimeType = MIME_TYPE_M4A, kind = OutputMediaKind.Audio)
                     "wav" -> OutputProfile(extension = "wav", mimeType = MIME_TYPE_WAV, kind = OutputMediaKind.Audio)
                     "flac" -> OutputProfile(extension = "flac", mimeType = MIME_TYPE_FLAC, kind = OutputMediaKind.Audio)
+                    "alac" -> OutputProfile(extension = "m4a", mimeType = MIME_TYPE_ALAC, kind = OutputMediaKind.Audio)
                     "wma" -> OutputProfile(extension = "wma", mimeType = MIME_TYPE_WMA, kind = OutputMediaKind.Audio)
                     "opus" -> OutputProfile(extension = "opus", mimeType = MIME_TYPE_OPUS, kind = OutputMediaKind.Audio)
                     else -> null
@@ -7339,6 +7348,7 @@ class ConversionService : Service() {
             normalized.contains("m4a") || normalized.contains("aac") -> "m4a"
             normalized.contains("wav") -> "wav"
             normalized.contains("flac") -> "flac"
+            normalized.contains("alac") -> "alac"
             normalized.contains("wma") -> "wma"
             normalized.contains("opus") -> "opus"
             else -> null
@@ -7814,6 +7824,7 @@ class ConversionService : Service() {
         private const val MP3_VBR_QUALITY_MAX = 9
         private const val FFMPEG_WAV_ENCODER = "pcm_s16le"
         private const val FFMPEG_FLAC_ENCODER = "flac"
+        private const val FFMPEG_ALAC_ENCODER = "alac"
         private const val FFMPEG_WMA_ENCODER = "wmav2"
         private const val FFMPEG_OPUS_ENCODER = "libopus"
         private val OPUS_SUPPORTED_SAMPLE_RATES = setOf(48_000, 24_000, 16_000, 12_000, 8_000)
@@ -7848,6 +7859,7 @@ class ConversionService : Service() {
         private const val MIME_TYPE_M4A = "audio/mp4"
         private const val MIME_TYPE_WAV = "audio/wav"
         private const val MIME_TYPE_FLAC = "audio/flac"
+        private const val MIME_TYPE_ALAC = "audio/mp4"
         private const val MIME_TYPE_WMA = "audio/x-ms-wma"
         private const val MIME_TYPE_OPUS = "audio/opus"
         private const val MIME_TYPE_JPEG = "image/jpeg"

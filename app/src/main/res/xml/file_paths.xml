@@ -6,4 +6,7 @@
     <files-path
         name="internal_update_apks"
         path="updates/" />
+    <cache-path
+        name="crash_reports"
+        path="crash-reports/" />
 </paths>

@@ -82,6 +82,10 @@ work within the stated compatibility limits.
 | Office conversion | Beta | DOCX / PPTX / XLSX to PDF, TXT, or MD on the device. Chinese uses system fonts, with optional Noto CJK download. Layout can differ from Office; files are capped at 64 MiB. |
 | Font conversion | Stable | Convert between TTF, OTF, WOFF, and WOFF2. The output gets .ttf or .otf to match the font. |
 | Subtitle & lyrics conversion | Stable | Convert between SRT, VTT, LRC, and ASS. LRC handles multiple timestamps, `[offset:]`, and GBK/GB18030 Chinese files. |
+| Audio & tools studio | Beta | A local-first editing hub: waveform trim with fades, multi-track mixer, mic recorder, voice changer, offline text to speech, noise and silence removal, tag and cover art editing, ringtone maker, equalizer, loudness normalisation, compressor and reverb, gapless splitter, recipes, A/B player, conversion history, plugins, a local Wi-Fi transfer server, storage cleaner, folder watching and an accessibility mode. Nothing is uploaded and no account is needed. |
+| PDF and ebook tools | Beta | Split a PDF by page range, build a PDF from text, Markdown or HTML, and package text into an EPUB or pull text back out of one. Runs on device with PDFBox and pure Kotlin. |
+| Archive tools | Stable | Create and extract ZIP, TAR and 7z archives in-process, with entry-traversal, size and count guards. |
+| Crash reports (opt-in) | Stable | Off by default. When enabled, a crash writes a report to the device only; nothing is uploaded, and reports can be shared or deleted from the app. |
 
 Also included: import from share/open-with, the gallery, or a whole folder; queue different file types together and set each one separately; share or open results right away. The app supports Material You colors, dark mode with an optional OLED black theme, and English, Simplified/Traditional Chinese, and French.
 
