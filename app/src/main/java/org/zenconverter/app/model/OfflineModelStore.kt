@@ -182,11 +182,16 @@ object WhisperModelManager {
     ): File = OfflineModelStore.download(context, CATEGORY, spec, onProgress)
 
     /**
-     * The Whisper runtime is a native library that this build does not bundle, so
-     * a downloaded model cannot be executed yet. The screen reports this instead
-     * of pretending a transcript was produced.
+     * Whether this build can actually run a downloaded model. The Whisper
+     * runtime is an optional native library (`libzen_whisper.so`, built from
+     * `native/whisper-jni`); when it is not bundled the model can still be
+     * downloaded and verified, but no transcript is produced.
+     *
+     * Resolved through [WhisperNative] so a build that ships the runtime needs no
+     * Kotlin change here.
      */
-    const val INFERENCE_AVAILABLE = false
+    val INFERENCE_AVAILABLE: Boolean
+        get() = org.zenconverter.app.model.WhisperNative.ensureLoaded()
 }
 
 /** Offline vocal/drum/bass separation model (Demucs/Spleeter-style, via NCNN). */
@@ -218,9 +223,11 @@ object StemSeparationModelManager {
     ): File = OfflineModelStore.download(context, CATEGORY, spec, onProgress)
 
     /**
-     * Upstream Demucs publishes source releases with no downloadable weights and
-     * no pinned digest, so this build cannot offer a verified model download.
-     * The stems screen uses the built-in FFmpeg approximation instead.
+     * Whether this build can run a model-backed separation. The separator is
+     * compiled into `libzen_ncnn.so` (see `native/ncnn-jni`); when those symbols
+     * are absent the screen keeps the built-in FFmpeg approximation instead of
+     * failing.
      */
-    const val INFERENCE_AVAILABLE = false
+    val INFERENCE_AVAILABLE: Boolean
+        get() = org.zenconverter.app.model.StemNative.ensureLoaded()
 }

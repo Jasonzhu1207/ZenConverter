@@ -29,9 +29,12 @@ import kotlinx.coroutines.launch
 import org.zenconverter.app.audio.AudioDecoder
 import org.zenconverter.app.audio.AudioStudioEngine
 import org.zenconverter.app.audio.StemKind
+import org.zenconverter.app.audio.StemSplitter
 import org.zenconverter.app.audio.StudioOutput
 import org.zenconverter.app.audio.SubtitleExport
 import org.zenconverter.app.audio.TranscriptSegment
+import org.zenconverter.app.audio.TranscriptionEngine
+import org.zenconverter.app.audio.WhisperTranscriptParser
 import org.zenconverter.app.conversion.ConversionTaskStore
 import org.zenconverter.app.model.WhisperModelManager
 import org.zenconverter.app.recipe.ConversionRecipe
@@ -55,6 +58,7 @@ internal fun TranscribeScreen(texts: UiText, onBack: () -> Unit) {
     var status by remember { mutableStateOf<String?>(null) }
     var downloadProgress by remember { mutableStateOf<Float?>(null) }
     var modelReady by remember { mutableStateOf(WhisperModelManager.isDownloaded(context)) }
+    var segments by remember { mutableStateOf<List<TranscriptSegment>>(emptyList()) }
     val pickAudio = rememberAudioPicker { uri -> sourceUri = uri }
     val engineAvailable = WhisperModelManager.INFERENCE_AVAILABLE
 
@@ -126,11 +130,22 @@ internal fun TranscribeScreen(texts: UiText, onBack: () -> Unit) {
                             val uri = sourceUri ?: return@Button
                             busy = true
                             scope.launch {
-                                // The transcript is typed or pasted; measuring the clip
-                                // gives the exported subtitles a real time range.
                                 val decoded = AudioDecoder.decodeMono(context, uri)
                                 durationSeconds = decoded?.let { it.samples.size.toDouble() / it.sampleRateHz } ?: 0.0
-                                status = texts.studioModelReady()
+                                if (engineAvailable && modelReady) {
+                                    val result = TranscriptionEngine.transcribe(context, uri)
+                                    if (result.isNotEmpty()) {
+                                        segments = result
+                                        transcript = WhisperTranscriptParser.toPlainText(result)
+                                        status = texts.studioModelReady()
+                                    } else {
+                                        status = texts.transcribeEngineUnavailable()
+                                    }
+                                } else {
+                                    // Manual path: the typed transcript covers the clip.
+                                    segments = emptyList()
+                                    status = texts.studioModelReady()
+                                }
                                 busy = false
                             }
                         }
@@ -142,20 +157,24 @@ internal fun TranscribeScreen(texts: UiText, onBack: () -> Unit) {
             }
         }
         if (transcript.isNotBlank()) {
-            val segments = listOf(
-                TranscriptSegment(0.0, durationSeconds.coerceAtLeast(0.0), transcript.trim())
-            )
+            // Prefer the timed segments from the engine; a typed transcript has
+            // only the measured clip range to attach to.
+            val exportSegments = segments.ifEmpty {
+                listOf(
+                    TranscriptSegment(0.0, durationSeconds.coerceAtLeast(0.0), transcript.trim())
+                )
+            }
             item("transcribe-edit") {
                 InsetGroupCard {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { exportTranscript(context, texts, segments, "srt") { status = it } }) {
+                            OutlinedButton(onClick = { exportTranscript(context, texts, exportSegments, "srt") { status = it } }) {
                                 Text(texts.transcribeExportSrt())
                             }
-                            OutlinedButton(onClick = { exportTranscript(context, texts, segments, "vtt") { status = it } }) {
+                            OutlinedButton(onClick = { exportTranscript(context, texts, exportSegments, "vtt") { status = it } }) {
                                 Text(texts.transcribeExportVtt())
                             }
-                            OutlinedButton(onClick = { exportTranscript(context, texts, segments, "txt") { status = it } }) {
+                            OutlinedButton(onClick = { exportTranscript(context, texts, exportSegments, "txt") { status = it } }) {
                                 Text(texts.transcribeExportTxt())
                             }
                         }
@@ -198,21 +217,24 @@ internal fun StemSeparationScreen(texts: UiText, onBack: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     val pickAudio = rememberAudioPicker { uri -> sourceUri = uri }
+    val neuralAvailable = StemSplitter.isNeuralAvailable(context)
 
     SettingsPage(texts.stemsTitle(), texts.studioBack(), onBack) {
         item("stems-note") {
             InsetGroupCard {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        texts.stemsEngineUnavailable(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        texts.stemsApproximateNote(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    if (!neuralAvailable) {
+                        Text(
+                            texts.stemsEngineUnavailable(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            texts.stemsApproximateNote(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
@@ -228,11 +250,11 @@ internal fun StemSeparationScreen(texts: UiText, onBack: () -> Unit) {
                                 busy = true
                                 scope.launch {
                                     val outputDir = File(context.cacheDir, "zen-stems-${System.currentTimeMillis()}")
-                                    val stems = AudioStudioEngine.separateStems(context, uri, outputDir)
-                                    status = if (stems.isEmpty()) {
+                                    val result = StemSplitter.separate(context, uri, outputDir)
+                                    status = if (result.stems.isEmpty()) {
                                         texts.studioFailed()
                                     } else {
-                                        stems.forEach { (kind, file) ->
+                                        result.stems.forEach { (kind, file) ->
                                             StudioOutput.save(
                                                 context,
                                                 file,
@@ -241,7 +263,7 @@ internal fun StemSeparationScreen(texts: UiText, onBack: () -> Unit) {
                                                 StudioOutput.Collection.Music
                                             )
                                         }
-                                        texts.stemsDone(stems.size)
+                                        texts.stemsDone(result.stems.size)
                                     }
                                     outputDir.deleteRecursively()
                                     busy = false
