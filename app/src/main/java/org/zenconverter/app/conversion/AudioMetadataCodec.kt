@@ -17,6 +17,8 @@ internal object AudioMetadataCodec {
     const val MAX_LYRICS_BYTES = 256L * 1024
     private const val MAX_METADATA_BYTES = 64 * 1024 * 1024
     private const val MAX_TEXT_BYTES = 64 * 1024
+    private val VORBIS_IDENTIFICATION_SIGNATURE = byteArrayOf(1) + "vorbis".toByteArray(Charsets.US_ASCII)
+    private val VORBIS_COMMENT_SIGNATURE = byteArrayOf(3) + "vorbis".toByteArray(Charsets.US_ASCII)
 
     data class AudioLyrics(
         val text: String,
@@ -243,6 +245,19 @@ internal object AudioMetadataCodec {
         verifySnapshot(snapshotFromTags(comments).copy(cover = matchingCover(picturesFromComments(comments), snapshot.cover)), snapshot)
     }
 
+    fun verifyOggVorbis(file: File, snapshot: AudioMetadataSnapshot): Verification = checked("ogg-verify") {
+        val packets = mutableListOf<ByteArray>()
+        file.inputStream().buffered().use { input -> walkOgg(input, false) { packet, index -> packets += packet; index < 2 } }
+        validateVorbisIdentification(packets.firstOrNull() ?: error("missing-vorbis-head"))
+        val commentPacket = packets.getOrNull(1)
+        if (commentPacket == null) {
+            require(!snapshot.hasRequiredMetadata) { "missing-vorbis-comments" }
+            return@checked
+        }
+        val comments = readVorbisComments(commentPacket)
+        verifySnapshot(snapshotFromTags(comments).copy(cover = matchingCover(picturesFromComments(comments), snapshot.cover)), snapshot)
+    }
+
     fun verifyFlac(file: File, snapshot: AudioMetadataSnapshot): Verification = checked("flac-verify") {
         val flac = file.inputStream().buffered().use { readFlac(it) }
         verifySnapshot(snapshotFromTags(flac.tags).copy(cover = matchingCover(flac.pictures, snapshot.cover)), snapshot)
@@ -274,6 +289,24 @@ internal object AudioMetadataCodec {
                         true
                     }
                     require(audioPackets > 0) { "missing-opus-audio" }
+                    digest.update(granule)
+                }
+                "ogg" -> {
+                    var audioPackets = 0
+                    val granule = walkOgg(input, true) { packet, index ->
+                        checkCancelled(cancelled)
+                        // Vorbis has three header packets (identification,
+                        // comment, setup); only the audio packets are hashed so
+                        // a metadata rewrite does not change the fingerprint.
+                        if (index == 0) validateVorbisIdentification(packet)
+                        if (index > 2) {
+                            digest.update(byteArrayOf((packet.size ushr 24).toByte(), (packet.size ushr 16).toByte(), (packet.size ushr 8).toByte(), packet.size.toByte()))
+                            digest.update(packet)
+                            audioPackets++
+                        }
+                        true
+                    }
+                    require(audioPackets > 0) { "missing-vorbis-audio" }
                     digest.update(granule)
                 }
                 else -> error("unsupported-audio-hash")
@@ -361,11 +394,20 @@ internal object AudioMetadataCodec {
             }
             magic.hasMagic("OggS") -> {
                 val packets = mutableListOf<ByteArray>()
-                walkOgg(input, false) { packet, index -> packets += packet; index < 1 }
-                if (!packets.firstOrNull().hasMagic("OpusHead")) return null
-                validateOpusHead(packets.first())
-                val comments = packets.getOrNull(1)?.let(::readOpusTags).orEmpty()
-                snapshotFromTags(comments).copy(cover = primaryCover(picturesFromComments(comments)))
+                walkOgg(input, false) { packet, index -> packets += packet; index < 2 }
+                when {
+                    packets.firstOrNull().hasMagic("OpusHead") -> {
+                        validateOpusHead(packets.first())
+                        val comments = packets.getOrNull(1)?.let(::readOpusTags).orEmpty()
+                        snapshotFromTags(comments).copy(cover = primaryCover(picturesFromComments(comments)))
+                    }
+                    packets.firstOrNull()?.hasMagicBytes(VORBIS_IDENTIFICATION_SIGNATURE) == true -> {
+                        validateVorbisIdentification(packets.first())
+                        val comments = packets.getOrNull(1)?.let(::readVorbisComments).orEmpty()
+                        snapshotFromTags(comments).copy(cover = primaryCover(picturesFromComments(comments)))
+                    }
+                    else -> null
+                }
             }
             else -> null
         }
@@ -480,6 +522,11 @@ internal object AudioMetadataCodec {
         require(packet.hasMagic("OpusTags")) { "invalid-opus-tags" }
         return readComments(packet, 8)
     }
+    /** The Vorbis comment header starts with the 7-byte signature then a vendor string. */
+    private fun readVorbisComments(packet: ByteArray): List<Pair<String, String>> {
+        require(packet.hasMagicBytes(VORBIS_COMMENT_SIGNATURE)) { "invalid-vorbis-comments" }
+        return readComments(packet, VORBIS_COMMENT_SIGNATURE.size)
+    }
     private fun readComments(bytes: ByteArray, start: Int = 0): List<Pair<String, String>> {
         val cursor = Cursor(bytes, start); cursor.blobLe()
         val count = cursor.le(); require(count in 0..100_000 && count <= (bytes.size - cursor.offset) / 4) { "comment-count" }
@@ -553,6 +600,14 @@ internal object AudioMetadataCodec {
         // Channel-mapping-family 0 uses the 19-byte header. Mapped streams
         // carry the additional stream/coupled-channel/mapping table bytes.
         if (u(bytes[18]) != 0) require(bytes.size >= 21 + u(bytes[9])) { "invalid-opus-mapping" }
+    }
+
+    /** Vorbis identification header: signature, version 0, then channels and rate. */
+    private fun validateVorbisIdentification(bytes: ByteArray) {
+        require(bytes.hasMagicBytes(VORBIS_IDENTIFICATION_SIGNATURE) && bytes.size >= 30) { "invalid-vorbis-head" }
+        require(le(bytes, 7) == 0) { "invalid-vorbis-version" }
+        require(u(bytes[11]) > 0) { "invalid-vorbis-channels" }
+        require(le(bytes, 12) > 0) { "invalid-vorbis-rate" }
     }
     private fun isLyricsKey(key: String): Boolean = key.equals("lyrics", true) || key.equals("unsyncedlyrics", true) || key.equals("uslt", true) || key.startsWith("lyrics-", true)
     private fun isLegacyLyricsTxxx(payload: ByteArray): Boolean = runCatching {

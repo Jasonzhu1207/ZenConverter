@@ -610,6 +610,9 @@ internal class UiText(private val context: Context) {
     val opusSampleRateHint: String
         get() = text(R.string.ui_opus_sample_rate_hint)
 
+    val vorbisHint: String
+        get() = text(R.string.ui_vorbis_hint)
+
     val channels: String
         get() = text(R.string.ui_channels)
 

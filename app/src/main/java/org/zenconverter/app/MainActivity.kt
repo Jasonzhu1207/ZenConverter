@@ -2428,6 +2428,7 @@ private fun audioTargetExtensionFor(targetFormat: String): String? {
         normalized.contains("flac") -> "flac"
         normalized.contains("wma") -> "wma"
         normalized.contains("opus") -> "opus"
+        normalized.contains("ogg") -> "ogg"
         else -> null
     }
 }
@@ -2489,7 +2490,7 @@ private fun ConversionTaskState.toUiProgress(): TaskProgress {
     )
 }
 
-private val CONNECTED_AUDIO_TARGETS = setOf("mp3", "m4a", "wav", "flac", "wma", "opus")
+private val CONNECTED_AUDIO_TARGETS = setOf("mp3", "m4a", "wav", "flac", "wma", "opus", "ogg")
 private val EXTERNAL_IMPORT_ACTIONS = setOf(
     Intent.ACTION_VIEW,
     Intent.ACTION_SEND,

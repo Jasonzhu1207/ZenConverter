@@ -4603,7 +4603,7 @@ class ConversionService : Service() {
 
     private suspend fun prepareAudioMetadataFor(input: ConversionTaskInput): AudioMetadataPreparation {
         if (input.category != ConversionMediaCategory.Audio) return AudioMetadataPreparation()
-        val strict = audioTargetExtensionFor(input.targetFormat) in setOf("mp3", "opus", "flac")
+        val strict = audioTargetExtensionFor(input.targetFormat) in setOf("mp3", "opus", "ogg", "flac")
         val source = openFfmpegInputSource(input.inputUri)
             ?: return AudioMetadataPreparation(failure = if (strict) localizedText(R.string.message_audio_metadata_probe_failed) else null)
         var coverFile: File? = null
@@ -4704,11 +4704,11 @@ class ConversionService : Service() {
         val target = audioTargetExtensionFor(input.targetFormat)
             ?: return FfmpegRunResult(success = true, cancelled = false)
         if (input.category != ConversionMediaCategory.Audio || snapshot == null ||
-            target !in setOf("mp3", "opus", "flac")) {
+            target !in setOf("mp3", "opus", "ogg", "flac")) {
             return FfmpegRunResult(success = true, cancelled = false)
         }
         var verification = verifyAudioOutput(target, outputFile, snapshot)
-        if (!verification.success && target in setOf("opus", "flac")) {
+        if (!verification.success && target in setOf("opus", "ogg", "flac")) {
             verification = remuxAudioMetadata(input, outputFile, target, snapshot, dropChapters)
         }
         if (ConversionTaskStore.isCancelled()) return FfmpegRunResult(success = false, cancelled = true)
@@ -4741,6 +4741,7 @@ class ConversionService : Service() {
     ): AudioMetadataCodec.Verification = when (target) {
         "mp3" -> AudioMetadataCodec.repairAndVerifyMp3(file, snapshot) { ConversionTaskStore.isCancelled() }
         "opus" -> AudioMetadataCodec.verifyOpus(file, snapshot)
+        "ogg" -> AudioMetadataCodec.verifyOggVorbis(file, snapshot)
         "flac" -> AudioMetadataCodec.verifyFlac(file, snapshot)
         else -> AudioMetadataCodec.Verification(true)
     }
@@ -4778,7 +4779,7 @@ class ConversionService : Service() {
             // Ogg merges globals with AV_DICT_DONT_OVERWRITE. Override both
             // dictionaries so a stale stream-level value cannot win. This
             // produces one comment per key, not duplicate OpusTags entries.
-            addAudioMetadataArguments(arguments, snapshot, includePicture = target == "opus")
+            addAudioMetadataArguments(arguments, snapshot, includePicture = target == "opus" || target == "ogg")
             arguments += listOf("-c:a", "copy", "-f", target, remuxFile.absolutePath)
             val result = executeFfmpeg(
                 input = input, arguments = arguments, durationMs = null, logTail = mutableListOf(),
@@ -5094,10 +5095,20 @@ class ConversionService : Service() {
             }
         }
         if (audioProfile.supportsChannelCount) {
-            audioOptions.channelCount?.let { channelCount ->
+            val maxChannels = audioProfile.maxChannels
+            val requested = audioOptions.channelCount
+            val resolved = when {
+                requested != null -> maxChannels?.let { requested.coerceAtMost(it) } ?: requested
+                else -> maxChannels
+            }
+            resolved?.let { channelCount ->
                 add("-ac")
                 add(channelCount.toString())
             }
+        }
+        if (audioProfile.requiresExperimentalEncoder) {
+            add("-strict")
+            add("-2")
         }
     }
 
@@ -5559,6 +5570,13 @@ class ConversionService : Service() {
                 codec = FFMPEG_OPUS_ENCODER,
                 format = "opus",
                 requiredEncoder = FFMPEG_OPUS_ENCODER
+            )
+            "ogg" -> FfmpegAudioProfile(
+                codec = FFMPEG_VORBIS_ENCODER,
+                format = "ogg",
+                maxChannels = 2,
+                requiresExperimentalEncoder = true,
+                requiredEncoder = FFMPEG_VORBIS_ENCODER
             )
             else -> null
         }
@@ -6157,6 +6175,8 @@ class ConversionService : Service() {
                 localizedText(R.string.text_task_message_compatibility_engine_needs_a_wma_capable_ffmpeg_package)
             encoder == FFMPEG_OPUS_ENCODER ->
                 localizedText(R.string.text_task_message_compatibility_engine_needs_an_opus_capable_ffmpeg_package)
+            encoder == FFMPEG_VORBIS_ENCODER ->
+                localizedText(R.string.text_task_message_compatibility_engine_needs_a_vorbis_capable_ffmpeg_package)
             encoder == FFMPEG_GIF_ENCODER &&
                 isVideoGifOutput(input) ->
                 localizedText(R.string.text_task_message_compatibility_engine_needs_a_gif_capable_ffmpeg_package)
@@ -7436,6 +7456,7 @@ class ConversionService : Service() {
             normalized.contains("alac") -> "alac"
             normalized.contains("wma") -> "wma"
             normalized.contains("opus") -> "opus"
+            normalized.contains("ogg") -> "ogg"
             else -> null
         }
     }
@@ -7528,6 +7549,10 @@ class ConversionService : Service() {
         val supportsChannelCount: Boolean = true,
         val supportsBitDepth: Boolean = false,
         val supportsAttachedPicture: Boolean = false,
+        /** Upper bound for -ac when the encoder cannot handle more channels. */
+        val maxChannels: Int? = null,
+        /** The native encoder is flagged experimental and needs -strict -2. */
+        val requiresExperimentalEncoder: Boolean = false,
         val requiredEncoder: String? = null
     )
 
@@ -7918,6 +7943,7 @@ class ConversionService : Service() {
         private const val FFMPEG_ALAC_ENCODER = "alac"
         private const val FFMPEG_WMA_ENCODER = "wmav2"
         private const val FFMPEG_OPUS_ENCODER = "libopus"
+        private const val FFMPEG_VORBIS_ENCODER = "vorbis"
         private val OPUS_SUPPORTED_SAMPLE_RATES = setOf(48_000, 24_000, 16_000, 12_000, 8_000)
         private const val FFMPEG_DEFAULT_CRF_H264 = "23"
         private const val FFMPEG_DEFAULT_CRF_H265 = "28"

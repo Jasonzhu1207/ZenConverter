@@ -15,6 +15,7 @@ enum class TargetId(val key: String) {
     Alac("ALAC"),
     Wma("WMA"),
     Opus("OPUS"),
+    Ogg("OGG"),
     Jpg("JPG"),
     Jfif("JFIF"),
     Png("PNG"),

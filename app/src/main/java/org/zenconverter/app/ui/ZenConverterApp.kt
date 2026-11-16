@@ -351,7 +351,8 @@ enum class FileCategory(
             TargetFormat(TargetId.Flac, "flac", "Re-encode"),
             TargetFormat(TargetId.Alac, "alac", "Apple lossless"),
             TargetFormat(TargetId.Wma, "wma", "Re-encode"),
-            TargetFormat(TargetId.Opus, "opus", "Re-encode")
+            TargetFormat(TargetId.Opus, "opus", "Re-encode"),
+            TargetFormat(TargetId.Ogg, "ogg", "Vorbis")
         )
     ),
     Image(
@@ -812,6 +813,11 @@ private val OPUS_AUDIO_SAMPLE_RATE_OPTIONS = listOf(
     AUDIO_SAMPLE_RATE_16000,
     AUDIO_SAMPLE_RATE_8000
 )
+
+private fun isVorbisTarget(targetFormat: TargetFormat): Boolean {
+    return targetFormat.id == TargetId.Ogg ||
+        targetFormat.extension.equals("ogg", ignoreCase = true)
+}
 
 private fun isOpusTarget(targetFormat: TargetFormat): Boolean {
     return targetFormat.extension.equals("opus", ignoreCase = true) ||
@@ -5393,6 +5399,13 @@ private fun AudioOptions(
         if (isOpusTarget(targetFormat)) {
             Text(
                 text = texts.opusSampleRateHint,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (isVorbisTarget(targetFormat)) {
+            Text(
+                text = texts.vorbisHint,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

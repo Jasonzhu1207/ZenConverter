@@ -446,6 +446,7 @@
     <string name="text_task_message_compatibility_engine_needs_an_h_265_capable_ffmpeg_package">Compatibility engine needs an H.265-capable FFmpeg package</string>
     <string name="text_task_message_compatibility_engine_needs_an_mp3_capable_ffmpeg_package">Compatibility engine needs an MP3-capable FFmpeg package</string>
     <string name="text_task_message_compatibility_engine_needs_an_opus_capable_ffmpeg_package">Compatibility engine needs an Opus-capable FFmpeg package</string>
+    <string name="text_task_message_compatibility_engine_needs_a_vorbis_capable_ffmpeg_package">Compatibility engine needs a Vorbis-capable FFmpeg package</string>
     <string name="text_task_message_compatibility_engine_needs_duration_metadata_for_fade_out">Compatibility engine needs duration metadata for fade out</string>
     <string name="text_task_message_compatibility_engine_needs_duration_metadata_for_reverse_playback">Compatibility engine needs duration metadata for reverse playback</string>
     <string name="text_task_message_compatibility_engine_needs_motion_blur_filter">Compatibility engine needs the motion blur filter</string>
@@ -618,6 +619,8 @@
     <string name="ui_open_output_location">Open output location</string>
     <string name="ui_open_settings">Open settings</string>
     <string name="ui_opus_sample_rate_hint">Opus natively operates at 48 kHz (RFC 6716 / RFC 7845). Non-Opus rates like 44.1 kHz are automatically resampled to 48 kHz.</string>
+
+    <string name="ui_vorbis_hint">OGG uses the Vorbis encoder, which is limited to two channels and flagged experimental in FFmpeg.</string>
     <string name="ui_output">Save location</string>
     <string name="ui_output_unavailable">Output file is unavailable</string>
     <string name="ui_page_size">Page size</string>
