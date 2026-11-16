@@ -291,8 +291,23 @@ enum class ImageSuperResolutionMode(val scale: Int) {
 data class ImageExportOptions(
     val quality: Int = 90,
     val webpLossless: Boolean = false,
-    val superResolution: ImageSuperResolutionMode = ImageSuperResolutionMode.Off
+    val superResolution: ImageSuperResolutionMode = ImageSuperResolutionMode.Off,
+    val resize: ImageResizeMode = ImageResizeMode.Original
 )
+
+/**
+ * Output dimension cap for still images. A long-edge cap keeps aspect ratio
+ * predictable for mixed portrait and landscape batches.
+ */
+enum class ImageResizeMode(val maxLongEdgePx: Int?) {
+    Original(null),
+    Px4096(4096),
+    Px2560(2560),
+    Px1920(1920),
+    Px1280(1280),
+    Px1080(1080),
+    Px720(720)
+}
 
 data class PdfExportOptions(
     val imagePageMode: PdfImagePageMode = PdfImagePageMode.A4Fit,

@@ -267,6 +267,7 @@ import org.zenconverter.app.conversion.AudioVolumeMode
 import org.zenconverter.app.conversion.FileBasicInfo
 import org.zenconverter.app.conversion.GifFrameExportMode
 import org.zenconverter.app.conversion.ImageExportOptions
+import org.zenconverter.app.conversion.ImageResizeMode
 import org.zenconverter.app.conversion.ImageSuperResolutionMode
 import org.zenconverter.app.conversion.MediaTrimRange
 import org.zenconverter.app.conversion.Mp3BitrateMode
@@ -929,6 +930,23 @@ private val IMAGE_SUPER_RESOLUTION_OPTIONS = listOf(
     IMAGE_SUPER_RESOLUTION_4X,
     IMAGE_SUPER_RESOLUTION_AI_ANIME,
     IMAGE_SUPER_RESOLUTION_AI
+)
+
+internal const val IMAGE_RESIZE_ORIGINAL = "Original size"
+internal const val IMAGE_RESIZE_4096 = "Long edge 4096 px"
+internal const val IMAGE_RESIZE_2560 = "Long edge 2560 px"
+internal const val IMAGE_RESIZE_1920 = "Long edge 1920 px"
+internal const val IMAGE_RESIZE_1280 = "Long edge 1280 px"
+internal const val IMAGE_RESIZE_1080 = "Long edge 1080 px"
+internal const val IMAGE_RESIZE_720 = "Long edge 720 px"
+private val IMAGE_RESIZE_OPTIONS = listOf(
+    IMAGE_RESIZE_ORIGINAL,
+    IMAGE_RESIZE_4096,
+    IMAGE_RESIZE_2560,
+    IMAGE_RESIZE_1920,
+    IMAGE_RESIZE_1280,
+    IMAGE_RESIZE_1080,
+    IMAGE_RESIZE_720
 )
 
 private const val PDF_PAGE_MODE_A4_FIT = "A4 fit"
@@ -3839,6 +3857,9 @@ private fun BatchImageTargetOptions(
         superResolution = commonBatchLabel(files) {
             superResolutionLabelFor(it.imageOptions.superResolution)
         },
+        resize = commonBatchLabel(files) {
+            imageResizeLabelFor(it.imageOptions.resize)
+        },
         availableAiModels = availableAiModels,
         openMenuId = openMenuId,
         onOpenMenuChange = onOpenMenuChange,
@@ -3846,7 +3867,7 @@ private fun BatchImageTargetOptions(
             onOpenMenuChange(null)
             onUpdateFiles(
                 files.map { file ->
-                    file.copy(imageOptions = imageOptionsForQuality(value, target))
+                    file.copy(imageOptions = imageOptionsForQuality(value, target, file.imageOptions))
                 }
             )
         },
@@ -3878,6 +3899,15 @@ private fun BatchImageTargetOptions(
                             file.gifFrameMode
                         }
                     )
+                }
+            )
+        },
+        onResizeChange = { value ->
+            onOpenMenuChange(null)
+            val mode = imageResizeModeFor(value)
+            onUpdateFiles(
+                files.map { file ->
+                    file.copy(imageOptions = file.imageOptions.copy(resize = mode))
                 }
             )
         }
@@ -6333,12 +6363,14 @@ private fun ImageOptions(
     quality: String,
     pdfPageMode: String,
     superResolution: String,
+    resize: String,
     availableAiModels: Set<String>,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onQualityChange: (String) -> Unit,
     onPdfPageModeChange: (String) -> Unit,
-    onSuperResolutionChange: (String) -> Unit
+    onSuperResolutionChange: (String) -> Unit,
+    onResizeChange: (String) -> Unit
 ) {
     if (targetFormat.extension.equals("pdf", ignoreCase = true)) {
         OptionGrid {
@@ -6388,7 +6420,7 @@ private fun ImageOptions(
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
                 disabledOptions = disabledOptions,
-                showDivider = hasQuality,
+                showDivider = true,
                 onSelected = onSuperResolutionChange
             )
             if (hasQuality) {
@@ -6400,10 +6432,21 @@ private fun ImageOptions(
                     texts = texts,
                     openMenuId = openMenuId,
                     onOpenMenuChange = onOpenMenuChange,
-                    showDivider = false,
+                    showDivider = true,
                     onSelected = onQualityChange
                 )
             }
+            OptionDropdown(
+                menuId = "${menuPrefix}image-resize",
+                label = texts.resize,
+                selected = resize,
+                options = IMAGE_RESIZE_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = false,
+                onSelected = onResizeChange
+            )
         }
 
         if (availableAiModels.isEmpty()) {
@@ -7460,11 +7503,12 @@ private fun QueuedFileOptionsPanel(
                     quality = imageQualityLabelFor(file.imageOptions, selectedTarget.targetFormat),
                     pdfPageMode = pdfPageModeLabelFor(file.pdfOptions.imagePageMode),
                     superResolution = superResolutionLabelFor(file.imageOptions.superResolution),
+                    resize = imageResizeLabelFor(file.imageOptions.resize),
                     availableAiModels = availableAiModels,
                     openMenuId = openMenuId,
                     onOpenMenuChange = onOpenMenuChange,
                     onQualityChange = { value ->
-                        onUpdateFile(file.copy(imageOptions = imageOptionsForQuality(value, selectedTarget.targetFormat)))
+                        onUpdateFile(file.copy(imageOptions = imageOptionsForQuality(value, selectedTarget.targetFormat, file.imageOptions)))
                     },
                     onPdfPageModeChange = { value ->
                         onUpdateFile(file.copy(pdfOptions = file.pdfOptions.copy(imagePageMode = pdfPageModeToOption(value))))
@@ -7484,6 +7528,9 @@ private fun QueuedFileOptionsPanel(
                                 }
                             )
                         )
+                    },
+                    onResizeChange = { value ->
+                        onUpdateFile(file.copy(imageOptions = file.imageOptions.copy(resize = imageResizeModeFor(value))))
                     }
                 )
                 if (
@@ -8778,9 +8825,10 @@ private fun imageQualityLabelFor(
 
 private fun imageOptionsForQuality(
     value: String,
-    targetFormat: TargetFormat
+    targetFormat: TargetFormat,
+    existing: ImageExportOptions = ImageExportOptions()
 ): ImageExportOptions {
-    return ImageExportOptions(
+    return existing.copy(
         quality = imageQualityToPercent(value),
         webpLossless = supportsWebpLosslessQuality(targetFormat) &&
             value == IMAGE_QUALITY_LOSSLESS
@@ -8806,6 +8854,30 @@ private fun superResolutionModeFor(value: String): ImageSuperResolutionMode {
         IMAGE_SUPER_RESOLUTION_AI_ANIME -> ImageSuperResolutionMode.RealEsrganAnime4x
         IMAGE_SUPER_RESOLUTION_AI -> ImageSuperResolutionMode.RealEsrgan4x
         else -> ImageSuperResolutionMode.Off
+    }
+}
+
+private fun imageResizeLabelFor(mode: ImageResizeMode): String {
+    return when (mode) {
+        ImageResizeMode.Original -> IMAGE_RESIZE_ORIGINAL
+        ImageResizeMode.Px4096 -> IMAGE_RESIZE_4096
+        ImageResizeMode.Px2560 -> IMAGE_RESIZE_2560
+        ImageResizeMode.Px1920 -> IMAGE_RESIZE_1920
+        ImageResizeMode.Px1280 -> IMAGE_RESIZE_1280
+        ImageResizeMode.Px1080 -> IMAGE_RESIZE_1080
+        ImageResizeMode.Px720 -> IMAGE_RESIZE_720
+    }
+}
+
+private fun imageResizeModeFor(value: String): ImageResizeMode {
+    return when (value) {
+        IMAGE_RESIZE_4096 -> ImageResizeMode.Px4096
+        IMAGE_RESIZE_2560 -> ImageResizeMode.Px2560
+        IMAGE_RESIZE_1920 -> ImageResizeMode.Px1920
+        IMAGE_RESIZE_1280 -> ImageResizeMode.Px1280
+        IMAGE_RESIZE_1080 -> ImageResizeMode.Px1080
+        IMAGE_RESIZE_720 -> ImageResizeMode.Px720
+        else -> ImageResizeMode.Original
     }
 }
 

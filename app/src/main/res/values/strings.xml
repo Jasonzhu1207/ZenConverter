@@ -362,6 +362,13 @@
     <string name="text_option_value_re_encode">Re-encode</string>
     <string name="text_option_value_real_esrgan_4_ai">Real-ESRGAN 4× (AI)</string>
     <string name="text_option_value_real_esrgan_anime_4_ai">Real-ESRGAN Anime 4× (AI)</string>
+    <string name="text_option_value_resize_original">Original size</string>
+    <string name="text_option_value_resize_long_edge_4096">Long edge 4096 px</string>
+    <string name="text_option_value_resize_long_edge_2560">Long edge 2560 px</string>
+    <string name="text_option_value_resize_long_edge_1920">Long edge 1920 px</string>
+    <string name="text_option_value_resize_long_edge_1280">Long edge 1280 px</string>
+    <string name="text_option_value_resize_long_edge_1080">Long edge 1080 px</string>
+    <string name="text_option_value_resize_long_edge_720">Long edge 720 px</string>
     <string name="text_option_value_recommended_192_kbps">Recommended (192 kbps)</string>
     <string name="text_option_value_recommended_48_khz">Recommended (48 kHz)</string>
     <string name="text_option_value_reduce_file_size">Reduce file size</string>
@@ -631,6 +638,7 @@
     <string name="ui_start">Start</string>
     <string name="ui_storage_permission_required">Allow storage permission or choose a folder</string>
     <string name="ui_super_resolution">Super resolution</string>
+    <string name="ui_resize">Resize</string>
     <string name="ui_support_development">Sponsor development</string>
     <string name="ui_tagline">Files stay on this device</string>
     <string name="ui_target">Target</string>

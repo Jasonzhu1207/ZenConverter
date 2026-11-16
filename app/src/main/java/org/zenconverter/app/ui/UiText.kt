@@ -568,6 +568,9 @@ internal class UiText(private val context: Context) {
     val superResolution: String
         get() = text(R.string.ui_super_resolution)
 
+    val resize: String
+        get() = text(R.string.ui_resize)
+
     val videoCompressionMode: String
         get() = text(R.string.ui_video_compression_mode)
 
@@ -1663,6 +1666,13 @@ internal class UiText(private val context: Context) {
             IMAGE_SUPER_RESOLUTION_4X -> text(R.string.text_option_value_4_bilinear)
             IMAGE_SUPER_RESOLUTION_AI_ANIME -> text(R.string.text_option_value_real_esrgan_anime_4_ai)
             IMAGE_SUPER_RESOLUTION_AI -> text(R.string.text_option_value_real_esrgan_4_ai)
+            IMAGE_RESIZE_ORIGINAL -> text(R.string.text_option_value_resize_original)
+            IMAGE_RESIZE_4096 -> text(R.string.text_option_value_resize_long_edge_4096)
+            IMAGE_RESIZE_2560 -> text(R.string.text_option_value_resize_long_edge_2560)
+            IMAGE_RESIZE_1920 -> text(R.string.text_option_value_resize_long_edge_1920)
+            IMAGE_RESIZE_1280 -> text(R.string.text_option_value_resize_long_edge_1280)
+            IMAGE_RESIZE_1080 -> text(R.string.text_option_value_resize_long_edge_1080)
+            IMAGE_RESIZE_720 -> text(R.string.text_option_value_resize_long_edge_720)
             "Auto bitrate" -> text(R.string.text_option_value_auto_recommended)
             "Auto audio bitrate" -> text(R.string.text_option_value_auto_encoder_default)
             "Recommended audio bitrate" -> text(R.string.text_option_value_recommended_192_kbps)

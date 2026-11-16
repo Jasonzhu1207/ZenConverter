@@ -2242,12 +2242,18 @@ class ConversionService : Service() {
         )
         throwIfConversionCancelled()
 
+        val resizedBitmap = applyResizeIfNeeded(workingBitmap, input.imageOptions.resize)
+        throwIfConversionCancelled()
+
         if (outputProfile.extension.equals("ico", ignoreCase = true)) {
             try {
-                writeIcoImageFile(workingBitmap, outputFile)
+                writeIcoImageFile(resizedBitmap, outputFile)
                 throwIfConversionCancelled()
                 updateImageProgress(0.95f)
             } finally {
+                if (resizedBitmap !== workingBitmap) {
+                    resizedBitmap.recycle()
+                }
                 if (workingBitmap !== decodedBitmap) {
                     workingBitmap.recycle()
                 }
@@ -2257,7 +2263,7 @@ class ConversionService : Service() {
         }
 
         val bitmapForOutput = bitmapForImageOutput(
-            workingBitmap,
+            resizedBitmap,
             outputProfile.extension,
             flattenTransparency = false
         )
@@ -2288,8 +2294,11 @@ class ConversionService : Service() {
             throwIfConversionCancelled()
             updateImageProgress(0.95f)
         } finally {
-            if (bitmapForOutput !== workingBitmap) {
+            if (bitmapForOutput !== resizedBitmap) {
                 bitmapForOutput.recycle()
+            }
+            if (resizedBitmap !== workingBitmap) {
+                resizedBitmap.recycle()
             }
             if (workingBitmap !== decodedBitmap) {
                 workingBitmap.recycle()
@@ -3000,6 +3009,16 @@ class ConversionService : Service() {
             Bitmap.createScaledBitmap(bitmap, targetWidth.toInt(), targetHeight.toInt(), true)
         } catch (oom: OutOfMemoryError) {
             throw LocalizedFailure(localizedText(R.string.text_task_message_not_enough_memory_to_super_resolve_this_image))
+        }
+    }
+
+    private fun applyResizeIfNeeded(bitmap: Bitmap, mode: ImageResizeMode): Bitmap {
+        val (targetWidth, targetHeight) = ImageResizer.targetSize(bitmap.width, bitmap.height, mode)
+        if (targetWidth == bitmap.width && targetHeight == bitmap.height) return bitmap
+        return try {
+            Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)
+        } catch (oom: OutOfMemoryError) {
+            throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_write_this_output))
         }
     }
 
