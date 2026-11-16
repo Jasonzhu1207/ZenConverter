@@ -27,12 +27,18 @@ object AudioStudioEngine {
         val mute: Boolean = false
     )
 
+    /** How layered tracks are combined into the master. */
+    enum class MixMode { Layer, Concat }
+
     /** Mixes [tracks] with per-track volume/pan and optional mute using `amix`. */
     suspend fun mix(
         context: Context,
         tracks: List<MixTrack>,
         target: File,
-        audioBitrateKbps: Int = 192
+        audioBitrateKbps: Int = 192,
+        mode: MixMode = MixMode.Layer,
+        limiter: Boolean = true,
+        normalize: Boolean = false
     ): Boolean = withContext(Dispatchers.IO) {
         val audible = tracks.filterNot { it.mute }
         if (audible.isEmpty()) return@withContext false
@@ -41,23 +47,8 @@ object AudioStudioEngine {
 
         val arguments = mutableListOf("-hide_banner", "-nostdin")
         paths.forEach { path -> arguments += listOf("-i", path) }
-
-        val filterParts = audible.mapIndexed { index, track ->
-            val gain = track.volume.coerceIn(0f, 4f)
-            // Downmix to mono first so the constant-power pan balances the whole
-            // signal rather than scaling one stereo channel of an existing mix.
-            val (left, right) = panGains(track.pan)
-            "[$index:a]aformat=channel_layouts=stereo," +
-                "pan=mono|c0=0.5*c0+0.5*c1," +
-                "pan=stereo|c0=${formatGain(left * gain)}*c0|c1=${formatGain(right * gain)}*c0[v$index]"
-        }
-        val mixInputs = audible.indices.joinToString("") { "[v$it]" }
-        val filter = filterParts.joinToString(";") +
-            ";${mixInputs}amix=inputs=${audible.size}:duration=longest:dropout_transition=0," +
-            "alimiter=limit=0.97[out]"
-
         arguments += listOf(
-            "-filter_complex", filter,
+            "-filter_complex", buildMixFilter(audible, mode, limiter, normalize),
             "-map", "[out]",
             "-c:a", "aac",
             "-b:a", "${audioBitrateKbps}k",
@@ -65,6 +56,32 @@ object AudioStudioEngine {
             target.absolutePath
         )
         ReturnCode.isSuccess(FFmpegKit.executeWithArguments(arguments.toTypedArray()).getReturnCode())
+    }
+
+    /** The filter graph [mix] will run, also shown verbatim in the command view. */
+    fun buildMixFilter(
+        tracks: List<MixTrack>,
+        mode: MixMode = MixMode.Layer,
+        limiter: Boolean = true,
+        normalize: Boolean = false
+    ): String {
+        val perTrack = tracks.mapIndexed { index, track ->
+            val gain = track.volume.coerceIn(0f, 4f)
+            val (left, right) = panGains(track.pan)
+            "[$index:a]aformat=channel_layouts=stereo," +
+                "pan=mono|c0=0.5*c0+0.5*c1," +
+                "pan=stereo|c0=${formatGain(left * gain)}*c0|c1=${formatGain(right * gain)}*c0[v$index]"
+        }
+        val inputs = tracks.indices.joinToString("") { "[v$it]" }
+        val combine = when (mode) {
+            MixMode.Layer -> "${inputs}amix=inputs=${tracks.size}:duration=longest:dropout_transition=0"
+            MixMode.Concat -> "${inputs}concat=n=${tracks.size}:v=0:a=1"
+        }
+        val tail = buildString {
+            if (normalize) append(",loudnorm=I=-16:TP=-1.5:LRA=11")
+            if (limiter) append(",alimiter=limit=0.97")
+        }
+        return perTrack.joinToString(";") + ";" + combine + tail + "[out]"
     }
 
     /**

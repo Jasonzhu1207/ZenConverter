@@ -419,18 +419,36 @@ private fun WaveformControls(
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun AudioRecorderScreen(texts: UiText, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val recorder = remember { AudioRecorder() }
-    val state by recorder.state.collectAsStateWithLifecycle()
-    val level by recorder.level.collectAsStateWithLifecycle()
-    val elapsed by recorder.elapsedMs.collectAsStateWithLifecycle()
+    var input by remember { mutableStateOf(AudioRecorder.Input.BuiltInMic) }
+    var sampleRate by remember { mutableStateOf(44_100) }
+    var channels by remember { mutableStateOf(1) }
+    var autoGain by remember { mutableStateOf(false) }
+    var noiseGate by remember { mutableStateOf(0f) }
+    var monitor by remember { mutableStateOf(false) }
+    var afterAction by remember { mutableStateOf(0) }
     var permissionGranted by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var recorded by remember { mutableStateOf<File?>(null) }
+    val recorder = remember(input, sampleRate, channels, autoGain, noiseGate, monitor) {
+        AudioRecorder(
+            sampleRateHz = sampleRate,
+            channelCount = channels,
+            inputSource = input.source,
+            autoGain = autoGain,
+            noiseGate = noiseGate,
+            monitor = monitor
+        )
+    }
+    val state by recorder.state.collectAsStateWithLifecycle()
+    val level by recorder.level.collectAsStateWithLifecycle()
+    val elapsed by recorder.elapsedMs.collectAsStateWithLifecycle()
+    val markers by recorder.markers.collectAsStateWithLifecycle()
     val requestPermission = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { granted -> permissionGranted = granted }
@@ -489,6 +507,58 @@ internal fun AudioRecorderScreen(texts: UiText, onBack: () -> Unit) {
                 }
             }
         }
+        item("recorder-input") {
+            InsetGroupCard {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StudioFieldLabel(texts.recorderInputSource())
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        AudioRecorder.Input.entries.forEach { option ->
+                            androidx.compose.material3.FilterChip(
+                                selected = option == input,
+                                onClick = { if (state == AudioRecorder.State.Idle) input = option },
+                                label = {
+                                    Text(
+                                        when (option) {
+                                            AudioRecorder.Input.BuiltInMic -> texts.recorderInputBuiltin()
+                                            AudioRecorder.Input.BluetoothSco -> texts.recorderInputBluetooth()
+                                            AudioRecorder.Input.Usb -> texts.recorderInputUsb()
+                                            AudioRecorder.Input.Camcorder -> texts.recorderInputCamcorder()
+                                        }
+                                    )
+                                }
+                            )
+                        }
+                    }
+                    StudioFieldLabel(texts.recorderCapture())
+                    StudioFieldLabel("${texts.recorderSampleRate()} · ${sampleRate / 1000} kHz")
+                    Slider(
+                        value = sampleRate.toFloat(),
+                        onValueChange = { sampleRate = it.toInt() },
+                        valueRange = 22_050f..96_000f,
+                        enabled = state == AudioRecorder.State.Idle,
+                        steps = 2
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        androidx.compose.material3.FilterChip(
+                            selected = channels == 1,
+                            onClick = { if (state == AudioRecorder.State.Idle) channels = 1 },
+                            label = { Text(texts.recorderChannelsMono()) }
+                        )
+                        androidx.compose.material3.FilterChip(
+                            selected = channels == 2,
+                            onClick = { if (state == AudioRecorder.State.Idle) channels = 2 },
+                            label = { Text(texts.recorderChannelsStereo()) }
+                        )
+                    }
+                    StudioSwitchRow(texts.recorderAutoGain(), autoGain) { autoGain = it }
+                    StudioFieldLabel("${texts.recorderNoiseGate()} · ${"%.2f".format(noiseGate)}")
+                    Slider(value = noiseGate, onValueChange = { noiseGate = it }, valueRange = 0f..0.2f)
+                    StudioSwitchRow(texts.recorderMonitor(), monitor) { monitor = it }
+                }
+            }
+        }
         item("recorder-controls") {
             InsetGroupCard {
                 Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -530,6 +600,10 @@ internal fun AudioRecorderScreen(texts: UiText, onBack: () -> Unit) {
                             onClick = { stopRecording() }
                         ) { Text(texts.recorderStop()) }
                         OutlinedButton(
+                            enabled = state != AudioRecorder.State.Idle,
+                            onClick = { recorder.addMarker(texts.recorderMarkerLabel(markers.size + 1)) }
+                        ) { Text(texts.recorderAddMarker()) }
+                        OutlinedButton(
                             enabled = (state != AudioRecorder.State.Idle || recorded != null) && !busy,
                             onClick = { saveAs("wav", "audio/wav", StudioOutput.Collection.Music) }
                         ) { Text(texts.recorderSaveWav()) }
@@ -550,9 +624,50 @@ internal fun AudioRecorderScreen(texts: UiText, onBack: () -> Unit) {
                 }
             }
         }
+        item("recorder-markers") {
+            InsetGroupCard {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(texts.recorderMarkers(), style = MaterialTheme.typography.titleSmall)
+                    if (markers.isEmpty()) {
+                        StudioNote(texts.recorderAddMarker())
+                    } else {
+                        markers.forEach { marker ->
+                            Text(
+                                "${formatClock(marker.atMs)}  ${marker.label}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        item("recorder-after") {
+            InsetGroupCard {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(texts.recorderAfter(), style = MaterialTheme.typography.titleSmall)
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(
+                            texts.recorderAfterNone(),
+                            texts.recorderAfterRingtone(),
+                            texts.recorderAfterWaveform()
+                        ).forEachIndexed { index, label ->
+                            androidx.compose.material3.FilterChip(
+                                selected = afterAction == index,
+                                onClick = { afterAction = index },
+                                label = { Text(label) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun AudioMixerScreen(texts: UiText, onBack: () -> Unit) {
     val context = LocalContext.current
@@ -560,6 +675,10 @@ internal fun AudioMixerScreen(texts: UiText, onBack: () -> Unit) {
     var tracks by remember { mutableStateOf(listOf<MixerTrack>()) }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
+    var mode by remember { mutableStateOf(AudioStudioEngine.MixMode.Layer) }
+    var limiter by remember { mutableStateOf(true) }
+    var normalize by remember { mutableStateOf(false) }
+    var showCommand by remember { mutableStateOf(false) }
     val pickAudio = rememberAudioPicker { uri -> tracks = tracks + MixerTrack(uri) }
 
     SettingsPage(texts.mixerTitle(), texts.studioBack(), onBack) {
@@ -600,6 +719,46 @@ internal fun AudioMixerScreen(texts: UiText, onBack: () -> Unit) {
             }
         }
         if (tracks.isNotEmpty()) {
+            item("mixer-master") {
+                InsetGroupCard {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(texts.mixerMaster(), style = MaterialTheme.typography.titleSmall)
+                        StudioFieldLabel(texts.mixerMode())
+                        androidx.compose.foundation.layout.FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            androidx.compose.material3.FilterChip(
+                                selected = mode == AudioStudioEngine.MixMode.Layer,
+                                onClick = { mode = AudioStudioEngine.MixMode.Layer },
+                                label = { Text(texts.mixerModeAmix()) }
+                            )
+                            androidx.compose.material3.FilterChip(
+                                selected = mode == AudioStudioEngine.MixMode.Concat,
+                                onClick = { mode = AudioStudioEngine.MixMode.Concat },
+                                label = { Text(texts.mixerModeConcat()) }
+                            )
+                        }
+                        StudioSwitchRow(texts.mixerLimiter(), limiter) { limiter = it }
+                        StudioSwitchRow(texts.mixerNormalize(), normalize) { normalize = it }
+                        OutlinedButton(onClick = { showCommand = !showCommand }) {
+                            Text(texts.mixerCommand())
+                        }
+                        if (showCommand) {
+                            Text(texts.mixerCommandTitle(), style = MaterialTheme.typography.labelLarge)
+                            Text(
+                                AudioStudioEngine.buildMixFilter(
+                                    tracks.filterNot { it.mute }.map {
+                                        AudioStudioEngine.MixTrack(it.uri, it.volume, it.pan, it.mute)
+                                    },
+                                    mode, limiter, normalize
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
             item("mixer-export") {
                 InsetGroupCard {
                     Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -614,7 +773,10 @@ internal fun AudioMixerScreen(texts: UiText, onBack: () -> Unit) {
                                         tracks = tracks.map {
                                             AudioStudioEngine.MixTrack(it.uri, it.volume, it.pan, it.mute)
                                         },
-                                        target = temp
+                                        target = temp,
+                                        mode = mode,
+                                        limiter = limiter,
+                                        normalize = normalize
                                     )
                                     status = if (ok) {
                                         StudioOutput.save(

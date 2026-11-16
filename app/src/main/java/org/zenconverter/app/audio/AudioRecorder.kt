@@ -3,6 +3,7 @@ package org.zenconverter.app.audio
 import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
+import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.os.SystemClock
 import kotlinx.coroutines.Dispatchers
@@ -23,11 +24,26 @@ import kotlin.math.max
  */
 class AudioRecorder(
     private val sampleRateHz: Int = 44_100,
-    private val channelCount: Int = 1
+    private val channelCount: Int = 1,
+    private val inputSource: Int = MediaRecorder.AudioSource.MIC,
+    private val autoGain: Boolean = false,
+    private val noiseGate: Float = 0f,
+    private val monitor: Boolean = false
 ) {
     enum class State { Idle, Recording, Paused }
 
+    /** Microphone inputs a device may expose; the UI only offers what is present. */
+    enum class Input(val source: Int, val label: String) {
+        BuiltInMic(MediaRecorder.AudioSource.MIC, "Built-in mic"),
+        BluetoothSco(MediaRecorder.AudioSource.VOICE_RECOGNITION, "Bluetooth"),
+        Usb(MediaRecorder.AudioSource.UNPROCESSED, "USB"),
+        Camcorder(MediaRecorder.AudioSource.CAMCORDER, "Camcorder")
+    }
+
     data class Level(val rms: Float, val peak: Float)
+
+    /** A named position in the recording, in milliseconds from the start. */
+    data class Marker(val atMs: Long, val label: String)
 
     private val _state = MutableStateFlow(State.Idle)
     val state: StateFlow<State> = _state.asStateFlow()
@@ -38,7 +54,11 @@ class AudioRecorder(
     private val _elapsedMs = MutableStateFlow(0L)
     val elapsedMs: StateFlow<Long> = _elapsedMs.asStateFlow()
 
+    private val _markers = MutableStateFlow<List<Marker>>(emptyList())
+    val markers: StateFlow<List<Marker>> = _markers.asStateFlow()
+
     private var recorder: AudioRecord? = null
+    private var monitorTrack: AudioTrack? = null
     private var thread: Thread? = null
     private var outputFile: File? = null
     @Volatile private var running = false
@@ -55,7 +75,7 @@ class AudioRecorder(
         )
         val bufferSize = max(minBuffer, sampleRateHz / 5 * channelCount * 2)
         val record = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
+            inputSource,
             sampleRateHz,
             if (channelCount == 1) AudioFormat.CHANNEL_IN_MONO else AudioFormat.CHANNEL_IN_STEREO,
             AudioFormat.ENCODING_PCM_16BIT,
@@ -66,10 +86,30 @@ class AudioRecorder(
         bytesWritten = 0
         writeWavHeader(target, 0)
         recorder = record
+        if (monitor) {
+            monitorTrack = runCatching {
+                val track = AudioTrack.Builder()
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .setSampleRate(sampleRateHz)
+                            .setChannelMask(
+                                if (channelCount == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
+                            )
+                            .build()
+                    )
+                    .setBufferSizeInBytes(bufferSize)
+                    .setTransferMode(AudioTrack.MODE_STREAM)
+                    .build()
+                    .also { it.play() }
+                track
+            }.getOrNull()
+        }
         running = true
         paused = false
         _state.value = State.Recording
         _elapsedMs.value = 0
+        _markers.value = emptyList()
         record.startRecording()
         thread = Thread {
             val buffer = ByteArray(bufferSize)
@@ -88,6 +128,8 @@ class AudioRecorder(
                 }
                 val read = record.read(buffer, 0, buffer.size)
                 if (read <= 0) continue
+                if (noiseGate > 0f || autoGain) applyProcessing(buffer, read)
+                monitorTrack?.let { track -> runCatching { track.write(buffer, 0, read) } }
                 RandomAccessFile(target, "rw").use { raf ->
                     raf.seek(HEADER_BYTES + bytesWritten)
                     raf.write(buffer, 0, read)
@@ -122,11 +164,54 @@ class AudioRecorder(
         thread?.join(1_500)
         thread = null
         recorder = null
+        monitorTrack?.let { track ->
+            runCatching { track.stop() }
+            runCatching { track.release() }
+        }
+        monitorTrack = null
         _state.value = State.Idle
         _level.value = Level(0f, 0f)
         val file = outputFile
         if (file != null) finalizeWavHeader(file, bytesWritten)
         file
+    }
+
+    /** Adds a marker at the current elapsed position. */
+    fun addMarker(label: String) {
+        if (_state.value == State.Idle) return
+        _markers.value = _markers.value + Marker(_elapsedMs.value, label)
+    }
+
+    /**
+     * Applies the noise gate and auto gain in place on 16-bit little-endian PCM.
+     * The gate zeroes samples below [noiseGate]; auto gain then scales the whole
+     * block toward a -3 dBFS peak so quiet takes stay usable.
+     */
+    private fun applyProcessing(buffer: ByteArray, length: Int) {
+        val sampleCount = length / 2
+        if (sampleCount == 0) return
+        var peak = 0f
+        for (index in 0 until sampleCount) {
+            val value = sampleAt(buffer, index)
+            if (kotlin.math.abs(value) > peak) peak = kotlin.math.abs(value)
+        }
+        val gain = if (autoGain && peak > 0.0001f) (AUTO_GAIN_TARGET / peak).coerceAtMost(AUTO_GAIN_MAX) else 1f
+        for (index in 0 until sampleCount) {
+            var value = sampleAt(buffer, index)
+            if (noiseGate > 0f && kotlin.math.abs(value) < noiseGate) {
+                value = 0f
+            }
+            value = (value * gain).coerceIn(-1f, 1f)
+            val scaled = (value * 32767f).toInt()
+            buffer[index * 2] = (scaled and 0xFF).toByte()
+            buffer[index * 2 + 1] = ((scaled shr 8) and 0xFF).toByte()
+        }
+    }
+
+    private fun sampleAt(buffer: ByteArray, index: Int): Float {
+        val low = buffer[index * 2].toInt() and 0xFF
+        val high = buffer[index * 2 + 1].toInt()
+        return ((high shl 8) or low).toShort() / 32768f
     }
 
     private fun levelOf(buffer: ByteArray, length: Int): Level {
@@ -184,6 +269,9 @@ class AudioRecorder(
     }
 
     companion object {
+        private const val AUTO_GAIN_TARGET = 0.7f
+        private const val AUTO_GAIN_MAX = 8f
+
         private const val HEADER_BYTES = 44L
 
         /** Converts a linear RMS value to dBFS for display. */

@@ -1469,6 +1469,40 @@
     <string name="tag_field_language">Language</string>
     <string name="tag_yes">Yes</string>
     <string name="tag_no">No</string>
+
+    <!-- Recorder enrichment -->
+    <string name="recorder_input_source">Input source</string>
+    <string name="recorder_input_builtin">Built-in mic</string>
+    <string name="recorder_input_bluetooth">Bluetooth</string>
+    <string name="recorder_input_usb">USB</string>
+    <string name="recorder_input_camcorder">Camcorder</string>
+    <string name="recorder_capture">Capture settings</string>
+    <string name="recorder_sample_rate">Sample rate</string>
+    <string name="recorder_channels">Channels</string>
+    <string name="recorder_channels_mono">Mono</string>
+    <string name="recorder_channels_stereo">Stereo</string>
+    <string name="recorder_auto_gain">Auto gain</string>
+    <string name="recorder_noise_gate">Noise gate</string>
+    <string name="recorder_monitor">Monitor input</string>
+    <string name="recorder_add_marker">Add marker</string>
+    <string name="recorder_marker_label">Marker %1$d</string>
+    <string name="recorder_markers">Markers</string>
+    <string name="recorder_after">After recording</string>
+    <string name="recorder_after_none">Do nothing</string>
+    <string name="recorder_after_ringtone">Set as ringtone</string>
+    <string name="recorder_after_waveform">Open in waveform editor</string>
+    <string name="recorder_ringtone_set">Set as your ringtone.</string>
+
+    <!-- Mixer enrichment -->
+    <string name="mixer_mode">Mix mode</string>
+    <string name="mixer_mode_amix">Layer (amix)</string>
+    <string name="mixer_mode_concat">Join end to end</string>
+    <string name="mixer_master">Master output</string>
+    <string name="mixer_limiter">Master limiter</string>
+    <string name="mixer_normalize">Normalize mix</string>
+    <string name="mixer_command">Show FFmpeg command</string>
+    <string name="mixer_command_title">Generated command</string>
 </resources>
+
 
 
