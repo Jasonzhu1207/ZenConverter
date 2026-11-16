@@ -4866,12 +4866,30 @@ class ConversionService : Service() {
                     addAudioMetadataArguments(this, snapshot, includePicture = false)
                 }
                 add("-c:a")
-                add(audioProfile.codec)
+                add(
+                    if (audioProfile.codec == FFMPEG_WAV_ENCODER) {
+                        AudioBitDepthResolver.wavEncoder(input.audioOptions.bitDepth)
+                    } else {
+                        audioProfile.codec
+                    }
+                )
                 addFfmpegAudioOptions(input.audioOptions, audioProfile, durationMs)
                 if (audioProfile.codec == FFMPEG_FLAC_ENCODER) {
-                    audioMetadata?.flacStreamInfo?.let { info ->
+                    val requestedDepth = AudioBitDepthResolver.flacBitsPerRawSample(input.audioOptions.bitDepth)
+                    if (requestedDepth != null) {
                         add("-bits_per_raw_sample")
-                        add(AudioMetadataCodec.flacBitDepth(info).toString())
+                        add(requestedDepth.toString())
+                    } else {
+                        audioMetadata?.flacStreamInfo?.let { info ->
+                            add("-bits_per_raw_sample")
+                            add(AudioMetadataCodec.flacBitDepth(info).toString())
+                        }
+                    }
+                }
+                if (audioProfile.supportsBitDepth && audioProfile.codec == FFMPEG_ALAC_ENCODER) {
+                    AudioBitDepthResolver.alacSampleFormat(input.audioOptions.bitDepth)?.let { sampleFormat ->
+                        add("-sample_fmt")
+                        add(sampleFormat)
                     }
                 }
                 if (audioProfile.useFastStart) {
@@ -5526,6 +5544,7 @@ class ConversionService : Service() {
                 format = "ipod",
                 useFastStart = true,
                 supportsBitrate = false,
+                supportsBitDepth = true,
                 requiredEncoder = FFMPEG_ALAC_ENCODER,
                 supportsAttachedPicture = true
             )
@@ -7505,6 +7524,7 @@ class ConversionService : Service() {
         val supportsBitrate: Boolean = true,
         val supportsSampleRate: Boolean = true,
         val supportsChannelCount: Boolean = true,
+        val supportsBitDepth: Boolean = false,
         val supportsAttachedPicture: Boolean = false,
         val requiredEncoder: String? = null
     )

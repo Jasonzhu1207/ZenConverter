@@ -164,9 +164,18 @@ data class AudioExportOptions(
     val mp3VbrQuality: Int = DEFAULT_MP3_VBR_QUALITY,
     val sampleRateHz: Int? = null,
     val channelCount: Int? = null,
+    val bitDepth: AudioBitDepth = AudioBitDepth.Auto,
     val trimRange: MediaTrimRange = MediaTrimRange(),
     val advanced: AudioAdvancedOptions = AudioAdvancedOptions()
 )
+
+/** Sample bit depth for the lossless encoders that support a choice. */
+enum class AudioBitDepth(val bits: Int?) {
+    Auto(null),
+    Bit16(16),
+    Bit24(24),
+    Bit32(32)
+}
 
 enum class Mp3BitrateMode {
     Cbr,

@@ -203,6 +203,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import org.zenconverter.app.conversion.AudioAdvancedOptions
+import org.zenconverter.app.conversion.AudioBitDepth
 import org.zenconverter.app.ui.studio.StudioScreen
 import org.zenconverter.app.ui.studio.WaveformEditorScreen
 import org.zenconverter.app.ui.studio.AudioRecorderScreen
@@ -803,6 +804,17 @@ private fun audioSampleRateOptionsFor(targetFormat: TargetFormat): List<String> 
         AUDIO_SAMPLE_RATE_OPTIONS
     }
 }
+
+internal const val AUDIO_BIT_DEPTH_ORIGINAL = "Original"
+internal const val AUDIO_BIT_DEPTH_16 = "16-bit"
+internal const val AUDIO_BIT_DEPTH_24 = "24-bit"
+internal const val AUDIO_BIT_DEPTH_32 = "32-bit"
+private val AUDIO_BIT_DEPTH_OPTIONS = listOf(
+    AUDIO_BIT_DEPTH_ORIGINAL,
+    AUDIO_BIT_DEPTH_16,
+    AUDIO_BIT_DEPTH_24,
+    AUDIO_BIT_DEPTH_32
+)
 
 private const val AUDIO_CHANNELS_ORIGINAL = "Original"
 private const val AUDIO_CHANNELS_STEREO = "Stereo"
@@ -3793,6 +3805,29 @@ private fun BatchAudioTargetOptions(
                     }
                 )
             }
+            if (audioSupportsBitDepthOption(target)) {
+                OptionDropdown(
+                    menuId = "batch-audio-bit-depth",
+                    label = texts.bitDepth,
+                    selected = commonBatchLabel(files) { audioBitDepthLabelFor(it.audioOptions.bitDepth) },
+                    options = AUDIO_BIT_DEPTH_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = true
+                ) { value ->
+                    onOpenMenuChange(null)
+                    onUpdateFiles(
+                        files.map { file ->
+                            file.copy(
+                                audioOptions = file.audioOptions.copy(
+                                    bitDepth = audioBitDepthFor(value)
+                                )
+                            )
+                        }
+                    )
+                }
+            }
             OptionDropdown(
                 menuId = "batch-audio-channels",
                 label = texts.channels,
@@ -5130,6 +5165,7 @@ private fun AudioOptions(
     vbrQuality: Int,
     bitrate: String,
     sampleRate: String,
+    bitDepth: String,
     channels: String,
     advanced: AudioAdvancedUiState,
     targetFormat: TargetFormat,
@@ -5144,6 +5180,7 @@ private fun AudioOptions(
     onVbrQualityChange: (String) -> Unit,
     onBitrateChange: (String) -> Unit,
     onSampleRateChange: (String) -> Unit,
+    onBitDepthChange: (String) -> Unit,
     onChannelsChange: (String) -> Unit,
     onAdvancedExpandedChange: (Boolean) -> Unit,
     onReverseChange: (Boolean) -> Unit,
@@ -5227,6 +5264,19 @@ private fun AudioOptions(
                 showDivider = true,
                 onSelected = onSampleRateChange
             )
+            if (audioSupportsBitDepthOption(targetFormat)) {
+                OptionDropdown(
+                    menuId = "${menuPrefix}audio-bit-depth",
+                    label = texts.bitDepth,
+                    selected = bitDepth,
+                    options = AUDIO_BIT_DEPTH_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = true,
+                    onSelected = onBitDepthChange
+                )
+            }
             OptionDropdown(
                 menuId = "${menuPrefix}audio-channels",
                 label = texts.channels,
@@ -7425,6 +7475,7 @@ private fun QueuedFileOptionsPanel(
                 vbrQuality = file.audioOptions.mp3VbrQuality,
                 bitrate = audioBitrateLabelFor(file.audioOptions.audioBitrate),
                 sampleRate = audioSampleRateLabelFor(file.audioOptions.sampleRateHz),
+                bitDepth = audioBitDepthLabelFor(file.audioOptions.bitDepth),
                 channels = audioChannelsLabelFor(file.audioOptions.channelCount),
                 advanced = audioAdvancedUiStateFor(file.audioOptions.advanced, audioAdvancedExpanded),
                 targetFormat = selectedTarget.targetFormat,
@@ -7468,6 +7519,9 @@ private fun QueuedFileOptionsPanel(
                 },
                 onSampleRateChange = { value ->
                     onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(sampleRateHz = audioSampleRateToHz(value))))
+                },
+                onBitDepthChange = { value ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(bitDepth = audioBitDepthFor(value))))
                 },
                 onChannelsChange = { value ->
                     onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(channelCount = audioChannelsToCount(value))))
@@ -8574,14 +8628,16 @@ private fun audioOptionsForTarget(
     current: AudioExportOptions,
     targetFormat: TargetFormat
 ): AudioExportOptions {
+    var result = current
+    if (!audioSupportsBitDepthOption(targetFormat) && result.bitDepth != AudioBitDepth.Auto) {
+        result = result.copy(bitDepth = AudioBitDepth.Auto)
+    }
     if (isOpusTarget(targetFormat)) {
-        return if (current.sampleRateHz != null && current.sampleRateHz !in OPUS_SUPPORTED_SAMPLE_RATES) {
-            current.copy(sampleRateHz = null)
-        } else {
-            current
+        if (result.sampleRateHz != null && result.sampleRateHz !in OPUS_SUPPORTED_SAMPLE_RATES) {
+            result = result.copy(sampleRateHz = null)
         }
     }
-    return current
+    return result
 }
 
 private fun videoResolutionLabelFor(options: VideoExportOptions): String {
@@ -8699,6 +8755,24 @@ private fun audioChannelsLabelFor(value: Int?): String {
         2 -> AUDIO_CHANNELS_STEREO
         1 -> AUDIO_CHANNELS_MONO
         else -> AUDIO_CHANNELS_ORIGINAL
+    }
+}
+
+private fun audioBitDepthLabelFor(value: AudioBitDepth): String {
+    return when (value) {
+        AudioBitDepth.Bit16 -> AUDIO_BIT_DEPTH_16
+        AudioBitDepth.Bit24 -> AUDIO_BIT_DEPTH_24
+        AudioBitDepth.Bit32 -> AUDIO_BIT_DEPTH_32
+        AudioBitDepth.Auto -> AUDIO_BIT_DEPTH_ORIGINAL
+    }
+}
+
+private fun audioBitDepthFor(value: String): AudioBitDepth {
+    return when (value) {
+        AUDIO_BIT_DEPTH_16 -> AudioBitDepth.Bit16
+        AUDIO_BIT_DEPTH_24 -> AudioBitDepth.Bit24
+        AUDIO_BIT_DEPTH_32 -> AudioBitDepth.Bit32
+        else -> AudioBitDepth.Auto
     }
 }
 
@@ -9161,6 +9235,10 @@ private fun audioSupportsBitrateOption(targetFormat: TargetFormat): Boolean {
     return targetFormat.extension.lowercase(Locale.US) !in AUDIO_LOSSLESS_OUTPUT_EXTENSIONS
 }
 
+private fun audioSupportsBitDepthOption(targetFormat: TargetFormat): Boolean {
+    return targetFormat.extension.lowercase(Locale.US) in AUDIO_BIT_DEPTH_OUTPUT_EXTENSIONS
+}
+
 private fun imageQualityOptionsFor(targetFormat: TargetFormat): List<String> {
     return if (supportsWebpLosslessQuality(targetFormat)) {
         listOf(
@@ -9240,6 +9318,8 @@ private fun pdfCompressionPresetToOption(value: String): PdfCompressionPreset {
 }
 
 private val AUDIO_LOSSLESS_OUTPUT_EXTENSIONS = setOf("wav", "flac")
+
+private val AUDIO_BIT_DEPTH_OUTPUT_EXTENSIONS = setOf("wav", "flac", "alac")
 
 
 

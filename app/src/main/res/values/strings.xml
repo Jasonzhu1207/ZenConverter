@@ -349,6 +349,10 @@
     <string name="text_option_value_native_or_compatibility">Native or compatibility</string>
     <string name="text_option_value_none">None</string>
     <string name="text_option_value_off">Off</string>
+    <string name="text_option_value_bit_depth_original">Original</string>
+    <string name="text_option_value_bit_depth_16">16-bit</string>
+    <string name="text_option_value_bit_depth_24">24-bit</string>
+    <string name="text_option_value_bit_depth_32">32-bit</string>
     <string name="text_option_value_off_manual">Off (manual)</string>
     <string name="text_option_value_office_to_pdf">Office to PDF</string>
     <string name="text_option_value_one_file_per_input">One file per input</string>
@@ -627,6 +631,7 @@
     <string name="ui_resolution">Resolution</string>
     <string name="ui_rife_model_purpose">Deep-learning optical flow frame interpolator (2× FPS enhancement, Experimental)</string>
     <string name="ui_sample_rate">Sample rate</string>
+    <string name="ui_bit_depth">Bit depth</string>
     <string name="ui_selected_suffix">selected</string>
     <string name="ui_share_output">Share output</string>
     <string name="ui_share_output_failed">No app can share this output</string>

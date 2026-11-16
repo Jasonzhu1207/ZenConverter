@@ -598,6 +598,9 @@ internal class UiText(private val context: Context) {
     val sampleRate: String
         get() = text(R.string.ui_sample_rate)
 
+    val bitDepth: String
+        get() = text(R.string.ui_bit_depth)
+
     val opusSampleRateHint: String
         get() = text(R.string.ui_opus_sample_rate_hint)
 
@@ -1619,6 +1622,10 @@ internal class UiText(private val context: Context) {
             "Balanced" -> text(R.string.text_option_value_balanced)
             "Small" -> text(R.string.text_option_value_small)
             "Original" -> text(R.string.text_option_value_original)
+            AUDIO_BIT_DEPTH_ORIGINAL -> text(R.string.text_option_value_bit_depth_original)
+            AUDIO_BIT_DEPTH_16 -> text(R.string.text_option_value_bit_depth_16)
+            AUDIO_BIT_DEPTH_24 -> text(R.string.text_option_value_bit_depth_24)
+            AUDIO_BIT_DEPTH_32 -> text(R.string.text_option_value_bit_depth_32)
             ADVANCED_FADE_OFF -> text(R.string.text_option_value_off)
             ADVANCED_FADE_HALF_SECOND,
             ADVANCED_FADE_ONE_SECOND,
