@@ -2,6 +2,7 @@ package org.zenconverter.app.conversion
 import org.zenconverter.app.R
 import org.zenconverter.app.i18n.LocalizedText
 import org.zenconverter.app.i18n.localizedText
+import org.zenconverter.app.audio.AudioEffects
 
 
 import android.net.Uri
@@ -128,13 +129,32 @@ data class VideoExportOptions(
     val compressionMode: VideoCompressionMode = VideoCompressionMode.Standard,
     val frameInterpolation: VideoFrameInterpolationMode = VideoFrameInterpolationMode.Off,
     val trimRange: MediaTrimRange = MediaTrimRange(),
-    val advanced: VideoAdvancedOptions = VideoAdvancedOptions()
+    val advanced: VideoAdvancedOptions = VideoAdvancedOptions(),
+    /**
+     * GIF frame rate cap. Lower values shrink the file and are the main
+     * lever for the GIF/sticker size optimizer.
+     */
+    val gifFrameRate: Int = DEFAULT_GIF_FRAME_RATE,
+    /**
+     * GIF palette size. Fewer colours mean a smaller file; 256 keeps full
+     * fidelity while 32/64/128 trade colour depth for size.
+     */
+    val gifMaxColors: Int = DEFAULT_GIF_MAX_COLORS,
+    /**
+     * Use the platform encoder when the linked FFmpeg exposes one. Off by
+     * default so output is byte-reproducible across devices until the user opts
+     * in; the software encoder is always the fallback.
+     */
+    val allowHardwareEncoding: Boolean = false
 ) {
     companion object {
         const val VIDEO_MIME_TYPE_H264 = "video/avc"
         const val VIDEO_MIME_TYPE_H265 = "video/hevc"
         const val VIDEO_MIME_TYPE_VP9 = "video/x-vnd.on2.vp9"
         const val VIDEO_MIME_TYPE_VP8 = "video/x-vnd.on2.vp8"
+
+        const val DEFAULT_GIF_FRAME_RATE = 30
+        const val DEFAULT_GIF_MAX_COLORS = 256
     }
 }
 
@@ -157,9 +177,18 @@ data class AudioExportOptions(
     val mp3VbrQuality: Int = DEFAULT_MP3_VBR_QUALITY,
     val sampleRateHz: Int? = null,
     val channelCount: Int? = null,
+    val bitDepth: AudioBitDepth = AudioBitDepth.Auto,
     val trimRange: MediaTrimRange = MediaTrimRange(),
     val advanced: AudioAdvancedOptions = AudioAdvancedOptions()
 )
+
+/** Sample bit depth for the lossless encoders that support a choice. */
+enum class AudioBitDepth(val bits: Int?) {
+    Auto(null),
+    Bit16(16),
+    Bit24(24),
+    Bit32(32)
+}
 
 enum class Mp3BitrateMode {
     Cbr,
@@ -208,7 +237,8 @@ data class AudioAdvancedOptions(
     val fadeOutSeconds: Float? = null,
     val volume: AudioVolumeMode = AudioVolumeMode.Original,
     val echo: AudioEchoMode = AudioEchoMode.Off,
-    val noiseReduction: AudioNoiseReductionMode = AudioNoiseReductionMode.Off
+    val noiseReduction: AudioNoiseReductionMode = AudioNoiseReductionMode.Off,
+    val effects: AudioEffects = AudioEffects()
 ) {
     val hasEnabledEffects: Boolean
         get() = reverse ||
@@ -216,7 +246,8 @@ data class AudioAdvancedOptions(
             fadeOutSeconds != null ||
             volume != AudioVolumeMode.Original ||
             echo != AudioEchoMode.Off ||
-            noiseReduction != AudioNoiseReductionMode.Off
+            noiseReduction != AudioNoiseReductionMode.Off ||
+            effects.hasEnabledEffects
 }
 
 enum class VideoMirrorMode {
@@ -282,8 +313,23 @@ enum class ImageSuperResolutionMode(val scale: Int) {
 data class ImageExportOptions(
     val quality: Int = 90,
     val webpLossless: Boolean = false,
-    val superResolution: ImageSuperResolutionMode = ImageSuperResolutionMode.Off
+    val superResolution: ImageSuperResolutionMode = ImageSuperResolutionMode.Off,
+    val resize: ImageResizeMode = ImageResizeMode.Original
 )
+
+/**
+ * Output dimension cap for still images. A long-edge cap keeps aspect ratio
+ * predictable for mixed portrait and landscape batches.
+ */
+enum class ImageResizeMode(val maxLongEdgePx: Int?) {
+    Original(null),
+    Px4096(4096),
+    Px2560(2560),
+    Px1920(1920),
+    Px1280(1280),
+    Px1080(1080),
+    Px720(720)
+}
 
 data class PdfExportOptions(
     val imagePageMode: PdfImagePageMode = PdfImagePageMode.A4Fit,
@@ -353,11 +399,26 @@ object ConversionTaskStore {
     val summaryMessage = mutableStateOf<LocalizedText?>(null)
     val isRunning = mutableStateOf(false)
 
+    /** True while the user has held the queue; the service re-checks it per task. */
+    val isQueuePaused = mutableStateOf(false)
+
+    /** The most recent FFmpeg command, surfaced by the studio command-line view. */
+    val lastFfmpegCommand = mutableStateOf<String?>(null)
+
+    fun recordFfmpegCommand(command: String) {
+        lastFfmpegCommand.value = command
+    }
+
     private val inputs = mutableListOf<ConversionTaskInput>()
     private var cancelled = false
 
+    /** Set when a single task should be re-run without redoing the whole queue. */
+    private var requestedStartIndex: Int? = null
+
     fun prepareRun(nextInputs: List<ConversionTaskInput>) {
         cancelled = false
+        isQueuePaused.value = false
+        requestedStartIndex = null
         inputs.clear()
         inputs.addAll(nextInputs)
         isRunning.value = nextInputs.isNotEmpty()
@@ -375,6 +436,58 @@ object ConversionTaskStore {
                 )
             }
         )
+    }
+
+    fun isQueuePausedNow(): Boolean = isQueuePaused.value
+
+    /** Holds the queue after the running task finishes. */
+    fun pauseQueue() {
+        if (!isRunning.value) return
+        isQueuePaused.value = true
+        summaryMessage.value = localizedText(R.string.queue_paused)
+    }
+
+    fun resumeQueue() {
+        isQueuePaused.value = false
+    }
+
+    /**
+     * Marks the task at [index] for another attempt and asks the service to start
+     * from there. Only tasks that are not currently running can be retried.
+     */
+    fun requestRetry(index: Int): Boolean {
+        val task = tasks.getOrNull(index) ?: return false
+        if (task.status == ConversionTaskStatus.Running) return false
+        updateTask(index) { current ->
+            current.copy(
+                status = ConversionTaskStatus.Queued,
+                progress = 0f,
+                message = localizedText(R.string.ui_waiting),
+                outputUri = null,
+                outputUris = emptyList()
+            )
+        }
+        requestedStartIndex = index
+        cancelled = false
+        isQueuePaused.value = false
+        isRunning.value = true
+        summaryMessage.value = localizedText(R.string.task_processing)
+        return true
+    }
+
+    /** Hands the pending start index to the service and clears it. */
+    fun consumeStartIndex(): Int? = requestedStartIndex.also { requestedStartIndex = null }
+
+    /**
+     * Moves a queued task from [from] to [to], keeping the task list and the
+     * pending inputs in step. Reordering is refused while a run is in flight.
+     */
+    fun moveQueuedTask(from: Int, to: Int): Boolean {
+        if (isRunning.value) return false
+        if (from !in tasks.indices || to !in tasks.indices || from == to) return false
+        tasks.add(to, tasks.removeAt(from))
+        inputs.add(to, inputs.removeAt(from))
+        return true
     }
 
     fun showMessage(message: LocalizedText) {

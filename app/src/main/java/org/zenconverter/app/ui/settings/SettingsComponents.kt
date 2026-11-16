@@ -1,7 +1,6 @@
 package org.zenconverter.app.ui.settings
 
 import android.os.Build
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,7 +25,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -40,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import org.zenconverter.app.ui.AccentColorOption
 import org.zenconverter.app.ui.AppIcon
 import org.zenconverter.app.ui.UiText
+import org.zenconverter.app.ui.theme.ZenDimensions
+import org.zenconverter.app.ui.theme.bounceClick
 
 /** Shared window insets, reading width, app bar, and scroll behavior for every subpage. */
 @Composable
@@ -49,28 +55,38 @@ internal fun SettingsPage(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState(),
+    /** Widen the content column on large screens; off by default. */
+    allowWideContent: Boolean = false,
+    /** Root pages such as the hub drop the back arrow; sub-pages keep it. */
+    showBack: Boolean = true,
+    /** Optional trailing controls in the top bar, shown after the title. */
+    actions: @Composable RowScope.() -> Unit = {},
     content: LazyListScope.() -> Unit
 ) {
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    GlassBackdrop(modifier) {
         BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             val margin = if (maxWidth >= 600.dp) 24.dp else 16.dp
+            val contentWidth = if (allowWideContent && maxWidth >= 840.dp) 1100.dp else 680.dp
             Column(
                 Modifier.align(Alignment.TopCenter)
                     .padding(horizontal = margin)
-                    .widthIn(max = 680.dp).fillMaxWidth().fillMaxHeight()
+                    .widthIn(max = contentWidth).fillMaxWidth().fillMaxHeight()
             ) {
                 Row(
                     Modifier.fillMaxWidth().heightIn(min = 56.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = backLabel)
+                    if (showBack) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = backLabel)
+                        }
                     }
                     Text(
                         title, modifier = Modifier.weight(1f).semantics { heading() },
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold
                     )
+                    actions()
                 }
                 LazyColumn(
                     state = listState,
@@ -84,6 +100,101 @@ internal fun SettingsPage(
     }
 }
 
+/**
+ * The card surface every subpage draws on: a translucent "glass" panel with a
+ * hairline border and a soft top sheen, matching the hub tiles. The translucency
+ * is what lets the page backdrop read through, so keep cards on top of the
+ * [GlassBackdrop] rather than a flat fill.
+ */
+@Composable
+internal fun GlassCard(
+    modifier: Modifier = Modifier,
+    shape: Shape = GlassCardShape,
+    onClick: (() -> Unit)? = null,
+    content: @Composable BoxScope.() -> Unit
+) {
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = glassSurfaceAlpha()))
+            .border(ZenDimensions.BorderWidth, MaterialTheme.colorScheme.outlineVariant, shape)
+            .then(if (onClick != null) Modifier.bounceClick(onClick = onClick, scaleDown = 0.97f) else Modifier)
+    ) {
+        Box(
+            Modifier
+                .matchParentSize()
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = GlassSheenAlpha),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+        content()
+    }
+}
+
+internal val GlassCardShape = RoundedCornerShape(18.dp)
+
+/** Opacity of the top sheen that fakes the preview's blurred highlight. */
+private const val GlassSheenAlpha = 0.55f
+
+/**
+ * Card fill opacity, matched to the reference design per mode: lighter in light,
+ * a touch more open in dark, and denser on OLED black so the card stays readable
+ * there without a glow behind it.
+ */
+@Composable
+private fun glassSurfaceAlpha(): Float {
+    val background = MaterialTheme.colorScheme.background.luminance()
+    return when {
+        background > 0.5f -> 0.62f
+        background < 0.001f -> 0.72f
+        else -> 0.55f
+    }
+}
+
+/**
+ * Paints the soft radial glows the preview uses behind the glass cards. Without
+ * a non-flat backdrop the translucent cards would read as plain surfaces, so
+ * every page that draws glass lays this down first.
+ */
+@Composable
+internal fun GlassBackdrop(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    val primary = MaterialTheme.colorScheme.primary
+    val secondary = MaterialTheme.colorScheme.secondary
+    Box(
+        modifier.fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .drawBehind {
+                fun glow(x: Float, y: Float, radiusFraction: Float, color: Color) {
+                    val center = Offset(size.width * x, size.height * y)
+                    val radius = size.width * radiusFraction
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(color, Color.Transparent),
+                            center = center,
+                            radius = radius
+                        ),
+                        radius = radius,
+                        center = center
+                    )
+                }
+                glow(0.12f, -0.08f, 0.85f, secondary.copy(alpha = 0.30f))
+                glow(0.92f, 0.04f, 0.75f, primary.copy(alpha = 0.22f))
+                glow(0.50f, 1.08f, 0.70f, primary.copy(alpha = 0.16f))
+            }
+    ) {
+        content()
+    }
+}
+
+/** Solid card fill, for the few places that must sit flat on top of glass. */
 @Composable
 internal fun settingsCardColor(): Color = MaterialTheme.colorScheme.surface
 
@@ -110,12 +221,7 @@ internal fun InsetGroupCard(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = settingsCardColor(),
-        border = BorderStroke(1.dp, settingsHairlineColor())
-    ) {
+    GlassCard(modifier = modifier.fillMaxWidth()) {
         Column(Modifier.fillMaxWidth(), content = content)
     }
 }

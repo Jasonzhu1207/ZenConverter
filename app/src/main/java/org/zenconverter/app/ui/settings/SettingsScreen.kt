@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
@@ -43,21 +44,22 @@ import org.zenconverter.app.ui.theme.ZenDimensions
 internal fun SettingsScreen(
     texts: UiText,
     selectedAccent: AccentColorOption,
-    selectedThemeMode: ThemeModeOption,
     isOledDark: Boolean,
+    useHardwareEncoding: Boolean,
     selectedLanguage: LanguageOption,
     selectedActionBarPosition: ActionBarPosition,
     outputLocationMode: OutputLocationMode,
     outputDirectory: OutputDirectory?,
     onAccentSelected: (AccentColorOption) -> Unit,
-    onThemeModeSelected: (ThemeModeOption) -> Unit,
     onOledDarkChange: (Boolean) -> Unit,
+    onUseHardwareEncodingChange: (Boolean) -> Unit,
     onLanguageSelected: (LanguageOption) -> Unit,
     onActionBarPositionSelected: (ActionBarPosition) -> Unit,
     onOutputLocationModeChange: (OutputLocationMode) -> Unit,
     onPickOutputDirectory: () -> Unit,
     onNavigateToMetadataSecurity: () -> Unit,
     onNavigateToOfflineEngines: () -> Unit,
+    onNavigateToStudio: () -> Unit,
     onShowHelp: () -> Unit,
     onShowPrivacyPolicy: () -> Unit,
     onShowSupport: () -> Unit,
@@ -98,11 +100,12 @@ internal fun SettingsScreen(
         item(key = "appearance") {
             InsetGroupCard {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SettingsChoiceGroup(
-                        options = ThemeModeOption.entries, selectedOption = selectedThemeMode,
-                        onOptionSelected = onThemeModeSelected, labelProvider = texts::themeModeLabel
+                    Text(
+                        text = texts.followsDeviceTheme,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    if (selectedThemeMode != ThemeModeOption.Light) {
+                    if (isDark) {
                         Row(
                             Modifier.fillMaxWidth().heightIn(min = 48.dp)
                                 .toggleable(value = isOledDark, role = Role.Switch, onValueChange = onOledDarkChange),
@@ -118,6 +121,20 @@ internal fun SettingsScreen(
                 }
             }
         }
+        item(key = "performance-title") { SettingsGroupHeader(texts.settingsGroupPerformance) }
+        item(key = "performance") {
+            InsetGroupCard {
+                SettingsRow(
+                    badgeIcon = Icons.Rounded.Memory,
+                    title = texts.useHardwareEncoding,
+                    subtitle = texts.useHardwareEncodingDescription,
+                    trailingContent = {
+                        Switch(checked = useHardwareEncoding, onCheckedChange = null)
+                    },
+                    onClick = { onUseHardwareEncodingChange(!useHardwareEncoding) }
+                )
+            }
+        }
         item(key = "tools-title") { SettingsGroupHeader(texts.settingsGroupPrivacyEngines) }
         item(key = "tools") {
             InsetGroupCard {
@@ -129,7 +146,12 @@ internal fun SettingsScreen(
                 SettingsRow(
                     badgeIcon = Icons.Rounded.AutoAwesome, title = texts.settingsOfflineEngines,
                     subtitle = texts.settingsOfflineEnginesDesc, showChevron = true,
-                    showDivider = false, onClick = onNavigateToOfflineEngines
+                    onClick = onNavigateToOfflineEngines
+                )
+                SettingsRow(
+                    badgeIcon = Icons.Rounded.GraphicEq, title = texts.settingsStudioEntry(),
+                    subtitle = texts.settingsStudioEntryDesc(), showChevron = true,
+                    showDivider = false, onClick = onNavigateToStudio
                 )
             }
         }

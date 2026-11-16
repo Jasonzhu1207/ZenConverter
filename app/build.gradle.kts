@@ -13,6 +13,7 @@ check(ffmpegKitLocalAar.isFile) {
 val smartExceptionCommonLocalJar = file("libs/smart-exception-common-0.2.1.jar")
 val smartExceptionJavaLocalJar = file("libs/smart-exception-java-0.2.1.jar")
 val pdfBoxAndroidLocalAar = file("libs/pdfbox-android-2.0.27.0.aar")
+val zip4jLocalJar = file("libs/zip4j-2.11.5.jar")
 val bouncyCastleProvLocalJar = file("libs/bcprov-jdk15to18-1.72.jar")
 val bouncyCastlePkixLocalJar = file("libs/bcpkix-jdk15to18-1.72.jar")
 val bouncyCastleUtilLocalJar = file("libs/bcutil-jdk15to18-1.72.jar")
@@ -179,6 +180,9 @@ dependencies {
         )
     )
     implementation(files(ffmpegKitLocalAar))
+    implementation("org.apache.commons:commons-compress:1.27.1")
+    implementation(files(zip4jLocalJar))
+    implementation("org.tukaani:xz:1.10")
     if (smartExceptionCommonLocalJar.isFile && smartExceptionJavaLocalJar.isFile) {
         implementation(files(smartExceptionCommonLocalJar, smartExceptionJavaLocalJar))
     } else {
@@ -187,4 +191,7 @@ dependencies {
     }
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }

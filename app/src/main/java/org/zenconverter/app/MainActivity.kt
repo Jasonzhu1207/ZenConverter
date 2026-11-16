@@ -31,6 +31,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.lifecycleScope
@@ -46,6 +47,7 @@ import org.zenconverter.app.conversion.ConversionTaskState
 import org.zenconverter.app.conversion.ConversionTaskStatus
 import org.zenconverter.app.conversion.ConversionTaskStore
 import org.zenconverter.app.conversion.FileBasicInfo
+import org.zenconverter.app.conversion.QueueInbox
 import org.zenconverter.app.conversion.FileBasicInfoReader
 import org.zenconverter.app.conversion.GifFrameExportMode
 import org.zenconverter.app.conversion.ImageExportOptions
@@ -61,6 +63,7 @@ import org.zenconverter.app.metadata.MetadataOperationException
 import org.zenconverter.app.metadata.MetadataPrivacyManager
 import org.zenconverter.app.metadata.MetadataStatusMessage
 import org.zenconverter.app.metadata.MetadataTargetKind
+import org.zenconverter.app.metadata.MetadataScrubTargets
 import org.zenconverter.app.metadata.MetadataToolState
 import org.zenconverter.app.model.EsrganModelManager
 import org.zenconverter.app.model.EsrganModelSpec
@@ -119,6 +122,8 @@ class MainActivity : AppCompatActivity() {
     private val pendingQueuedPdfSelections = ArrayDeque<PendingQueuedPdfSelection>()
     private var pendingPdfOutputPasswordQueuedFileIds: List<String> = emptyList()
     private var pendingMetadataTargetKind: MetadataTargetKind? = null
+    private var activeScrubTargets: MetadataScrubTargets = MetadataScrubTargets()
+    private var pendingBatchScrubTargets: MetadataScrubTargets = MetadataScrubTargets()
     private var pendingMetadataMediaWriteGrant: PendingMetadataMediaWriteGrant? = null
     private var pendingMetadataReadPermissionRetry: PendingMetadataMediaWriteGrant? = null
     private var pendingAlbumPickKind: AlbumPickKind? = null
@@ -242,6 +247,13 @@ class MainActivity : AppCompatActivity() {
         inspectMetadataSelection(uri, kind, canWrite)
     }
 
+    private val openMetadataBatch = registerForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isEmpty()) return@registerForActivityResult
+        launchMetadataBatchScrub(pendingBatchScrubTargets, uris)
+    }
+
     private val requestMetadataMediaReadPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -251,7 +263,10 @@ class MainActivity : AppCompatActivity() {
         if (ready.inspection.uri != pending.uri) return@registerForActivityResult
         if (granted) {
             when (pending.operation) {
-                MetadataWriteOperation.Clean -> cleanSelectedMetadata(allowMediaWriteRequest = true)
+                MetadataWriteOperation.Clean -> cleanSelectedMetadata(
+                    allowMediaWriteRequest = true,
+                    targets = activeScrubTargets
+                )
                 MetadataWriteOperation.Restore -> {
                     val backupId = pending.backupId ?: return@registerForActivityResult
                     restoreSelectedMetadata(
@@ -277,7 +292,10 @@ class MainActivity : AppCompatActivity() {
             val ready = metadataToolState.value as? MetadataToolState.Ready ?: return@registerForActivityResult
             if (ready.inspection.uri != pending.uri) return@registerForActivityResult
             when (pending.operation) {
-                MetadataWriteOperation.Clean -> cleanSelectedMetadata(allowMediaWriteRequest = false)
+                MetadataWriteOperation.Clean -> cleanSelectedMetadata(
+                    allowMediaWriteRequest = false,
+                    targets = activeScrubTargets
+                )
                 MetadataWriteOperation.Restore -> {
                     val backupId = pending.backupId ?: return@registerForActivityResult
                     restoreSelectedMetadata(
@@ -312,7 +330,22 @@ class MainActivity : AppCompatActivity() {
         refreshEsrganModelState()
         refreshRifeModelState()
         refreshOfficeFontState()
+        org.zenconverter.app.system.CrashReporter.installIfEnabled(this)
         setContent {
+            LaunchedEffect(QueueInbox.size) {
+                if (QueueInbox.size == 0) return@LaunchedEffect
+                val pending = QueueInbox.drain()
+                if (pending.isEmpty()) return@LaunchedEffect
+                val uris = pending.map { ExternalImportUri(it.uri, it.mimeType) }
+                val items = withContext(Dispatchers.IO) {
+                    buildExternalImportDocuments(uris)
+                }
+                if (items.isEmpty()) {
+                    ConversionTaskStore.showMessage(localizedText(R.string.message_no_shared_files_were_found))
+                } else {
+                    enqueuePreparedDocuments(items, pending.mapNotNull { it.targetFormatKey })
+                }
+            }
             ZenConverterApp(
                 queuedFiles = queuedFiles,
                 pdfMergeGroups = pdfMergeGroups,
@@ -389,6 +422,9 @@ class MainActivity : AppCompatActivity() {
                 onRemoveFile = { fileId ->
                     removeQueuedFile(fileId)
                 },
+                onMoveQueuedFile = { fileId, delta ->
+                    moveQueuedFile(fileId, delta)
+                },
                 onClearQueue = {
                     queuedFiles.clear()
                     pdfMergeGroups.clear()
@@ -417,11 +453,14 @@ class MainActivity : AppCompatActivity() {
                 onPickMetadataVideo = {
                     openMetadataPicker(MetadataTargetKind.Video)
                 },
-                onCleanMetadata = {
-                    cleanSelectedMetadata()
+                onCleanMetadata = { targets ->
+                    cleanSelectedMetadata(targets = targets)
                 },
                 onRestoreMetadata = { backupId ->
                     restoreSelectedMetadata(backupId)
+                },
+                onBatchScrubMetadata = { targets ->
+                    launchMetadataBatchScrub(targets)
                 },
                 onDownloadEsrganModel = { spec ->
                     downloadEsrganModel(spec)
@@ -907,6 +946,14 @@ class MainActivity : AppCompatActivity() {
         return runCatching { Math.round(seconds * 1_000.0) }.getOrNull()
     }
 
+    private fun moveQueuedFile(fileId: String, delta: Int) {
+        val from = queuedFiles.indexOfFirst { it.id == fileId }
+        if (from < 0) return
+        val to = (from + delta).coerceIn(0, queuedFiles.lastIndex)
+        if (to == from) return
+        queuedFiles.add(to, queuedFiles.removeAt(from))
+    }
+
     private fun removeQueuedFile(fileId: String) {
         queuedFiles.removeAll { it.id == fileId }
         sanitizePdfMergeGroups()
@@ -1086,6 +1133,7 @@ class MainActivity : AppCompatActivity() {
     private fun buildConversionInputs(outputDestination: OutputDestination): List<ConversionTaskInput> {
         sanitizePdfMergeGroups()
         sanitizeVideoMergeGroups()
+        val allowHardwareEncoding = AppPreferences.useHardwareEncoding(this)
         val activePdfGroups = pdfMergeGroups
             .mapNotNull { group ->
                 val members = group.memberFileIds.mapNotNull { fileId ->
@@ -1114,10 +1162,16 @@ class MainActivity : AppCompatActivity() {
                 }
                 val videoGroup = videoGroupByFirstMemberId[file.id]
                 if (videoGroup != null) {
-                    add(videoGroup.first.toConversionTaskInput(videoGroup.second, outputDestination))
+                    add(
+                        videoGroup.first.toConversionTaskInput(
+                            videoGroup.second,
+                            outputDestination,
+                            allowHardwareEncoding
+                        )
+                    )
                 }
                 if (file.id !in allGroupedIds) {
-                    add(file.toConversionTaskInput(outputDestination))
+                    add(file.toConversionTaskInput(outputDestination, allowHardwareEncoding))
                 }
             }
         }
@@ -1257,13 +1311,19 @@ class MainActivity : AppCompatActivity() {
         enqueuePreparedDocuments(prepared)
     }
 
-    private fun enqueuePreparedDocuments(prepared: List<PreparedExternalImportDocument>) {
+    private fun enqueuePreparedDocuments(
+        prepared: List<PreparedExternalImportDocument>,
+        preferredFormatKeys: List<String> = emptyList()
+    ) {
         val pdfCount = prepared.count { it.detectedCategory == FileCategory.Pdf }
+        val preferredKey = preferredFormatKeys.firstOrNull()
         val nextFiles = prepared.mapNotNull { candidate ->
             val category = candidate.detectedCategory ?: return@mapNotNull null
             val targets = externalTargetsFor(category, pdfCount, candidate.extension)
             if (targets.isEmpty()) return@mapNotNull null
-            val defaultTarget = defaultExternalTargetFor(
+            val preferred = preferredKey
+                ?.let { key -> targets.firstOrNull { it.targetFormat.key == key } }
+            val defaultTarget = preferred ?: defaultExternalTargetFor(
                 category = category,
                 extension = candidate.extension,
                 targets = targets
@@ -1484,6 +1544,68 @@ class MainActivity : AppCompatActivity() {
         openMetadataDocument.launch(intent)
     }
 
+    /**
+     * Opens the multi-file picker for a batch scrub. The targets are stashed so
+     * the picker callback can use them after the activity result round trip.
+     */
+    private fun launchMetadataBatchScrub(targets: MetadataScrubTargets) {
+        pendingBatchScrubTargets = targets
+        openMetadataBatch.launch(
+            arrayOf(
+                "image/jpeg",
+                "image/jpg",
+                "image/jfif",
+                "image/png",
+                "image/webp",
+                "image/heic",
+                "image/heif"
+            )
+        )
+    }
+
+    /**
+     * Scrubs every selected image with [targets] and reports how many were
+     * touched. Files that cannot be written are counted as skipped rather than
+     * aborting the batch, so one locked file never stops the rest.
+     */
+    private fun launchMetadataBatchScrub(targets: MetadataScrubTargets, uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        lifecycleScope.launch {
+            val summary = withContext(Dispatchers.IO) {
+                var scrubbed = 0
+                var skipped = 0
+                uris.forEach { uri ->
+                    val result = runCatching {
+                        val metadata = queryOpenableMetadata(uri)
+                        val mimeType = contentResolver.getType(uri)
+                        val canWrite = persistMetadataFilePermission(uri = uri, requestWrite = true)
+                        val inspection = MetadataPrivacyManager.inspect(
+                            context = this@MainActivity,
+                            uri = uri,
+                            displayName = metadata.displayName,
+                            sizeBytes = metadata.sizeBytes,
+                            mimeType = mimeType,
+                            kind = MetadataTargetKind.Image,
+                            canWrite = canWrite
+                        )
+                        if (!inspection.editable || !inspection.canWrite) return@runCatching false
+                        MetadataPrivacyManager.cleanJpegInPlace(this@MainActivity, inspection, targets)
+                        true
+                    }.getOrDefault(false)
+                    if (result) scrubbed++ else skipped++
+                }
+                scrubbed to skipped
+            }
+            ConversionTaskStore.showMessage(
+                localizedText(
+                    R.string.text_metadata_message_batch_scrub_summary,
+                    summary.first,
+                    summary.second
+                )
+            )
+        }
+    }
+
     private fun inspectMetadataSelection(
         uri: Uri,
         kind: MetadataTargetKind,
@@ -1516,15 +1638,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun cleanSelectedMetadata(allowMediaWriteRequest: Boolean = true) {
+    private fun cleanSelectedMetadata(
+        allowMediaWriteRequest: Boolean = true,
+        targets: MetadataScrubTargets = activeScrubTargets
+    ) {
         val ready = metadataToolState.value as? MetadataToolState.Ready ?: return
         val inspection = ready.inspection
+        activeScrubTargets = targets
         metadataToolState.value = ready.copy(busy = true, message = null)
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     MetadataPrivacyManager.requireJpegWriteAccess(this@MainActivity, inspection)
-                    MetadataPrivacyManager.cleanJpegInPlace(this@MainActivity, inspection)
+                    MetadataPrivacyManager.cleanJpegInPlace(this@MainActivity, inspection, targets)
                 }
             }
             result.onSuccess { message ->
@@ -2171,7 +2297,8 @@ private fun QueuedFile.toSelectedDocument(): SelectedDocument {
 }
 
 private fun QueuedFile.toConversionTaskInput(
-    outputDestination: OutputDestination
+    outputDestination: OutputDestination,
+    allowHardwareEncoding: Boolean = false
 ): ConversionTaskInput {
     return ConversionTaskInput(
         fileId = id,
@@ -2182,7 +2309,7 @@ private fun QueuedFile.toConversionTaskInput(
         category = category.toConversionCategory(),
         targetFormat = targetFormat,
         outputDestination = outputDestination,
-        videoOptions = videoOptions,
+        videoOptions = videoOptions.copy(allowHardwareEncoding = allowHardwareEncoding),
         audioOptions = audioOptions,
         imageOptions = imageOptions,
         pdfOptions = pdfOptions,
@@ -2289,7 +2416,8 @@ private fun List<QueuedFile>.toMergedPdfInput(
 
 private fun VideoMergeGroup.toConversionTaskInput(
     members: List<QueuedFile>,
-    outputDestination: OutputDestination
+    outputDestination: OutputDestination,
+    allowHardwareEncoding: Boolean = false
 ): ConversionTaskInput {
     val first = members.first()
     val totalSize = members.mapNotNull { it.sizeBytes }
@@ -2310,7 +2438,7 @@ private fun VideoMergeGroup.toConversionTaskInput(
         category = ConversionMediaCategory.Video,
         targetFormat = targetFormat,
         outputDestination = outputDestination,
-        videoOptions = videoOptions,
+        videoOptions = videoOptions.copy(allowHardwareEncoding = allowHardwareEncoding),
         audioOptions = audioOptions,
         imageOptions = first.imageOptions,
         pdfOptions = PdfExportOptions(),
@@ -2396,6 +2524,7 @@ private fun audioTargetExtensionFor(targetFormat: String): String? {
         normalized.contains("flac") -> "flac"
         normalized.contains("wma") -> "wma"
         normalized.contains("opus") -> "opus"
+        normalized.contains("ogg") -> "ogg"
         else -> null
     }
 }
@@ -2457,7 +2586,7 @@ private fun ConversionTaskState.toUiProgress(): TaskProgress {
     )
 }
 
-private val CONNECTED_AUDIO_TARGETS = setOf("mp3", "m4a", "wav", "flac", "wma", "opus")
+private val CONNECTED_AUDIO_TARGETS = setOf("mp3", "m4a", "wav", "flac", "wma", "opus", "ogg")
 private val EXTERNAL_IMPORT_ACTIONS = setOf(
     Intent.ACTION_VIEW,
     Intent.ACTION_SEND,

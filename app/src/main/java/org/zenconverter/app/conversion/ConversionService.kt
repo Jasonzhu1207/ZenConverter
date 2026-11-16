@@ -65,6 +65,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import org.zenconverter.app.studio.ConversionHistoryEntry
+import org.zenconverter.app.studio.StudioStore
+import org.zenconverter.app.system.BatteryThermalGuard
+import java.util.UUID
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.cos.COSBase
 import com.tom_roush.pdfbox.cos.COSName
@@ -94,6 +98,7 @@ import org.zenconverter.app.subtitle.LrcCodec
 import org.zenconverter.app.subtitle.SrtCodec
 import org.zenconverter.app.subtitle.SubtitleFormat
 import org.zenconverter.app.subtitle.SubtitleTextDecoder
+import org.zenconverter.app.audio.AudioEffectFilters
 import org.zenconverter.app.model.EsrganModelManager
 import org.zenconverter.app.model.RealEsrganUpscaler
 import org.zenconverter.app.model.RifeModelManager
@@ -127,6 +132,7 @@ class ConversionService : Service() {
 
     private var taskIndex = 0
     private var notificationState = NotificationState.Idle
+    private var guardHolding = false
     private var notificationTitle: LocalizedText = localizedText(R.string.message_preparing)
     private var notificationProgress = 0
     private var activeFfmpegSession: FFmpegSession? = null
@@ -207,7 +213,7 @@ class ConversionService : Service() {
                     )
                     else -> startForeground(NOTIFICATION_ID, buildProgressNotification(notificationTitle, 0))
                 }
-                taskIndex = 0
+                taskIndex = ConversionTaskStore.consumeStartIndex() ?: 0
                 customOutputFallbackOccurred = false
                 processNextTask()
             }
@@ -236,9 +242,36 @@ class ConversionService : Service() {
             return
         }
 
+        // Hold the queue when the user asked for a pause. The running task has
+        // already finished by the time this is called, so nothing is interrupted.
+        if (ConversionTaskStore.isQueuePausedNow()) {
+            pauseRun()
+            return
+        }
+
         if (taskIndex >= ConversionTaskStore.taskCount()) {
             finishRun()
             return
+        }
+
+        // Battery and thermal guard: hold the queue while the device is too hot or
+        // too low on charge, then resume automatically. This is checked between
+        // tasks so a running conversion is never interrupted mid-write.
+        guardPauseReason()?.let { reason ->
+            val message = when (reason) {
+                BatteryThermalGuard.PauseReason.Battery -> localizedText(R.string.guard_paused_battery)
+                BatteryThermalGuard.PauseReason.Thermal -> localizedText(R.string.guard_paused_thermal)
+            }
+            notificationState = NotificationState.Running
+            updateNotification(message, (ConversionTaskStore.aggregateProgress() * 100).toInt())
+            ConversionTaskStore.showMessage(message)
+            guardHolding = true
+            handler.postDelayed({ processNextTask() }, GUARD_RETRY_DELAY_MS)
+            return
+        }
+        if (guardHolding) {
+            guardHolding = false
+            ConversionTaskStore.showMessage(localizedText(R.string.guard_resumed))
         }
 
         val input = ConversionTaskStore.inputAt(taskIndex)
@@ -1420,6 +1453,7 @@ class ConversionService : Service() {
                     fallbackSizeBytes = tempFileSizeBytes,
                     formatOverride = outputProfile.extension.uppercase(Locale.US)
                 )
+                recordConversionHistory(input, createdOutputUri, outputInfo)
                 tempFile.delete()
                 handler.post {
                     if (ConversionTaskStore.isCancelled()) {
@@ -2214,12 +2248,18 @@ class ConversionService : Service() {
         )
         throwIfConversionCancelled()
 
+        val resizedBitmap = applyResizeIfNeeded(workingBitmap, input.imageOptions.resize)
+        throwIfConversionCancelled()
+
         if (outputProfile.extension.equals("ico", ignoreCase = true)) {
             try {
-                writeIcoImageFile(workingBitmap, outputFile)
+                writeIcoImageFile(resizedBitmap, outputFile)
                 throwIfConversionCancelled()
                 updateImageProgress(0.95f)
             } finally {
+                if (resizedBitmap !== workingBitmap) {
+                    resizedBitmap.recycle()
+                }
                 if (workingBitmap !== decodedBitmap) {
                     workingBitmap.recycle()
                 }
@@ -2229,7 +2269,7 @@ class ConversionService : Service() {
         }
 
         val bitmapForOutput = bitmapForImageOutput(
-            workingBitmap,
+            resizedBitmap,
             outputProfile.extension,
             flattenTransparency = false
         )
@@ -2260,8 +2300,11 @@ class ConversionService : Service() {
             throwIfConversionCancelled()
             updateImageProgress(0.95f)
         } finally {
-            if (bitmapForOutput !== workingBitmap) {
+            if (bitmapForOutput !== resizedBitmap) {
                 bitmapForOutput.recycle()
+            }
+            if (resizedBitmap !== workingBitmap) {
+                resizedBitmap.recycle()
             }
             if (workingBitmap !== decodedBitmap) {
                 workingBitmap.recycle()
@@ -2972,6 +3015,16 @@ class ConversionService : Service() {
             Bitmap.createScaledBitmap(bitmap, targetWidth.toInt(), targetHeight.toInt(), true)
         } catch (oom: OutOfMemoryError) {
             throw LocalizedFailure(localizedText(R.string.text_task_message_not_enough_memory_to_super_resolve_this_image))
+        }
+    }
+
+    private fun applyResizeIfNeeded(bitmap: Bitmap, mode: ImageResizeMode): Bitmap {
+        val (targetWidth, targetHeight) = ImageResizer.targetSize(bitmap.width, bitmap.height, mode)
+        if (targetWidth == bitmap.width && targetHeight == bitmap.height) return bitmap
+        return try {
+            Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)
+        } catch (oom: OutOfMemoryError) {
+            throw LocalizedFailure(localizedText(R.string.text_task_message_image_engine_could_not_write_this_output))
         }
     }
 
@@ -4063,13 +4116,18 @@ class ConversionService : Service() {
                     tempFile.absolutePath
                 ))
             } else {
-                encodeArgs.addAll(listOf(
-                    "-c:v", "libx264",
-                    "-crf", "18",
-                    "-preset", "medium",
-                    "-pix_fmt", "yuv420p",
-                    tempFile.absolutePath
-                ))
+                val hardware = videoProfile?.usesTargetBitrate == true
+                encodeArgs.addAll(
+                    buildList {
+                        addAll(listOf("-c:v", videoProfile?.videoCodec ?: "libx264"))
+                        if (hardware) {
+                            addAll(listOf("-b:v", hardwareBitrateFor(input).toString()))
+                        } else {
+                            addAll(listOf("-crf", "18", "-preset", "medium"))
+                        }
+                        addAll(listOf("-pix_fmt", "yuv420p", tempFile.absolutePath))
+                    }
+                )
             }
 
             val encodeResult = executeFfmpeg(
@@ -4234,16 +4292,22 @@ class ConversionService : Service() {
                     add("-preset")
                     add(videoProfile.preset)
                 }
-                input.videoOptions.videoBitrate?.let { bitrate ->
+                if (videoProfile.usesTargetBitrate) {
+                    // Platform encoders use a target bitrate, not CRF.
                     add("-b:v")
-                    add(bitrate.toString())
-                } ?: run {
-                    if (isVpx) {
+                    add(hardwareBitrateFor(input).toString())
+                } else {
+                    input.videoOptions.videoBitrate?.let { bitrate ->
                         add("-b:v")
-                        add("0")
+                        add(bitrate.toString())
+                    } ?: run {
+                        if (isVpx) {
+                            add("-b:v")
+                            add("0")
+                        }
+                        add("-crf")
+                        add(videoProfile.crf)
                     }
-                    add("-crf")
-                    add(videoProfile.crf)
                 }
                 input.videoOptions.maxFrameRate
                     ?.takeIf { it > 0 }
@@ -4545,7 +4609,7 @@ class ConversionService : Service() {
 
     private suspend fun prepareAudioMetadataFor(input: ConversionTaskInput): AudioMetadataPreparation {
         if (input.category != ConversionMediaCategory.Audio) return AudioMetadataPreparation()
-        val strict = audioTargetExtensionFor(input.targetFormat) in setOf("mp3", "opus", "flac")
+        val strict = audioTargetExtensionFor(input.targetFormat) in setOf("mp3", "opus", "ogg", "flac")
         val source = openFfmpegInputSource(input.inputUri)
             ?: return AudioMetadataPreparation(failure = if (strict) localizedText(R.string.message_audio_metadata_probe_failed) else null)
         var coverFile: File? = null
@@ -4646,11 +4710,11 @@ class ConversionService : Service() {
         val target = audioTargetExtensionFor(input.targetFormat)
             ?: return FfmpegRunResult(success = true, cancelled = false)
         if (input.category != ConversionMediaCategory.Audio || snapshot == null ||
-            target !in setOf("mp3", "opus", "flac")) {
+            target !in setOf("mp3", "opus", "ogg", "flac")) {
             return FfmpegRunResult(success = true, cancelled = false)
         }
         var verification = verifyAudioOutput(target, outputFile, snapshot)
-        if (!verification.success && target in setOf("opus", "flac")) {
+        if (!verification.success && target in setOf("opus", "ogg", "flac")) {
             verification = remuxAudioMetadata(input, outputFile, target, snapshot, dropChapters)
         }
         if (ConversionTaskStore.isCancelled()) return FfmpegRunResult(success = false, cancelled = true)
@@ -4683,6 +4747,7 @@ class ConversionService : Service() {
     ): AudioMetadataCodec.Verification = when (target) {
         "mp3" -> AudioMetadataCodec.repairAndVerifyMp3(file, snapshot) { ConversionTaskStore.isCancelled() }
         "opus" -> AudioMetadataCodec.verifyOpus(file, snapshot)
+        "ogg" -> AudioMetadataCodec.verifyOggVorbis(file, snapshot)
         "flac" -> AudioMetadataCodec.verifyFlac(file, snapshot)
         else -> AudioMetadataCodec.Verification(true)
     }
@@ -4720,7 +4785,7 @@ class ConversionService : Service() {
             // Ogg merges globals with AV_DICT_DONT_OVERWRITE. Override both
             // dictionaries so a stale stream-level value cannot win. This
             // produces one comment per key, not duplicate OpusTags entries.
-            addAudioMetadataArguments(arguments, snapshot, includePicture = target == "opus")
+            addAudioMetadataArguments(arguments, snapshot, includePicture = target == "opus" || target == "ogg")
             arguments += listOf("-c:a", "copy", "-f", target, remuxFile.absolutePath)
             val result = executeFfmpeg(
                 input = input, arguments = arguments, durationMs = null, logTail = mutableListOf(),
@@ -4808,12 +4873,30 @@ class ConversionService : Service() {
                     addAudioMetadataArguments(this, snapshot, includePicture = false)
                 }
                 add("-c:a")
-                add(audioProfile.codec)
+                add(
+                    if (audioProfile.codec == FFMPEG_WAV_ENCODER) {
+                        AudioBitDepthResolver.wavEncoder(input.audioOptions.bitDepth)
+                    } else {
+                        audioProfile.codec
+                    }
+                )
                 addFfmpegAudioOptions(input.audioOptions, audioProfile, durationMs)
                 if (audioProfile.codec == FFMPEG_FLAC_ENCODER) {
-                    audioMetadata?.flacStreamInfo?.let { info ->
+                    val requestedDepth = AudioBitDepthResolver.flacBitsPerRawSample(input.audioOptions.bitDepth)
+                    if (requestedDepth != null) {
                         add("-bits_per_raw_sample")
-                        add(AudioMetadataCodec.flacBitDepth(info).toString())
+                        add(requestedDepth.toString())
+                    } else {
+                        audioMetadata?.flacStreamInfo?.let { info ->
+                            add("-bits_per_raw_sample")
+                            add(AudioMetadataCodec.flacBitDepth(info).toString())
+                        }
+                    }
+                }
+                if (audioProfile.supportsBitDepth && audioProfile.codec == FFMPEG_ALAC_ENCODER) {
+                    AudioBitDepthResolver.alacSampleFormat(input.audioOptions.bitDepth)?.let { sampleFormat ->
+                        add("-sample_fmt")
+                        add(sampleFormat)
                     }
                 }
                 if (audioProfile.useFastStart) {
@@ -4907,16 +4990,21 @@ class ConversionService : Service() {
                 add("-preset")
                 add(videoProfile.preset)
             }
-            input.videoOptions.videoBitrate?.let { bitrate ->
+            if (videoProfile.usesTargetBitrate) {
                 add("-b:v")
-                add(bitrate.toString())
-            } ?: run {
-                if (isVpx) {
+                add(hardwareBitrateFor(input).toString())
+            } else {
+                input.videoOptions.videoBitrate?.let { bitrate ->
                     add("-b:v")
-                    add("0")
+                    add(bitrate.toString())
+                } ?: run {
+                    if (isVpx) {
+                        add("-b:v")
+                        add("0")
+                    }
+                    add("-crf")
+                    add(videoProfile.crf)
                 }
-                add("-crf")
-                add(videoProfile.crf)
             }
             ffmpegVideoFilterFor(input, durationMs)?.let { filter ->
                 add("-vf")
@@ -5013,10 +5101,20 @@ class ConversionService : Service() {
             }
         }
         if (audioProfile.supportsChannelCount) {
-            audioOptions.channelCount?.let { channelCount ->
+            val maxChannels = audioProfile.maxChannels
+            val requested = audioOptions.channelCount
+            val resolved = when {
+                requested != null -> maxChannels?.let { requested.coerceAtMost(it) } ?: requested
+                else -> maxChannels
+            }
+            resolved?.let { channelCount ->
                 add("-ac")
                 add(channelCount.toString())
             }
+        }
+        if (audioProfile.requiresExperimentalEncoder) {
+            add("-strict")
+            add("-2")
         }
     }
 
@@ -5073,10 +5171,11 @@ class ConversionService : Service() {
             add("-an")
             add("-sn")
             add("-dn")
+            val maxColors = input.videoOptions.gifMaxColors.coerceIn(2, 256)
             add("-filter_complex")
             add(
                 "[0:v:0]${ffmpegVideoGifFilterChainFor(input)},split[gifsrc][palette_src];" +
-                    "[palette_src]palettegen=max_colors=256[palette];" +
+                    "[palette_src]palettegen=max_colors=$maxColors[palette];" +
                     "[gifsrc][palette]paletteuse=dither=sierra2_4a[gif]"
             )
             add("-map")
@@ -5093,7 +5192,8 @@ class ConversionService : Service() {
 
     private fun ffmpegVideoGifFilterChainFor(input: ConversionTaskInput): String {
         return buildList {
-            add("fps=$FFMPEG_VIDEO_GIF_FRAME_RATE")
+            val frameRate = input.videoOptions.gifFrameRate.coerceIn(5, 50)
+            add("fps=$frameRate")
             ffmpegVideoGifScaleFilterFor(input)?.let { add(it) }
         }.joinToString(separator = ",")
     }
@@ -5119,52 +5219,79 @@ class ConversionService : Service() {
 
     private fun ffmpegVideoProfileFor(input: ConversionTaskInput): FfmpegVideoProfile? {
         val targetExtension = videoTargetExtensionFor(input.targetFormat) ?: return null
-        val videoCodec = when (targetExtension) {
+        val preference = if (input.videoOptions.allowHardwareEncoding) {
+            VideoEncoderSelection.Preference.HardwareWhenAvailable
+        } else {
+            VideoEncoderSelection.Preference.Software
+        }
+        val codec = when (targetExtension) {
             "webm" -> {
                 if (input.videoOptions.videoMimeType == VideoExportOptions.VIDEO_MIME_TYPE_VP8) {
-                    FFMPEG_VIDEO_ENCODER_VP8
+                    VideoEncoderSelection.Codec.Vp8
                 } else {
-                    FFMPEG_VIDEO_ENCODER_VP9
+                    VideoEncoderSelection.Codec.Vp9
                 }
             }
             else -> {
                 when (input.videoOptions.videoMimeType) {
-                    VideoExportOptions.VIDEO_MIME_TYPE_H265 -> FFMPEG_VIDEO_ENCODER_H265
-                    else -> FFMPEG_VIDEO_ENCODER_H264
+                    VideoExportOptions.VIDEO_MIME_TYPE_H265 -> VideoEncoderSelection.Codec.H265
+                    else -> VideoEncoderSelection.Codec.H264
                 }
             }
         }
+        val choice = VideoEncoderSelection.select(codec, preference, ::ffmpegEncoderAvailable)
+        val videoCodec = choice.codec
+        val hardware = choice.usesTargetBitrate
         return when (targetExtension) {
             "mp4" -> FfmpegVideoProfile(
                 videoCodec = videoCodec,
                 format = "mp4",
                 useFastStart = true,
                 videoTag = if (videoCodec == FFMPEG_VIDEO_ENCODER_H265) "hvc1" else null,
-                preset = videoPresetFor(input.videoOptions.compressionMode),
-                crf = videoCrfFor(videoCodec, input.videoOptions.compressionMode)
+                preset = if (hardware) null else videoPresetFor(input.videoOptions.compressionMode),
+                crf = videoCrfFor(videoCodec, input.videoOptions.compressionMode),
+                usesTargetBitrate = hardware
             )
             "mov" -> FfmpegVideoProfile(
                 videoCodec = videoCodec,
                 format = "mov",
                 useFastStart = true,
                 videoTag = if (videoCodec == FFMPEG_VIDEO_ENCODER_H265) "hvc1" else null,
-                preset = videoPresetFor(input.videoOptions.compressionMode),
-                crf = videoCrfFor(videoCodec, input.videoOptions.compressionMode)
+                preset = if (hardware) null else videoPresetFor(input.videoOptions.compressionMode),
+                crf = videoCrfFor(videoCodec, input.videoOptions.compressionMode),
+                usesTargetBitrate = hardware
             )
             "mkv" -> FfmpegVideoProfile(
                 videoCodec = videoCodec,
                 format = "matroska",
-                preset = videoPresetFor(input.videoOptions.compressionMode),
-                crf = videoCrfFor(videoCodec, input.videoOptions.compressionMode)
+                preset = if (hardware) null else videoPresetFor(input.videoOptions.compressionMode),
+                crf = videoCrfFor(videoCodec, input.videoOptions.compressionMode),
+                usesTargetBitrate = hardware
             )
             "webm" -> FfmpegVideoProfile(
                 videoCodec = videoCodec,
                 format = "webm",
                 preset = null,
-                crf = videoCrfFor(videoCodec, input.videoOptions.compressionMode)
+                crf = videoCrfFor(videoCodec, input.videoOptions.compressionMode),
+                usesTargetBitrate = hardware
             )
             else -> null
         }
+    }
+
+    /**
+     * The bitrate a platform encoder should target: the caller's explicit choice
+     * when set, otherwise a resolution-scaled default.
+     */
+    private fun hardwareBitrateFor(input: ConversionTaskInput): Int {
+        input.videoOptions.videoBitrate?.takeIf { it > 0 }?.let { return it }
+        val info = input.inputInfo
+        return VideoEncoderSelection.fallbackBitrateFor(
+            width = info?.width,
+            height = info?.height,
+            frameRate = info?.frameRate,
+            compressionMode = input.videoOptions.compressionMode
+        )
     }
 
     private fun videoPresetFor(compressionMode: VideoCompressionMode): String {
@@ -5358,6 +5485,7 @@ class ConversionService : Service() {
                     )
                 }
             }
+            addAll(AudioEffectFilters.filtersFor(advanced.effects, durationMs))
         }
         return filters.takeIf { it.isNotEmpty() }?.joinToString(separator = ",")
     }
@@ -5430,6 +5558,15 @@ class ConversionService : Service() {
                 requiredEncoder = FFMPEG_FLAC_ENCODER,
                 supportsAttachedPicture = true
             )
+            "alac" -> FfmpegAudioProfile(
+                codec = FFMPEG_ALAC_ENCODER,
+                format = "ipod",
+                useFastStart = true,
+                supportsBitrate = false,
+                supportsBitDepth = true,
+                requiredEncoder = FFMPEG_ALAC_ENCODER,
+                supportsAttachedPicture = true
+            )
             "wma" -> FfmpegAudioProfile(
                 codec = FFMPEG_WMA_ENCODER,
                 format = "asf",
@@ -5439,6 +5576,13 @@ class ConversionService : Service() {
                 codec = FFMPEG_OPUS_ENCODER,
                 format = "opus",
                 requiredEncoder = FFMPEG_OPUS_ENCODER
+            )
+            "ogg" -> FfmpegAudioProfile(
+                codec = FFMPEG_VORBIS_ENCODER,
+                format = "ogg",
+                maxChannels = 2,
+                requiresExperimentalEncoder = true,
+                requiredEncoder = FFMPEG_VORBIS_ENCODER
             )
             else -> null
         }
@@ -5454,6 +5598,7 @@ class ConversionService : Service() {
         progressEnd: Float = FFMPEG_MAX_PROGRESS_BEFORE_SAVE
     ): FfmpegRunResult = suspendCancellableCoroutine { continuation ->
         val resumed = AtomicBoolean(false)
+        ConversionTaskStore.recordFfmpegCommand(formatFfmpegArguments(arguments))
         Log.i(
             TAG,
             "Starting FFmpeg compatibility export category=${input.category} " +
@@ -5770,6 +5915,16 @@ class ConversionService : Service() {
             "areverse" -> localizedText(R.string.text_task_message_compatibility_engine_needs_reverse_filters)
             "afftdn" -> localizedText(R.string.text_task_message_compatibility_engine_needs_the_audio_denoise_filter)
             "tmix" -> localizedText(R.string.text_task_message_compatibility_engine_needs_motion_blur_filter)
+            "equalizer",
+            "loudnorm",
+            "acompressor",
+            "alimiter",
+            "silenceremove",
+            "asetrate",
+            "atempo",
+            "highpass",
+            "afftfilt" ->
+                localizedText(R.string.message_compatibility_engine_is_missing_an_audio_effects_filter)
             else -> localizedText(R.string.text_task_message_compatibility_engine_is_missing_an_advanced_filter)
         }
     }
@@ -5876,6 +6031,8 @@ class ConversionService : Service() {
                 ) {
                     add("afade")
                 }
+                AudioEffectFilters.filtersFor(audioAdvanced.effects, null)
+                    .mapNotNullTo(this) { AudioEffectFilters.filterNameOf(it) }
             }
         }
     }
@@ -6004,9 +6161,11 @@ class ConversionService : Service() {
             encoder == FFMPEG_MP3_ENCODER &&
                 audioTargetExtensionFor(input.targetFormat) == "mp3" ->
                 localizedText(R.string.text_task_message_compatibility_engine_needs_an_mp3_capable_ffmpeg_package)
-            encoder == FFMPEG_VIDEO_ENCODER_H264 ->
+            encoder == FFMPEG_VIDEO_ENCODER_H264 ||
+                encoder == VideoEncoderSelection.HARDWARE_H264 ->
                 localizedText(R.string.text_task_message_compatibility_engine_needs_an_h_264_capable_ffmpeg_package)
-            encoder == FFMPEG_VIDEO_ENCODER_H265 ->
+            encoder == FFMPEG_VIDEO_ENCODER_H265 ||
+                encoder == VideoEncoderSelection.HARDWARE_H265 ->
                 localizedText(R.string.text_task_message_compatibility_engine_needs_an_h_265_capable_ffmpeg_package)
             encoder == FFMPEG_VIDEO_ENCODER_VP9 ->
                 localizedText(R.string.text_task_message_compatibility_engine_needs_a_vp9_capable_ffmpeg_package)
@@ -6022,6 +6181,8 @@ class ConversionService : Service() {
                 localizedText(R.string.text_task_message_compatibility_engine_needs_a_wma_capable_ffmpeg_package)
             encoder == FFMPEG_OPUS_ENCODER ->
                 localizedText(R.string.text_task_message_compatibility_engine_needs_an_opus_capable_ffmpeg_package)
+            encoder == FFMPEG_VORBIS_ENCODER ->
+                localizedText(R.string.text_task_message_compatibility_engine_needs_a_vorbis_capable_ffmpeg_package)
             encoder == FFMPEG_GIF_ENCODER &&
                 isVideoGifOutput(input) ->
                 localizedText(R.string.text_task_message_compatibility_engine_needs_a_gif_capable_ffmpeg_package)
@@ -6547,6 +6708,7 @@ class ConversionService : Service() {
                     fallbackSizeBytes = tempFileSizeBytes,
                     formatOverride = outputProfile.extension.uppercase(Locale.US)
                 )
+                recordConversionHistory(input, createdOutputUri, outputInfo)
                 tempFile.delete()
                 handler.post {
                     if (ConversionTaskStore.isCancelled()) {
@@ -6580,6 +6742,37 @@ class ConversionService : Service() {
                 }
             }
         }.also { it.start() }
+    }
+
+    /**
+     * Keeps a local record of the finished export so the studio can re-run it or
+     * restore the original later. Runs on the copy thread, never on the UI
+     * thread, and stays entirely on the device.
+     */
+    private fun recordConversionHistory(
+        input: ConversionTaskInput,
+        outputUri: Uri,
+        outputInfo: FileBasicInfo?
+    ) {
+        runCatching {
+            StudioStore.recordHistory(
+                this,
+                ConversionHistoryEntry(
+                    id = UUID.randomUUID().toString(),
+                    displayName = input.displayName,
+                    sourceUri = input.inputUri.toString(),
+                    outputUri = outputUri.toString(),
+                    targetFormat = input.targetFormat,
+                    inputBytes = input.inputInfo?.sizeBytes,
+                    outputBytes = outputInfo?.sizeBytes,
+                    timestampMs = System.currentTimeMillis(),
+                    success = true,
+                    ffmpegCommand = ConversionTaskStore.lastFfmpegCommand.value
+                )
+            )
+        }.onFailure { exception ->
+            Log.w(TAG, "Could not record conversion history", exception)
+        }
     }
 
     private fun saveCompletedExportFiles(
@@ -6765,6 +6958,25 @@ class ConversionService : Service() {
         notificationState = NotificationState.Idle
         removeForegroundNotification()
         stopSelf()
+    }
+
+    /**
+     * Holds the queue without discarding it. The foreground service stays alive so
+     * the user can resume, and no work in flight is interrupted because this runs
+     * between tasks.
+     */
+    private fun pauseRun() {
+        handler.removeCallbacksAndMessages(null)
+        notificationState = NotificationState.Running
+        updateNotification(localizedText(R.string.queue_paused), (ConversionTaskStore.aggregateProgress() * 100).toInt())
+    }
+
+    /** Returns the guard's pause reason, or null when the guard is off or clear. */
+    private fun guardPauseReason(): BatteryThermalGuard.PauseReason? {
+        StudioStore.ensureLoaded(this)
+        if (!StudioStore.guardEnabled.value) return null
+        val guard = BatteryThermalGuard(this, StudioStore.guardBatteryThreshold.value)
+        return guard.shouldPause()
     }
 
     private fun createTempFileFor(input: ConversionTaskInput, extension: String): File {
@@ -7160,6 +7372,7 @@ class ConversionService : Service() {
                     "m4a" -> OutputProfile(extension = "m4a", mimeType = MIME_TYPE_M4A, kind = OutputMediaKind.Audio)
                     "wav" -> OutputProfile(extension = "wav", mimeType = MIME_TYPE_WAV, kind = OutputMediaKind.Audio)
                     "flac" -> OutputProfile(extension = "flac", mimeType = MIME_TYPE_FLAC, kind = OutputMediaKind.Audio)
+                    "alac" -> OutputProfile(extension = "m4a", mimeType = MIME_TYPE_ALAC, kind = OutputMediaKind.Audio)
                     "wma" -> OutputProfile(extension = "wma", mimeType = MIME_TYPE_WMA, kind = OutputMediaKind.Audio)
                     "opus" -> OutputProfile(extension = "opus", mimeType = MIME_TYPE_OPUS, kind = OutputMediaKind.Audio)
                     else -> null
@@ -7246,8 +7459,10 @@ class ConversionService : Service() {
             normalized.contains("m4a") || normalized.contains("aac") -> "m4a"
             normalized.contains("wav") -> "wav"
             normalized.contains("flac") -> "flac"
+            normalized.contains("alac") -> "alac"
             normalized.contains("wma") -> "wma"
             normalized.contains("opus") -> "opus"
+            normalized.contains("ogg") -> "ogg"
             else -> null
         }
     }
@@ -7323,7 +7538,12 @@ class ConversionService : Service() {
         val pixelFormat: String = "yuv420p",
         val preset: String? = "veryfast",
         val crf: String,
-        val videoTag: String? = null
+        val videoTag: String? = null,
+        /**
+         * True when [videoCodec] is a platform encoder that only understands a
+         * target bitrate, so `-crf`/`-preset` must not be emitted for it.
+         */
+        val usesTargetBitrate: Boolean = false
     )
 
     private data class FfmpegAudioProfile(
@@ -7333,7 +7553,12 @@ class ConversionService : Service() {
         val supportsBitrate: Boolean = true,
         val supportsSampleRate: Boolean = true,
         val supportsChannelCount: Boolean = true,
+        val supportsBitDepth: Boolean = false,
         val supportsAttachedPicture: Boolean = false,
+        /** Upper bound for -ac when the encoder cannot handle more channels. */
+        val maxChannels: Int? = null,
+        /** The native encoder is flagged experimental and needs -strict -2. */
+        val requiresExperimentalEncoder: Boolean = false,
         val requiredEncoder: String? = null
     )
 
@@ -7707,6 +7932,7 @@ class ConversionService : Service() {
         private const val FFMPEG_LOG_DRAIN_TIMEOUT_MS = 1_000
         private const val FFMPEG_ENCODER_PROBE_TIMEOUT_MS = 2_000
         private const val FFMPEG_MEDIA_INFORMATION_PROBE_TIMEOUT_MS = 3_000
+        private const val GUARD_RETRY_DELAY_MS = 10_000L
         private const val FFMPEG_LOG_TAIL_LINES = 16
         private const val FFMPEG_LOG_LINE_LIMIT = 600
         private const val FFMPEG_VIDEO_ENCODER_H264 = "libx264"
@@ -7720,8 +7946,10 @@ class ConversionService : Service() {
         private const val MP3_VBR_QUALITY_MAX = 9
         private const val FFMPEG_WAV_ENCODER = "pcm_s16le"
         private const val FFMPEG_FLAC_ENCODER = "flac"
+        private const val FFMPEG_ALAC_ENCODER = "alac"
         private const val FFMPEG_WMA_ENCODER = "wmav2"
         private const val FFMPEG_OPUS_ENCODER = "libopus"
+        private const val FFMPEG_VORBIS_ENCODER = "vorbis"
         private val OPUS_SUPPORTED_SAMPLE_RATES = setOf(48_000, 24_000, 16_000, 12_000, 8_000)
         private const val FFMPEG_DEFAULT_CRF_H264 = "23"
         private const val FFMPEG_DEFAULT_CRF_H265 = "28"
@@ -7754,6 +7982,7 @@ class ConversionService : Service() {
         private const val MIME_TYPE_M4A = "audio/mp4"
         private const val MIME_TYPE_WAV = "audio/wav"
         private const val MIME_TYPE_FLAC = "audio/flac"
+        private const val MIME_TYPE_ALAC = "audio/mp4"
         private const val MIME_TYPE_WMA = "audio/x-ms-wma"
         private const val MIME_TYPE_OPUS = "audio/opus"
         private const val MIME_TYPE_JPEG = "image/jpeg"

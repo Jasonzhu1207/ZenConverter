@@ -468,10 +468,9 @@
     <string name="text_task_message_trimming_needs_readable_media_duration">裁剪需要讀取檔案時長</string>
     <string name="text_task_message_unsupported_office_document">不支援這個 Office 文件</string>
     <string name="text_task_message_unsupported_subtitle_format">不支援這個字幕格式</string>
-    <string name="text_theme_mode_label">跟隨系統</string>
-    <string name="text_theme_mode_label_dark">夜間</string>
-    <string name="text_theme_mode_label_light">日間</string>
     <string name="text_use_pure_black_theme">使用純黑夜間模式 (OLED)</string>
+    <string name="text_use_hardware_encoding">硬體視訊編碼</string>
+    <string name="text_use_hardware_encoding_desc">當此版本提供硬體編碼器時使用手機的視訊編碼器，否則使用軟體編碼器。關閉可在不同裝置上獲得一致的輸出。</string>
     <string name="text_trim_duration_hint">時長 %1$s</string>
     <string name="text_update_available_message">發現新版本 %1$s</string>
     <string name="text_update_failure_message">無法連接 GitHub</string>
@@ -618,7 +617,6 @@
     <string name="ui_support_development">贊助開發</string>
     <string name="ui_tagline">本機轉換，檔案不上雲</string>
     <string name="ui_target">目標</string>
-    <string name="ui_theme_mode">深色模式</string>
     <string name="ui_to_prefix">轉為</string>
     <string name="ui_trim_add_split_point">新增分割點</string>
     <string name="ui_trim_duration_unknown">時長未知</string>
@@ -660,6 +658,7 @@
     <string name="ui_settings_title">設定</string>
     <string name="ui_settings_group_general">一般</string>
     <string name="ui_settings_group_appearance">外觀與主題</string>
+    <string name="ui_settings_group_performance">效能</string>
     <string name="ui_settings_group_privacy_engines">工具與資源</string>
     <string name="ui_settings_group_about_support">關於與支援</string>
     <string name="ui_settings_language">應用語言</string>

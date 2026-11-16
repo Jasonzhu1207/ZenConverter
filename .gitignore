@@ -68,3 +68,8 @@ Thumbs.db
 # Local AI models
 scripts/onnx_export/*.pth
 scripts/onnx_export/*.onnx
+
+# Upstream sources fetched by native build scripts
+/native/whisper-jni/whisper.cpp/
+/native/demucs-jni/demucs.cpp/
+/native/*/build-arm64*/

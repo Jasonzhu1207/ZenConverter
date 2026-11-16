@@ -38,6 +38,7 @@ import org.zenconverter.app.ui.settings.MetadataSecurityScreen
 import org.zenconverter.app.ui.settings.SettingsPage
 import org.zenconverter.app.ui.settings.SubpageHost
 import org.zenconverter.app.ui.settings.MountedHome
+import org.zenconverter.app.ui.settings.GlassBackdrop
 import org.zenconverter.app.ui.settings.UpdateStateHolder
 import org.zenconverter.app.ui.settings.InsetGroupCard
 import org.zenconverter.app.ui.settings.settingsDividerColor
@@ -82,6 +83,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -89,6 +91,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image as BrandImage
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.material.icons.rounded.Add
@@ -96,6 +99,8 @@ import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.ExpandMore
@@ -106,6 +111,7 @@ import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.PictureAsPdf
+import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PrivacyTip
 import androidx.compose.material.icons.rounded.Security
@@ -126,6 +132,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -183,6 +190,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -200,6 +208,75 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import org.zenconverter.app.conversion.AudioAdvancedOptions
+import org.zenconverter.app.conversion.AudioBitDepth
+import org.zenconverter.app.ui.studio.ChapterSplitScreen
+import org.zenconverter.app.ui.studio.AudioConverterScreen
+import org.zenconverter.app.ui.studio.DocumentConverterScreen
+import org.zenconverter.app.ui.studio.StudioScreen
+import org.zenconverter.app.ui.studio.SubtitleBurnScreen
+import org.zenconverter.app.ui.studio.WaveformEditorScreen
+import org.zenconverter.app.ui.studio.AudioRecorderScreen
+import org.zenconverter.app.ui.studio.AudioMixerScreen
+import org.zenconverter.app.ui.studio.AudioAnalyzeScreen
+import org.zenconverter.app.ui.studio.KaraokeScreen
+import org.zenconverter.app.ui.studio.MediaLibraryScreen
+import org.zenconverter.app.ui.studio.LyricsEditorScreen
+import org.zenconverter.app.ui.studio.LrcExportScreen
+import org.zenconverter.app.ui.studio.LrcImportScreen
+import org.zenconverter.app.ui.studio.LyricShiftScreen
+import org.zenconverter.app.ui.studio.LyricTranscribeScreen
+import org.zenconverter.app.ui.studio.TagEditorScreen
+import org.zenconverter.app.ui.studio.RingtoneMakerScreen
+import org.zenconverter.app.ui.studio.TextToSpeechScreen
+import org.zenconverter.app.ui.studio.VisualizerScreen
+import org.zenconverter.app.ui.studio.RecipesScreen
+import org.zenconverter.app.ui.studio.AbPlayerScreen
+import org.zenconverter.app.ui.studio.TranscribeScreen
+import org.zenconverter.app.ui.studio.StemSeparationScreen
+import org.zenconverter.app.ui.studio.HistoryScreen
+import org.zenconverter.app.ui.studio.CommandViewScreen
+import org.zenconverter.app.ui.studio.PluginsScreen
+import org.zenconverter.app.ui.studio.WifiTransferScreen
+import org.zenconverter.app.ui.studio.StorageCleanerScreen
+import org.zenconverter.app.ui.studio.GuardScreen
+import org.zenconverter.app.ui.studio.AccessibilityScreen
+import org.zenconverter.app.ui.studio.ArchiveToolsScreen
+import org.zenconverter.app.ui.studio.FolderWatchScreen
+import org.zenconverter.app.ui.studio.SplitSilenceScreen
+import org.zenconverter.app.ui.studio.CutTranscriptScreen
+import org.zenconverter.app.ui.studio.PdfSplitScreen
+import org.zenconverter.app.ui.studio.PdfCreateScreen
+import org.zenconverter.app.ui.studio.EpubToolsScreen
+import org.zenconverter.app.ui.studio.CrashReportScreen
+import org.zenconverter.app.ui.studio.AutoMasteringScreen
+import org.zenconverter.app.ui.studio.HarmonicExciterScreen
+import org.zenconverter.app.ui.studio.LoudnessDynamicsScreen
+import org.zenconverter.app.ui.studio.LoudnessNormalizationScreen
+import org.zenconverter.app.ui.studio.MasteringEqScreen
+import org.zenconverter.app.ui.studio.MasteringUiState
+import org.zenconverter.app.ui.studio.RadioReadyCheckScreen
+import org.zenconverter.app.ui.studio.SpectrumAnalyzerScreen
+import org.zenconverter.app.ui.studio.StemBalanceScreen
+import org.zenconverter.app.audio.AudioEffects
+import org.zenconverter.app.audio.CompressorPreset
+import org.zenconverter.app.audio.EqualizerPreset
+import org.zenconverter.app.audio.LoudnessTarget
+import org.zenconverter.app.audio.ReverbPreset
+import org.zenconverter.app.audio.SilenceRemovalMode
+import org.zenconverter.app.audio.VoiceChangerPreset
+import org.zenconverter.app.studio.QualityEstimator
+import org.zenconverter.app.studio.SmartPreset
+import org.zenconverter.app.studio.BitrateCalculator
+import org.zenconverter.app.studio.SmartPresets
+import org.zenconverter.app.studio.FileFacts
+import org.zenconverter.app.studio.SmartSuggestions
+import org.zenconverter.app.studio.SmartSuggestion
+import org.zenconverter.app.studio.PluginPresets
+import org.zenconverter.app.studio.StudioStore
+import org.zenconverter.app.conversion.ConversionMediaCategory
+import org.zenconverter.app.conversion.ConversionService
+import org.zenconverter.app.conversion.ConversionTaskStatus
+import org.zenconverter.app.conversion.ConversionTaskStore
 import org.zenconverter.app.conversion.AudioEchoMode
 import org.zenconverter.app.conversion.AudioExportOptions
 import org.zenconverter.app.conversion.AudioNoiseReductionMode
@@ -207,6 +284,7 @@ import org.zenconverter.app.conversion.AudioVolumeMode
 import org.zenconverter.app.conversion.FileBasicInfo
 import org.zenconverter.app.conversion.GifFrameExportMode
 import org.zenconverter.app.conversion.ImageExportOptions
+import org.zenconverter.app.conversion.ImageResizeMode
 import org.zenconverter.app.conversion.ImageSuperResolutionMode
 import org.zenconverter.app.conversion.MediaTrimRange
 import org.zenconverter.app.conversion.Mp3BitrateMode
@@ -229,6 +307,7 @@ import org.zenconverter.app.conversion.VideoContactSheetOptions
 import org.zenconverter.app.metadata.MetadataInspection
 import org.zenconverter.app.metadata.MetadataStatusMessage
 import org.zenconverter.app.metadata.MetadataTargetKind
+import org.zenconverter.app.metadata.MetadataScrubTargets
 import org.zenconverter.app.metadata.MetadataToolState
 import org.zenconverter.app.model.EsrganModelManager
 import org.zenconverter.app.model.EsrganModelSpec
@@ -287,8 +366,10 @@ enum class FileCategory(
             TargetFormat(TargetId.Mp3, "mp3", "Re-encode"),
             TargetFormat(TargetId.Wav, "wav", "Re-encode"),
             TargetFormat(TargetId.Flac, "flac", "Re-encode"),
+            TargetFormat(TargetId.Alac, "alac", "Apple lossless"),
             TargetFormat(TargetId.Wma, "wma", "Re-encode"),
-            TargetFormat(TargetId.Opus, "opus", "Re-encode")
+            TargetFormat(TargetId.Opus, "opus", "Re-encode"),
+            TargetFormat(TargetId.Ogg, "ogg", "Vorbis")
         )
     ),
     Image(
@@ -484,16 +565,66 @@ private data class AudioAdvancedUiState(
     val fadeOut: String,
     val volume: String,
     val echo: String,
-    val noiseReduction: String
+    val noiseReduction: String,
+    val effects: AudioEffects = AudioEffects()
 )
 
 internal enum class AppScreen {
+    /** The glass hub; the app opens here. */
     Home,
+    /** The file converter and queue, opened from the hub's "Audio converter" card. */
+    Converter,
     Settings,
     OfflineEngines,
     MetadataSecurity,
     Help,
-    PrivacyPolicy
+    PrivacyPolicy,
+    StudioWaveform,
+    StudioRecorder,
+    StudioMixer,
+    StudioAnalyze,
+    StudioTags,
+    StudioRingtone,
+    StudioTts,
+    StudioVisualizer,
+    StudioRecipes,
+    StudioAbPlayer,
+    StudioTranscribe,
+    StudioStems,
+    StudioHistory,
+    StudioCommand,
+    StudioPlugins,
+    StudioWifi,
+    StudioCleaner,
+    StudioGuard,
+    StudioAccessibility,
+    StudioArchive,
+    StudioFolderWatch,
+    StudioSplitSilence,
+    StudioCutTranscript,
+    StudioBurnSubs,
+    StudioChapterSplit,
+    StudioPdfSplit,
+    StudioPdfCreate,
+    StudioEpub,
+    StudioCrashReports,
+    StudioMastering,
+    StudioMasteringStems,
+    StudioMasteringEq,
+    StudioMasteringSpectrum,
+    StudioMasteringLoudness,
+    StudioMasteringCheck,
+    StudioMasteringLoudnessNorm,
+    StudioMasteringExciter,
+    StudioLrcImport,
+    StudioLrcExport,
+    StudioLyricTranscribe,
+    StudioLyricShift,
+    StudioKaraoke,
+    StudioLyricsEditor,
+    StudioMediaLibrary,
+    StudioDocumentConverter,
+    StudioAudioConverter
 }
 
 internal const val ZENCONVERTER_REPOSITORY_URL = "https://github.com/Jasonzhu1207/ZenConverter"
@@ -523,6 +654,7 @@ internal enum class AccentColorOption(
     val darkColor: Color,
     val darkContentColor: Color
 ) {
+    Glass("Glass", Color(0xFF2563EB), Color.White, Color(0xFF3B82F6), Color.White),
     Dynamic("Material You", Color(0xFF6750A4), Color.White, Color(0xFFD0BCFF), Color(0xFF381E72)),
     Charcoal("Charcoal", Color(0xFF111111), Color.White, Color(0xFFE5E7EB), Color(0xFF111111)),
     DeepNavy("Deep Navy", Color(0xFF36454F), Color.White, Color(0xFF93C5FD), Color(0xFF0F172A)),
@@ -540,12 +672,6 @@ internal enum class AccentColorOption(
 
     fun color(isDark: Boolean): Color = if (isDark) darkColor else lightColor
     fun contentColor(isDark: Boolean): Color = if (isDark) darkContentColor else lightContentColor
-}
-
-internal enum class ThemeModeOption {
-    System,
-    Light,
-    Dark
 }
 
 
@@ -568,6 +694,28 @@ private val VIDEO_GIF_RESOLUTION_OPTIONS = listOf(
     VIDEO_RESOLUTION_480P,
     VIDEO_RESOLUTION_720P,
     VIDEO_RESOLUTION_ORIGINAL
+)
+
+internal const val GIF_FRAME_RATE_15 = "GIF 15 fps"
+internal const val GIF_FRAME_RATE_20 = "GIF 20 fps"
+internal const val GIF_FRAME_RATE_25 = "GIF 25 fps"
+internal const val GIF_FRAME_RATE_30 = "GIF 30 fps"
+private val GIF_FRAME_RATE_OPTIONS = listOf(
+    GIF_FRAME_RATE_30,
+    GIF_FRAME_RATE_25,
+    GIF_FRAME_RATE_20,
+    GIF_FRAME_RATE_15
+)
+
+internal const val GIF_COLORS_256 = "GIF 256 colors"
+internal const val GIF_COLORS_128 = "GIF 128 colors"
+internal const val GIF_COLORS_64 = "GIF 64 colors"
+internal const val GIF_COLORS_32 = "GIF 32 colors"
+private val GIF_COLORS_OPTIONS = listOf(
+    GIF_COLORS_256,
+    GIF_COLORS_128,
+    GIF_COLORS_64,
+    GIF_COLORS_32
 )
 
 internal const val VIDEO_COMPRESSION_STANDARD = "Video compression standard"
@@ -691,6 +839,11 @@ private val OPUS_AUDIO_SAMPLE_RATE_OPTIONS = listOf(
     AUDIO_SAMPLE_RATE_8000
 )
 
+private fun isVorbisTarget(targetFormat: TargetFormat): Boolean {
+    return targetFormat.id == TargetId.Ogg ||
+        targetFormat.extension.equals("ogg", ignoreCase = true)
+}
+
 private fun isOpusTarget(targetFormat: TargetFormat): Boolean {
     return targetFormat.extension.equals("opus", ignoreCase = true) ||
         targetFormat.id == TargetId.Webm ||
@@ -704,6 +857,17 @@ private fun audioSampleRateOptionsFor(targetFormat: TargetFormat): List<String> 
         AUDIO_SAMPLE_RATE_OPTIONS
     }
 }
+
+internal const val AUDIO_BIT_DEPTH_ORIGINAL = "Original"
+internal const val AUDIO_BIT_DEPTH_16 = "16-bit"
+internal const val AUDIO_BIT_DEPTH_24 = "24-bit"
+internal const val AUDIO_BIT_DEPTH_32 = "32-bit"
+private val AUDIO_BIT_DEPTH_OPTIONS = listOf(
+    AUDIO_BIT_DEPTH_ORIGINAL,
+    AUDIO_BIT_DEPTH_16,
+    AUDIO_BIT_DEPTH_24,
+    AUDIO_BIT_DEPTH_32
+)
 
 private const val AUDIO_CHANNELS_ORIGINAL = "Original"
 private const val AUDIO_CHANNELS_STEREO = "Stereo"
@@ -833,6 +997,23 @@ private val IMAGE_SUPER_RESOLUTION_OPTIONS = listOf(
     IMAGE_SUPER_RESOLUTION_AI
 )
 
+internal const val IMAGE_RESIZE_ORIGINAL = "Original size"
+internal const val IMAGE_RESIZE_4096 = "Long edge 4096 px"
+internal const val IMAGE_RESIZE_2560 = "Long edge 2560 px"
+internal const val IMAGE_RESIZE_1920 = "Long edge 1920 px"
+internal const val IMAGE_RESIZE_1280 = "Long edge 1280 px"
+internal const val IMAGE_RESIZE_1080 = "Long edge 1080 px"
+internal const val IMAGE_RESIZE_720 = "Long edge 720 px"
+private val IMAGE_RESIZE_OPTIONS = listOf(
+    IMAGE_RESIZE_ORIGINAL,
+    IMAGE_RESIZE_4096,
+    IMAGE_RESIZE_2560,
+    IMAGE_RESIZE_1920,
+    IMAGE_RESIZE_1280,
+    IMAGE_RESIZE_1080,
+    IMAGE_RESIZE_720
+)
+
 private const val PDF_PAGE_MODE_A4_FIT = "A4 fit"
 private const val PDF_PAGE_MODE_ORIGINAL_RATIO = "Original ratio"
 private val PDF_PAGE_MODE_OPTIONS = listOf(
@@ -904,11 +1085,13 @@ fun ZenConverterApp(
     onRemoveFileFromVideoMergeGroup: (String, String) -> Unit = { _, _ -> },
     onPickOutputDirectory: () -> Unit,
     onRemoveFile: (String) -> Unit,
+    onMoveQueuedFile: (String, Int) -> Unit,
     onClearQueue: () -> Unit,
     onPickMetadataImage: () -> Unit,
     onPickMetadataVideo: () -> Unit,
-    onCleanMetadata: () -> Unit,
+    onCleanMetadata: (MetadataScrubTargets) -> Unit,
     onRestoreMetadata: (String) -> Unit,
+    onBatchScrubMetadata: (MetadataScrubTargets) -> Unit,
     onDownloadEsrganModel: (EsrganModelSpec) -> Unit,
     onCancelEsrganModelDownload: (EsrganModelSpec) -> Unit,
     rifeModelStates: Map<String, RifeModelUiState> = emptyMap(),
@@ -933,23 +1116,18 @@ fun ZenConverterApp(
     var accent by remember(context) {
         mutableStateOf(accentColorFromPreference(AppPreferences.accentColor(context)))
     }
-    var themeModeOption by remember(context) {
-        mutableStateOf(themeModeFromPreference(AppPreferences.themeMode(context)))
-    }
     var isOledDark by remember(context) {
         mutableStateOf(AppPreferences.isOledDarkMode(context))
+    }
+    var useHardwareEncoding by remember(context) {
+        mutableStateOf(AppPreferences.useHardwareEncoding(context))
     }
     val languageOption = AppLanguages.selectedOption(context, configuration)
     val resourceContext = remember(context, configuration, languageRevision) { AppLanguages.localizedContext(context) }
     val texts = remember(resourceContext) { UiText(resourceContext) }
     val rootView = LocalView.current
-    val isSystemDark = isSystemInDarkTheme()
-
-    val isDark = when (themeModeOption) {
-        ThemeModeOption.System -> isSystemDark
-        ThemeModeOption.Light -> false
-        ThemeModeOption.Dark -> true
-    }
+    // The app follows the device theme: light device, light app; dark device, dark app.
+    val isDark = isSystemInDarkTheme()
     val isOled = isDark && isOledDark
 
     DisposableEffect(rootView, isConversionRunning) {
@@ -981,14 +1159,23 @@ fun ZenConverterApp(
             androidx.compose.ui.unit.LayoutDirection.Ltr
         }
     ) {
-        MaterialTheme(colorScheme = zenConverterColorScheme(context, accent, isDark, isOled)) {
+        val baseTypography = MaterialTheme.typography
+        val largeText = StudioStore.largeText.value
+        val typography = if (largeText) {
+            remember(baseTypography) { scaledTypography(baseTypography, LARGE_TEXT_SCALE) }
+        } else {
+            baseTypography
+        }
+        MaterialTheme(
+            colorScheme = zenConverterColorScheme(context, accent, isDark, isOled),
+            typography = typography
+        ) {
             Surface(
                 modifier = Modifier.fillMaxSize(),
                 color = MaterialTheme.colorScheme.background
             ) {
                 ZenConverterContent(
                     accent = accent,
-                    themeModeOption = themeModeOption,
                     isOledDark = isOledDark,
                     languageOption = languageOption,
                     texts = texts,
@@ -1009,13 +1196,14 @@ fun ZenConverterApp(
                         accent = it
                         AppPreferences.setAccentColor(context, it.name)
                     },
-                    onThemeModeSelected = {
-                        themeModeOption = it
-                        AppPreferences.setThemeMode(context, it.name)
-                    },
                     onOledDarkChange = { enabled ->
                         isOledDark = enabled
                         AppPreferences.setOledDarkMode(context, enabled)
+                    },
+                    useHardwareEncoding = useHardwareEncoding,
+                    onUseHardwareEncodingChange = { enabled ->
+                        useHardwareEncoding = enabled
+                        AppPreferences.setUseHardwareEncoding(context, enabled)
                     },
                     onLanguageSelected = {
                         AppLanguages.select(it)
@@ -1039,11 +1227,13 @@ fun ZenConverterApp(
                     onRemoveFileFromVideoMergeGroup = onRemoveFileFromVideoMergeGroup,
                     onPickOutputDirectory = onPickOutputDirectory,
                     onRemoveFile = onRemoveFile,
+                    onMoveQueuedFile = onMoveQueuedFile,
                     onClearQueue = onClearQueue,
                     onPickMetadataImage = onPickMetadataImage,
                     onPickMetadataVideo = onPickMetadataVideo,
                     onCleanMetadata = onCleanMetadata,
                     onRestoreMetadata = onRestoreMetadata,
+                    onBatchScrubMetadata = onBatchScrubMetadata,
                     onDownloadEsrganModel = onDownloadEsrganModel,
                     onCancelEsrganModelDownload = onCancelEsrganModelDownload,
                     onDownloadRifeModel = onDownloadRifeModel,
@@ -1078,8 +1268,8 @@ fun ZenConverterApp(
 @Composable
 private fun ZenConverterContent(
     accent: AccentColorOption,
-    themeModeOption: ThemeModeOption,
     isOledDark: Boolean,
+    useHardwareEncoding: Boolean,
     languageOption: LanguageOption,
     texts: UiText,
     queuedFiles: List<QueuedFile>,
@@ -1096,8 +1286,8 @@ private fun ZenConverterContent(
     rifeModelStates: Map<String, RifeModelUiState> = emptyMap(),
     officeFontStates: Map<String, OfficeFontUiState>,
     onAccentSelected: (AccentColorOption) -> Unit,
-    onThemeModeSelected: (ThemeModeOption) -> Unit,
     onOledDarkChange: (Boolean) -> Unit,
+    onUseHardwareEncodingChange: (Boolean) -> Unit,
     onLanguageSelected: (LanguageOption) -> Unit,
     onOutputLocationModeChange: (OutputLocationMode) -> Unit,
     onPickFiles: () -> Unit,
@@ -1118,11 +1308,13 @@ private fun ZenConverterContent(
     onRemoveFileFromVideoMergeGroup: (String, String) -> Unit = { _, _ -> },
     onPickOutputDirectory: () -> Unit,
     onRemoveFile: (String) -> Unit,
+    onMoveQueuedFile: (String, Int) -> Unit,
     onClearQueue: () -> Unit,
     onPickMetadataImage: () -> Unit,
     onPickMetadataVideo: () -> Unit,
-    onCleanMetadata: () -> Unit,
+    onCleanMetadata: (MetadataScrubTargets) -> Unit,
     onRestoreMetadata: (String) -> Unit,
+    onBatchScrubMetadata: (MetadataScrubTargets) -> Unit,
     onDownloadEsrganModel: (EsrganModelSpec) -> Unit,
     onCancelEsrganModelDownload: (EsrganModelSpec) -> Unit,
     onDownloadRifeModel: (RifeModelSpec) -> Unit = {},
@@ -1163,6 +1355,30 @@ private fun ZenConverterContent(
         }
     }
 
+    /** Returns to the hub without stacking another copy of it underneath. */
+    fun navigateHome() {
+        if (screenStack.size > 1) {
+            returning = true
+            screenStack = listOf(AppScreen.Home.name)
+        }
+    }
+
+    // Files arrive either from the converter's own import sheet or from a share intent handled
+    // in MainActivity. If the queue grows while the hub is showing, surface it by opening the
+    // converter, so a shared file is never queued invisibly behind the hub.
+    var lastQueueSize by remember { mutableStateOf(queuedFiles.size) }
+    LaunchedEffect(queuedFiles.size) {
+        val grew = queuedFiles.size > lastQueueSize
+        lastQueueSize = queuedFiles.size
+        if (grew && currentScreen == AppScreen.Home) {
+            navigateTo(AppScreen.Converter)
+        }
+    }
+
+    // One mastering session shared by the hub, the auto-master screen and every
+    // sub-tool, so a change in one place is visible in all of them.
+    val masteringState = remember { MasteringUiState() }
+
     var showSupport by remember { mutableStateOf(false) }
     var showImportSourceSheet by rememberSaveable { mutableStateOf(false) }
     var showAlbumSourceDialog by rememberSaveable { mutableStateOf(false) }
@@ -1200,23 +1416,21 @@ private fun ZenConverterContent(
     var homeTopInRoot by remember { mutableStateOf(0f) }
     var emptyHeroTopInRoot by remember { mutableStateOf<Float?>(null) }
 
-    val isSystemDark = isSystemInDarkTheme()
-    val isDark = when (themeModeOption) {
-        ThemeModeOption.System -> isSystemDark
-        ThemeModeOption.Light -> false
-        ThemeModeOption.Dark -> true
-    }
+    val isDark = isSystemInDarkTheme()
 
     BackHandler(enabled = screenStack.size > 1) {
         navigateBack()
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        MountedHome(visible = currentScreen == AppScreen.Home) {
+        // The converter keeps its composition (and the morph animation) alive even while the
+        // hub covers it, exactly as it did when it was the root screen.
+        MountedHome(visible = currentScreen == AppScreen.Converter) {
             NoOverscroll {
-                Scaffold(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    contentWindowInsets = WindowInsets.safeDrawing,
+                GlassBackdrop {
+                    Scaffold(
+                        containerColor = Color.Transparent,
+                        contentWindowInsets = WindowInsets.safeDrawing,
                     bottomBar = {
                         if (actionBarPosition == ActionBarPosition.Bottom && queuedFiles.isNotEmpty()) {
                             BottomQueueActionBar(
@@ -1385,6 +1599,37 @@ private fun ZenConverterContent(
                             }
                         }
 
+                        if (isConversionRunning || ConversionTaskStore.isQueuePaused.value) {
+                            item(key = "queue-controls") {
+                                QueueControls(
+                                    texts = texts,
+                                    isPaused = ConversionTaskStore.isQueuePaused.value,
+                                    onPause = { ConversionTaskStore.pauseQueue() },
+                                    onResume = { ConversionTaskStore.resumeQueue() }
+                                )
+                            }
+                        }
+
+                        if (!isConversionRunning && ConversionTaskStore.tasks.any {
+                                it.status == ConversionTaskStatus.Failed || it.status == ConversionTaskStatus.Cancelled
+                            }
+                        ) {
+                            item(key = "queue-retry") {
+                                QueueRetryRow(
+                                    texts = texts,
+                                    failedCount = ConversionTaskStore.tasks.count {
+                                        it.status == ConversionTaskStatus.Failed ||
+                                            it.status == ConversionTaskStatus.Cancelled
+                                    },
+                                    onRetry = { index ->
+                                        if (ConversionTaskStore.requestRetry(index)) {
+                                            ConversionService.start(context)
+                                        }
+                                    }
+                                )
+                            }
+                        }
+
                         statusMessage?.let { message ->
                             item(key = "status-line") {
                                 StatusLine(text = texts.summaryMessage(message))
@@ -1398,7 +1643,7 @@ private fun ZenConverterContent(
                             val videoGroupByFileId = videoMergeGroups.flatMap { group ->
                                 group.memberFileIds.map { id -> id to group }
                             }.toMap()
-                            items(queuedFiles, key = { it.id }) { file ->
+                            itemsIndexed(queuedFiles, key = { _, file -> file.id }) { index, file ->
                                 val effectiveProgress = taskProgressById[file.id]
                                     ?: pdfGroupByFileId[file.id]?.let { taskProgressById[it.id] }
                                     ?: videoGroupByFileId[file.id]?.let { taskProgressById[it.id] }
@@ -1421,6 +1666,9 @@ private fun ZenConverterContent(
                                         expandedFileId = if (expanded) file.id else null
                                         if (!expanded) openMenuId = null
                                     },
+                                    queueIndex = index,
+                                    queueSize = queuedFiles.size,
+                                    onMove = { delta -> onMoveQueuedFile(file.id, delta) },
                                     onRemove = { onRemoveFile(file.id) }
                                 )
                             }
@@ -1443,6 +1691,7 @@ private fun ZenConverterContent(
                             texts = texts,
                             hasFiles = hasFiles,
                             isSettingsActive = currentScreen == AppScreen.Settings,
+                            onBackToHub = { navigateBack() },
                             onOpenSettings = {
                                 openMenuId = null
                                 if (currentScreen == AppScreen.Settings) {
@@ -1538,6 +1787,7 @@ private fun ZenConverterContent(
                 )
             }
             }
+            }
         }
 
         SubpageHost(screen = currentScreen, returning = returning) { destination ->
@@ -1545,15 +1795,15 @@ private fun ZenConverterContent(
                 AppScreen.Settings -> SettingsScreen(
                     texts = texts,
                     selectedAccent = accent,
-                    selectedThemeMode = themeModeOption,
                     isOledDark = isOledDark,
+                    useHardwareEncoding = useHardwareEncoding,
                     selectedLanguage = languageOption,
                     selectedActionBarPosition = actionBarPosition,
                     outputLocationMode = outputLocationMode,
                     outputDirectory = outputDirectory,
                     onAccentSelected = onAccentSelected,
-                    onThemeModeSelected = onThemeModeSelected,
                     onOledDarkChange = onOledDarkChange,
+                    onUseHardwareEncodingChange = onUseHardwareEncodingChange,
                     onLanguageSelected = onLanguageSelected,
                     onActionBarPositionSelected = { newPos ->
                         actionBarPosition = newPos
@@ -1563,6 +1813,7 @@ private fun ZenConverterContent(
                     onPickOutputDirectory = onPickOutputDirectory,
                     onNavigateToMetadataSecurity = { navigateTo(AppScreen.MetadataSecurity) },
                     onNavigateToOfflineEngines = { navigateTo(AppScreen.OfflineEngines) },
+                    onNavigateToStudio = { navigateHome() },
                     onShowHelp = { navigateTo(AppScreen.Help) },
                     onShowPrivacyPolicy = { navigateTo(AppScreen.PrivacyPolicy) },
                     onShowSupport = { showSupport = true },
@@ -1591,6 +1842,7 @@ private fun ZenConverterContent(
                     onPickVideo = onPickMetadataVideo,
                     onClean = onCleanMetadata,
                     onRestore = onRestoreMetadata,
+                    onBatchScrub = onBatchScrubMetadata,
                     onBack = { navigateBack() },
                 )
                 AppScreen.PrivacyPolicy -> PrivacyPolicyScreen(
@@ -1602,7 +1854,62 @@ private fun ZenConverterContent(
                     copy = texts.helpGuide,
                     onBack = { navigateBack() },
                 )
-                AppScreen.Home -> Unit
+                AppScreen.Home -> StudioScreen(
+                    texts = texts,
+                    onNavigate = { navigateTo(it) },
+                    onOpenSettings = { navigateTo(AppScreen.Settings) },
+                )
+                AppScreen.StudioWaveform -> WaveformEditorScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioRecorder -> AudioRecorderScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioMixer -> AudioMixerScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioAnalyze -> AudioAnalyzeScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioTags -> TagEditorScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioRingtone -> RingtoneMakerScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioTts -> TextToSpeechScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioVisualizer -> VisualizerScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioRecipes -> RecipesScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioAbPlayer -> AbPlayerScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioTranscribe -> TranscribeScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioStems -> StemSeparationScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioHistory -> HistoryScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioCommand -> CommandViewScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioPlugins -> PluginsScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioWifi -> WifiTransferScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioCleaner -> StorageCleanerScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioGuard -> GuardScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioLrcImport -> LrcImportScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioLrcExport -> LrcExportScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioLyricTranscribe -> LyricTranscribeScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioLyricShift -> LyricShiftScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioKaraoke -> KaraokeScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioMediaLibrary -> MediaLibraryScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioDocumentConverter -> DocumentConverterScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioLyricsEditor -> LyricsEditorScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioAccessibility -> AccessibilityScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioArchive -> ArchiveToolsScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioFolderWatch -> FolderWatchScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioSplitSilence -> SplitSilenceScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioPdfSplit -> PdfSplitScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioPdfCreate -> PdfCreateScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioEpub -> EpubToolsScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioCrashReports -> CrashReportScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioMastering -> AutoMasteringScreen(texts, masteringState, onBack = { navigateBack() })
+                AppScreen.StudioMasteringStems -> StemBalanceScreen(texts, masteringState, onBack = { navigateBack() })
+                AppScreen.StudioMasteringEq -> MasteringEqScreen(texts, masteringState, onBack = { navigateBack() })
+                AppScreen.StudioMasteringSpectrum -> SpectrumAnalyzerScreen(texts, masteringState, onBack = { navigateBack() })
+                AppScreen.StudioMasteringLoudness -> LoudnessDynamicsScreen(texts, masteringState, onBack = { navigateBack() })
+                AppScreen.StudioMasteringCheck -> RadioReadyCheckScreen(texts, masteringState, onBack = { navigateBack() })
+                AppScreen.StudioMasteringLoudnessNorm -> LoudnessNormalizationScreen(texts, masteringState, onBack = { navigateBack() })
+                AppScreen.StudioMasteringExciter -> HarmonicExciterScreen(texts, masteringState, onBack = { navigateBack() })
+                AppScreen.StudioCutTranscript -> CutTranscriptScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioBurnSubs -> SubtitleBurnScreen(texts, onBack = { navigateBack() })
+                AppScreen.StudioChapterSplit -> ChapterSplitScreen(texts, onBack = { navigateBack() })
+                AppScreen.Converter -> Unit
+                AppScreen.StudioAudioConverter -> AudioConverterScreen(
+                    texts = texts,
+                    onBack = { navigateBack() },
+                    onOpenQueue = { navigateTo(AppScreen.Converter) },
+                )
             }
         }
     }
@@ -1914,6 +2221,7 @@ private fun Header(
     hasFiles: Boolean,
     isSettingsActive: Boolean,
     onOpenSettings: () -> Unit,
+    onBackToHub: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val spacerWidth by animateDpAsState(
@@ -1933,6 +2241,14 @@ private fun Header(
                 .semantics(mergeDescendants = true) {},
             verticalAlignment = Alignment.CenterVertically
         ) {
+            IconButton(onClick = onBackToHub, modifier = Modifier.size(HeaderButtonSize)) {
+                Icon(
+                    Icons.AutoMirrored.Rounded.ArrowBack,
+                    contentDescription = texts.studioBack(),
+                    tint = MaterialTheme.colorScheme.onBackground
+                )
+            }
+            Spacer(modifier = Modifier.width(2.dp))
             BrandImage(
                 painter = painterResource(id = R.drawable.zenconverter),
                 contentDescription = null,
@@ -3265,6 +3581,43 @@ private fun BatchVideoTargetOptions(
                 }
             }
 
+            if (isGifTarget) {
+                OptionDropdown(
+                    menuId = "batch-video-gif-frame-rate",
+                    label = texts.gifFrameRate,
+                    selected = commonBatchLabel(files) { gifFrameRateLabelFor(it.videoOptions.gifFrameRate) },
+                    options = GIF_FRAME_RATE_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = true
+                ) { value ->
+                    onOpenMenuChange(null)
+                    onUpdateFiles(
+                        files.map { file ->
+                            file.copy(videoOptions = file.videoOptions.copy(gifFrameRate = gifFrameRateFor(value)))
+                        }
+                    )
+                }
+                OptionDropdown(
+                    menuId = "batch-video-gif-colors",
+                    label = texts.gifColors,
+                    selected = commonBatchLabel(files) { gifColorsLabelFor(it.videoOptions.gifMaxColors) },
+                    options = GIF_COLORS_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = false
+                ) { value ->
+                    onOpenMenuChange(null)
+                    onUpdateFiles(
+                        files.map { file ->
+                            file.copy(videoOptions = file.videoOptions.copy(gifMaxColors = gifColorsFor(value)))
+                        }
+                    )
+                }
+            }
+
             if (!isGifTarget && !isInterpolationActive && (standardCompressionActive || mixedCompression)) {
                 OptionDropdown(
                     menuId = "batch-video-bitrate",
@@ -3591,6 +3944,29 @@ private fun BatchAudioTargetOptions(
                     }
                 )
             }
+            if (audioSupportsBitDepthOption(target)) {
+                OptionDropdown(
+                    menuId = "batch-audio-bit-depth",
+                    label = texts.bitDepth,
+                    selected = commonBatchLabel(files) { audioBitDepthLabelFor(it.audioOptions.bitDepth) },
+                    options = AUDIO_BIT_DEPTH_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = true
+                ) { value ->
+                    onOpenMenuChange(null)
+                    onUpdateFiles(
+                        files.map { file ->
+                            file.copy(
+                                audioOptions = file.audioOptions.copy(
+                                    bitDepth = audioBitDepthFor(value)
+                                )
+                            )
+                        }
+                    )
+                }
+            }
             OptionDropdown(
                 menuId = "batch-audio-channels",
                 label = texts.channels,
@@ -3655,6 +4031,9 @@ private fun BatchImageTargetOptions(
         superResolution = commonBatchLabel(files) {
             superResolutionLabelFor(it.imageOptions.superResolution)
         },
+        resize = commonBatchLabel(files) {
+            imageResizeLabelFor(it.imageOptions.resize)
+        },
         availableAiModels = availableAiModels,
         openMenuId = openMenuId,
         onOpenMenuChange = onOpenMenuChange,
@@ -3662,7 +4041,7 @@ private fun BatchImageTargetOptions(
             onOpenMenuChange(null)
             onUpdateFiles(
                 files.map { file ->
-                    file.copy(imageOptions = imageOptionsForQuality(value, target))
+                    file.copy(imageOptions = imageOptionsForQuality(value, target, file.imageOptions))
                 }
             )
         },
@@ -3694,6 +4073,15 @@ private fun BatchImageTargetOptions(
                             file.gifFrameMode
                         }
                     )
+                }
+            )
+        },
+        onResizeChange = { value ->
+            onOpenMenuChange(null)
+            val mode = imageResizeModeFor(value)
+            onUpdateFiles(
+                files.map { file ->
+                    file.copy(imageOptions = file.imageOptions.copy(resize = mode))
                 }
             )
         }
@@ -4598,7 +4986,7 @@ private fun QueueHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = texts.queue,
+            text = texts.queueTitle(),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold
         )
@@ -4631,6 +5019,8 @@ private fun VideoOptions(
     trimInputMode: TrimInputMode,
     frameInterpolation: String = VIDEO_INTERPOLATION_OFF,
     isRifeModelDownloaded: Boolean = false,
+    gifFrameRate: String = GIF_FRAME_RATE_30,
+    gifColors: String = GIF_COLORS_256,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onTrimInputModeChange: (TrimInputMode) -> Unit,
@@ -4639,6 +5029,8 @@ private fun VideoOptions(
     onTrimRangeChange: (MediaTrimRange) -> Unit,
     onFrameInterpolationChange: (String) -> Unit = {},
     onResolutionChange: (String) -> Unit,
+    onGifFrameRateChange: (String) -> Unit = {},
+    onGifColorsChange: (String) -> Unit = {},
     onCompressionModeChange: (String) -> Unit,
     onBitrateChange: (String) -> Unit,
     onCodecChange: (String) -> Unit,
@@ -4661,6 +5053,7 @@ private fun VideoOptions(
     onAudioVolumeChange: (String) -> Unit,
     onAudioEchoChange: (String) -> Unit,
     onAudioNoiseReductionChange: (String) -> Unit,
+    onAudioEffectsChange: (AudioEffects) -> Unit = {},
     contactSheetOptions: VideoContactSheetOptions = VideoContactSheetOptions(),
     onContactSheetOptionsChange: (VideoContactSheetOptions) -> Unit = {},
     sourceShortSide: Int? = null,
@@ -4756,6 +5149,30 @@ private fun VideoOptions(
                     showDivider = !isGifTarget && isStandardCompression,
                     onSelected = onResolutionChange
                 )
+                if (isGifTarget) {
+                    OptionDropdown(
+                        menuId = "${menuPrefix}video-gif-frame-rate",
+                        label = texts.gifFrameRate,
+                        selected = gifFrameRate,
+                        options = GIF_FRAME_RATE_OPTIONS,
+                        texts = texts,
+                        openMenuId = openMenuId,
+                        onOpenMenuChange = onOpenMenuChange,
+                        showDivider = true,
+                        onSelected = onGifFrameRateChange
+                    )
+                    OptionDropdown(
+                        menuId = "${menuPrefix}video-gif-colors",
+                        label = texts.gifColors,
+                        selected = gifColors,
+                        options = GIF_COLORS_OPTIONS,
+                        texts = texts,
+                        openMenuId = openMenuId,
+                        onOpenMenuChange = onOpenMenuChange,
+                        showDivider = false,
+                        onSelected = onGifColorsChange
+                    )
+                }
             }
             if (!isGifTarget && !isInterpolationActive && isStandardCompression) {
                 OptionDropdown(
@@ -4898,7 +5315,8 @@ private fun VideoOptions(
                 onFadeOutChange = onAudioFadeOutChange,
                 onVolumeChange = onAudioVolumeChange,
                 onEchoChange = onAudioEchoChange,
-                onNoiseReductionChange = onAudioNoiseReductionChange
+                onNoiseReductionChange = onAudioNoiseReductionChange,
+                onEffectsChange = onAudioEffectsChange
             )
         }
     }
@@ -4914,6 +5332,7 @@ private fun AudioOptions(
     vbrQuality: Int,
     bitrate: String,
     sampleRate: String,
+    bitDepth: String,
     channels: String,
     advanced: AudioAdvancedUiState,
     targetFormat: TargetFormat,
@@ -4928,6 +5347,7 @@ private fun AudioOptions(
     onVbrQualityChange: (String) -> Unit,
     onBitrateChange: (String) -> Unit,
     onSampleRateChange: (String) -> Unit,
+    onBitDepthChange: (String) -> Unit,
     onChannelsChange: (String) -> Unit,
     onAdvancedExpandedChange: (Boolean) -> Unit,
     onReverseChange: (Boolean) -> Unit,
@@ -4935,7 +5355,8 @@ private fun AudioOptions(
     onFadeOutChange: (String) -> Unit,
     onVolumeChange: (String) -> Unit,
     onEchoChange: (String) -> Unit,
-    onNoiseReductionChange: (String) -> Unit
+    onNoiseReductionChange: (String) -> Unit,
+    onEffectsChange: (AudioEffects) -> Unit = {}
 ) {
     OptionGrid {
         MediaTrimOptions(
@@ -5010,6 +5431,19 @@ private fun AudioOptions(
                 showDivider = true,
                 onSelected = onSampleRateChange
             )
+            if (audioSupportsBitDepthOption(targetFormat)) {
+                OptionDropdown(
+                    menuId = "${menuPrefix}audio-bit-depth",
+                    label = texts.bitDepth,
+                    selected = bitDepth,
+                    options = AUDIO_BIT_DEPTH_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = true,
+                    onSelected = onBitDepthChange
+                )
+            }
             OptionDropdown(
                 menuId = "${menuPrefix}audio-channels",
                 label = texts.channels,
@@ -5043,6 +5477,13 @@ private fun AudioOptions(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        if (isVorbisTarget(targetFormat)) {
+            Text(
+                text = texts.vorbisHint,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         AudioAdvancedOptionsPanel(
             texts = texts,
             state = advanced,
@@ -5055,7 +5496,8 @@ private fun AudioOptions(
             onFadeOutChange = onFadeOutChange,
             onVolumeChange = onVolumeChange,
             onEchoChange = onEchoChange,
-            onNoiseReductionChange = onNoiseReductionChange
+            onNoiseReductionChange = onNoiseReductionChange,
+            onEffectsChange = onEffectsChange
         )
     }
 }
@@ -5811,7 +6253,8 @@ private fun AudioAdvancedOptionsPanel(
     onFadeOutChange: (String) -> Unit,
     onVolumeChange: (String) -> Unit,
     onEchoChange: (String) -> Unit,
-    onNoiseReductionChange: (String) -> Unit
+    onNoiseReductionChange: (String) -> Unit,
+    onEffectsChange: (AudioEffects) -> Unit = {}
 ) {
     AdvancedOptionsPanel(
         title = texts.audioAdvancedTitle(),
@@ -5880,6 +6323,156 @@ private fun AudioAdvancedOptionsPanel(
                 showDivider = false,
                 onSelected = onNoiseReductionChange
             )
+        }
+        AudioEffectsPanel(
+            texts = texts,
+            effects = state.effects,
+            menuPrefix = "$menuPrefix audio-effects",
+            openMenuId = openMenuId,
+            onOpenMenuChange = onOpenMenuChange,
+            onEffectsChange = onEffectsChange
+        )
+    }
+}
+
+@Composable
+private fun AudioEffectsPanel(
+    texts: UiText,
+    effects: AudioEffects,
+    menuPrefix: String,
+    openMenuId: String?,
+    onOpenMenuChange: (String?) -> Unit,
+    onEffectsChange: (AudioEffects) -> Unit
+) {
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = texts.audioEffectsTitle(),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp)
+        )
+        InsetGroupCard {
+            OptionDropdown(
+                menuId = "$menuPrefix-eq",
+                label = texts.equalizerLabel(),
+                selected = texts.equalizerPresetLabel(effects.equalizer),
+                options = EqualizerPreset.entries.map { texts.equalizerPresetLabel(it) },
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = true,
+                onSelected = { label ->
+                    EqualizerPreset.entries.firstOrNull { texts.equalizerPresetLabel(it) == label }
+                        ?.let { onEffectsChange(effects.copy(equalizer = it)) }
+                }
+            )
+            OptionDropdown(
+                menuId = "$menuPrefix-loudness",
+                label = texts.loudnessLabel(),
+                selected = texts.loudnessTargetLabel(effects.loudnessTarget),
+                options = LoudnessTarget.entries.map { texts.loudnessTargetLabel(it) },
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = true,
+                onSelected = { label ->
+                    LoudnessTarget.entries.firstOrNull { texts.loudnessTargetLabel(it) == label }
+                        ?.let { onEffectsChange(effects.copy(loudnessTarget = it)) }
+                }
+            )
+            OptionDropdown(
+                menuId = "$menuPrefix-compressor",
+                label = texts.compressorLabel(),
+                selected = texts.compressorPresetLabel(effects.compressor),
+                options = CompressorPreset.entries.map { texts.compressorPresetLabel(it) },
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = true,
+                onSelected = { label ->
+                    CompressorPreset.entries.firstOrNull { texts.compressorPresetLabel(it) == label }
+                        ?.let { onEffectsChange(effects.copy(compressor = it)) }
+                }
+            )
+            OptionDropdown(
+                menuId = "$menuPrefix-reverb",
+                label = texts.reverbLabel(),
+                selected = texts.reverbPresetLabel(effects.reverb),
+                options = ReverbPreset.entries.map { texts.reverbPresetLabel(it) },
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = true,
+                onSelected = { label ->
+                    ReverbPreset.entries.firstOrNull { texts.reverbPresetLabel(it) == label }
+                        ?.let { onEffectsChange(effects.copy(reverb = it)) }
+                }
+            )
+            OptionDropdown(
+                menuId = "$menuPrefix-voice",
+                label = texts.voiceChangerLabel(),
+                selected = texts.voiceChangerPresetLabel(effects.voiceChanger),
+                options = VoiceChangerPreset.entries.map { texts.voiceChangerPresetLabel(it) },
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = true,
+                onSelected = { label ->
+                    VoiceChangerPreset.entries.firstOrNull { texts.voiceChangerPresetLabel(it) == label }
+                        ?.let { onEffectsChange(effects.copy(voiceChanger = it)) }
+                }
+            )
+            OptionDropdown(
+                menuId = "$menuPrefix-silence",
+                label = texts.silenceRemovalLabel(),
+                selected = texts.silenceRemovalModeLabel(effects.silenceRemoval),
+                options = SilenceRemovalMode.entries.map { texts.silenceRemovalModeLabel(it) },
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = false,
+                onSelected = { label ->
+                    SilenceRemovalMode.entries.firstOrNull { texts.silenceRemovalModeLabel(it) == label }
+                        ?.let { onEffectsChange(effects.copy(silenceRemoval = it)) }
+                }
+            )
+        }
+        AdvancedSwitchRow(
+            label = texts.deHumLabel(),
+            checked = effects.deHum,
+            onCheckedChange = { onEffectsChange(effects.copy(deHum = it)) }
+        )
+        val pluginPresets = StudioStore.pluginPresets.toList()
+        var appliedPreset by remember { mutableStateOf<String?>(null) }
+        if (pluginPresets.isNotEmpty()) {
+            Text(
+                text = texts.pluginsTitle(),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+            )
+            InsetGroupCard {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    pluginPresets.forEach { preset ->
+                        OutlinedButton(
+                            onClick = {
+                                onEffectsChange(PluginPresets.apply(preset, effects))
+                                appliedPreset = preset.name
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(texts.pluginsApply() + " · " + preset.name)
+                        }
+                    }
+                    appliedPreset?.let {
+                        Text(
+                            texts.pluginsApplied(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -6007,12 +6600,14 @@ private fun ImageOptions(
     quality: String,
     pdfPageMode: String,
     superResolution: String,
+    resize: String,
     availableAiModels: Set<String>,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
     onQualityChange: (String) -> Unit,
     onPdfPageModeChange: (String) -> Unit,
-    onSuperResolutionChange: (String) -> Unit
+    onSuperResolutionChange: (String) -> Unit,
+    onResizeChange: (String) -> Unit
 ) {
     if (targetFormat.extension.equals("pdf", ignoreCase = true)) {
         OptionGrid {
@@ -6062,7 +6657,7 @@ private fun ImageOptions(
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
                 disabledOptions = disabledOptions,
-                showDivider = hasQuality,
+                showDivider = true,
                 onSelected = onSuperResolutionChange
             )
             if (hasQuality) {
@@ -6074,10 +6669,21 @@ private fun ImageOptions(
                     texts = texts,
                     openMenuId = openMenuId,
                     onOpenMenuChange = onOpenMenuChange,
-                    showDivider = false,
+                    showDivider = true,
                     onSelected = onQualityChange
                 )
             }
+            OptionDropdown(
+                menuId = "${menuPrefix}image-resize",
+                label = texts.resize,
+                selected = resize,
+                options = IMAGE_RESIZE_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = false,
+                onSelected = onResizeChange
+            )
         }
 
         if (availableAiModels.isEmpty()) {
@@ -6349,6 +6955,103 @@ private fun QueueActions(
 }
 
 @Composable
+private fun QueueControls(
+    texts: UiText,
+    isPaused: Boolean,
+    onPause: () -> Unit,
+    onResume: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        OutlinedButton(
+            onClick = { if (isPaused) onResume() else onPause() },
+            shape = RoundedCornerShape(8.dp),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+            modifier = Modifier
+                .weight(1f)
+                .heightIn(min = 38.dp)
+        ) {
+            AppIcon(
+                icon = if (isPaused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = if (isPaused) texts.queueResume() else texts.queuePause(),
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (isPaused) {
+            Text(
+                text = texts.queuePaused(),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun QueueRetryRow(
+    texts: UiText,
+    failedCount: Int,
+    onRetry: (Int) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = texts.queueRetry(),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        if (failedCount == 0) return@Column
+        val indices = ConversionTaskStore.tasks.indices.filter { index ->
+            val status = ConversionTaskStore.tasks[index].status
+            status == ConversionTaskStatus.Failed || status == ConversionTaskStatus.Cancelled
+        }
+        indices.forEach { index ->
+            val task = ConversionTaskStore.tasks[index]
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = task.displayName,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                OutlinedButton(
+                    onClick = { onRetry(index) },
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Text(texts.queueRetry(), style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun BottomQueueActionBar(
     texts: UiText,
     isRunning: Boolean,
@@ -6442,9 +7145,12 @@ private fun FileRow(
     optionsExpanded: Boolean,
     groupedInPdfMerge: Boolean,
     groupedInVideoMerge: Boolean = false,
+    queueIndex: Int = 0,
+    queueSize: Int = 1,
     onOpenMenuChange: (String?) -> Unit,
     onUpdateFile: (QueuedFile) -> Unit,
     onOptionsExpandedChange: (Boolean) -> Unit,
+    onMove: (Int) -> Unit = {},
     onRemove: () -> Unit
 ) {
     val context = LocalContext.current
@@ -6509,6 +7215,18 @@ private fun FileRow(
                         onClick = { openOutputLocation(context, completedProgress, texts) }
                     )
                 }
+                CompactTaskActionButton(
+                    icon = Icons.Rounded.ArrowUpward,
+                    contentDescription = texts.queueMoveUp(),
+                    enabled = canEdit && queueIndex > 0,
+                    onClick = { onMove(-1) }
+                )
+                CompactTaskActionButton(
+                    icon = Icons.Rounded.ArrowDownward,
+                    contentDescription = texts.queueMoveDown(),
+                    enabled = canEdit && queueIndex < queueSize - 1,
+                    onClick = { onMove(1) }
+                )
                 CompactTaskActionButton(
                     icon = Icons.Rounded.DeleteOutline,
                     contentDescription = texts.remove,
@@ -6739,6 +7457,25 @@ private fun QueuedFileOptionsPanel(
     onUpdateFile: (QueuedFile) -> Unit
 ) {
     val menuPrefix = "file-${file.id}-"
+    val targetId = selectedTarget.targetFormat.id
+    val facts = FileFacts(
+        displayName = file.displayName,
+        sizeBytes = file.sizeBytes ?: file.inputInfo?.sizeBytes,
+        category = file.category.mediaCategory,
+        widthPx = file.inputInfo?.width,
+        heightPx = file.inputInfo?.height,
+        durationSeconds = file.inputInfo?.durationMs?.let { it / 1_000.0 },
+        bitrate = file.inputInfo?.bitrateBitsPerSecond?.toInt()
+    )
+    val suggestions = remember(facts) {
+        SmartSuggestions.suggestionsFor(facts).filter { it.preset != null }
+    }
+    val estimateText = remember(file.videoOptions, file.audioOptions, file.inputInfo, file.category) {
+        qualityEstimateTextFor(file, texts)
+    }
+    val durationSeconds = (file.inputInfo?.durationMs ?: 0L) / 1_000.0
+    val targetSizeEligible = durationSeconds > 0.0 &&
+        (file.category == FileCategory.Video || file.category == FileCategory.Audio)
     AnimatedContent(
         targetState = "${file.category.name}-${file.targetFormat}",
         transitionSpec = {
@@ -6763,6 +7500,8 @@ private fun QueuedFileOptionsPanel(
                 audioBitrate = audioBitrateLabelFor(file.audioOptions.audioBitrate),
                 audioSampleRate = audioSampleRateLabelFor(file.audioOptions.sampleRateHz),
                 audioChannels = audioChannelsLabelFor(file.audioOptions.channelCount),
+                gifFrameRate = gifFrameRateLabelFor(file.videoOptions.gifFrameRate),
+                gifColors = gifColorsLabelFor(file.videoOptions.gifMaxColors),
                 videoAdvanced = videoAdvancedUiStateFor(file.videoOptions.advanced, videoAdvancedExpanded),
                 audioAdvanced = audioAdvancedUiStateFor(file.audioOptions.advanced, audioAdvancedExpanded),
                 targetFormat = selectedTarget.targetFormat,
@@ -6847,6 +7586,12 @@ private fun QueuedFileOptionsPanel(
                             )
                         )
                     )
+                },
+                onGifFrameRateChange = { value ->
+                    onUpdateFile(file.copy(videoOptions = file.videoOptions.copy(gifFrameRate = gifFrameRateFor(value))))
+                },
+                onGifColorsChange = { value ->
+                    onUpdateFile(file.copy(videoOptions = file.videoOptions.copy(gifMaxColors = gifColorsFor(value))))
                 },
                 onCompressionModeChange = { value ->
                     val mode = videoCompressionModeFor(value)
@@ -6936,6 +7681,9 @@ private fun QueuedFileOptionsPanel(
                 },
                 onAudioNoiseReductionChange = { value ->
                     onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(advanced = file.audioOptions.advanced.copy(noiseReduction = audioNoiseReductionModeFor(value)))))
+                },
+                onAudioEffectsChange = { effects ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(advanced = file.audioOptions.advanced.copy(effects = effects))))
                 }
             )
             FileCategory.Audio -> AudioOptions(
@@ -6947,6 +7695,7 @@ private fun QueuedFileOptionsPanel(
                 vbrQuality = file.audioOptions.mp3VbrQuality,
                 bitrate = audioBitrateLabelFor(file.audioOptions.audioBitrate),
                 sampleRate = audioSampleRateLabelFor(file.audioOptions.sampleRateHz),
+                bitDepth = audioBitDepthLabelFor(file.audioOptions.bitDepth),
                 channels = audioChannelsLabelFor(file.audioOptions.channelCount),
                 advanced = audioAdvancedUiStateFor(file.audioOptions.advanced, audioAdvancedExpanded),
                 targetFormat = selectedTarget.targetFormat,
@@ -6991,6 +7740,9 @@ private fun QueuedFileOptionsPanel(
                 onSampleRateChange = { value ->
                     onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(sampleRateHz = audioSampleRateToHz(value))))
                 },
+                onBitDepthChange = { value ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(bitDepth = audioBitDepthFor(value))))
+                },
                 onChannelsChange = { value ->
                     onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(channelCount = audioChannelsToCount(value))))
                 },
@@ -7012,6 +7764,9 @@ private fun QueuedFileOptionsPanel(
                 },
                 onNoiseReductionChange = { value ->
                     onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(advanced = file.audioOptions.advanced.copy(noiseReduction = audioNoiseReductionModeFor(value)))))
+                },
+                onEffectsChange = { effects ->
+                    onUpdateFile(file.copy(audioOptions = file.audioOptions.copy(advanced = file.audioOptions.advanced.copy(effects = effects))))
                 }
             )
             FileCategory.Image -> {
@@ -7022,11 +7777,12 @@ private fun QueuedFileOptionsPanel(
                     quality = imageQualityLabelFor(file.imageOptions, selectedTarget.targetFormat),
                     pdfPageMode = pdfPageModeLabelFor(file.pdfOptions.imagePageMode),
                     superResolution = superResolutionLabelFor(file.imageOptions.superResolution),
+                    resize = imageResizeLabelFor(file.imageOptions.resize),
                     availableAiModels = availableAiModels,
                     openMenuId = openMenuId,
                     onOpenMenuChange = onOpenMenuChange,
                     onQualityChange = { value ->
-                        onUpdateFile(file.copy(imageOptions = imageOptionsForQuality(value, selectedTarget.targetFormat)))
+                        onUpdateFile(file.copy(imageOptions = imageOptionsForQuality(value, selectedTarget.targetFormat, file.imageOptions)))
                     },
                     onPdfPageModeChange = { value ->
                         onUpdateFile(file.copy(pdfOptions = file.pdfOptions.copy(imagePageMode = pdfPageModeToOption(value))))
@@ -7046,6 +7802,9 @@ private fun QueuedFileOptionsPanel(
                                 }
                             )
                         )
+                    },
+                    onResizeChange = { value ->
+                        onUpdateFile(file.copy(imageOptions = file.imageOptions.copy(resize = imageResizeModeFor(value))))
                     }
                 )
                 if (
@@ -7093,6 +7852,201 @@ private fun QueuedFileOptionsPanel(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+    if (suggestions.isNotEmpty() || estimateText != null || targetSizeEligible) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (suggestions.isNotEmpty()) {
+                Text(
+                    text = texts.smartPresetSection(),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 4.dp)
+                )
+                CenteredFlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalSpacing = 6.dp,
+                    verticalSpacing = 6.dp
+                ) {
+                    suggestions.forEach { suggestion ->
+                        SuggestionChip(
+                            texts = texts,
+                            suggestion = suggestion,
+                            onApply = {
+                                onUpdateFile(applySmartSuggestion(file, suggestion))
+                            }
+                        )
+                    }
+                }
+            }
+            if (targetSizeEligible) {
+                TargetSizeModeRow(
+                    texts = texts,
+                    onApply = { targetBytes ->
+                        onUpdateFile(applyTargetSize(file, targetBytes, durationSeconds))
+                    }
+                )
+            }
+            estimateText?.let { estimate ->
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
+                ) {
+                    Column(
+                        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = texts.qualityEstimatorTitle(),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = estimate,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TargetSizeModeRow(
+    texts: UiText,
+    onApply: (Long) -> Unit
+) {
+    var megabytes by remember { mutableStateOf("") }
+    val parsed = megabytes.trim().toDoubleOrNull()
+    val isValid = parsed != null && parsed in 1.0..2000.0
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = texts.targetSizeMode(),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = megabytes,
+                    onValueChange = { megabytes = it },
+                    label = { Text(texts.targetSizeHint()) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedButton(
+                    enabled = isValid,
+                    onClick = { parsed?.let { onApply((it * 1024.0 * 1024.0).toLong()) } }
+                ) {
+                    Text(texts.targetSizeApply())
+                }
+            }
+            if (megabytes.isNotBlank() && !isValid) {
+                Text(
+                    text = texts.targetSizeInvalid(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
+}
+
+private fun applyTargetSize(file: QueuedFile, targetBytes: Long, durationSeconds: Double): QueuedFile {
+    val audioBitrate = file.audioOptions.audioBitrate ?: 128_000
+    return if (file.category == FileCategory.Video) {
+        val videoBitrate = BitrateCalculator.videoBitrateFor(targetBytes, durationSeconds, audioBitrate)
+            ?: return file
+        file.copy(videoOptions = file.videoOptions.copy(videoBitrate = videoBitrate))
+    } else {
+        val total = BitrateCalculator.totalBitrate(targetBytes, durationSeconds) ?: return file
+        file.copy(audioOptions = file.audioOptions.copy(audioBitrate = total))
+    }
+}
+
+@Composable
+private fun SuggestionChip(
+    texts: UiText,
+    suggestion: SmartSuggestion,
+    onApply: () -> Unit
+) {
+    val label = "${texts.optionValue(suggestion.titleKey)} · ${texts.optionValue(suggestion.detailKey)}"
+    OutlinedButton(
+        onClick = onApply,
+        modifier = Modifier.heightIn(min = 32.dp),
+        shape = RoundedCornerShape(ZenDimensions.RadiusChip),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
+            contentColor = MaterialTheme.colorScheme.primary
+        ),
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+    ) {
+        Text(text = label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+    }
+}
+
+private fun applySmartSuggestion(
+    file: QueuedFile,
+    suggestion: SmartSuggestion
+): QueuedFile {
+    val preset = suggestion.preset ?: return file
+    var updated = file
+    if (preset.isVideo) {
+        updated = updated.copy(
+            videoOptions = SmartPresets.videoOptions(preset, file.inputInfo?.durationMs?.let { it / 1_000.0 })
+        )
+    }
+    return updated.copy(audioOptions = SmartPresets.audioOptions(preset))
+}
+
+internal val FileCategory.mediaCategory: ConversionMediaCategory
+    get() = when (this) {
+        FileCategory.Video -> ConversionMediaCategory.Video
+        FileCategory.Audio -> ConversionMediaCategory.Audio
+        FileCategory.Image -> ConversionMediaCategory.Image
+        FileCategory.Pdf -> ConversionMediaCategory.Pdf
+        FileCategory.Document -> ConversionMediaCategory.Document
+        FileCategory.Font -> ConversionMediaCategory.Font
+        FileCategory.Subtitle -> ConversionMediaCategory.Subtitle
+    }
+
+private fun qualityEstimateTextFor(file: QueuedFile, texts: UiText): String? {
+    val duration = file.inputInfo?.durationMs?.takeIf { it > 0 }?.let { it / 1_000.0 } ?: return null
+    return when (file.category) {
+        FileCategory.Video -> {
+            val estimate = QualityEstimator.estimateVideo(
+                durationSeconds = duration,
+                width = file.inputInfo?.width,
+                height = file.inputInfo?.height,
+                fps = file.inputInfo?.frameRate?.toDouble(),
+                videoBitrate = file.videoOptions.videoBitrate
+            )
+            val size = estimate.estimatedBytes?.let { formatBytes(it, texts) }
+                ?: return texts.qualityEstimatorQuality(estimate.quality)
+            "${texts.qualityEstimatorSize(size)} · ${texts.qualityEstimatorQuality(estimate.quality)}"
+        }
+        FileCategory.Audio -> {
+            val estimate = QualityEstimator.estimateAudio(duration, file.audioOptions.audioBitrate)
+            val size = estimate.estimatedBytes?.let { formatBytes(it, texts) }
+                ?: return texts.qualityEstimatorQuality(estimate.quality)
+            "${texts.qualityEstimatorSize(size)} · ${texts.qualityEstimatorQuality(estimate.quality)}"
+        }
+        else -> null
     }
 }
 
@@ -7547,9 +8501,61 @@ private fun zenConverterColorScheme(
         }
     }
 
+    val glass = accent == AccentColorOption.Glass
     val safeAccent = if (accent == AccentColorOption.Dynamic) AccentColorOption.Charcoal else accent
     val primary = safeAccent.color(isDark)
     val onPrimary = safeAccent.contentColor(isDark)
+
+    // Glass themes use the accent as-is in both modes: blue for light, ruby for dark.
+    if (glass) {
+        // Glass is one system: blue in light, ruby on polished black in dark.
+        val accentColor = if (isDark) Color(0xFFE11D48) else Color(0xFF2563EB)
+        return if (!isDark) {
+            lightColorScheme(
+                primary = accentColor,
+                onPrimary = Color.White,
+                secondary = Color(0xFF3B82F6),
+                onSecondary = Color.White,
+                background = Color(0xFFEEF2FB),
+                onBackground = Color(0xFF0B1220),
+                surface = Color(0xFFFFFFFF),
+                onSurface = Color(0xFF0B1220),
+                surfaceVariant = Color(0xFFE6ECF7),
+                onSurfaceVariant = Color(0xFF5B6577),
+                surfaceContainerLowest = Color(0xFFFFFFFF),
+                surfaceContainerLow = Color(0xFFF7F9FE),
+                surfaceContainer = Color(0xFFEFF3FB),
+                surfaceContainerHigh = Color(0xFFE7EDF8),
+                surfaceContainerHighest = Color(0xFFDDE5F3),
+                outline = Color(0xFFC9D3E4),
+                outlineVariant = Color(0xFFE1E8F4),
+                error = Color(0xFFB3261E),
+                onError = Color.White
+            )
+        } else {
+            darkColorScheme(
+                primary = accentColor,
+                onPrimary = Color.White,
+                secondary = Color(0xFFFB7185),
+                onSecondary = Color.White,
+                background = if (isOled) Color(0xFF000000) else Color(0xFF07080B),
+                onBackground = Color(0xFFF4F5F7),
+                surface = if (isOled) Color(0xFF000000) else Color(0xFF16171C),
+                onSurface = Color(0xFFF4F5F7),
+                surfaceVariant = if (isOled) Color(0xFF141414) else Color(0xFF262830),
+                onSurfaceVariant = Color(0xFF9AA2B1),
+                surfaceContainerLowest = if (isOled) Color(0xFF000000) else Color(0xFF0C0D11),
+                surfaceContainerLow = if (isOled) Color(0xFF0C0C0C) else Color(0xFF141519),
+                surfaceContainer = if (isOled) Color(0xFF141414) else Color(0xFF1B1C22),
+                surfaceContainerHigh = if (isOled) Color(0xFF1C1C1C) else Color(0xFF22242C),
+                surfaceContainerHighest = if (isOled) Color(0xFF242424) else Color(0xFF2A2D37),
+                outline = if (isOled) Color(0xFF282828) else Color(0xFF3A3D47),
+                outlineVariant = if (isOled) Color(0xFF1C1C1C) else Color(0xFF2B2E38),
+                error = Color(0xFFEF4444),
+                onError = Color.White
+            )
+        }
+    }
 
     return if (!isDark) {
         lightColorScheme(
@@ -7620,18 +8626,42 @@ private fun zenConverterColorScheme(
     }
 }
 
+/** Multiplier applied to every text style when the large-text preference is on. */
+private const val LARGE_TEXT_SCALE = 1.25f
+
+/**
+ * Returns a copy of [base] with each text style's size and line height scaled by
+ * [scale]. Used by the accessibility "large text" preference so the whole UI
+ * grows, not just the studio pages.
+ */
+private fun scaledTypography(base: Typography, scale: Float): Typography {
+    fun TextStyle.scaled(): TextStyle =
+        copy(fontSize = fontSize * scale, lineHeight = lineHeight * scale)
+    return Typography(
+        displayLarge = base.displayLarge.scaled(),
+        displayMedium = base.displayMedium.scaled(),
+        displaySmall = base.displaySmall.scaled(),
+        headlineLarge = base.headlineLarge.scaled(),
+        headlineMedium = base.headlineMedium.scaled(),
+        headlineSmall = base.headlineSmall.scaled(),
+        titleLarge = base.titleLarge.scaled(),
+        titleMedium = base.titleMedium.scaled(),
+        titleSmall = base.titleSmall.scaled(),
+        bodyLarge = base.bodyLarge.scaled(),
+        bodyMedium = base.bodyMedium.scaled(),
+        bodySmall = base.bodySmall.scaled(),
+        labelLarge = base.labelLarge.scaled(),
+        labelMedium = base.labelMedium.scaled(),
+        labelSmall = base.labelSmall.scaled()
+    )
+}
+
 private fun accentColorFromPreference(value: String?): AccentColorOption {
     if (value == "Dynamic" && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
         return AccentColorOption.Charcoal
     }
     return AccentColorOption.entries.firstOrNull { it.name == value }
-        ?: AccentColorOption.Charcoal
-}
-
-private fun themeModeFromPreference(value: String?): ThemeModeOption {
-    if (value == "OledDark") return ThemeModeOption.Dark
-    return ThemeModeOption.entries.firstOrNull { it.name == value }
-        ?: ThemeModeOption.System
+        ?: AccentColorOption.Glass
 }
 
 
@@ -7864,14 +8894,52 @@ private fun audioOptionsForTarget(
     current: AudioExportOptions,
     targetFormat: TargetFormat
 ): AudioExportOptions {
+    var result = current
+    if (!audioSupportsBitDepthOption(targetFormat) && result.bitDepth != AudioBitDepth.Auto) {
+        result = result.copy(bitDepth = AudioBitDepth.Auto)
+    }
     if (isOpusTarget(targetFormat)) {
-        return if (current.sampleRateHz != null && current.sampleRateHz !in OPUS_SUPPORTED_SAMPLE_RATES) {
-            current.copy(sampleRateHz = null)
-        } else {
-            current
+        if (result.sampleRateHz != null && result.sampleRateHz !in OPUS_SUPPORTED_SAMPLE_RATES) {
+            result = result.copy(sampleRateHz = null)
         }
     }
-    return current
+    return result
+}
+
+private fun gifFrameRateLabelFor(value: Int): String {
+    return when (value) {
+        15 -> GIF_FRAME_RATE_15
+        20 -> GIF_FRAME_RATE_20
+        25 -> GIF_FRAME_RATE_25
+        else -> GIF_FRAME_RATE_30
+    }
+}
+
+private fun gifFrameRateFor(value: String): Int {
+    return when (value) {
+        GIF_FRAME_RATE_15 -> 15
+        GIF_FRAME_RATE_20 -> 20
+        GIF_FRAME_RATE_25 -> 25
+        else -> VideoExportOptions.DEFAULT_GIF_FRAME_RATE
+    }
+}
+
+private fun gifColorsLabelFor(value: Int): String {
+    return when (value) {
+        32 -> GIF_COLORS_32
+        64 -> GIF_COLORS_64
+        128 -> GIF_COLORS_128
+        else -> GIF_COLORS_256
+    }
+}
+
+private fun gifColorsFor(value: String): Int {
+    return when (value) {
+        GIF_COLORS_32 -> 32
+        GIF_COLORS_64 -> 64
+        GIF_COLORS_128 -> 128
+        else -> VideoExportOptions.DEFAULT_GIF_MAX_COLORS
+    }
 }
 
 private fun videoResolutionLabelFor(options: VideoExportOptions): String {
@@ -7992,6 +9060,24 @@ private fun audioChannelsLabelFor(value: Int?): String {
     }
 }
 
+private fun audioBitDepthLabelFor(value: AudioBitDepth): String {
+    return when (value) {
+        AudioBitDepth.Bit16 -> AUDIO_BIT_DEPTH_16
+        AudioBitDepth.Bit24 -> AUDIO_BIT_DEPTH_24
+        AudioBitDepth.Bit32 -> AUDIO_BIT_DEPTH_32
+        AudioBitDepth.Auto -> AUDIO_BIT_DEPTH_ORIGINAL
+    }
+}
+
+private fun audioBitDepthFor(value: String): AudioBitDepth {
+    return when (value) {
+        AUDIO_BIT_DEPTH_16 -> AudioBitDepth.Bit16
+        AUDIO_BIT_DEPTH_24 -> AudioBitDepth.Bit24
+        AUDIO_BIT_DEPTH_32 -> AudioBitDepth.Bit32
+        else -> AudioBitDepth.Auto
+    }
+}
+
 private fun videoAdvancedUiStateFor(
     advanced: VideoAdvancedOptions,
     expanded: Boolean
@@ -8019,7 +9105,8 @@ private fun audioAdvancedUiStateFor(
         fadeOut = fadeLabelFor(advanced.fadeOutSeconds),
         volume = audioVolumeLabelFor(advanced.volume),
         echo = audioEchoLabelFor(advanced.echo),
-        noiseReduction = audioNoiseReductionLabelFor(advanced.noiseReduction)
+        noiseReduction = audioNoiseReductionLabelFor(advanced.noiseReduction),
+        effects = advanced.effects
     )
 }
 
@@ -8114,9 +9201,10 @@ private fun imageQualityLabelFor(
 
 private fun imageOptionsForQuality(
     value: String,
-    targetFormat: TargetFormat
+    targetFormat: TargetFormat,
+    existing: ImageExportOptions = ImageExportOptions()
 ): ImageExportOptions {
-    return ImageExportOptions(
+    return existing.copy(
         quality = imageQualityToPercent(value),
         webpLossless = supportsWebpLosslessQuality(targetFormat) &&
             value == IMAGE_QUALITY_LOSSLESS
@@ -8142,6 +9230,30 @@ private fun superResolutionModeFor(value: String): ImageSuperResolutionMode {
         IMAGE_SUPER_RESOLUTION_AI_ANIME -> ImageSuperResolutionMode.RealEsrganAnime4x
         IMAGE_SUPER_RESOLUTION_AI -> ImageSuperResolutionMode.RealEsrgan4x
         else -> ImageSuperResolutionMode.Off
+    }
+}
+
+private fun imageResizeLabelFor(mode: ImageResizeMode): String {
+    return when (mode) {
+        ImageResizeMode.Original -> IMAGE_RESIZE_ORIGINAL
+        ImageResizeMode.Px4096 -> IMAGE_RESIZE_4096
+        ImageResizeMode.Px2560 -> IMAGE_RESIZE_2560
+        ImageResizeMode.Px1920 -> IMAGE_RESIZE_1920
+        ImageResizeMode.Px1280 -> IMAGE_RESIZE_1280
+        ImageResizeMode.Px1080 -> IMAGE_RESIZE_1080
+        ImageResizeMode.Px720 -> IMAGE_RESIZE_720
+    }
+}
+
+private fun imageResizeModeFor(value: String): ImageResizeMode {
+    return when (value) {
+        IMAGE_RESIZE_4096 -> ImageResizeMode.Px4096
+        IMAGE_RESIZE_2560 -> ImageResizeMode.Px2560
+        IMAGE_RESIZE_1920 -> ImageResizeMode.Px1920
+        IMAGE_RESIZE_1280 -> ImageResizeMode.Px1280
+        IMAGE_RESIZE_1080 -> ImageResizeMode.Px1080
+        IMAGE_RESIZE_720 -> ImageResizeMode.Px720
+        else -> ImageResizeMode.Original
     }
 }
 
@@ -8425,6 +9537,10 @@ private fun audioSupportsBitrateOption(targetFormat: TargetFormat): Boolean {
     return targetFormat.extension.lowercase(Locale.US) !in AUDIO_LOSSLESS_OUTPUT_EXTENSIONS
 }
 
+private fun audioSupportsBitDepthOption(targetFormat: TargetFormat): Boolean {
+    return targetFormat.extension.lowercase(Locale.US) in AUDIO_BIT_DEPTH_OUTPUT_EXTENSIONS
+}
+
 private fun imageQualityOptionsFor(targetFormat: TargetFormat): List<String> {
     return if (supportsWebpLosslessQuality(targetFormat)) {
         listOf(
@@ -8504,6 +9620,8 @@ private fun pdfCompressionPresetToOption(value: String): PdfCompressionPreset {
 }
 
 private val AUDIO_LOSSLESS_OUTPUT_EXTENSIONS = setOf("wav", "flac")
+
+private val AUDIO_BIT_DEPTH_OUTPUT_EXTENSIONS = setOf("wav", "flac", "alac")
 
 
 

@@ -63,7 +63,7 @@ internal fun SubpageHost(
         },
         label = "subpage"
     ) { destination ->
-        if (destination != AppScreen.Home) {
+        if (destination != AppScreen.Converter) {
             // Outgoing pages may still draw during the transition, but cannot receive input or TalkBack focus.
             val inactive = if (destination == screen) Modifier else Modifier
                 .clearAndSetSemantics {}
