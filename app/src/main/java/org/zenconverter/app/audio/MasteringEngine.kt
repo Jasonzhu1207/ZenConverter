@@ -67,11 +67,6 @@ object MasteringEngine {
     }
 
     /** Measures an intermediate file the pipeline produced itself (e.g. a mix). */
-    suspend fun analyzeFile(context: Context, file: File): Analysis? = withContext(Dispatchers.IO) {
-        if (!file.isFile || file.length() == 0L) return@withContext null
-        analyzeInput(context, file.absolutePath)
-    }
-
     private fun analyzeInput(context: Context, input: String): Analysis? {
         val decoded = decodeToPcm(context, input) ?: return null
         val measurement = LoudnessAnalyzer.measure(
