@@ -2,6 +2,7 @@ package org.zenconverter.app.ui.studio
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -72,7 +73,7 @@ internal fun WaveformEditorScreen(texts: UiText, onBack: () -> Unit) {
         }
     }
 
-    SettingsPage(texts.waveformTitle(), texts.studioBack(), onBack) {
+    SettingsPage(texts.waveformTitle(), texts.studioBack(), onBack, allowWideContent = true) {
         item("waveform-pick") {
             InsetGroupCard {
                 Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -89,77 +90,75 @@ internal fun WaveformEditorScreen(texts: UiText, onBack: () -> Unit) {
                 if (current == null) {
                     StudioNote(if (busy) texts.waveformAnalyzing() else texts.waveformEmpty())
                 } else {
-                    WaveformCanvas(
-                        peaks = current,
-                        startFraction = startFraction,
-                        endFraction = endFraction,
-                        selectionColor = MaterialTheme.colorScheme.primary
-                    )
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)) {
-                        Text(
-                            texts.waveformSelection(
-                                formatClock((current.durationSeconds * startFraction * 1000).toLong()),
-                                formatClock((current.durationSeconds * endFraction * 1000).toLong())
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        StudioFieldLabel(texts.waveformTrimStart())
-                        Slider(
-                            value = startFraction,
-                            onValueChange = { startFraction = it.coerceAtMost(endFraction - 0.01f) },
-                            valueRange = 0f..1f
-                        )
-                        StudioFieldLabel(texts.waveformTrimEnd())
-                        Slider(
-                            value = endFraction,
-                            onValueChange = { endFraction = it.coerceAtLeast(startFraction + 0.01f) },
-                            valueRange = 0f..1f
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { fadeIn = !fadeIn }) {
-                                Text("${texts.waveformFadeIn()}${if (fadeIn) " ✓" else ""}")
-                            }
-                            OutlinedButton(onClick = { fadeOut = !fadeOut }) {
-                                Text("${texts.waveformFadeOut()}${if (fadeOut) " ✓" else ""}")
-                            }
+                    BoxWithConstraints(Modifier.fillMaxWidth()) {
+                        // Tablets and foldables get the waveform beside the controls;
+                        // phones stack them.
+                        val twoPane = maxWidth >= 720.dp
+                        val canvas: @Composable () -> Unit = {
+                            WaveformCanvas(
+                                peaks = current,
+                                startFraction = startFraction,
+                                endFraction = endFraction,
+                                selectionColor = MaterialTheme.colorScheme.primary
+                            )
                         }
-                        Button(
-                            enabled = !busy,
-                            onClick = {
-                                val uri = sourceUri ?: return@Button
-                                val decoded = current
-                                busy = true
-                                scope.launch {
-                                    val temp = tempOutput(context, "zen-waveform", "mp3")
-                                    val ok = AudioStudioEngine.applyEffects(
-                                        context = context,
-                                        sourceUri = uri,
-                                        filters = emptyList(),
-                                        target = temp,
-                                        startSeconds = decoded.durationSeconds * startFraction,
-                                        endSeconds = decoded.durationSeconds * endFraction,
-                                        fadeInSeconds = if (fadeIn) 1.0 else null,
-                                        fadeOutSeconds = if (fadeOut) 1.0 else null
-                                    )
-                                    status = if (ok) {
-                                        StudioOutput.save(
-                                            context, temp, "zenconverter-trim-${System.currentTimeMillis()}.mp3",
-                                            "audio/mpeg", StudioOutput.Collection.Music
-                                        )
-                                        temp.delete()
-                                        texts.studioSaved()
-                                    } else {
-                                        temp.delete()
-                                        texts.studioFailed()
+                        val controls: @Composable () -> Unit = {
+                            WaveformControls(
+                                texts = texts,
+                                durationSeconds = current.durationSeconds,
+                                startFraction = startFraction,
+                                endFraction = endFraction,
+                                onStartChange = { startFraction = it.coerceAtMost(endFraction - 0.01f) },
+                                onEndChange = { endFraction = it.coerceAtLeast(startFraction + 0.01f) },
+                                fadeIn = fadeIn,
+                                fadeOut = fadeOut,
+                                onToggleFadeIn = { fadeIn = !fadeIn },
+                                onToggleFadeOut = { fadeOut = !fadeOut },
+                                busy = busy,
+                                status = status,
+                                onApply = {
+                                    val uri = sourceUri
+                                    if (uri != null) {
+                                        busy = true
+                                        scope.launch {
+                                            val temp = tempOutput(context, "zen-waveform", "mp3")
+                                            val ok = AudioStudioEngine.applyEffects(
+                                                context = context,
+                                                sourceUri = uri,
+                                                filters = emptyList(),
+                                                target = temp,
+                                                startSeconds = current.durationSeconds * startFraction,
+                                                endSeconds = current.durationSeconds * endFraction,
+                                                fadeInSeconds = if (fadeIn) 1.0 else null,
+                                                fadeOutSeconds = if (fadeOut) 1.0 else null
+                                            )
+                                            status = if (ok) {
+                                                StudioOutput.save(
+                                                    context, temp, "zenconverter-trim-${System.currentTimeMillis()}.mp3",
+                                                    "audio/mpeg", StudioOutput.Collection.Music
+                                                )
+                                                temp.delete()
+                                                texts.studioSaved()
+                                            } else {
+                                                temp.delete()
+                                                texts.studioFailed()
+                                            }
+                                            busy = false
+                                        }
                                     }
-                                    busy = false
                                 }
-                            },
-                            modifier = Modifier.padding(top = 8.dp)
-                        ) { Text(texts.waveformApply()) }
-                        status?.let {
-                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                            )
+                        }
+                        if (twoPane) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                Column(Modifier.weight(1f)) { canvas() }
+                                Column(Modifier.weight(1f)) { controls() }
+                            }
+                        } else {
+                            Column(Modifier.fillMaxWidth()) {
+                                canvas()
+                                controls()
+                            }
                         }
                     }
                 }
@@ -198,6 +197,54 @@ private fun WaveformCanvas(
                 end = Offset(x, centerY - minValue * half),
                 strokeWidth = barWidth.coerceAtLeast(1f)
             )
+        }
+    }
+}
+
+@Composable
+private fun WaveformControls(
+    texts: UiText,
+    durationSeconds: Double,
+    startFraction: Float,
+    endFraction: Float,
+    onStartChange: (Float) -> Unit,
+    onEndChange: (Float) -> Unit,
+    fadeIn: Boolean,
+    fadeOut: Boolean,
+    onToggleFadeIn: () -> Unit,
+    onToggleFadeOut: () -> Unit,
+    busy: Boolean,
+    status: String?,
+    onApply: () -> Unit
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)) {
+        Text(
+            texts.waveformSelection(
+                formatClock((durationSeconds * startFraction * 1000).toLong()),
+                formatClock((durationSeconds * endFraction * 1000).toLong())
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        StudioFieldLabel(texts.waveformTrimStart())
+        Slider(value = startFraction, onValueChange = onStartChange, valueRange = 0f..1f)
+        StudioFieldLabel(texts.waveformTrimEnd())
+        Slider(value = endFraction, onValueChange = onEndChange, valueRange = 0f..1f)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onToggleFadeIn) {
+                Text("${texts.waveformFadeIn()}${if (fadeIn) " ✓" else ""}")
+            }
+            OutlinedButton(onClick = onToggleFadeOut) {
+                Text("${texts.waveformFadeOut()}${if (fadeOut) " ✓" else ""}")
+            }
+        }
+        Button(
+            enabled = !busy,
+            onClick = onApply,
+            modifier = Modifier.padding(top = 8.dp)
+        ) { Text(texts.waveformApply()) }
+        status?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
         }
     }
 }

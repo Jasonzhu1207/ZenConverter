@@ -49,15 +49,18 @@ internal fun SettingsPage(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState(),
+    /** Widen the content column on large screens; off by default. */
+    allowWideContent: Boolean = false,
     content: LazyListScope.() -> Unit
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         BoxWithConstraints(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             val margin = if (maxWidth >= 600.dp) 24.dp else 16.dp
+            val contentWidth = if (allowWideContent && maxWidth >= 840.dp) 1100.dp else 680.dp
             Column(
                 Modifier.align(Alignment.TopCenter)
                     .padding(horizontal = margin)
-                    .widthIn(max = 680.dp).fillMaxWidth().fillMaxHeight()
+                    .widthIn(max = contentWidth).fillMaxWidth().fillMaxHeight()
             ) {
                 Row(
                     Modifier.fillMaxWidth().heightIn(min = 56.dp),
