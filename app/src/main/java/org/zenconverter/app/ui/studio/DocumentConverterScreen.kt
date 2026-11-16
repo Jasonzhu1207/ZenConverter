@@ -486,7 +486,7 @@ private fun copyUriToCache(context: android.content.Context, uri: Uri, name: Str
     return target
 }
 
-private fun queryDisplayName(context: android.content.Context, uri: Uri): String? {
+internal fun queryDisplayName(context: android.content.Context, uri: Uri): String? {
     val cursor = runCatching {
         context.contentResolver.query(uri, null, null, null, null)
     }.getOrNull() ?: return null

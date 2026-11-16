@@ -30,6 +30,33 @@ object AudioStudioEngine {
     /** How layered tracks are combined into the master. */
     enum class MixMode { Layer, Concat }
 
+    /** Audio outputs the converter offers, with the encoder each one needs. */
+    enum class OutputFormat(val extension: String, val codec: String, val mimeType: String) {
+        Mp3("mp3", "libmp3lame", "audio/mpeg"),
+        Opus("opus", "libopus", "audio/ogg"),
+        Flac("flac", "flac", "audio/flac"),
+        Wav("wav", "pcm_s16le", "audio/wav")
+    }
+
+    enum class BitrateMode { Cbr, Vbr }
+
+    /**
+     * Everything the audio converter can vary. [normalizeLufs] adds `loudnorm`
+     * and [keepMetadata] carries tags, cover art and lyrics across.
+     */
+    data class ConvertProfile(
+        val format: OutputFormat = OutputFormat.Mp3,
+        val bitrateMode: BitrateMode = BitrateMode.Cbr,
+        val bitrateKbps: Int = 192,
+        val vbrQuality: Int = 2,
+        val sampleRateHz: Int? = null,
+        val keepMetadata: Boolean = true,
+        val normalizeLufs: Double? = null
+    ) {
+        val isLossless: Boolean
+            get() = format == OutputFormat.Flac || format == OutputFormat.Wav
+    }
+
     /** Mixes [tracks] with per-track volume/pan and optional mute using `amix`. */
     suspend fun mix(
         context: Context,
@@ -268,6 +295,71 @@ object AudioStudioEngine {
         outputDir.listFiles { file -> file.name.startsWith("segment-") }
             ?.sortedBy { it.name }
             .orEmpty()
+    }
+
+    /**
+     * Builds the FFmpeg arguments for [profile]. Exposed so the converter screen
+     * can show the exact command before anything runs.
+     */
+    fun buildConvertArguments(input: String, output: String, profile: ConvertProfile): List<String> {
+        val arguments = mutableListOf("-hide_banner", "-nostdin", "-i", input, "-vn")
+        val filters = mutableListOf<String>()
+        profile.normalizeLufs?.let { target ->
+            filters += "loudnorm=I=${formatGain(target.toFloat())}:TP=-1.5:LRA=11"
+        }
+        if (filters.isNotEmpty()) arguments += listOf("-af", filters.joinToString(","))
+        arguments += listOf("-c:a", profile.format.codec)
+        if (!profile.isLossless) {
+            if (profile.format == OutputFormat.Mp3 && profile.bitrateMode == BitrateMode.Vbr) {
+                arguments += listOf("-q:a", profile.vbrQuality.toString())
+            } else {
+                arguments += listOf("-b:a", "${profile.bitrateKbps}k")
+            }
+        }
+        profile.sampleRateHz?.let { arguments += listOf("-ar", it.toString()) }
+        if (profile.keepMetadata) {
+            arguments += listOf("-map_metadata", "0", "-map", "0:a")
+        } else {
+            arguments += listOf("-map_metadata", "-1")
+        }
+        arguments += listOf("-y", output)
+        return arguments
+    }
+
+    /** The readable command line for the converter's recipe preview. */
+    fun commandPreview(input: String, output: String, profile: ConvertProfile): String =
+        (listOf("ffmpeg") + buildConvertArguments(input, output, profile)).joinToString(" ")
+
+    /** Converts [sourceUri] to [target] with [profile]. */
+    suspend fun convert(
+        context: Context,
+        sourceUri: Uri,
+        target: File,
+        profile: ConvertProfile
+    ): Boolean = withContext(Dispatchers.IO) {
+        val input = inputPathFor(context, sourceUri) ?: return@withContext false
+        val arguments = buildConvertArguments(input, target.absolutePath, profile)
+        ReturnCode.isSuccess(FFmpegKit.executeWithArguments(arguments.toTypedArray()).getReturnCode())
+    }
+
+    /** Duration in seconds, or null when the source cannot be probed. */
+    suspend fun durationSeconds(context: Context, sourceUri: Uri): Double? =
+        withContext(Dispatchers.IO) {
+            val path = inputPathFor(context, sourceUri) ?: return@withContext null
+            val information = runCatching {
+                FFprobeKit.getMediaInformation(path).getMediaInformation()
+            }.getOrNull() ?: return@withContext null
+            information.getDuration()?.toDoubleOrNull()
+        }
+
+    /** Predicted output size in bytes for [profile] over [seconds]. */
+    fun estimateSizeBytes(seconds: Double, profile: ConvertProfile): Long {
+        val bitsPerSecond = when (profile.format) {
+            OutputFormat.Wav -> (profile.sampleRateHz ?: 44_100).toLong() * 16L * 2L
+            OutputFormat.Flac -> ((profile.sampleRateHz ?: 44_100).toLong() * 16L * 2L * 6L) / 10L
+            else -> profile.bitrateKbps.toLong() * 1_000L
+        }
+        return (bitsPerSecond * seconds / 8.0).toLong()
     }
 
     /** Re-encodes a local file to another audio codec, used by the recorder. */

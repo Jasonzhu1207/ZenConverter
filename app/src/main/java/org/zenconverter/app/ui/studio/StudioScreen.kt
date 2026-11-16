@@ -168,7 +168,7 @@ private fun studioSections(texts: UiText): List<HubSection> = listOf(
         title = texts.studioSectionAudio(),
         hero = HubEntry(
             texts.studioAudioConverter(), texts.studioAudioConverterDesc(),
-            Icons.Rounded.AudioFile, AppScreen.Converter
+            Icons.Rounded.AudioFile, AppScreen.StudioAudioConverter
         ),
         tiles = listOf(
             HubEntry(texts.studioWaveform(), texts.studioWaveformDesc(), Icons.Rounded.GraphicEq, AppScreen.StudioWaveform),

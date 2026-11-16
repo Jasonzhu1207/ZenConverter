@@ -210,6 +210,7 @@ import androidx.compose.ui.window.PopupProperties
 import org.zenconverter.app.conversion.AudioAdvancedOptions
 import org.zenconverter.app.conversion.AudioBitDepth
 import org.zenconverter.app.ui.studio.ChapterSplitScreen
+import org.zenconverter.app.ui.studio.AudioConverterScreen
 import org.zenconverter.app.ui.studio.DocumentConverterScreen
 import org.zenconverter.app.ui.studio.StudioScreen
 import org.zenconverter.app.ui.studio.SubtitleBurnScreen
@@ -621,7 +622,8 @@ internal enum class AppScreen {
     StudioKaraoke,
     StudioLyricsEditor,
     StudioMediaLibrary,
-    StudioDocumentConverter
+    StudioDocumentConverter,
+    StudioAudioConverter
 }
 
 internal const val ZENCONVERTER_REPOSITORY_URL = "https://github.com/Jasonzhu1207/ZenConverter"
@@ -1898,6 +1900,11 @@ private fun ZenConverterContent(
                 AppScreen.StudioBurnSubs -> SubtitleBurnScreen(texts, onBack = { navigateBack() })
                 AppScreen.StudioChapterSplit -> ChapterSplitScreen(texts, onBack = { navigateBack() })
                 AppScreen.Converter -> Unit
+                AppScreen.StudioAudioConverter -> AudioConverterScreen(
+                    texts = texts,
+                    onBack = { navigateBack() },
+                    onOpenQueue = { navigateTo(AppScreen.Converter) },
+                )
             }
         }
     }

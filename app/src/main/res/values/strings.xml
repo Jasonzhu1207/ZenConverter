@@ -1581,7 +1581,36 @@
     <string name="archive_none_yet">No archives yet.</string>
     <string name="archive_on">On</string>
     <string name="archive_size_value">%1$s</string>
+
+    <!-- Audio converter enrichment -->
+    <string name="converter_source">Source</string>
+    <string name="converter_no_file">No file chosen</string>
+    <string name="converter_output_format">Output format</string>
+    <string name="converter_quality">Quality</string>
+    <string name="converter_mode_cbr">Constant bitrate</string>
+    <string name="converter_mode_vbr">Variable bitrate</string>
+    <string name="converter_bitrate">Bitrate</string>
+    <string name="converter_bitrate_value">%1$d kbps</string>
+    <string name="converter_vbr_quality">VBR quality</string>
+    <string name="converter_sample_rate">Sample rate</string>
+    <string name="converter_sample_rate_auto">Source</string>
+    <string name="converter_sample_rate_value">%1$d kHz</string>
+    <string name="converter_keep_tags">Keep tags, art and lyrics</string>
+    <string name="converter_normalize">Normalize loudness to −14 LUFS</string>
+    <string name="converter_estimated">Estimated output</string>
+    <string name="converter_predicted_size">Predicted size</string>
+    <string name="converter_recipe">Recipe preview</string>
+    <string name="converter_run">Convert</string>
+    <string name="converter_batch_add">Batch add</string>
+    <string name="converter_added_to_queue">Added to the conversion queue.</string>
+    <string name="converter_done">Converted and saved to your files.</string>
+    <string name="converter_lossless_note">FLAC and WAV are lossless, so bitrate does not apply.</string>
+    <string name="converter_opus_note">Opus is best for speech and streaming.</string>
+    <string name="converter_mp3_note">MP3 supports CBR and VBR, with tags and cover art.</string>
+    <string name="converter_flac_note">FLAC is lossless and keeps artwork.</string>
+    <string name="converter_wav_note">WAV is uncompressed PCM, bit-perfect.</string>
 </resources>
+
 
 
 
