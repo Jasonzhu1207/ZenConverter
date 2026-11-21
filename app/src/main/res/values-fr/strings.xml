@@ -32,6 +32,10 @@
         <item quantity="one">%1$d page</item>
         <item quantity="other">%1$d pages</item>
     </plurals>
+    <plurals name="count_pdf_split_files_hint">
+        <item quantity="one">%1$d fichier PDF</item>
+        <item quantity="other">%1$d fichiers PDF</item>
+    </plurals>
     <plurals name="count_selected">
         <item quantity="one">%1$d sélectionné</item>
         <item quantity="other">%1$d sélectionnés</item>
@@ -62,8 +66,8 @@
     <string name="help_audio_title">Audio</string>
     <string name="help_back">Retour</string>
     <string name="help_body">Choisissez un fichier, sélectionnez une destination, puis lancez la conversion en local.</string>
-    <string name="help_document_body">Convertir des fichiers Office en documents accessibles, fusionner des fichiers PDF, réduire la taille des PDF, convertir des PDF en images/texte, ou les protéger par mot de passe.</string>
-    <string name="help_document_formats">PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  Fusion · Compression · PNG · JPG · WEBP · TXT · MD</string>
+    <string name="help_document_body">Convertir des fichiers Office et Markdown en PDF soignés, fusionner ou diviser des PDF par page, réduire la taille des PDF, convertir en images/texte ou protéger par mot de passe.</string>
+    <string name="help_document_formats">PPTX · DOCX · XLSX · MD  →  PDF · TXT · MD  |  PDF  →  Fusion · Division · Compression · PNG · JPG · WEBP · TXT · MD</string>
     <string name="help_document_title">Documents et PDF</string>
     <string name="help_flow_input">Choisir</string>
     <string name="help_flow_output">Utiliser le résultat</string>
@@ -730,4 +734,40 @@
     <string name="settings_action_bar_position_desc">Position des boutons d\'effacement et de démarrage</string>
     <string name="ui_clear_tasks">Effacer</string>
     <string name="ui_start_conversion">Démarrer (%1$d)</string>
+    <string name="ui_pdf_split">Diviser le PDF</string>
+    <string name="option_pdf_split_hint">Diviser les pages</string>
+    <string name="ui_pdf_split_title">Découpage des pages</string>
+    <string name="ui_pdf_split_mode_custom">Découpage personnalisé</string>
+    <string name="ui_pdf_split_mode_every_page">Une page par fichier</string>
+    <string name="ui_pdf_split_every_page_hint">Exporte chaque page dans son propre fichier PDF au sein d\'un nouveau dossier.</string>
+    <string name="ui_pdf_split_batch_note">Appliquez « Une page par fichier » à tout le lot ici, ou ajustez les coupures individuellement ci-dessous.</string>
+    <string name="ui_pdf_split_start_page">Page de début</string>
+    <string name="ui_pdf_split_end_page">Page de fin</string>
+    <string name="ui_pdf_split_cut_after_page">Couper après p. %1$d</string>
+    <string name="ui_pdf_split_add_cut">Ajouter une coupure</string>
+    <string name="ui_pdf_split_reset">Réinitialiser</string>
+    <string name="ui_pdf_split_range_chip">p.%1$d–%2$d</string>
+    <string name="ui_pdf_split_single_page_chip">p.%1$d</string>
+    <string name="ui_pdf_split_slider_cut_chip">✂️%1$d après p.%2$d</string>
+    <string name="ui_pdf_split_page_count_pending">Le nombre de pages sera lu à l\'ouverture. Saisissez les numéros de page ci-dessous ou choisissez Une page par fichier.</string>
+    <string name="ui_pdf_split_start_end_order">La page de fin doit être supérieure ou égale à la page de début</string>
+    <string name="message_pdf_split_failed">Échec de la division du PDF</string>
+    <string name="message_pdf_split_requires_multiple_pages">Seuls les PDF d\'au moins 2 pages peuvent être divisés</string>
+    <string name="message_pdf_split_invalid_page_range">Les pages de début et de fin doivent rester dans les limites du PDF</string>
+    <string name="message_pdf_split_invalid_cut_points">Les coupures doivent être strictement croissantes dans la plage sélectionnée</string>
+    <string name="message_pdf_split_add_cut_or_range">Ajoutez au moins une coupure ou réduisez la plage de pages</string>
+    <string name="option_markdown_to_pdf_hint">Markdown vers PDF</string>
+    <string name="ui_markdown_font_size">Taille du texte</string>
+    <string name="option_markdown_page_letter">Lettre US</string>
+    <string name="option_markdown_font_compact">Compact</string>
+    <string name="option_markdown_font_large">Grand</string>
+    <string name="ui_markdown_fetch_remote_media">Charger les médias distants</string>
+    <string name="ui_markdown_fetch_remote_media_desc">Désactivé par défaut pour rester hors ligne. Lorsque activé, les images et premières images vidéo distantes sont téléchargées ; sinon elles restent des cartes cliquables.</string>
+    <string name="ui_markdown_assets_folder">Dossier de ressources locales</string>
+    <string name="ui_markdown_assets_folder_hint">Associez un dossier pour résoudre hors ligne les chemins relatifs d\'images ou de vidéos (automatique via l\'import de dossier).</string>
+    <string name="ui_markdown_assets_folder_none">Non associé (optionnel)</string>
+    <string name="ui_markdown_link_folder">Choisir un dossier</string>
+    <string name="ui_markdown_change_folder">Changer</string>
+    <string name="message_markdown_file_is_too_large">Le fichier Markdown dépasse la limite de 16 Mio</string>
+    <string name="message_markdown_conversion_failed">Échec de la conversion Markdown vers PDF</string>
 </resources>

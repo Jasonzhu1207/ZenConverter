@@ -21,6 +21,7 @@ enum class TargetId(val key: String) {
     Ico("ICO"),
     Pdf("PDF"),
     PdfCompress("pdf_compress"),
+    PdfSplit("pdf_split"),
     Txt("TXT"),
     Md("MD"),
     PdfEncrypt("pdf_encrypt"),

@@ -92,6 +92,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Article
 import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
@@ -208,6 +209,9 @@ import org.zenconverter.app.conversion.FileBasicInfo
 import org.zenconverter.app.conversion.GifFrameExportMode
 import org.zenconverter.app.conversion.ImageExportOptions
 import org.zenconverter.app.conversion.ImageSuperResolutionMode
+import org.zenconverter.app.conversion.MarkdownExportOptions
+import org.zenconverter.app.conversion.MarkdownFontScale
+import org.zenconverter.app.conversion.MarkdownPageSize
 import org.zenconverter.app.conversion.MediaTrimRange
 import org.zenconverter.app.conversion.Mp3BitrateMode
 import org.zenconverter.app.conversion.DEFAULT_MP3_VBR_QUALITY
@@ -216,6 +220,10 @@ import org.zenconverter.app.conversion.PdfExportOptions
 import org.zenconverter.app.conversion.PdfImagePageMode
 import org.zenconverter.app.conversion.PdfRenderQuality
 import org.zenconverter.app.conversion.PdfSecurityOptions
+import org.zenconverter.app.conversion.PdfSplitMode
+import org.zenconverter.app.conversion.PdfSplitOptions
+import org.zenconverter.app.conversion.PdfSplitValidationError
+import org.zenconverter.app.conversion.PdfSplitValidator
 import org.zenconverter.app.conversion.VideoAdvancedOptions
 import org.zenconverter.app.conversion.VideoAspectRatioMode
 import org.zenconverter.app.conversion.VideoCompressionMode
@@ -242,6 +250,7 @@ import org.zenconverter.app.settings.AppPreferences
 import org.zenconverter.app.updates.InstalledAppVersion
 import org.zenconverter.app.R
 import java.util.Locale
+import kotlin.math.roundToInt
 import org.zenconverter.app.i18n.toLocalizedDoubleOrNull
 import org.zenconverter.app.i18n.LocalizedText
 import org.zenconverter.app.i18n.AppLanguages
@@ -320,6 +329,7 @@ enum class FileCategory(
             TargetFormat(TargetId.Webp, "webp", "Page rasterization"),
             TargetFormat(TargetId.Pdf, "pdf", "Merge PDFs"),
             TargetFormat(TargetId.PdfCompress, "pdf", "Reduce file size"),
+            TargetFormat(TargetId.PdfSplit, "pdf", "Split pages"),
             TargetFormat(TargetId.Txt, "txt", "Text layer"),
             TargetFormat(TargetId.Md, "md", "Markdown"),
             TargetFormat(TargetId.PdfEncrypt, "pdf", "Password protect"),
@@ -336,6 +346,15 @@ enum class FileCategory(
             TargetFormat(TargetId.Pdf, "pdf", "Office to PDF"),
             TargetFormat(TargetId.Txt, "txt", "Text layer"),
             TargetFormat(TargetId.Md, "md", "Markdown")
+        )
+    ),
+    Markdown(
+        mimeTypes = listOf(
+            "text/markdown",
+            "text/x-markdown"
+        ),
+        formats = listOf(
+            TargetFormat(TargetId.Pdf, "pdf", "Markdown to PDF")
         )
     ),
     Font(
@@ -408,6 +427,7 @@ data class QueuedFile(
     val audioOptions: AudioExportOptions = AudioExportOptions(),
     val imageOptions: ImageExportOptions = ImageExportOptions(quality = 85),
     val pdfOptions: PdfExportOptions = PdfExportOptions(),
+    val markdownOptions: MarkdownExportOptions = MarkdownExportOptions(),
     val inputInfo: FileBasicInfo? = null,
     val gifFrameMode: GifFrameExportMode = GifFrameExportMode.FirstFrame,
     val pdfSecurityOptions: PdfSecurityOptions = PdfSecurityOptions(),
@@ -858,6 +878,22 @@ private val PDF_COMPRESSION_PRESET_OPTIONS = listOf(
     PDF_COMPRESSION_PRESET_SMALL
 )
 
+private const val MARKDOWN_PAGE_A4 = "md_page_a4"
+private const val MARKDOWN_PAGE_LETTER = "md_page_letter"
+private val MARKDOWN_PAGE_SIZE_OPTIONS = listOf(
+    MARKDOWN_PAGE_A4,
+    MARKDOWN_PAGE_LETTER
+)
+
+private const val MARKDOWN_FONT_COMPACT = "md_font_compact"
+private const val MARKDOWN_FONT_STANDARD = "md_font_standard"
+private const val MARKDOWN_FONT_LARGE = "md_font_large"
+private val MARKDOWN_FONT_SCALE_OPTIONS = listOf(
+    MARKDOWN_FONT_COMPACT,
+    MARKDOWN_FONT_STANDARD,
+    MARKDOWN_FONT_LARGE
+)
+
 private const val GIF_FRAME_FIRST = "First frame"
 private const val GIF_FRAME_IMAGES = "Split frames"
 private const val GIF_FRAMES_SINGLE_PDF = "All frames in one PDF"
@@ -890,6 +926,7 @@ fun ZenConverterApp(
     onPickAlbumImages: () -> Unit,
     onPickAlbumVideos: () -> Unit,
     onPickFolder: () -> Unit,
+    onPickMarkdownAssetsFolder: (List<String>) -> Unit = {},
     onUpdateQueuedFile: (QueuedFile) -> Unit,
     onUpdateQueuedFiles: (List<QueuedFile>) -> Unit,
     onCreatePdfMergeGroup: (PdfMergeType) -> Unit,
@@ -1025,6 +1062,7 @@ fun ZenConverterApp(
                     onPickAlbumImages = onPickAlbumImages,
                     onPickAlbumVideos = onPickAlbumVideos,
                     onPickFolder = onPickFolder,
+                    onPickMarkdownAssetsFolder = onPickMarkdownAssetsFolder,
                     onUpdateQueuedFile = onUpdateQueuedFile,
                     onUpdateQueuedFiles = onUpdateQueuedFiles,
                     onCreatePdfMergeGroup = onCreatePdfMergeGroup,
@@ -1104,6 +1142,7 @@ private fun ZenConverterContent(
     onPickAlbumImages: () -> Unit,
     onPickAlbumVideos: () -> Unit,
     onPickFolder: () -> Unit,
+    onPickMarkdownAssetsFolder: (List<String>) -> Unit = {},
     onUpdateQueuedFile: (QueuedFile) -> Unit,
     onUpdateQueuedFiles: (List<QueuedFile>) -> Unit,
     onCreatePdfMergeGroup: (PdfMergeType) -> Unit,
@@ -1311,6 +1350,7 @@ private fun ZenConverterContent(
                                     isRifeModelDownloaded = isRifeModelDownloaded,
                                     openMenuId = openMenuId,
                                     onOpenMenuChange = { openMenuId = it },
+                                    onPickMarkdownAssetsFolder = onPickMarkdownAssetsFolder,
                                     onUpdateFiles = onUpdateQueuedFiles
                                 )
                             }
@@ -1416,6 +1456,7 @@ private fun ZenConverterContent(
                                     groupedInPdfMerge = file.id in pdfGroupedIds,
                                     groupedInVideoMerge = file.id in videoGroupedIds,
                                     onOpenMenuChange = { openMenuId = it },
+                                    onPickMarkdownAssetsFolder = onPickMarkdownAssetsFolder,
                                     onUpdateFile = onUpdateQueuedFile,
                                     onOptionsExpandedChange = { expanded ->
                                         expandedFileId = if (expanded) file.id else null
@@ -2836,6 +2877,7 @@ private fun BatchSettingsPanel(
     isRifeModelDownloaded: Boolean = false,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
+    onPickMarkdownAssetsFolder: (List<String>) -> Unit = {},
     onUpdateFiles: (List<QueuedFile>) -> Unit
 ) {
     val groups = files
@@ -2958,6 +3000,7 @@ private fun BatchSettingsPanel(
                     isRifeModelDownloaded = isRifeModelDownloaded,
                     openMenuId = openMenuId,
                     onOpenMenuChange = onOpenMenuChange,
+                    onPickMarkdownAssetsFolder = onPickMarkdownAssetsFolder,
                     onUpdateFiles = onUpdateFiles
                 )
             }
@@ -3007,6 +3050,7 @@ private fun BatchTargetOptions(
     isRifeModelDownloaded: Boolean = false,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
+    onPickMarkdownAssetsFolder: (List<String>) -> Unit = {},
     onUpdateFiles: (List<QueuedFile>) -> Unit
 ) {
     AnimatedContent(
@@ -3058,6 +3102,14 @@ private fun BatchTargetOptions(
                 text = texts.optionValue(target.targetFormat.modeHint),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            FileCategory.Markdown -> BatchMarkdownTargetOptions(
+                texts = texts,
+                files = files,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                onPickMarkdownAssetsFolder = onPickMarkdownAssetsFolder,
+                onUpdateFiles = onUpdateFiles
             )
             FileCategory.Font -> Text(
                 text = texts.optionValue(target.targetFormat.modeHint),
@@ -3709,6 +3761,44 @@ private fun BatchPdfTargetOptions(
     onOpenMenuChange: (String?) -> Unit,
     onUpdateFiles: (List<QueuedFile>) -> Unit
 ) {
+    if (target.id == TargetId.PdfSplit) {
+        val allEveryPage = files.isNotEmpty() && files.all { it.pdfOptions.splitOptions.mode == PdfSplitMode.EveryPage }
+        val allCustom = files.isNotEmpty() && files.all { it.pdfOptions.splitOptions.mode == PdfSplitMode.Custom }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            PdfSplitModeToggle(
+                texts = texts,
+                isCustomSelected = allCustom,
+                isEveryPageSelected = allEveryPage,
+                onSelectCustom = {
+                    onUpdateFiles(
+                        files.map { file ->
+                            val nextSplit = file.pdfOptions.splitOptions
+                                .withCustomModeAndSuggestedCut(file.inputInfo?.pageCount)
+                            file.copy(pdfOptions = file.pdfOptions.copy(splitOptions = nextSplit))
+                        }
+                    )
+                },
+                onSelectEveryPage = {
+                    onUpdateFiles(
+                        files.map { file ->
+                            file.copy(
+                                pdfOptions = file.pdfOptions.copy(
+                                    splitOptions = file.pdfOptions.splitOptions.copy(mode = PdfSplitMode.EveryPage)
+                                )
+                            )
+                        }
+                    )
+                }
+            )
+            Text(
+                text = texts.pdfSplitBatchNote,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        return
+    }
+
     PdfOptions(
         texts = texts,
         menuPrefix = "batch-pdf-",
@@ -3736,6 +3826,63 @@ private fun BatchPdfTargetOptions(
                     file.copy(
                         pdfOptions = file.pdfOptions.copy(
                             compressionPreset = pdfCompressionPresetToOption(value)
+                        )
+                    )
+                }
+            )
+        }
+    )
+}
+
+@Composable
+private fun BatchMarkdownTargetOptions(
+    texts: UiText,
+    files: List<QueuedFile>,
+    openMenuId: String?,
+    onOpenMenuChange: (String?) -> Unit,
+    onPickMarkdownAssetsFolder: (List<String>) -> Unit,
+    onUpdateFiles: (List<QueuedFile>) -> Unit
+) {
+    val allRemote = files.isNotEmpty() && files.all { it.markdownOptions.fetchRemoteMedia }
+    val distinctTreeUris = files.map { it.markdownOptions.assetsTreeUri }.distinct()
+    val hasLinkedAssets = files.any { it.markdownOptions.assetsTreeUri != null }
+    val folderLabel = when {
+        distinctTreeUris.size == 1 && distinctTreeUris.first() != null ->
+            files.firstOrNull { !it.markdownOptions.assetsFolderLabel.isNullOrBlank() }?.markdownOptions?.assetsFolderLabel
+                ?: texts.markdownAssetsFolder
+        hasLinkedAssets -> texts.optionValue(BATCH_MIXED_OPTION)
+        else -> null
+    }
+    MarkdownOptionsContent(
+        texts = texts,
+        menuPrefix = "batch-markdown-",
+        pageSize = commonBatchLabel(files) { markdownPageSizeLabelFor(it.markdownOptions.pageSize) },
+        fontScale = commonBatchLabel(files) { markdownFontScaleLabelFor(it.markdownOptions.fontScale) },
+        fetchRemoteMedia = allRemote,
+        assetsFolderLabel = folderLabel,
+        hasLinkedAssets = hasLinkedAssets,
+        openMenuId = openMenuId,
+        onOpenMenuChange = onOpenMenuChange,
+        onPageSizeChange = { value ->
+            val size = markdownPageSizeToOption(value)
+            onUpdateFiles(files.map { it.copy(markdownOptions = it.markdownOptions.copy(pageSize = size)) })
+        },
+        onFontScaleChange = { value ->
+            val scale = markdownFontScaleToOption(value)
+            onUpdateFiles(files.map { it.copy(markdownOptions = it.markdownOptions.copy(fontScale = scale)) })
+        },
+        onFetchRemoteMediaChange = { enabled ->
+            onUpdateFiles(files.map { it.copy(markdownOptions = it.markdownOptions.copy(fetchRemoteMedia = enabled)) })
+        },
+        onPickAssetsFolder = { onPickMarkdownAssetsFolder(files.map { it.id }) },
+        onClearAssetsFolder = {
+            onUpdateFiles(
+                files.map {
+                    it.copy(
+                        markdownOptions = it.markdownOptions.copy(
+                            assetsTreeUri = null,
+                            assetsFolderLabel = null,
+                            sourceParentDocumentId = null
                         )
                     )
                 }
@@ -6176,6 +6323,821 @@ private fun PdfOptions(
 }
 
 @Composable
+private fun PdfSplitOptionsPanel(
+    texts: UiText,
+    splitOptions: PdfSplitOptions,
+    pageCount: Int?,
+    onSplitOptionsChange: (PdfSplitOptions) -> Unit
+) {
+    var inputMode by remember { mutableStateOf(TrimInputMode.Quick) }
+    val rawValidationError = PdfSplitValidator.validatePdfSplit(
+        options = splitOptions,
+        totalPages = pageCount,
+        strictPageCountRequired = false
+    )
+    val errorText = rawValidationError
+        ?.takeUnless { pageCount == null && it == PdfSplitValidationError.NoSplitOrTrimConfigured }
+        ?.let { texts.pdfSplitValidationMessage(it) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.04f), RoundedCornerShape(8.dp))
+            .border(
+                1.dp,
+                if (errorText == null) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                } else {
+                    MaterialTheme.colorScheme.error.copy(alpha = 0.35f)
+                },
+                RoundedCornerShape(8.dp)
+            )
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = texts.pdfSplitTitle,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            if (pageCount != null && pageCount > 0) {
+                val resolved = splitOptions.resolvedRanges(pageCount)
+                val hint = when {
+                    splitOptions.mode == PdfSplitMode.EveryPage ->
+                        "${texts.pageCountLabel(pageCount)} · ${texts.pdfSplitFilesHint(pageCount)}"
+                    resolved.isNotEmpty() ->
+                        "${texts.pageCountLabel(pageCount)} · ${texts.pdfSplitFilesHint(resolved.size)}"
+                    else -> texts.pageCountLabel(pageCount)
+                }
+                Text(
+                    text = hint,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        PdfSplitModeToggle(
+            texts = texts,
+            isCustomSelected = splitOptions.mode == PdfSplitMode.Custom,
+            isEveryPageSelected = splitOptions.mode == PdfSplitMode.EveryPage,
+            onSelectCustom = {
+                onSplitOptionsChange(splitOptions.withCustomModeAndSuggestedCut(pageCount))
+            },
+            onSelectEveryPage = {
+                onSplitOptionsChange(splitOptions.copy(mode = PdfSplitMode.EveryPage))
+            }
+        )
+
+        if (splitOptions.mode == PdfSplitMode.EveryPage) {
+            Text(
+                text = texts.pdfSplitEveryPageHint,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else if (pageCount != null && pageCount >= 2) {
+            val suggestedNextCut = PdfSplitValidator.nextSuggestedSplitPage(splitOptions, pageCount)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    TrimModeToggle(
+                        texts = texts,
+                        selected = inputMode,
+                        onSelected = { inputMode = it }
+                    )
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    modifier = Modifier
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(ZenDimensions.RadiusChip))
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                ) {
+                    IconButton(
+                        onClick = {
+                            if (splitOptions.splitAfterPages.isNotEmpty()) {
+                                onSplitOptionsChange(
+                                    splitOptions.copy(splitAfterPages = splitOptions.splitAfterPages.dropLast(1))
+                                )
+                            }
+                        },
+                        enabled = splitOptions.splitAfterPages.isNotEmpty(),
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Remove,
+                            contentDescription = texts.text(R.string.a11y_remove_split_point),
+                            modifier = Modifier.size(16.dp),
+                            tint = if (splitOptions.splitAfterPages.isNotEmpty()) MaterialTheme.colorScheme.primary else Color.Gray
+                        )
+                    }
+                    Text(
+                        text = stringResource(R.string.display_media_trim_options_1_s, splitOptions.splitAfterPages.size),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(horizontal = 2.dp)
+                    )
+                    IconButton(
+                        onClick = {
+                            if (suggestedNextCut != null) {
+                                onSplitOptionsChange(
+                                    splitOptions.copy(
+                                        splitAfterPages = (splitOptions.splitAfterPages + suggestedNextCut).sorted()
+                                    )
+                                )
+                            }
+                        },
+                        enabled = suggestedNextCut != null,
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Add,
+                            contentDescription = texts.text(R.string.a11y_add_split_point),
+                            modifier = Modifier.size(16.dp),
+                            tint = if (suggestedNextCut != null) MaterialTheme.colorScheme.primary else Color.Gray
+                        )
+                    }
+                }
+            }
+
+            if (inputMode == TrimInputMode.Quick) {
+                PdfPageSplitSlider(
+                    splitOptions = splitOptions,
+                    pageCount = pageCount,
+                    texts = texts,
+                    onSplitOptionsChange = onSplitOptionsChange
+                )
+            } else {
+                PrecisePdfSplitFields(
+                    splitOptions = splitOptions,
+                    pageCount = pageCount,
+                    texts = texts,
+                    errorText = errorText,
+                    onSplitOptionsChange = onSplitOptionsChange
+                )
+            }
+        } else if (pageCount == null) {
+            Text(
+                text = texts.pdfSplitPageCountPending,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            PrecisePdfSplitFields(
+                splitOptions = splitOptions,
+                pageCount = null,
+                texts = texts,
+                errorText = errorText,
+                onSplitOptionsChange = onSplitOptionsChange
+            )
+        }
+
+        errorText?.let { message ->
+            Text(
+                text = message,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+    }
+}
+
+@Composable
+private fun PdfSplitModeToggle(
+    texts: UiText,
+    isCustomSelected: Boolean,
+    isEveryPageSelected: Boolean,
+    onSelectCustom: () -> Unit,
+    onSelectEveryPage: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(ZenDimensions.RadiusChip))
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        TrimModeChip(
+            text = texts.pdfSplitModeCustom,
+            selected = isCustomSelected,
+            onClick = onSelectCustom,
+            modifier = Modifier.weight(1f)
+        )
+        TrimModeChip(
+            text = texts.pdfSplitModeEveryPage,
+            selected = isEveryPageSelected,
+            onClick = onSelectEveryPage,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+private fun PdfSplitOptions.withCustomModeAndSuggestedCut(pageCount: Int?): PdfSplitOptions {
+    val base = copy(mode = PdfSplitMode.Custom)
+    val hasConfig = base.startPage != null || base.endPage != null || base.splitAfterPages.isNotEmpty()
+    if (!hasConfig && pageCount != null && pageCount >= 2) {
+        val suggested = PdfSplitValidator.nextSuggestedSplitPage(base, pageCount)
+        if (suggested != null) {
+            return base.copy(splitAfterPages = listOf(suggested))
+        }
+    }
+    return base
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PdfPageSplitSlider(
+    splitOptions: PdfSplitOptions,
+    pageCount: Int,
+    texts: UiText,
+    onSplitOptionsChange: (PdfSplitOptions) -> Unit
+) {
+    val startPage = splitOptions.effectiveStartPage(pageCount)
+    val endPage = splitOptions.effectiveEndPage(pageCount).coerceAtLeast(startPage)
+    val valueRange = 1f..pageCount.toFloat()
+    val currentRange = startPage.toFloat()..endPage.toFloat()
+    val span = (pageCount - 1f).coerceAtLeast(1f)
+
+    var sliderWidthPx by remember { mutableStateOf(0f) }
+    val density = LocalDensity.current
+
+    val currentOptions by rememberUpdatedState(splitOptions)
+    val currentOnChange by rememberUpdatedState(onSplitOptionsChange)
+    val currentSliderWidthPx by rememberUpdatedState(sliderWidthPx)
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        val sliderColors = SliderDefaults.colors(
+            thumbColor = MaterialTheme.colorScheme.primary,
+            activeTrackColor = MaterialTheme.colorScheme.primary,
+            inactiveTrackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 22.dp, bottom = 4.dp)
+                .onSizeChanged { sliderWidthPx = it.width.toFloat() },
+            contentAlignment = Alignment.CenterStart
+        ) {
+            RangeSlider(
+                value = currentRange,
+                onValueChange = { range ->
+                    val rawStart = range.start.roundToInt().coerceIn(1, pageCount)
+                    val rawEnd = range.endInclusive.roundToInt().coerceIn(1, pageCount)
+                    val nextStart = minOf(rawStart, rawEnd)
+                    val nextEnd = maxOf(rawStart, rawEnd)
+                    val sanitizedCuts = PdfSplitValidator.sanitizedSplitAfterPages(
+                        splitOptions.splitAfterPages,
+                        nextStart,
+                        nextEnd
+                    )
+                    onSplitOptionsChange(
+                        splitOptions.copy(
+                            startPage = if (nextStart == 1) null else nextStart,
+                            endPage = if (nextEnd == pageCount) null else nextEnd,
+                            splitAfterPages = sanitizedCuts
+                        )
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                valueRange = valueRange,
+                colors = sliderColors,
+                startThumb = { SmallTrimThumb() },
+                endThumb = { SmallTrimThumb() },
+                track = { state ->
+                    TrimAndSplitTrack(
+                        state = state,
+                        colors = sliderColors,
+                        splitFractions = splitOptions.splitAfterPages.map {
+                            ((it - 0.5f) / span).coerceIn(0f, 1f)
+                        }
+                    )
+                }
+            )
+
+            if (sliderWidthPx > 0f && splitOptions.splitAfterPages.isNotEmpty()) {
+                splitOptions.splitAfterPages.forEachIndexed { index, cutAfter ->
+                    val frac = ((cutAfter - 0.5f) / span).coerceIn(0f, 1f)
+                    val xPosPx = frac * sliderWidthPx
+                    val xDp = with(density) { xPosPx.toDp() } - 18.dp
+
+                    Box(
+                        modifier = Modifier
+                            .offset(x = xDp, y = (-22).dp)
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color.White)
+                            .border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                            .pointerInput(index, splitOptions.splitAfterPages.size, pageCount) {
+                                var dragAccumulatedCut = cutAfter.toFloat()
+                                detectDragGestures(
+                                    onDragStart = {
+                                        dragAccumulatedCut = (currentOptions.splitAfterPages.getOrNull(index) ?: cutAfter).toFloat()
+                                    },
+                                    onDrag = { change, dragAmount ->
+                                        change.consume()
+                                        val sWidth = currentSliderWidthPx
+                                        val opts = currentOptions
+                                        if (sWidth > 0f && opts.splitAfterPages.isNotEmpty()) {
+                                            val deltaPages = (dragAmount.x / sWidth) * span
+                                            val effStart = opts.effectiveStartPage(pageCount)
+                                            val effEnd = opts.effectiveEndPage(pageCount)
+                                            val prevLimit = if (index == 0) effStart else opts.splitAfterPages[index - 1] + 1
+                                            val nextLimit = if (index == opts.splitAfterPages.lastIndex) {
+                                                effEnd - 1
+                                            } else {
+                                                opts.splitAfterPages[index + 1] - 1
+                                            }
+                                            if (prevLimit <= nextLimit) {
+                                                dragAccumulatedCut = (dragAccumulatedCut + deltaPages)
+                                                    .coerceIn(prevLimit.toFloat(), nextLimit.toFloat())
+                                                val snapped = dragAccumulatedCut.roundToInt().coerceIn(prevLimit, nextLimit)
+                                                val updated = opts.splitAfterPages.toMutableList()
+                                                if (index < updated.size && updated[index] != snapped) {
+                                                    updated[index] = snapped
+                                                    currentOnChange(opts.copy(splitAfterPages = updated))
+                                                }
+                                            }
+                                        }
+                                    }
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "✂️",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.format_label_value, texts.pdfSplitStartPage, startPage.toString()),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            splitOptions.splitAfterPages.forEachIndexed { index, cutAfter ->
+                Text(
+                    text = texts.pdfSplitSliderCutChip(index + 1, cutAfter),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            Text(
+                text = stringResource(R.string.format_label_value, texts.pdfSplitEndPage, endPage.toString()),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+
+        val resolvedRanges = splitOptions.resolvedRanges(pageCount)
+        val defaultSplit = PdfSplitOptions(mode = PdfSplitMode.Custom).withCustomModeAndSuggestedCut(pageCount)
+        if (resolvedRanges.isNotEmpty() || splitOptions != defaultSplit) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                resolvedRanges.forEach { range ->
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(ZenDimensions.RadiusChip))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+                            .border(
+                                1.dp,
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                RoundedCornerShape(ZenDimensions.RadiusChip)
+                            )
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = texts.pdfSplitRangeChip(range.first, range.last),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+                if (splitOptions != defaultSplit) {
+                    Text(
+                        text = texts.pdfSplitReset,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(ZenDimensions.RadiusChip))
+                            .clickable { onSplitOptionsChange(defaultSplit) }
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PrecisePdfSplitFields(
+    splitOptions: PdfSplitOptions,
+    pageCount: Int?,
+    texts: UiText,
+    errorText: String?,
+    onSplitOptionsChange: (PdfSplitOptions) -> Unit
+) {
+    val canAddCut = when {
+        splitOptions.splitAfterPages.size >= PdfSplitOptions.MAX_CUSTOM_SPLIT_POINTS -> false
+        pageCount != null -> PdfSplitValidator.nextSuggestedSplitPage(splitOptions, pageCount) != null
+        else -> true
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            PdfPageNumberField(
+                value = splitOptions.startPage,
+                label = texts.pdfSplitStartPage,
+                placeholderText = "1",
+                isError = errorText != null,
+                onValueChange = { nextStart ->
+                    val normalized = nextStart?.takeIf { pageCount == null || it != 1 }
+                    onSplitOptionsChange(splitOptions.copy(startPage = normalized))
+                },
+                modifier = Modifier.weight(1f)
+            )
+            PdfPageNumberField(
+                value = splitOptions.endPage,
+                label = texts.pdfSplitEndPage,
+                placeholderText = pageCount?.toString() ?: "",
+                isError = errorText != null,
+                onValueChange = { nextEnd ->
+                    val normalized = nextEnd?.takeIf { pageCount == null || it != pageCount }
+                    onSplitOptionsChange(splitOptions.copy(endPage = normalized))
+                },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        splitOptions.splitAfterPages.forEachIndexed { index, cutAfter ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                PdfPageNumberField(
+                    value = cutAfter,
+                    label = texts.pdfSplitCutAfterLabel(cutAfter),
+                    placeholderText = "",
+                    isError = errorText != null,
+                    onValueChange = { newVal ->
+                        if (newVal != null) {
+                            val updated = splitOptions.splitAfterPages.toMutableList()
+                            updated[index] = newVal
+                            onSplitOptionsChange(splitOptions.copy(splitAfterPages = updated))
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(
+                    onClick = {
+                        val updated = splitOptions.splitAfterPages.toMutableList()
+                        updated.removeAt(index)
+                        onSplitOptionsChange(splitOptions.copy(splitAfterPages = updated))
+                    },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = texts.remove,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        OutlinedButton(
+            onClick = {
+                val nextCut = if (pageCount != null) {
+                    PdfSplitValidator.nextSuggestedSplitPage(splitOptions, pageCount)
+                } else {
+                    (splitOptions.splitAfterPages.maxOrNull() ?: (splitOptions.startPage ?: 1) - 1) + 1
+                }
+                if (nextCut != null && nextCut !in splitOptions.splitAfterPages) {
+                    onSplitOptionsChange(
+                        splitOptions.copy(
+                            splitAfterPages = (splitOptions.splitAfterPages + nextCut).sorted()
+                        )
+                    )
+                }
+            },
+            enabled = canAddCut,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Add,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(text = texts.pdfSplitAddCut)
+        }
+    }
+}
+
+@Composable
+private fun PdfPageNumberField(
+    value: Int?,
+    label: String,
+    placeholderText: String,
+    isError: Boolean,
+    onValueChange: (Int?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var text by remember { mutableStateOf(value?.toString().orEmpty()) }
+    var focused by remember { mutableStateOf(false) }
+    LaunchedEffect(value) {
+        if (!focused) {
+            text = value?.toString().orEmpty()
+        }
+    }
+    OutlinedTextField(
+        value = text,
+        onValueChange = { rawValue ->
+            val cleaned = rawValue.filter { it.isDigit() }.take(7)
+            text = cleaned
+            if (cleaned.isEmpty()) {
+                onValueChange(null)
+            } else {
+                cleaned.toIntOrNull()?.let(onValueChange)
+            }
+        },
+        singleLine = true,
+        label = { Text(label) },
+        placeholder = if (placeholderText.isNotEmpty()) {
+            { Text(placeholderText) }
+        } else {
+            null
+        },
+        isError = isError || (text.isNotEmpty() && (text.toIntOrNull() ?: 0) < 1),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = MaterialTheme.colorScheme.primary,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+            focusedLabelColor = MaterialTheme.colorScheme.primary,
+            unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            cursorColor = MaterialTheme.colorScheme.primary,
+            focusedContainerColor = MaterialTheme.colorScheme.surface,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+            errorBorderColor = MaterialTheme.colorScheme.error,
+            errorLabelColor = MaterialTheme.colorScheme.error,
+            errorCursorColor = MaterialTheme.colorScheme.error,
+            errorContainerColor = MaterialTheme.colorScheme.surface
+        ),
+        modifier = modifier
+            .defaultMinSize(minWidth = 0.dp)
+            .onFocusChanged { focusState ->
+                if (focused && !focusState.isFocused) {
+                    text = value?.toString().orEmpty()
+                }
+                focused = focusState.isFocused
+            }
+    )
+}
+
+@Composable
+private fun MarkdownPdfOptions(
+    texts: UiText,
+    menuPrefix: String = "",
+    options: MarkdownExportOptions,
+    openMenuId: String?,
+    onOpenMenuChange: (String?) -> Unit,
+    onPickAssetsFolder: () -> Unit,
+    onUpdateOptions: (MarkdownExportOptions) -> Unit
+) {
+    MarkdownOptionsContent(
+        texts = texts,
+        menuPrefix = menuPrefix,
+        pageSize = markdownPageSizeLabelFor(options.pageSize),
+        fontScale = markdownFontScaleLabelFor(options.fontScale),
+        fetchRemoteMedia = options.fetchRemoteMedia,
+        assetsFolderLabel = options.assetsFolderLabel,
+        hasLinkedAssets = options.assetsTreeUri != null,
+        openMenuId = openMenuId,
+        onOpenMenuChange = onOpenMenuChange,
+        onPageSizeChange = { value ->
+            onUpdateOptions(options.copy(pageSize = markdownPageSizeToOption(value)))
+        },
+        onFontScaleChange = { value ->
+            onUpdateOptions(options.copy(fontScale = markdownFontScaleToOption(value)))
+        },
+        onFetchRemoteMediaChange = { enabled ->
+            onUpdateOptions(options.copy(fetchRemoteMedia = enabled))
+        },
+        onPickAssetsFolder = onPickAssetsFolder,
+        onClearAssetsFolder = {
+            onUpdateOptions(
+                options.copy(
+                    assetsTreeUri = null,
+                    assetsFolderLabel = null,
+                    sourceParentDocumentId = null
+                )
+            )
+        }
+    )
+}
+
+@Composable
+private fun MarkdownOptionsContent(
+    texts: UiText,
+    menuPrefix: String,
+    pageSize: String,
+    fontScale: String,
+    fetchRemoteMedia: Boolean,
+    assetsFolderLabel: String?,
+    hasLinkedAssets: Boolean,
+    openMenuId: String?,
+    onOpenMenuChange: (String?) -> Unit,
+    onPageSizeChange: (String) -> Unit,
+    onFontScaleChange: (String) -> Unit,
+    onFetchRemoteMediaChange: (Boolean) -> Unit,
+    onPickAssetsFolder: () -> Unit,
+    onClearAssetsFolder: () -> Unit
+) {
+    OptionGrid {
+        InsetGroupCard {
+            OptionDropdown(
+                menuId = "${menuPrefix}markdown-page-size",
+                label = texts.pageSize,
+                selected = pageSize,
+                options = MARKDOWN_PAGE_SIZE_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = true,
+                onSelected = onPageSizeChange
+            )
+            OptionDropdown(
+                menuId = "${menuPrefix}markdown-font-scale",
+                label = texts.markdownFontSize,
+                selected = fontScale,
+                options = MARKDOWN_FONT_SCALE_OPTIONS,
+                texts = texts,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                showDivider = false,
+                onSelected = onFontScaleChange
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.72f))
+                .border(
+                    1.dp,
+                    MaterialTheme.colorScheme.primary.copy(alpha = if (fetchRemoteMedia) 0.22f else 0.08f),
+                    RoundedCornerShape(8.dp)
+                )
+                .clickable(role = Role.Switch) { onFetchRemoteMediaChange(!fetchRemoteMedia) }
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = texts.markdownFetchRemoteMedia,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Switch(
+                    checked = fetchRemoteMedia,
+                    onCheckedChange = null,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                        checkedTrackColor = MaterialTheme.colorScheme.primary,
+                        checkedBorderColor = MaterialTheme.colorScheme.primary,
+                        uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+                        uncheckedBorderColor = MaterialTheme.colorScheme.outline
+                    )
+                )
+            }
+            Text(
+                text = texts.markdownFetchRemoteMediaDesc,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.72f))
+                .border(
+                    1.dp,
+                    MaterialTheme.colorScheme.primary.copy(alpha = if (hasLinkedAssets) 0.22f else 0.08f),
+                    RoundedCornerShape(8.dp)
+                )
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = texts.markdownAssetsFolder,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = assetsFolderLabel?.takeIf { it.isNotBlank() } ?: texts.markdownAssetsFolderNone,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (hasLinkedAssets) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (hasLinkedAssets) {
+                        OutlinedButton(
+                            onClick = onClearAssetsFolder,
+                            shape = RoundedCornerShape(ZenDimensions.RadiusChip),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.heightIn(min = 32.dp)
+                        ) {
+                            Text(
+                                text = texts.clearTasks,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = onPickAssetsFolder,
+                        shape = RoundedCornerShape(ZenDimensions.RadiusChip),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.heightIn(min = 32.dp)
+                    ) {
+                        Text(
+                            text = if (hasLinkedAssets) texts.markdownChangeFolder else texts.markdownLinkFolder,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
+            }
+            Text(
+                text = texts.markdownAssetsFolderHint,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
 private fun OptionGrid(content: @Composable ColumnScope.() -> Unit) {
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -6443,6 +7405,7 @@ private fun FileRow(
     groupedInPdfMerge: Boolean,
     groupedInVideoMerge: Boolean = false,
     onOpenMenuChange: (String?) -> Unit,
+    onPickMarkdownAssetsFolder: (List<String>) -> Unit = {},
     onUpdateFile: (QueuedFile) -> Unit,
     onOptionsExpandedChange: (Boolean) -> Unit,
     onRemove: () -> Unit
@@ -6648,6 +7611,7 @@ private fun FileRow(
                     onTrimInputModeChange = { trimInputMode = it },
                     onVideoAdvancedExpandedChange = { videoAdvancedExpanded = it },
                     onAudioAdvancedExpandedChange = { audioAdvancedExpanded = it },
+                    onPickMarkdownAssetsFolder = onPickMarkdownAssetsFolder,
                     onUpdateFile = onUpdateFile
                 )
             }
@@ -6736,6 +7700,7 @@ private fun QueuedFileOptionsPanel(
     onTrimInputModeChange: (TrimInputMode) -> Unit,
     onVideoAdvancedExpandedChange: (Boolean) -> Unit,
     onAudioAdvancedExpandedChange: (Boolean) -> Unit,
+    onPickMarkdownAssetsFolder: (List<String>) -> Unit = {},
     onUpdateFile: (QueuedFile) -> Unit
 ) {
     val menuPrefix = "file-${file.id}-"
@@ -7062,25 +8027,51 @@ private fun QueuedFileOptionsPanel(
                     )
                 }
             }
-            FileCategory.Pdf -> PdfOptions(
-                texts = texts,
-                menuPrefix = menuPrefix,
-                targetFormat = selectedTarget.targetFormat,
-                renderQuality = pdfRenderQualityLabelFor(file.pdfOptions.renderQuality),
-                compressionPreset = pdfCompressionPresetLabelFor(file.pdfOptions.compressionPreset),
-                openMenuId = openMenuId,
-                onOpenMenuChange = onOpenMenuChange,
-                onRenderQualityChange = { value ->
-                    onUpdateFile(file.copy(pdfOptions = file.pdfOptions.copy(renderQuality = pdfRenderQualityToOption(value))))
-                },
-                onCompressionPresetChange = { value ->
-                    onUpdateFile(file.copy(pdfOptions = file.pdfOptions.copy(compressionPreset = pdfCompressionPresetToOption(value))))
-                }
-            )
+            FileCategory.Pdf -> if (selectedTarget.targetFormat.id == TargetId.PdfSplit) {
+                PdfSplitOptionsPanel(
+                    texts = texts,
+                    splitOptions = file.pdfOptions.splitOptions,
+                    pageCount = file.inputInfo?.pageCount,
+                    onSplitOptionsChange = { nextSplit ->
+                        onUpdateFile(
+                            file.copy(
+                                pdfOptions = file.pdfOptions.copy(splitOptions = nextSplit)
+                            )
+                        )
+                    }
+                )
+            } else {
+                PdfOptions(
+                    texts = texts,
+                    menuPrefix = menuPrefix,
+                    targetFormat = selectedTarget.targetFormat,
+                    renderQuality = pdfRenderQualityLabelFor(file.pdfOptions.renderQuality),
+                    compressionPreset = pdfCompressionPresetLabelFor(file.pdfOptions.compressionPreset),
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    onRenderQualityChange = { value ->
+                        onUpdateFile(file.copy(pdfOptions = file.pdfOptions.copy(renderQuality = pdfRenderQualityToOption(value))))
+                    },
+                    onCompressionPresetChange = { value ->
+                        onUpdateFile(file.copy(pdfOptions = file.pdfOptions.copy(compressionPreset = pdfCompressionPresetToOption(value))))
+                    }
+                )
+            }
             FileCategory.Document -> Text(
                 text = texts.optionValue(selectedTarget.targetFormat.modeHint),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            FileCategory.Markdown -> MarkdownPdfOptions(
+                texts = texts,
+                menuPrefix = menuPrefix,
+                options = file.markdownOptions,
+                openMenuId = openMenuId,
+                onOpenMenuChange = onOpenMenuChange,
+                onPickAssetsFolder = { onPickMarkdownAssetsFolder(listOf(file.id)) },
+                onUpdateOptions = { next ->
+                    onUpdateFile(file.copy(markdownOptions = next))
+                }
             )
             FileCategory.Font -> Text(
                 text = texts.optionValue(selectedTarget.targetFormat.modeHint),
@@ -7512,6 +8503,7 @@ internal fun FileCategory.icon(): ImageVector {
         FileCategory.Image -> Icons.Rounded.Image
         FileCategory.Pdf -> Icons.Rounded.PictureAsPdf
         FileCategory.Document -> Icons.Rounded.Description
+        FileCategory.Markdown -> Icons.Rounded.Article
         FileCategory.Font -> Icons.Rounded.FontDownload
         FileCategory.Subtitle -> Icons.Rounded.Subtitles
     }
@@ -7689,6 +8681,9 @@ private fun targetsForSourceCategory(category: FileCategory?): List<ExternalImpo
         FileCategory.Document -> FileCategory.Document.formats.map {
             ExternalImportTarget(FileCategory.Document, it)
         }
+        FileCategory.Markdown -> FileCategory.Markdown.formats.map {
+            ExternalImportTarget(FileCategory.Markdown, it)
+        }
         FileCategory.Font -> FileCategory.Font.formats.map {
             ExternalImportTarget(FileCategory.Font, it)
         }
@@ -7790,12 +8785,23 @@ private fun fileWithTarget(
             PdfSecurityOptions(mode = org.zenconverter.app.conversion.PdfSecurityMode.Decrypt)
         else -> PdfSecurityOptions()
     }
+    val nextPdfOptions = if (target.category == FileCategory.Pdf && targetFormat.id == TargetId.PdfSplit) {
+        val nextSplit = if (file.pdfOptions.splitOptions.mode == PdfSplitMode.Custom) {
+            file.pdfOptions.splitOptions.withCustomModeAndSuggestedCut(file.inputInfo?.pageCount)
+        } else {
+            file.pdfOptions.splitOptions
+        }
+        file.pdfOptions.copy(splitOptions = nextSplit)
+    } else {
+        file.pdfOptions
+    }
     return file.copy(
         category = target.category,
         targetFormat = targetFormat.key,
         videoOptions = nextVideoOptions,
         audioOptions = nextAudioOptions,
         imageOptions = imageOptionsForTarget(file.imageOptions, targetFormat),
+        pdfOptions = nextPdfOptions,
         pdfSecurityOptions = nextPdfSecurityOptions
     )
 }
@@ -8500,6 +9506,36 @@ private fun pdfCompressionPresetToOption(value: String): PdfCompressionPreset {
         PDF_COMPRESSION_PRESET_HIGH -> PdfCompressionPreset.HighQuality
         PDF_COMPRESSION_PRESET_SMALL -> PdfCompressionPreset.SmallFile
         else -> PdfCompressionPreset.Balanced
+    }
+}
+
+private fun markdownPageSizeLabelFor(size: MarkdownPageSize): String {
+    return when (size) {
+        MarkdownPageSize.A4 -> MARKDOWN_PAGE_A4
+        MarkdownPageSize.Letter -> MARKDOWN_PAGE_LETTER
+    }
+}
+
+private fun markdownPageSizeToOption(value: String): MarkdownPageSize {
+    return when (value) {
+        MARKDOWN_PAGE_LETTER -> MarkdownPageSize.Letter
+        else -> MarkdownPageSize.A4
+    }
+}
+
+private fun markdownFontScaleLabelFor(scale: MarkdownFontScale): String {
+    return when (scale) {
+        MarkdownFontScale.Compact -> MARKDOWN_FONT_COMPACT
+        MarkdownFontScale.Standard -> MARKDOWN_FONT_STANDARD
+        MarkdownFontScale.Large -> MARKDOWN_FONT_LARGE
+    }
+}
+
+private fun markdownFontScaleToOption(value: String): MarkdownFontScale {
+    return when (value) {
+        MARKDOWN_FONT_COMPACT -> MarkdownFontScale.Compact
+        MARKDOWN_FONT_LARGE -> MarkdownFontScale.Large
+        else -> MarkdownFontScale.Standard
     }
 }
 

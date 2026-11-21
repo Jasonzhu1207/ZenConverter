@@ -293,6 +293,16 @@ Transitive dependencies required when consuming the local AAR through
 - The model list is hardcoded in the app; adding or changing a model is a code
   change that ships with an app update, not a remote hot-updated config.
 
+## Current Markdown Parser Dependency
+
+- Coordinates: `org.commonmark:commonmark:0.21.0`, plus official extension artifacts `commonmark-ext-gfm-tables:0.21.0`, `commonmark-ext-gfm-strikethrough:0.21.0`, `commonmark-ext-autolink:0.21.0`, `commonmark-ext-task-list-items:0.21.0`, and `commonmark-ext-yaml-front-matter:0.21.0`.
+- Upstream source: `https://github.com/commonmark/commonmark-java`.
+- License: BSD-2-Clause (`AGPL-3.0-or-later` compatible).
+- Transitive dependency: `org.nibor.autolink:autolink` (brought in by `commonmark-ext-autolink`), `https://github.com/robinst/autolink-java`, MIT License (`AGPL-3.0-or-later` compatible).
+- Reason platform APIs are not enough: Android has no Markdown AST parser, and WebView HTML-to-PDF printing relies on hidden print callback workarounds on newer APIs while dropping interactive PDF URI annotations and bookmarks.
+- Version pin note: `0.21.0` is pinned deliberately instead of `0.22+` because newer releases emit Java 11 library calls (`List.of`) unavailable at `minSdk 26` without core library desugaring enabled.
+- Scope: CommonMark parsing runs purely locally in Kotlin/JVM without extra `.so` binaries; HTML/CSS styling, CJK vector text layout (`StaticLayout`/`PdfDocument`), syntax highlighting, local/opt-in media resolution, and PDF links/bookmarks (`PDFBox-Android`) are implemented directly in ZenConverter.
+
 ## License Guardrail
 
 ZenConverter's own source is AGPL-licensed. Do not introduce dependencies or

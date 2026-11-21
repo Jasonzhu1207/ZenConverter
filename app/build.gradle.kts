@@ -170,6 +170,13 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    // Pin commonmark-java to 0.21.0: 0.22+ requires Java 11 APIs (e.g., List.of) unavailable on minSdk 26 without desugaring.
+    implementation("org.commonmark:commonmark:0.21.0")
+    implementation("org.commonmark:commonmark-ext-gfm-tables:0.21.0")
+    implementation("org.commonmark:commonmark-ext-gfm-strikethrough:0.21.0")
+    implementation("org.commonmark:commonmark-ext-autolink:0.21.0")
+    implementation("org.commonmark:commonmark-ext-task-list-items:0.21.0")
+    implementation("org.commonmark:commonmark-ext-yaml-front-matter:0.21.0")
     implementation(files(pdfBoxAndroidLocalAar))
     implementation(
         files(

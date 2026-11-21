@@ -22,6 +22,7 @@ data class ConversionTaskInput(
     val imageOptions: ImageExportOptions,
     val pdfOptions: PdfExportOptions,
     val pdfSecurityOptions: PdfSecurityOptions = PdfSecurityOptions(),
+    val markdownOptions: MarkdownExportOptions = MarkdownExportOptions(),
     val inputInfo: FileBasicInfo? = null,
     val gifFrameMode: GifFrameExportMode = GifFrameExportMode.FirstFrame,
     val pdfPasswords: List<String?> = emptyList(),
@@ -116,6 +117,7 @@ enum class ConversionMediaCategory {
     Image,
     Pdf,
     Document,
+    Markdown,
     Font,
     Subtitle
 }
@@ -288,7 +290,78 @@ data class ImageExportOptions(
 data class PdfExportOptions(
     val imagePageMode: PdfImagePageMode = PdfImagePageMode.A4Fit,
     val renderQuality: PdfRenderQuality = PdfRenderQuality.Balanced,
-    val compressionPreset: PdfCompressionPreset = PdfCompressionPreset.Balanced
+    val compressionPreset: PdfCompressionPreset = PdfCompressionPreset.Balanced,
+    val splitOptions: PdfSplitOptions = PdfSplitOptions()
+)
+
+enum class PdfSplitMode {
+    Custom,
+    EveryPage
+}
+
+data class PdfSplitOptions(
+    val mode: PdfSplitMode = PdfSplitMode.Custom,
+    val startPage: Int? = null,
+    val endPage: Int? = null,
+    val splitAfterPages: List<Int> = emptyList()
+) {
+    companion object {
+        const val MAX_CUSTOM_SPLIT_POINTS = 24
+    }
+
+    fun effectiveStartPage(totalPages: Int? = null): Int {
+        val raw = startPage ?: 1
+        return if (totalPages != null && totalPages > 0) raw.coerceIn(1, totalPages) else raw.coerceAtLeast(1)
+    }
+
+    fun effectiveEndPage(totalPages: Int): Int {
+        val raw = endPage ?: totalPages
+        return raw.coerceIn(1, totalPages)
+    }
+
+    fun resolvedRanges(totalPages: Int): List<IntRange> {
+        if (totalPages <= 0) return emptyList()
+        if (mode == PdfSplitMode.EveryPage) {
+            return (1..totalPages).map { page -> page..page }
+        }
+        val start = startPage ?: 1
+        val end = endPage ?: totalPages
+        if (start < 1 || end > totalPages || start > end) return emptyList()
+        if (splitAfterPages.isEmpty()) {
+            return listOf(start..end)
+        }
+        val ranges = mutableListOf<IntRange>()
+        var cursor = start
+        for (cutAfter in splitAfterPages) {
+            if (cutAfter < cursor || cutAfter >= end) return emptyList()
+            ranges.add(cursor..cutAfter)
+            cursor = cutAfter + 1
+        }
+        if (cursor <= end) {
+            ranges.add(cursor..end)
+        }
+        return ranges
+    }
+}
+
+enum class MarkdownPageSize(val widthPt: Int, val heightPt: Int) {
+    A4(595, 842),
+    Letter(612, 792)
+}
+
+enum class MarkdownFontScale(val bodyPt: Float) {
+    Compact(9.5f),
+    Standard(10.5f),
+    Large(12.0f)
+}
+
+data class MarkdownExportOptions(
+    val pageSize: MarkdownPageSize = MarkdownPageSize.A4,
+    val fontScale: MarkdownFontScale = MarkdownFontScale.Standard,
+    val fetchRemoteMedia: Boolean = false,
+    val assetsTreeUri: Uri? = null,
+    val assetsFolderLabel: String? = null,
+    val sourceParentDocumentId: String? = null
 )
 
 data class PdfSecurityOptions(

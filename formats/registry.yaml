@@ -426,6 +426,11 @@ groups:
         status: stable
         note: "Compresses PDF documents by downsampling and re-encoding embedded images with JPEG presets (High Quality 85%/2160px, Balanced 70%/1440px, Small File 50%/1080px) and stripping redundant thumbnail metadata through PDFBox-Android. Preserves selectable text, vectors, and page layouts."
       - from: pdf
+        to: split-pdf
+        engine: pdfbox-android
+        status: beta
+        note: "Splits PDFs by customizable 1-based page range and split points (up to 24 cuts) or one-tap every-page separation using PDFBox-Android Splitter chunked range-by-range with temp-file backing. Single-range trims export one PDF; multi-part or every-page splits export numbered PDFs inside a subfolder. Password-protected sources open with transient in-memory passwords and export unencrypted."
+      - from: pdf
         to: encrypted-pdf
         engine: pdfbox-android
         status: stable
@@ -482,6 +487,11 @@ groups:
         engine: office2pdf-native/pdfbox-android
         status: beta
         note: "Converts XLSX to an intermediate PDF, then writes lightweight Markdown with a title and per-page headings. Inherits the Office path's 64 MiB input cap and PDF text-layer limits; no high-fidelity spreadsheet structure reconstruction."
+      - from: md/markdown/mdown/mkd
+        to: pdf
+        engine: markdown-pdf
+        status: beta
+        note: "Converts Markdown documents (up to 16 MiB) to formatted PDFs via commonmark-java, Android StaticLayout + PdfDocument, and a PDFBox-Android post-pass for clickable hyperlinks and hierarchical H1-H3 outline bookmarks. Supports GFM tables, task lists, strikethrough, frontmatter, footnotes, callouts, common inline HTML/CSS typography and colors, code syntax highlighting, local SAF/Base64 images, video first-frame extraction, and opt-in (off by default) remote HTTP/HTTPS media fetching."
   font:
     verified:
       - from: ttf/otf

@@ -70,6 +70,7 @@ import com.tom_roush.pdfbox.cos.COSBase
 import com.tom_roush.pdfbox.cos.COSName
 import com.tom_roush.pdfbox.io.MemoryUsageSetting
 import com.tom_roush.pdfbox.multipdf.PDFMergerUtility
+import com.tom_roush.pdfbox.multipdf.Splitter
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.PDResources
 import com.tom_roush.pdfbox.pdmodel.encryption.AccessPermission
@@ -99,6 +100,8 @@ import org.zenconverter.app.model.RealEsrganUpscaler
 import org.zenconverter.app.model.RifeModelManager
 import org.zenconverter.app.model.RifeInterpolator
 import org.zenconverter.app.conversion.VideoFrameInterpolationMode
+import org.zenconverter.app.markdown.MarkdownAstParser
+import org.zenconverter.app.markdown.MarkdownPdfRenderer
 import org.zenconverter.app.settings.AppPreferences
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -264,6 +267,7 @@ class ConversionService : Service() {
                         input.category == ConversionMediaCategory.Image -> "NativeBitmap"
                         input.category == ConversionMediaCategory.Pdf -> "NativePdf"
                         input.category == ConversionMediaCategory.Document -> "Office2Pdf"
+                        input.category == ConversionMediaCategory.Markdown -> "MarkdownPdf"
                         input.category == ConversionMediaCategory.Font -> "Font"
                         input.category == ConversionMediaCategory.Subtitle -> "Subtitle"
                         input.category == ConversionMediaCategory.Video && isVideoContactSheetOutput(input) -> "ContactSheet"
@@ -284,6 +288,10 @@ class ConversionService : Service() {
         }
 
         if (input.category == ConversionMediaCategory.Pdf) {
+            if (TargetId.fromKey(input.targetFormat) == TargetId.PdfSplit) {
+                startPdfSplitExport(input, tempFile, outputProfile)
+                return
+            }
             if (
                 outputProfile.extension.equals("pdf", ignoreCase = true) ||
                 outputProfile.extension.equals("txt", ignoreCase = true) ||
@@ -298,6 +306,11 @@ class ConversionService : Service() {
 
         if (input.category == ConversionMediaCategory.Document) {
             startOfficeDocumentExport(input, tempFile, outputProfile)
+            return
+        }
+
+        if (input.category == ConversionMediaCategory.Markdown) {
+            startMarkdownExport(input, tempFile, outputProfile)
             return
         }
 
@@ -1009,6 +1022,67 @@ class ConversionService : Service() {
         }
     }
 
+    private fun extractFirstFrameForMarkdown(
+        videoUri: Uri?,
+        localPath: String?,
+        outputJpg: File
+    ): Boolean {
+        if (ConversionTaskStore.isCancelled()) return false
+        if (ensureFfmpegKitReady() != null) return false
+
+        val inputSource = if (videoUri != null) {
+            runCatching { openFfmpegInputSource(videoUri) }.getOrNull() ?: return false
+        } else {
+            null
+        }
+        val resolvedPath = inputSource?.path ?: localPath ?: return false
+        var session: FFmpegSession? = null
+        return try {
+            if (ConversionTaskStore.isCancelled()) return false
+            val arguments = listOf(
+                "-hide_banner",
+                "-loglevel", "error",
+                "-i", resolvedPath,
+                "-map", "0:v:0",
+                "-an", "-sn", "-dn",
+                "-frames:v", "1",
+                "-vf", "scale=1280:1280:force_original_aspect_ratio=decrease",
+                "-f", "image2",
+                "-c:v", "mjpeg",
+                "-q:v", "2",
+                "-y",
+                outputJpg.absolutePath
+            )
+            val latch = CountDownLatch(1)
+            var success = false
+            session = FFmpegKit.executeWithArgumentsAsync(
+                arguments.toTypedArray(),
+                { completedSession ->
+                    success = ReturnCode.isSuccess(completedSession.getReturnCode())
+                    latch.countDown()
+                }
+            )
+            activeFfmpegSession = session
+            if (ConversionTaskStore.isCancelled()) {
+                runCatching { FFmpegKit.cancel(session.getSessionId()) }
+                return false
+            }
+            val completed = latch.await(10, TimeUnit.SECONDS)
+            if (!completed) {
+                runCatching { FFmpegKit.cancel(session.getSessionId()) }
+            }
+            !ConversionTaskStore.isCancelled() && success && outputJpg.isFile && outputJpg.length() > 0L
+        } catch (e: Exception) {
+            Log.w(TAG, "extractFirstFrameForMarkdown failed", e)
+            false
+        } finally {
+            if (activeFfmpegSession == session) {
+                activeFfmpegSession = null
+            }
+            inputSource?.close()
+        }
+    }
+
     private fun parseFpsString(fps: String): Float? {
         val trimmed = fps.trim()
         if (trimmed.contains('/')) {
@@ -1141,6 +1215,54 @@ class ConversionService : Service() {
         }
     }
 
+    private fun startPdfSplitExport(
+        input: ConversionTaskInput,
+        firstTempFile: File,
+        outputProfile: OutputProfile
+    ) {
+        serviceScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    writeSplitPdfFiles(input, firstTempFile)
+                }
+            }.onSuccess { result ->
+                if (ConversionTaskStore.isCancelled()) {
+                    firstTempFile.delete()
+                    result.deleteTempFiles()
+                    cancelRun()
+                    return@onSuccess
+                }
+                ConversionTaskStore.updateProgress(taskIndex, PROGRESS_BEFORE_SAVE)
+                when (result) {
+                    is PdfSplitExportResult.SingleFile -> {
+                        saveCompletedExport(
+                            input = input,
+                            tempFile = result.file,
+                            outputDisplayNameOverride = result.displayName
+                        )
+                    }
+                    is PdfSplitExportResult.FolderFiles -> {
+                        firstTempFile.delete()
+                        saveCompletedExportFilesInFolder(
+                            input = input,
+                            tempFiles = result.files,
+                            outputProfile = outputProfile,
+                            folderName = result.folderName,
+                            nameGenerator = { index, _ -> result.fileNames[index] }
+                        )
+                    }
+                }
+            }.onFailure { exception ->
+                firstTempFile.delete()
+                if (exception is CancellationException) {
+                    return@onFailure
+                }
+                Log.w(TAG, "Could not run PDF split export", exception)
+                failCurrentTask(pdfDocumentFailureMessageFor(exception, input, outputProfile))
+            }
+        }
+    }
+
     private fun startPdfDocumentExport(
         input: ConversionTaskInput,
         tempFile: File,
@@ -1197,6 +1319,110 @@ class ConversionService : Service() {
                 failCurrentTask(officeFailureMessageFor(exception))
             }
         }
+    }
+
+    private fun startMarkdownExport(
+        input: ConversionTaskInput,
+        tempFile: File,
+        outputProfile: OutputProfile
+    ) {
+        serviceScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    writeMarkdownPdfExport(input, tempFile)
+                }
+            }.onSuccess {
+                if (ConversionTaskStore.isCancelled()) {
+                    tempFile.delete()
+                    cancelRun()
+                    return@onSuccess
+                }
+                ConversionTaskStore.updateProgress(taskIndex, PROGRESS_BEFORE_SAVE)
+                saveCompletedExport(input, tempFile)
+            }.onFailure { exception ->
+                tempFile.delete()
+                if (exception is CancellationException) {
+                    return@onFailure
+                }
+                Log.w(TAG, "Could not run Markdown export for output=${outputProfile.extension}", exception)
+                failCurrentTask(markdownFailureMessageFor(exception))
+            }
+        }
+    }
+
+    private fun writeMarkdownPdfExport(
+        input: ConversionTaskInput,
+        outputFile: File
+    ) {
+        throwIfConversionCancelled()
+        val inputBytes = readMarkdownInputBytes(input)
+        val markdownText = MarkdownAstParser.decodeMarkdownBytes(inputBytes)
+        throwIfConversionCancelled()
+
+        val parsed = MarkdownAstParser.parse(
+            markdown = markdownText,
+            fallbackTitle = markdownTitleFor(input)
+        )
+        throwIfConversionCancelled()
+        ensurePdfBoxReady()
+
+        val cacheRoot = externalCacheDir ?: cacheDir
+        val workDir = File(cacheRoot, "md-work/${input.fileId}")
+        try {
+            MarkdownPdfRenderer.render(
+                context = this,
+                document = parsed,
+                options = input.markdownOptions,
+                outputFile = outputFile,
+                workDir = workDir,
+                isCancelled = { ConversionTaskStore.isCancelled() },
+                onProgress = { progress -> updateImageProgress(progress) },
+                ffmpegExtractFrame = { videoUri, localPath, outputJpg ->
+                    extractFirstFrameForMarkdown(videoUri, localPath, outputJpg)
+                }
+            )
+            throwIfConversionCancelled()
+            updateImageProgress(0.95f)
+        } catch (throwable: Throwable) {
+            outputFile.delete()
+            throw throwable
+        } finally {
+            workDir.deleteRecursively()
+        }
+    }
+
+    private fun readMarkdownInputBytes(input: ConversionTaskInput): ByteArray {
+        val sourceSize = queryOpenableSize(input.inputUri)
+        sourceSize?.let { sizeBytes ->
+            if (sizeBytes > MARKDOWN_MAX_INPUT_BYTES) {
+                throw LocalizedFailure(localizedText(R.string.message_markdown_file_is_too_large))
+            }
+        }
+        val initialCapacity = sourceSize
+            ?.coerceAtMost(MARKDOWN_MAX_INPUT_BYTES)
+            ?.toInt()
+            ?: COPY_BUFFER_SIZE
+        val output = ByteArrayOutputStream(initialCapacity.coerceAtLeast(0))
+
+        contentResolver.openInputStream(input.inputUri)?.use { inputStream ->
+            val buffer = ByteArray(COPY_BUFFER_SIZE)
+            var totalBytes = 0L
+            while (true) {
+                throwIfConversionCancelled()
+                val read = inputStream.read(buffer)
+                if (read == -1) break
+                totalBytes += read.toLong()
+                if (totalBytes > MARKDOWN_MAX_INPUT_BYTES) {
+                    throw LocalizedFailure(localizedText(R.string.message_markdown_file_is_too_large))
+                }
+                output.write(buffer, 0, read)
+            }
+        } ?: throw LocalizedFailure(localizedText(R.string.text_task_message_input_file_could_not_be_opened))
+
+        if (output.size() == 0) {
+            throw LocalizedFailure(localizedText(R.string.text_task_message_input_file_is_empty))
+        }
+        return output.toByteArray()
     }
 
     private fun writeOfficeDocumentExport(
@@ -1635,6 +1861,136 @@ class ConversionService : Service() {
         val targetHeight = (height * scale).roundToInt().coerceAtLeast(1)
         val scaled = Bitmap.createScaledBitmap(source, targetWidth, targetHeight, true)
         return Pair(scaled, scaled !== source)
+    }
+
+    private fun writeSplitPdfFiles(
+        input: ConversionTaskInput,
+        firstTempFile: File
+    ): PdfSplitExportResult {
+        val inputUris = input.inputUris.ifEmpty { listOf(input.inputUri) }
+        if (inputUris.size != 1) {
+            throw LocalizedFailure(localizedText(R.string.message_pdf_split_failed))
+        }
+
+        throwIfConversionCancelled()
+        ensurePdfBoxReady()
+        val cachedInputs = cachePdfInputsForPdfBox(input, inputUris)
+        var document: PDDocument? = null
+        val createdTempFiles = mutableListOf<File>()
+
+        try {
+            document = loadPdfBoxDocument(cachedInputs.files.first(), input.pdfPasswordAt(0))
+            val pageCount = document.numberOfPages
+            if (pageCount <= 0) {
+                throw LocalizedFailure(localizedText(R.string.text_task_message_pdf_has_no_pages))
+            }
+
+            val splitOptions = input.pdfOptions.splitOptions
+            val validationError = PdfSplitValidator.validatePdfSplit(
+                options = splitOptions,
+                totalPages = pageCount,
+                strictPageCountRequired = true
+            )
+            if (validationError != null) {
+                throw LocalizedFailure(localizedPdfSplitValidationMessage(validationError))
+            }
+
+            val ranges = splitOptions.resolvedRanges(pageCount)
+            if (ranges.isEmpty()) {
+                throw LocalizedFailure(localizedText(R.string.message_pdf_split_invalid_page_range))
+            }
+
+            val baseName = sanitizedBaseNameFor(input)
+            if (ranges.size == 1) {
+                val range = ranges.first()
+                throwIfConversionCancelled()
+                val splitter = Splitter().apply {
+                    setStartPage(range.first)
+                    setEndPage(range.last)
+                    setSplitAtPage(range.count())
+                    setMemoryUsageSetting(MemoryUsageSetting.setupTempFileOnly())
+                }
+                val parts = splitter.split(document)
+                try {
+                    val chunkDoc = parts.firstOrNull()
+                        ?: throw LocalizedFailure(localizedText(R.string.message_pdf_split_failed))
+                    chunkDoc.setAllSecurityToBeRemoved(true)
+                    chunkDoc.save(firstTempFile)
+                } finally {
+                    parts.forEach { part -> runCatching { part.close() } }
+                }
+                throwIfConversionCancelled()
+                updateImageProgress(0.92f)
+                return PdfSplitExportResult.SingleFile(
+                    file = firstTempFile,
+                    displayName = "${baseName}_p${range.first}-${range.last}.pdf"
+                )
+            }
+
+            val cacheRoot = externalCacheDir ?: cacheDir
+            val exportTempDir = File(cacheRoot, "exports").apply { mkdirs() }
+            val fileNames = mutableListOf<String>()
+            val width = ranges.size.toString().length.coerceAtLeast(2)
+
+            ranges.forEachIndexed { index, range ->
+                throwIfConversionCancelled()
+                val chunkFile = File(exportTempDir, "${input.fileId}_split_$index.pdf")
+                createdTempFiles.add(chunkFile)
+
+                val splitter = Splitter().apply {
+                    setStartPage(range.first)
+                    setEndPage(range.last)
+                    setSplitAtPage(range.count())
+                    setMemoryUsageSetting(MemoryUsageSetting.setupTempFileOnly())
+                }
+                val parts = splitter.split(document)
+                try {
+                    val chunkDoc = parts.firstOrNull()
+                        ?: throw LocalizedFailure(localizedText(R.string.message_pdf_split_failed))
+                    chunkDoc.setAllSecurityToBeRemoved(true)
+                    chunkDoc.save(chunkFile)
+                } finally {
+                    parts.forEach { part -> runCatching { part.close() } }
+                }
+                throwIfConversionCancelled()
+
+                val name = if (splitOptions.mode == PdfSplitMode.EveryPage) {
+                    outputNameForPage(input, "pdf", range.first - 1, pageCount)
+                } else {
+                    val partNum = (index + 1).toString().padStart(width, '0')
+                    "${baseName}_part_${partNum}_p${range.first}-${range.last}.pdf"
+                }
+                fileNames.add(name)
+                updateImageProgress(progressForIndexedWork(index, ranges.size, 0.08f, 0.90f))
+            }
+
+            return PdfSplitExportResult.FolderFiles(
+                files = createdTempFiles.toList(),
+                folderName = outputFolderNameForSplit(input),
+                fileNames = fileNames
+            )
+        } catch (throwable: Throwable) {
+            firstTempFile.delete()
+            createdTempFiles.forEach { it.delete() }
+            throw throwable
+        } finally {
+            runCatching { document?.close() }
+            cachedInputs.delete()
+        }
+    }
+
+    private fun localizedPdfSplitValidationMessage(error: PdfSplitValidationError): LocalizedText {
+        return when (error) {
+            PdfSplitValidationError.SinglePagePdf -> localizedText(R.string.message_pdf_split_requires_multiple_pages)
+            PdfSplitValidationError.InvalidStartPage,
+            PdfSplitValidationError.InvalidEndPage,
+            PdfSplitValidationError.EndBeforeStart,
+            PdfSplitValidationError.StartExceedsPageCount,
+            PdfSplitValidationError.EndExceedsPageCount -> localizedText(R.string.message_pdf_split_invalid_page_range)
+            PdfSplitValidationError.SplitPointsOrder,
+            PdfSplitValidationError.SplitPointsOutOfRange -> localizedText(R.string.message_pdf_split_invalid_cut_points)
+            PdfSplitValidationError.NoSplitOrTrimConfigured -> localizedText(R.string.message_pdf_split_add_cut_or_range)
+        }
     }
 
     private fun writeMergedPdf(
@@ -3178,6 +3534,9 @@ class ConversionService : Service() {
         if (TargetId.fromKey(input.targetFormat) == TargetId.PdfCompress) {
             return localizedText(R.string.message_pdf_compression_failed)
         }
+        if (TargetId.fromKey(input.targetFormat) == TargetId.PdfSplit) {
+            return localizedText(R.string.message_pdf_split_failed)
+        }
         when (input.pdfSecurityOptions.mode) {
             PdfSecurityMode.Encrypt -> return localizedText(R.string.text_task_message_pdf_encryption_failed)
             PdfSecurityMode.Decrypt -> return localizedText(R.string.text_task_message_pdf_decryption_failed)
@@ -3197,6 +3556,11 @@ class ConversionService : Service() {
             is Office2PdfUnavailableException, is UnsatisfiedLinkError -> localizedText(R.string.text_task_message_office_converter_could_not_start_on_this_device)
             else -> exception.localizedFailure(R.string.text_task_message_office_conversion_failed)
         }
+    }
+
+    private fun markdownFailureMessageFor(exception: Throwable): LocalizedText {
+        if (exception is LocalizedFailure) return exception.description
+        return exception.localizedFailure(R.string.message_markdown_conversion_failed)
     }
 
     private fun readOfficeInputBytes(input: ConversionTaskInput): ByteArray {
@@ -4827,6 +5191,7 @@ class ConversionService : Service() {
             ConversionMediaCategory.Image -> throw LocalizedFailure(localizedText(R.string.ui_failed))
             ConversionMediaCategory.Pdf -> throw LocalizedFailure(localizedText(R.string.message_compatibility_engine_is_not_connected_for_pdfs))
             ConversionMediaCategory.Document -> throw LocalizedFailure(localizedText(R.string.message_compatibility_engine_is_not_connected_for_documents))
+            ConversionMediaCategory.Markdown -> throw LocalizedFailure(localizedText(R.string.message_compatibility_engine_is_not_connected_for_documents))
             ConversionMediaCategory.Font -> throw LocalizedFailure(localizedText(R.string.message_compatibility_engine_is_not_connected_for_fonts))
             ConversionMediaCategory.Subtitle -> throw LocalizedFailure(localizedText(R.string.ui_failed))
         }
@@ -5659,6 +6024,7 @@ class ConversionService : Service() {
             ConversionMediaCategory.Image,
             ConversionMediaCategory.Pdf,
             ConversionMediaCategory.Document,
+            ConversionMediaCategory.Markdown,
             ConversionMediaCategory.Font,
             ConversionMediaCategory.Subtitle -> false
         }
@@ -5844,6 +6210,7 @@ class ConversionService : Service() {
                 ConversionMediaCategory.Image,
                 ConversionMediaCategory.Pdf,
                 ConversionMediaCategory.Document,
+                ConversionMediaCategory.Markdown,
                 ConversionMediaCategory.Font,
                 ConversionMediaCategory.Subtitle -> false
             }
@@ -5906,6 +6273,7 @@ class ConversionService : Service() {
             ConversionMediaCategory.Image,
             ConversionMediaCategory.Pdf,
             ConversionMediaCategory.Document,
+            ConversionMediaCategory.Markdown,
             ConversionMediaCategory.Font,
             ConversionMediaCategory.Subtitle -> return null
         }
@@ -6133,6 +6501,8 @@ class ConversionService : Service() {
                 localizedText(R.string.message_compatibility_engine_is_not_connected_for_pdfs)
             ConversionMediaCategory.Document ->
                 localizedText(R.string.message_compatibility_engine_is_not_connected_for_documents)
+            ConversionMediaCategory.Markdown ->
+                localizedText(R.string.message_compatibility_engine_is_not_connected_for_documents)
             ConversionMediaCategory.Font ->
                 localizedText(R.string.message_compatibility_engine_is_not_connected_for_fonts)
             ConversionMediaCategory.Subtitle ->
@@ -6303,6 +6673,7 @@ class ConversionService : Service() {
             ConversionMediaCategory.Image,
             ConversionMediaCategory.Pdf,
             ConversionMediaCategory.Document,
+            ConversionMediaCategory.Markdown,
             ConversionMediaCategory.Font,
             ConversionMediaCategory.Subtitle -> MediaTrimRange()
         }
@@ -6346,6 +6717,7 @@ class ConversionService : Service() {
             ConversionMediaCategory.Image -> false
             ConversionMediaCategory.Pdf -> false
             ConversionMediaCategory.Document -> false
+            ConversionMediaCategory.Markdown -> false
             ConversionMediaCategory.Font -> false
             ConversionMediaCategory.Subtitle -> false
         }
@@ -6518,7 +6890,8 @@ class ConversionService : Service() {
 
     private fun saveCompletedExport(
         input: ConversionTaskInput,
-        tempFile: File
+        tempFile: File,
+        outputDisplayNameOverride: String? = null
     ) {
         ConversionTaskStore.markSaving(taskIndex)
         updateNotification(localizedText(R.string.task_saving), (ConversionTaskStore.aggregateProgress() * 100).toInt())
@@ -6528,7 +6901,7 @@ class ConversionService : Service() {
             try {
                 val outputProfile = outputProfileFor(input)
                     ?: throw LocalizedFailure(localizedText(R.string.message_unsupported_output_format))
-                val outputDisplayName = outputNameFor(input, outputProfile.extension)
+                val outputDisplayName = outputDisplayNameOverride ?: outputNameFor(input, outputProfile.extension)
                 val tempFileSizeBytes = tempFile.length().takeIf { it >= 0L }
                 val createdOutput = createOutput(
                     input,
@@ -7200,7 +7573,8 @@ class ConversionService : Service() {
                         OutputProfile(extension = "md", mimeType = MIME_TYPE_MARKDOWN, kind = OutputMediaKind.Document)
                     TargetId.fromKey(input.targetFormat) == TargetId.PdfEncrypt ||
                         TargetId.fromKey(input.targetFormat) == TargetId.PdfDecrypt ||
-                        TargetId.fromKey(input.targetFormat) == TargetId.PdfCompress ->
+                        TargetId.fromKey(input.targetFormat) == TargetId.PdfCompress ||
+                        TargetId.fromKey(input.targetFormat) == TargetId.PdfSplit ->
                         OutputProfile(extension = "pdf", mimeType = MIME_TYPE_PDF, kind = OutputMediaKind.Document)
                     else -> null
                 }
@@ -7213,6 +7587,13 @@ class ConversionService : Service() {
                         OutputProfile(extension = "txt", mimeType = MIME_TYPE_TEXT, kind = OutputMediaKind.Document)
                     input.targetFormat.equals("MD", ignoreCase = true) ->
                         OutputProfile(extension = "md", mimeType = MIME_TYPE_MARKDOWN, kind = OutputMediaKind.Document)
+                    else -> null
+                }
+            }
+            ConversionMediaCategory.Markdown -> {
+                when {
+                    input.targetFormat.equals("PDF", ignoreCase = true) ->
+                        OutputProfile(extension = "pdf", mimeType = MIME_TYPE_PDF, kind = OutputMediaKind.Document)
                     else -> null
                 }
             }
@@ -7286,6 +7667,26 @@ class ConversionService : Service() {
         when (this) {
             is ImageExportResult.SingleFile -> file.delete()
             is ImageExportResult.FolderFiles -> files.forEach { it.delete() }
+        }
+    }
+
+    private sealed interface PdfSplitExportResult {
+        data class SingleFile(
+            val file: File,
+            val displayName: String
+        ) : PdfSplitExportResult
+
+        data class FolderFiles(
+            val files: List<File>,
+            val folderName: String,
+            val fileNames: List<String>
+        ) : PdfSplitExportResult
+    }
+
+    private fun PdfSplitExportResult.deleteTempFiles() {
+        when (this) {
+            is PdfSplitExportResult.SingleFile -> file.delete()
+            is PdfSplitExportResult.FolderFiles -> files.forEach { it.delete() }
         }
     }
 
@@ -7700,6 +8101,7 @@ class ConversionService : Service() {
         private const val PDF_CACHE_HEADROOM_BYTES = 16L * 1024L * 1024L
         private const val PDF_UNKNOWN_CACHE_MIN_FREE_BYTES = 256L * 1024L * 1024L
         private const val OFFICE_MAX_INPUT_BYTES = 64L * 1024L * 1024L
+        private const val MARKDOWN_MAX_INPUT_BYTES = 16L * 1024L * 1024L
         private const val FONT_MAX_INPUT_BYTES = 32L * 1024L * 1024L
         private const val SUBTITLE_MAX_INPUT_BYTES = 8L * 1024L * 1024L
         private const val SUBTITLE_INTERCHANGE_DIRECTORY = "subtitle-interchange"

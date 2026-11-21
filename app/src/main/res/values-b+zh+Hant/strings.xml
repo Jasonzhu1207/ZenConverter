@@ -27,6 +27,9 @@
     <plurals name="count_page_count_label">
         <item quantity="other">%1$d 頁</item>
     </plurals>
+    <plurals name="count_pdf_split_files_hint">
+        <item quantity="other">共 %1$d 個 PDF</item>
+    </plurals>
     <plurals name="count_selected">
         <item quantity="other">已選擇 %1$d 項</item>
     </plurals>
@@ -54,8 +57,8 @@
     <string name="help_audio_title">音訊</string>
     <string name="help_back">返回</string>
     <string name="help_body">選擇檔案、指定目標格式，轉換過程預設在本機完成。</string>
-    <string name="help_document_body">Office 文件轉為可讀檔案，合併多個 PDF，智慧壓縮瘦身，轉圖片/文字或新增密碼保護。</string>
-    <string name="help_document_formats">PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  合併 · 壓縮 · PNG · JPG · WEBP · TXT · MD</string>
+    <string name="help_document_body">Office 與 Markdown 文件轉為排版精良的 PDF，合併或按頁分割 PDF，智慧壓縮瘦身，轉圖片/文字或新增密碼保護。</string>
+    <string name="help_document_formats">PPTX · DOCX · XLSX · MD  →  PDF · TXT · MD  |  PDF  →  合併 · 分割 · 壓縮 · PNG · JPG · WEBP · TXT · MD</string>
     <string name="help_document_title">文件與 PDF</string>
     <string name="help_flow_input">選擇檔案</string>
     <string name="help_flow_output">使用結果</string>
@@ -719,4 +722,40 @@
     <string name="settings_action_bar_position_desc">清空與開始轉換操作列的顯示位置</string>
     <string name="ui_clear_tasks">清空</string>
     <string name="ui_start_conversion">開始 (%1$d)</string>
+    <string name="ui_pdf_split">分割 PDF</string>
+    <string name="option_pdf_split_hint">分頁分割</string>
+    <string name="ui_pdf_split_title">分頁分割</string>
+    <string name="ui_pdf_split_mode_custom">自訂分割</string>
+    <string name="ui_pdf_split_mode_every_page">每頁一個檔案</string>
+    <string name="ui_pdf_split_every_page_hint">一鍵將每一頁單獨匯出為一個 PDF 檔案，並儲存至新資料夾。</string>
+    <string name="ui_pdf_split_batch_note">可在上方批次切換為每頁一個檔案，或在下方為各個 PDF 單獨設定分割點。</string>
+    <string name="ui_pdf_split_start_page">起始頁</string>
+    <string name="ui_pdf_split_end_page">結束頁</string>
+    <string name="ui_pdf_split_cut_after_page">第 %1$d 頁後分割</string>
+    <string name="ui_pdf_split_add_cut">新增分割點</string>
+    <string name="ui_pdf_split_reset">重設</string>
+    <string name="ui_pdf_split_range_chip">第%1$d–%2$d頁</string>
+    <string name="ui_pdf_split_single_page_chip">第%1$d頁</string>
+    <string name="ui_pdf_split_slider_cut_chip">✂️%1$d 第%2$d頁後</string>
+    <string name="ui_pdf_split_page_count_pending">暫未讀取到總頁數（如加密 PDF）。可在下方直接輸入起始頁、結束頁或分割頁碼，或切換為每頁一個檔案。</string>
+    <string name="ui_pdf_split_start_end_order">結束頁不能小於起始頁</string>
+    <string name="message_pdf_split_failed">PDF 分割失敗</string>
+    <string name="message_pdf_split_requires_multiple_pages">只有包含 2 頁及以上的 PDF 才能分割</string>
+    <string name="message_pdf_split_invalid_page_range">起始頁和結束頁必須在 PDF 總頁數範圍內</string>
+    <string name="message_pdf_split_invalid_cut_points">分割點必須嚴格遞增且位於選定頁碼範圍內</string>
+    <string name="message_pdf_split_add_cut_or_range">請至少新增一個分割點，或縮小起始/結束頁範圍</string>
+    <string name="option_markdown_to_pdf_hint">Markdown 轉 PDF</string>
+    <string name="ui_markdown_font_size">正文字級</string>
+    <string name="option_markdown_page_letter">信紙 (Letter)</string>
+    <string name="option_markdown_font_compact">緊湊</string>
+    <string name="option_markdown_font_large">大號</string>
+    <string name="ui_markdown_fetch_remote_media">載入遠端圖片與影片首幀</string>
+    <string name="ui_markdown_fetch_remote_media_desc">預設關閉以嚴格保持離線隱私。開啟後將連線取得文件中的遠端圖片並擷取影片首幀；關閉時保留為可點擊的連結卡片。</string>
+    <string name="ui_markdown_assets_folder">本機資源資料夾</string>
+    <string name="ui_markdown_assets_folder_hint">關聯資料夾後可離線載入相對路徑的圖片與影片（透過「匯入資料夾」加入的文件會自動關聯）。</string>
+    <string name="ui_markdown_assets_folder_none">未關聯（可選）</string>
+    <string name="ui_markdown_link_folder">選擇資料夾</string>
+    <string name="ui_markdown_change_folder">變更</string>
+    <string name="message_markdown_file_is_too_large">Markdown 檔案超過 16 MiB 大小限制</string>
+    <string name="message_markdown_conversion_failed">Markdown 轉 PDF 失敗</string>
 </resources>

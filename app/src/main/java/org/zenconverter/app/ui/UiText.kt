@@ -22,6 +22,7 @@ import org.zenconverter.app.metadata.MetadataInspection
 import org.zenconverter.app.metadata.MetadataMessageKey
 import org.zenconverter.app.metadata.MetadataStatusMessage
 import org.zenconverter.app.metadata.MetadataTargetKind
+import org.zenconverter.app.conversion.PdfSplitValidationError
 import org.zenconverter.app.conversion.TargetId
 import org.zenconverter.app.settings.ActionBarPosition
 import org.zenconverter.app.updates.DownloadProgress
@@ -658,6 +659,100 @@ internal class UiText(private val context: Context) {
     val contactSheetIncludeTimestamp: String
         get() = text(R.string.ui_contact_sheet_include_timestamp)
 
+    val pdfSplitTitle: String
+        get() = text(R.string.ui_pdf_split_title)
+
+    val pdfSplitModeCustom: String
+        get() = text(R.string.ui_pdf_split_mode_custom)
+
+    val pdfSplitModeEveryPage: String
+        get() = text(R.string.ui_pdf_split_mode_every_page)
+
+    val pdfSplitEveryPageHint: String
+        get() = text(R.string.ui_pdf_split_every_page_hint)
+
+    val pdfSplitBatchNote: String
+        get() = text(R.string.ui_pdf_split_batch_note)
+
+    val pdfSplitStartPage: String
+        get() = text(R.string.ui_pdf_split_start_page)
+
+    val pdfSplitEndPage: String
+        get() = text(R.string.ui_pdf_split_end_page)
+
+    val pdfSplitAddCut: String
+        get() = text(R.string.ui_pdf_split_add_cut)
+
+    val pdfSplitReset: String
+        get() = text(R.string.ui_pdf_split_reset)
+
+    val pdfSplitPageCountPending: String
+        get() = text(R.string.ui_pdf_split_page_count_pending)
+
+    val pdfSplitStartEndOrder: String
+        get() = text(R.string.ui_pdf_split_start_end_order)
+
+    val markdownFontSize: String
+        get() = text(R.string.ui_markdown_font_size)
+
+    val markdownFetchRemoteMedia: String
+        get() = text(R.string.ui_markdown_fetch_remote_media)
+
+    val markdownFetchRemoteMediaDesc: String
+        get() = text(R.string.ui_markdown_fetch_remote_media_desc)
+
+    val markdownAssetsFolder: String
+        get() = text(R.string.ui_markdown_assets_folder)
+
+    val markdownAssetsFolderHint: String
+        get() = text(R.string.ui_markdown_assets_folder_hint)
+
+    val markdownAssetsFolderNone: String
+        get() = text(R.string.ui_markdown_assets_folder_none)
+
+    val markdownLinkFolder: String
+        get() = text(R.string.ui_markdown_link_folder)
+
+    val markdownChangeFolder: String
+        get() = text(R.string.ui_markdown_change_folder)
+
+    fun pdfSplitCutAfterLabel(page: Int): String = text(R.string.ui_pdf_split_cut_after_page, page)
+
+    fun pdfSplitRangeChip(startPage: Int, endPage: Int): String {
+        return if (startPage == endPage) {
+            text(R.string.ui_pdf_split_single_page_chip, startPage)
+        } else {
+            text(R.string.ui_pdf_split_range_chip, startPage, endPage)
+        }
+    }
+
+    fun pdfSplitSliderCutChip(index: Int, cutAfterPage: Int): String {
+        return text(R.string.ui_pdf_split_slider_cut_chip, index, cutAfterPage)
+    }
+
+    fun pdfSplitFilesHint(count: Int): String {
+        return quantity(R.plurals.count_pdf_split_files_hint, count, count)
+    }
+
+    fun pdfSplitValidationMessage(error: PdfSplitValidationError): String {
+        return when (error) {
+            PdfSplitValidationError.SinglePagePdf ->
+                text(R.string.message_pdf_split_requires_multiple_pages)
+            PdfSplitValidationError.EndBeforeStart ->
+                pdfSplitStartEndOrder
+            PdfSplitValidationError.InvalidStartPage,
+            PdfSplitValidationError.InvalidEndPage,
+            PdfSplitValidationError.StartExceedsPageCount,
+            PdfSplitValidationError.EndExceedsPageCount ->
+                text(R.string.message_pdf_split_invalid_page_range)
+            PdfSplitValidationError.SplitPointsOrder,
+            PdfSplitValidationError.SplitPointsOutOfRange ->
+                text(R.string.message_pdf_split_invalid_cut_points)
+            PdfSplitValidationError.NoSplitOrTrimConfigured ->
+                text(R.string.message_pdf_split_add_cut_or_range)
+        }
+    }
+
     fun selectedCount(count: Int): String = quantity(R.plurals.count_selected, count, count)
 
     fun batchCount(count: Int): String {
@@ -686,6 +781,7 @@ internal class UiText(private val context: Context) {
             TargetId.ContactSheetPng -> "PNG"
             TargetId.M4a -> "M4A"
             TargetId.PdfCompress -> optionValue("pdf_compress")
+            TargetId.PdfSplit -> optionValue("pdf_split")
             TargetId.PdfEncrypt -> optionValue("pdf_encrypt")
             TargetId.PdfDecrypt -> optionValue("pdf_decrypt")
             else -> optionValue(target.targetFormat.key)
@@ -984,6 +1080,7 @@ internal class UiText(private val context: Context) {
             FileCategory.Image -> optionValue("Image")
             FileCategory.Pdf -> optionValue("PDF")
             FileCategory.Document -> optionValue("Document")
+            FileCategory.Markdown -> optionValue("Markdown")
             FileCategory.Font -> optionValue("Font")
             FileCategory.Subtitle -> optionValue("Subtitle")
         }
@@ -1092,6 +1189,14 @@ internal class UiText(private val context: Context) {
             "pdf_encrypt" -> text(R.string.text_option_value_encrypt_pdf)
             "pdf_decrypt" -> text(R.string.text_option_value_decrypt_pdf)
             "pdf_compress" -> text(R.string.text_option_value_compress_pdf)
+            "pdf_split" -> text(R.string.ui_pdf_split)
+            "Split pages" -> text(R.string.option_pdf_split_hint)
+            "Markdown to PDF" -> text(R.string.option_markdown_to_pdf_hint)
+            "md_page_a4" -> "A4"
+            "md_page_letter" -> text(R.string.option_markdown_page_letter)
+            "md_font_compact" -> text(R.string.option_markdown_font_compact)
+            "md_font_standard" -> text(R.string.text_option_value_standard)
+            "md_font_large" -> text(R.string.option_markdown_font_large)
             "Reduce file size" -> text(R.string.text_option_value_reduce_file_size)
             "High quality" -> text(R.string.text_option_value_high_quality)
             "Small file" -> text(R.string.text_option_value_small_file)

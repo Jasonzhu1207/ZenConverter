@@ -49,11 +49,15 @@ import org.zenconverter.app.conversion.FileBasicInfo
 import org.zenconverter.app.conversion.FileBasicInfoReader
 import org.zenconverter.app.conversion.GifFrameExportMode
 import org.zenconverter.app.conversion.ImageExportOptions
+import org.zenconverter.app.conversion.MarkdownExportOptions
 import org.zenconverter.app.conversion.MediaTrimRange
 import org.zenconverter.app.conversion.OutputDestination
 import org.zenconverter.app.conversion.PdfExportOptions
 import org.zenconverter.app.conversion.PdfSecurityMode
 import org.zenconverter.app.conversion.PdfSecurityOptions
+import org.zenconverter.app.conversion.PdfSplitMode
+import org.zenconverter.app.conversion.PdfSplitValidationError
+import org.zenconverter.app.conversion.PdfSplitValidator
 import org.zenconverter.app.conversion.VideoExportOptions
 import org.zenconverter.app.metadata.MetadataInspection
 import org.zenconverter.app.metadata.MetadataMessageKey
@@ -122,6 +126,7 @@ class MainActivity : AppCompatActivity() {
     private var pendingMetadataMediaWriteGrant: PendingMetadataMediaWriteGrant? = null
     private var pendingMetadataReadPermissionRetry: PendingMetadataMediaWriteGrant? = null
     private var pendingAlbumPickKind: AlbumPickKind? = null
+    private var pendingMarkdownAssetsFileIds: List<String> = emptyList()
     private var activeQueuedPdfPasswordSelection: PendingQueuedPdfSelection? = null
     private var pdfProbeRunning = false
     private var pdfBoxReady = false
@@ -202,6 +207,26 @@ class MainActivity : AppCompatActivity() {
             } else {
                 enqueueUnifiedDocuments(documents)
             }
+        }
+    }
+
+    private val openMarkdownAssetsFolder = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        val targetIds = pendingMarkdownAssetsFileIds
+        pendingMarkdownAssetsFileIds = emptyList()
+        if (uri == null || targetIds.isEmpty()) return@registerForActivityResult
+
+        persistInputFilePermission(uri)
+        val label = describeTreeUri(uri)
+        updateQueuedFilesById(targetIds.toSet()) { file ->
+            file.copy(
+                markdownOptions = file.markdownOptions.copy(
+                    assetsTreeUri = uri,
+                    assetsFolderLabel = label,
+                    sourceParentDocumentId = null
+                )
+            )
         }
     }
 
@@ -346,6 +371,10 @@ class MainActivity : AppCompatActivity() {
                 },
                 onPickFolder = {
                     openImportFolder.launch(null)
+                },
+                onPickMarkdownAssetsFolder = { fileIds ->
+                    pendingMarkdownAssetsFileIds = fileIds
+                    openMarkdownAssetsFolder.launch(null)
                 },
                 onUpdateQueuedFile = { updatedFile ->
                     updateQueuedFile(updatedFile)
@@ -715,6 +744,11 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        firstQueuedPdfSplitValidationMessage()?.let { message ->
+            ConversionTaskStore.showMessage(message)
+            return
+        }
+
         val encryptFilesNeedingPassword = queuedFiles.filter {
             it.pdfSecurityOptions.mode == PdfSecurityMode.Encrypt &&
                 it.pdfSecurityOptions.outputPassword.isNullOrBlank()
@@ -772,8 +806,8 @@ class MainActivity : AppCompatActivity() {
                     return@runOnUiThread
                 }
                 when (result) {
-                    PdfProbeResult.Opened -> {
-                        markQueuedPdfPassword(file.id, null)
+                    is PdfProbeResult.Opened -> {
+                        markQueuedPdfPassword(file.id, null, result.pageCount)
                         processNextQueuedPdfSelection()
                     }
                     PdfProbeResult.PasswordRequired -> {
@@ -811,7 +845,7 @@ class MainActivity : AppCompatActivity() {
                     return@runOnUiThread
                 }
                 when (result) {
-                    PdfProbeResult.Opened -> markQueuedPdfPassword(file.id, password)
+                    is PdfProbeResult.Opened -> markQueuedPdfPassword(file.id, password, result.pageCount)
                     PdfProbeResult.PasswordRequired -> {
                         ConversionTaskStore.showMessage(localizedText(R.string.text_task_message_pdf_password_was_incorrect_or_unsupported))
                         queuedFiles.removeAll { it.id == file.id }
@@ -835,10 +869,47 @@ class MainActivity : AppCompatActivity() {
         return probePdf(selection, password)
     }
 
-    private fun markQueuedPdfPassword(fileId: String, password: String?) {
+    private fun markQueuedPdfPassword(
+        fileId: String,
+        password: String?,
+        probedPageCount: Int? = null
+    ) {
         val index = queuedFiles.indexOfFirst { it.id == fileId }
         if (index >= 0) {
-            queuedFiles[index] = queuedFiles[index].copy(pdfPasswords = listOf(password))
+            val current = queuedFiles[index]
+            val hadKnownPageCount = current.inputInfo?.pageCount != null
+            val effectivePageCount = current.inputInfo?.pageCount ?: probedPageCount?.takeIf { it > 0 }
+            val updatedInfo = if (probedPageCount != null && probedPageCount > 0 && !hadKnownPageCount) {
+                (current.inputInfo ?: FileBasicInfo(sizeBytes = current.sizeBytes)).copy(pageCount = probedPageCount)
+            } else {
+                current.inputInfo
+            }
+            val currentSplit = current.pdfOptions.splitOptions
+            val isUnconfiguredCustom = currentSplit.mode == PdfSplitMode.Custom &&
+                currentSplit.startPage == null &&
+                currentSplit.endPage == null &&
+                currentSplit.splitAfterPages.isEmpty()
+            val updatedPdfOptions = if (
+                !hadKnownPageCount &&
+                effectivePageCount != null &&
+                effectivePageCount >= 2 &&
+                TargetId.fromKey(current.targetFormat) == TargetId.PdfSplit &&
+                isUnconfiguredCustom
+            ) {
+                val suggestedCut = PdfSplitValidator.nextSuggestedSplitPage(currentSplit, effectivePageCount)
+                if (suggestedCut != null) {
+                    current.pdfOptions.copy(splitOptions = currentSplit.copy(splitAfterPages = listOf(suggestedCut)))
+                } else {
+                    current.pdfOptions
+                }
+            } else {
+                current.pdfOptions
+            }
+            queuedFiles[index] = current.copy(
+                pdfPasswords = listOf(password),
+                inputInfo = updatedInfo,
+                pdfOptions = updatedPdfOptions
+            )
         }
     }
 
@@ -863,6 +934,34 @@ class MainActivity : AppCompatActivity() {
     private fun firstQueuedTrimValidationMessage(): LocalizedText? {
         return queuedFiles.firstNotNullOfOrNull { file ->
             trimValidationMessageFor(file.trimRangeForCurrentTarget(), file.inputInfo?.durationMs)
+        }
+    }
+
+    private fun firstQueuedPdfSplitValidationMessage(): LocalizedText? {
+        return queuedFiles.firstNotNullOfOrNull { file ->
+            if (file.category != FileCategory.Pdf || TargetId.fromKey(file.targetFormat) != TargetId.PdfSplit) {
+                return@firstNotNullOfOrNull null
+            }
+            val error = PdfSplitValidator.validatePdfSplit(
+                options = file.pdfOptions.splitOptions,
+                totalPages = file.inputInfo?.pageCount,
+                strictPageCountRequired = false
+            ) ?: return@firstNotNullOfOrNull null
+            when (error) {
+                PdfSplitValidationError.SinglePagePdf ->
+                    localizedText(R.string.message_pdf_split_requires_multiple_pages)
+                PdfSplitValidationError.InvalidStartPage,
+                PdfSplitValidationError.InvalidEndPage,
+                PdfSplitValidationError.EndBeforeStart,
+                PdfSplitValidationError.StartExceedsPageCount,
+                PdfSplitValidationError.EndExceedsPageCount ->
+                    localizedText(R.string.message_pdf_split_invalid_page_range)
+                PdfSplitValidationError.SplitPointsOrder,
+                PdfSplitValidationError.SplitPointsOutOfRange ->
+                    localizedText(R.string.message_pdf_split_invalid_cut_points)
+                PdfSplitValidationError.NoSplitOrTrimConfigured ->
+                    localizedText(R.string.message_pdf_split_add_cut_or_range)
+            }
         }
     }
 
@@ -1386,6 +1485,8 @@ class MainActivity : AppCompatActivity() {
                 extension.equals("pdf", ignoreCase = true) -> FileCategory.Pdf
             normalizedMimeType in OFFICE_MIME_TYPES ||
                 extension in OFFICE_INPUT_EXTENSIONS -> FileCategory.Document
+            normalizedMimeType in MARKDOWN_MIME_TYPES ||
+                extension in MARKDOWN_INPUT_EXTENSIONS -> FileCategory.Markdown
             normalizedMimeType in FONT_MIME_TYPES ||
                 extension in FONT_INPUT_EXTENSIONS -> FileCategory.Font
             normalizedMimeType in SUBTITLE_MIME_TYPES ||
@@ -1419,6 +1520,9 @@ class MainActivity : AppCompatActivity() {
             FileCategory.Document -> FileCategory.Document.formats.map {
                 ExternalImportTarget(FileCategory.Document, it)
             }
+            FileCategory.Markdown -> FileCategory.Markdown.formats.map {
+                ExternalImportTarget(FileCategory.Markdown, it)
+            }
             FileCategory.Font -> FileCategory.Font.formats.map {
                 ExternalImportTarget(FileCategory.Font, it)
             }
@@ -1440,6 +1544,7 @@ class MainActivity : AppCompatActivity() {
             FileCategory.Image -> if (extension in JPEG_INPUT_EXTENSIONS) "PNG" else "JPG"
             FileCategory.Pdf -> "PNG"
             FileCategory.Document -> "PDF"
+            FileCategory.Markdown -> "PDF"
             FileCategory.Font -> if (extension == "woff" || extension == "woff2") "TTF/OTF" else "WOFF2"
             FileCategory.Subtitle -> "SRT"
             null -> null
@@ -1733,6 +1838,7 @@ class MainActivity : AppCompatActivity() {
         val documents = mutableListOf<SelectedDocument>()
         val visitedDirectories = mutableSetOf<String>()
         val rootDocumentId = DocumentsContract.getTreeDocumentId(treeUri)
+        val folderLabel = describeTreeUri(treeUri)
 
         fun collectChildren(parentDocumentId: String) {
             if (!visitedDirectories.add(parentDocumentId)) return
@@ -1845,7 +1951,10 @@ class MainActivity : AppCompatActivity() {
                             displayName = displayName,
                             mimeType = mimeType,
                             fallbackSizeBytes = sizeBytes
-                        )
+                        ),
+                        assetsTreeUri = treeUri,
+                        assetsFolderLabel = folderLabel,
+                        sourceParentDocumentId = parentDocumentId
                     )
                 )
             }
@@ -1927,12 +2036,13 @@ class MainActivity : AppCompatActivity() {
     private fun probePdfWithRenderer(uri: Uri, password: String?): PdfProbeResult {
         return try {
             val renderer = openPdfRenderer(uri, password)
+            val pageCount = renderer.pageCount.takeIf { it > 0 }
             renderer.close()
-            PdfProbeResult.Opened
+            PdfProbeResult.Opened(pageCount)
         } catch (exception: SecurityException) {
             PdfProbeResult.PasswordRequired
         } catch (exception: IllegalArgumentException) {
-            PdfProbeResult.Opened
+            PdfProbeResult.Opened()
         } catch (exception: IOException) {
             PdfProbeResult.Failed(localizedText(R.string.text_task_message_could_not_open_this_pdf))
         } catch (exception: Throwable) {
@@ -1955,7 +2065,7 @@ class MainActivity : AppCompatActivity() {
                     if (document.numberOfPages <= 0) {
                         PdfProbeResult.Failed(localizedText(R.string.text_task_message_pdf_has_no_pages))
                     } else {
-                        PdfProbeResult.Opened
+                        PdfProbeResult.Opened(document.numberOfPages)
                     }
                 }
             } ?: PdfProbeResult.Failed(localizedText(R.string.text_task_message_could_not_open_this_pdf))
@@ -2045,7 +2155,10 @@ private data class SelectedDocument(
     val displayName: String,
     val sizeBytes: Long?,
     val mimeType: String?,
-    val inputInfo: FileBasicInfo?
+    val inputInfo: FileBasicInfo?,
+    val assetsTreeUri: Uri? = null,
+    val assetsFolderLabel: String? = null,
+    val sourceParentDocumentId: String? = null
 )
 
 private enum class MetadataWriteOperation {
@@ -2088,7 +2201,7 @@ private data class FolderChildDocument(
 )
 
 private sealed interface PdfProbeResult {
-    object Opened : PdfProbeResult
+    data class Opened(val pageCount: Int? = null) : PdfProbeResult
     object PasswordRequired : PdfProbeResult
     data class Failed(val message: LocalizedText) : PdfProbeResult
 }
@@ -2100,6 +2213,15 @@ private fun SelectedDocument.toQueuedFile(
     gifFrameMode: GifFrameExportMode = GifFrameExportMode.FirstFrame,
     pdfPassword: String? = null
 ): QueuedFile {
+    val initialMarkdownOptions = if (sourceCategory == FileCategory.Markdown && assetsTreeUri != null) {
+        MarkdownExportOptions(
+            assetsTreeUri = assetsTreeUri,
+            assetsFolderLabel = assetsFolderLabel,
+            sourceParentDocumentId = sourceParentDocumentId
+        )
+    } else {
+        MarkdownExportOptions()
+    }
     return QueuedFile(
         id = UUID.randomUUID().toString(),
         uri = uri,
@@ -2115,6 +2237,7 @@ private fun SelectedDocument.toQueuedFile(
         audioOptions = AudioExportOptions(),
         imageOptions = ImageExportOptions(quality = 85),
         pdfOptions = PdfExportOptions(),
+        markdownOptions = initialMarkdownOptions,
         inputInfo = inputInfo,
         gifFrameMode = gifFrameMode,
         pdfSecurityOptions = request.pdfSecurityOptions,
@@ -2151,6 +2274,7 @@ private fun QueuedFile.trimRangeForCurrentTarget(): MediaTrimRange {
         FileCategory.Image,
         FileCategory.Pdf,
         FileCategory.Document,
+        FileCategory.Markdown,
         FileCategory.Font,
         FileCategory.Subtitle -> MediaTrimRange()
     }
@@ -2186,6 +2310,7 @@ private fun QueuedFile.toConversionTaskInput(
         audioOptions = audioOptions,
         imageOptions = imageOptions,
         pdfOptions = pdfOptions,
+        markdownOptions = markdownOptions,
         pdfSecurityOptions = pdfSecurityOptions,
         inputInfo = inputInfo,
         gifFrameMode = gifFrameMode,
@@ -2374,6 +2499,11 @@ private fun PendingSelection.isPdfCompressTarget(): Boolean {
         targetFormat.id == TargetId.PdfCompress
 }
 
+private fun PendingSelection.isPdfSplitTarget(): Boolean {
+    return category == FileCategory.Pdf &&
+        targetFormat.id == TargetId.PdfSplit
+}
+
 private fun PendingSelection.usesPdfBoxTarget(): Boolean {
     return category == FileCategory.Pdf &&
         (
@@ -2381,6 +2511,7 @@ private fun PendingSelection.usesPdfBoxTarget(): Boolean {
                 isPdfEncryptTarget() ||
                 isPdfDecryptTarget() ||
                 isPdfCompressTarget() ||
+                isPdfSplitTarget() ||
                 pdfSecurityOptions.mode != PdfSecurityMode.None ||
                 targetFormat.extension.equals("txt", ignoreCase = true) ||
                 targetFormat.extension.equals("md", ignoreCase = true)
@@ -2432,6 +2563,7 @@ private fun FileCategory.toConversionCategory(): ConversionMediaCategory {
         FileCategory.Image -> ConversionMediaCategory.Image
         FileCategory.Pdf -> ConversionMediaCategory.Pdf
         FileCategory.Document -> ConversionMediaCategory.Document
+        FileCategory.Markdown -> ConversionMediaCategory.Markdown
         FileCategory.Font -> ConversionMediaCategory.Font
         FileCategory.Subtitle -> ConversionMediaCategory.Subtitle
     }
@@ -2518,6 +2650,11 @@ private val OFFICE_MIME_TYPES = setOf(
     MIME_TYPE_DOCX,
     MIME_TYPE_PPTX,
     MIME_TYPE_XLSX
+)
+private val MARKDOWN_INPUT_EXTENSIONS = setOf("md", "markdown", "mdown", "mkd")
+private val MARKDOWN_MIME_TYPES = setOf(
+    "text/markdown",
+    "text/x-markdown"
 )
 private val FONT_INPUT_EXTENSIONS = setOf("ttf", "otf", "woff", "woff2")
 private val FONT_MIME_TYPES = setOf(

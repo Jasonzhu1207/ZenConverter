@@ -33,6 +33,10 @@
         <item quantity="one">%1$d page</item>
         <item quantity="other">%1$d pages</item>
     </plurals>
+    <plurals name="count_pdf_split_files_hint">
+        <item quantity="one">%1$d PDF file</item>
+        <item quantity="other">%1$d PDF files</item>
+    </plurals>
     <plurals name="count_selected">
         <item quantity="one">%1$d selected</item>
         <item quantity="other">%1$d selected</item>
@@ -64,8 +68,8 @@
     <string name="help_audio_title">Audio</string>
     <string name="help_back">Back</string>
     <string name="help_body">Choose a file, pick a target, and let the conversion run locally.</string>
-    <string name="help_document_body">Turn Office files into readable documents, merge PDFs, compress PDF size, render PDFs to images/text, or protect with passwords.</string>
-    <string name="help_document_formats">PPTX · DOCX · XLSX  →  PDF · TXT · MD  |  PDF  →  Merge · Compress · PNG · JPG · WEBP · TXT · MD</string>
+    <string name="help_document_body">Turn Office and Markdown files into rich PDFs, merge or split PDFs by page, compress PDF size, render PDFs to images/text, or protect with passwords.</string>
+    <string name="help_document_formats">PPTX · DOCX · XLSX · MD  →  PDF · TXT · MD  |  PDF  →  Merge · Split · Compress · PNG · JPG · WEBP · TXT · MD</string>
     <string name="help_document_title">Documents and PDF</string>
     <string name="help_flow_input">Choose</string>
     <string name="help_flow_output">Use result</string>
@@ -737,4 +741,40 @@
     <string name="settings_action_bar_position_desc">Position of the clear and start conversion buttons</string>
     <string name="ui_clear_tasks">Clear</string>
     <string name="ui_start_conversion">Start (%1$d)</string>
+    <string name="ui_pdf_split">Split PDF</string>
+    <string name="option_pdf_split_hint">Split pages</string>
+    <string name="ui_pdf_split_title">Page split</string>
+    <string name="ui_pdf_split_mode_custom">Custom split</string>
+    <string name="ui_pdf_split_mode_every_page">Every page</string>
+    <string name="ui_pdf_split_every_page_hint">Exports each page into its own PDF file inside a new folder.</string>
+    <string name="ui_pdf_split_batch_note">Choose Every page for all files here, or adjust individual split points below.</string>
+    <string name="ui_pdf_split_start_page">Start page</string>
+    <string name="ui_pdf_split_end_page">End page</string>
+    <string name="ui_pdf_split_cut_after_page">Cut after page %1$d</string>
+    <string name="ui_pdf_split_add_cut">Add split point</string>
+    <string name="ui_pdf_split_reset">Reset</string>
+    <string name="ui_pdf_split_range_chip">P%1$d–%2$d</string>
+    <string name="ui_pdf_split_single_page_chip">P%1$d</string>
+    <string name="ui_pdf_split_slider_cut_chip">✂️%1$d P%2$d|</string>
+    <string name="ui_pdf_split_page_count_pending">Page count will load when opened. Enter exact start, end, or cut-after page numbers below, or switch to Every page.</string>
+    <string name="ui_pdf_split_start_end_order">End page must be greater than or equal to start page</string>
+    <string name="message_pdf_split_failed">PDF split failed</string>
+    <string name="message_pdf_split_requires_multiple_pages">Only PDFs with 2 or more pages can be split</string>
+    <string name="message_pdf_split_invalid_page_range">Start and end pages must be within the PDF page count</string>
+    <string name="message_pdf_split_invalid_cut_points">Split points must be strictly increasing within the selected page range</string>
+    <string name="message_pdf_split_add_cut_or_range">Add at least one split point or narrow the page range</string>
+    <string name="option_markdown_to_pdf_hint">Markdown to PDF</string>
+    <string name="ui_markdown_font_size">Text size</string>
+    <string name="option_markdown_page_letter">Letter</string>
+    <string name="option_markdown_font_compact">Compact</string>
+    <string name="option_markdown_font_large">Large</string>
+    <string name="ui_markdown_fetch_remote_media">Load remote images &amp; videos</string>
+    <string name="ui_markdown_fetch_remote_media_desc">Off by default to stay offline. When on, remote images and video first frames are fetched over the network; otherwise they appear as clickable cards.</string>
+    <string name="ui_markdown_assets_folder">Local assets folder</string>
+    <string name="ui_markdown_assets_folder_hint">Link a folder so relative image or video paths resolve offline. Folder imports link this automatically.</string>
+    <string name="ui_markdown_assets_folder_none">Not linked (optional)</string>
+    <string name="ui_markdown_link_folder">Choose folder</string>
+    <string name="ui_markdown_change_folder">Change</string>
+    <string name="message_markdown_file_is_too_large">Markdown file exceeds the 16 MiB input limit</string>
+    <string name="message_markdown_conversion_failed">Markdown to PDF conversion failed</string>
 </resources>

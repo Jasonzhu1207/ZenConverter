@@ -39,6 +39,8 @@ as supported until it has a tested path, sample files, and failure behavior.
 | PDF | TXT / MD | Stable | PDFBox-Android | Extracts selectable text with page separators. Markdown output is lightweight: a document title plus per-page headings and extracted text. This is not OCR; scanned PDFs without a text layer fail clearly. |
 | PDF | Encrypt PDF / Decrypt PDF | Stable | PDFBox-Android | Encrypt applies one open password to the output PDF. Decrypt removes security only after the source PDF opens normally or with the user-provided password. This is not password cracking; passwords are kept in memory only and are not logged or persisted. |
 | PDF | Compress PDF | Stable | PDFBox-Android | Compresses PDF files by downsampling and re-encoding embedded images (High Quality 85%/2160px, Balanced 70%/1440px, Small File 50%/1080px) and stripping redundant thumbnail metadata through PDFBox-Android. Preserves selectable text, vectors, and page layouts. |
+| PDF | Split PDF | Beta | PDFBox-Android | Splits a multi-page PDF by selectable start/end pages and custom split points (up to 24 cuts) or exports every page as its own PDF inside a subfolder. Preserves page objects and text layers without rasterizing; password-protected sources can open with transient passwords. |
+| MD / MARKDOWN / MDOWN / MKD | PDF | Beta | commonmark-java + Android PdfDocument + PDFBox-Android | Converts Markdown (up to 16 MiB) into formatted A4 or US Letter PDFs with clickable links and H1–H3 outline bookmarks. Handles GFM tables, task lists, strikethrough, frontmatter, callouts, `<details>`, footnotes, common inline HTML/CSS sizes/weights/colors, basic Unicode math symbols, syntax-highlighted code blocks, local SAF folder or `data:` images, local video first-frame extraction, and opt-in (off by default) remote media fetching. |
 | DOCX / PPTX / XLSX | PDF / TXT / MD | Beta | office2pdf native / PDFBox-Android | Converts OOXML Office files to PDF through the bundled `arm64-v8a` `libzen_office2pdf.so`. TXT/MD outputs reuse that intermediate PDF and extract its selectable text with PDFBox-Android. The current rebuilt library receives bundled Noto Sans and Noto Serif CJK directories through the explicit font-path JNI entry, and Simplified Chinese text rendering has been verified on an arm64 physical device. This path reads each whole input into memory, caps source files at 64 MiB, and does not promise Microsoft Office layout fidelity; overlapping text, shifted shapes, and degraded slide/spreadsheet layout remain expected on complex files. |
 | TTF / OTF | WOFF2 | Beta | woff2 native | Compresses a TrueType (glyf) or OpenType CFF font to WOFF2 through the bundled `arm64-v8a` `libzen_woff2.so` (Google woff2). Whole-file byte-level container conversion with no options; font metadata is not re-written. arm64-v8a only. |
 | TTF / OTF | WOFF | Beta | Pure Kotlin zlib | Compresses a TrueType or OpenType CFF font to WOFF 1.0 using `java.util.zip` in pure Kotlin, with no native dependency. Whole-file byte-level container conversion; WOFF metadata and private blocks are not preserved. |
@@ -302,16 +304,53 @@ as supported until it has a tested path, sample files, and failure behavior.
   normally or with the correct source password. It does not brute-force or
   recover unknown passwords; unencrypted PDFs can still be saved as normal PDF
   copies.
-- PDFBox-backed PDF merge, PDF to TXT/MD, and PDF encrypt/decrypt can load
+- PDFBox-backed PDF merge, PDF split, PDF compress, PDF to TXT/MD, and PDF encrypt/decrypt can load
   password-protected source PDFs with transient in-memory passwords. Source and
   output passwords are not logged or persisted.
+- PDF split requires at least 2 pages. Custom mode splits between 1-based page
+  ranges and up to 24 cut points (exporting a single PDF when narrowed to one
+  range, or numbered PDFs inside a subfolder for multiple parts). Every-page mode
+  exports each page to its own PDF inside a subfolder. Split parts preserve page
+  objects without rasterization; output files are unencrypted.
 
-Manual PDF sample coverage should include ordinary multi-PDF merge, mixed
-text/scanned/image PDFs, mixed page sizes, large PDFs, cancellation during cache
-or write, password-protected sources, text-layer PDF to TXT/MD, mixed-content PDF
-to TXT/MD, scanned PDF to TXT/MD with the no-selectable-text failure, encrypted
-PDF creation, correct-password decryption, wrong-password failure, and
-unencrypted PDF decryption-as-copy.
+Manual PDF sample coverage should include ordinary multi-PDF merge, PDF split
+  (midpoint, multi-cut, single-range trim, and every-page export on 2+ page and
+  encrypted sources), single-page split rejection, mixed
+  text/scanned/image PDFs, mixed page sizes, large PDFs, cancellation during cache
+  or write, password-protected sources, text-layer PDF to TXT/MD, mixed-content PDF
+  to TXT/MD, scanned PDF to TXT/MD with the no-selectable-text failure, encrypted
+  PDF creation, correct-password decryption, wrong-password failure, and
+  unencrypted PDF decryption-as-copy.
+
+## Current Markdown Document Limits
+
+- Markdown inputs accept `.md`, `.markdown`, `.mdown`, and `.mkd` files (read up
+  to 16 MiB as UTF-8 with BOM stripped or GB18030 fallback) and output PDF only.
+- Uses `commonmark-java` 0.21.0 with GFM tables, strikethrough, autolink, task
+  list items, and YAML frontmatter, plus a fence-aware preprocessor and
+  inline/block HTML+CSS parser (`<font>`, `<span>`, `style="..."`, `align`,
+  `<center>`, `<details>`, `<u>`, `<sub>`, `<sup>`, `<kbd>`, `<table>` with
+  `colspan`, `==highlight==`, footnotes, GitHub-style callouts, and code block
+  syntax highlighting).
+- Complex HTML/CSS layouts (`flexbox`, `grid`, absolute positioning, external
+  `<link>` stylesheets, `<script>` execution) and full LaTeX math equation
+  typesetting are outside scope; `$math$` / `$$math$$` expressions render using
+  Unicode mathematical symbols, Greek letters, fractions, and superscript/subscript
+  spans best-effort.
+- Text is rendered vectorially via Android `StaticLayout` + `PdfDocument` (A4 or
+  US Letter, Compact/Standard/Large scale) using system fonts including CJK and
+  color emoji with zero downloaded font assets. A `PDFBox-Android` post-pass adds
+  clickable `URI` link annotations and H1–H3 PDF outline bookmarks.
+- Local relative images and videos resolve offline from a linked SAF assets
+  folder (auto-linked during folder import or manually chosen per file/batch).
+  `data:` Base64 raster images always decode offline; raw SVG/shields badges
+  fall back to clean inline pill badges.
+- Remote HTTP/HTTPS images and video streams remain **disabled by default** to
+  preserve the offline-first guarantee. When disabled, remote media links and
+  `<video>` tags render cleanly as clickable link cards; when enabled, images are
+  bounded to 12 MiB each (40 remote items / 60 MiB total cap), and remote or
+  local videos extract their first frame via `MediaMetadataRetriever` with an
+  FFmpegKit fallback and `<video poster>` fallback.
 
 ## Current Office Document Limits
 

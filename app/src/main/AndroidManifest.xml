@@ -40,6 +40,8 @@
                 <data android:mimeType="video/*" />
                 <data android:mimeType="audio/*" />
                 <data android:mimeType="application/pdf" />
+                <data android:mimeType="text/markdown" />
+                <data android:mimeType="text/x-markdown" />
                 <data android:mimeType="application/octet-stream" />
                 <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
                 <data android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation" />
@@ -60,6 +62,8 @@
                 <data android:scheme="content" android:mimeType="video/*" />
                 <data android:scheme="content" android:mimeType="audio/*" />
                 <data android:scheme="content" android:mimeType="application/pdf" />
+                <data android:scheme="content" android:mimeType="text/markdown" />
+                <data android:scheme="content" android:mimeType="text/x-markdown" />
                 <data android:scheme="content" android:mimeType="application/octet-stream" />
                 <data android:scheme="content" android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
                 <data android:scheme="content" android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation" />
@@ -68,6 +72,8 @@
                 <data android:scheme="file" android:mimeType="video/*" />
                 <data android:scheme="file" android:mimeType="audio/*" />
                 <data android:scheme="file" android:mimeType="application/pdf" />
+                <data android:scheme="file" android:mimeType="text/markdown" />
+                <data android:scheme="file" android:mimeType="text/x-markdown" />
                 <data android:scheme="file" android:mimeType="application/octet-stream" />
                 <data android:scheme="file" android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
                 <data android:scheme="file" android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation" />
@@ -103,6 +109,10 @@
                 <data android:scheme="file" android:pathPattern=".*\\.heif" />
                 <data android:scheme="file" android:pathPattern=".*\\.ico" />
                 <data android:scheme="file" android:pathPattern=".*\\.pdf" />
+                <data android:scheme="file" android:pathPattern=".*\\.md" />
+                <data android:scheme="file" android:pathPattern=".*\\.markdown" />
+                <data android:scheme="file" android:pathPattern=".*\\.mdown" />
+                <data android:scheme="file" android:pathPattern=".*\\.mkd" />
                 <data android:scheme="file" android:pathPattern=".*\\.docx" />
                 <data android:scheme="file" android:pathPattern=".*\\.pptx" />
                 <data android:scheme="file" android:pathPattern=".*\\.xlsx" />
