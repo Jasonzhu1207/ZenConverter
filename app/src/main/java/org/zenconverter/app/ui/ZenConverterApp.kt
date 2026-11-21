@@ -464,7 +464,8 @@ data class TaskProgress(
     val outputUris: List<Uri> = emptyList(),
     val outputDirectoryUri: Uri? = null,
     val outputMimeType: String? = null,
-    val outputInfo: FileBasicInfo? = null
+    val outputInfo: FileBasicInfo? = null,
+    val noticeMessage: LocalizedText? = null
 )
 
 enum class TaskProgressStatus {
@@ -597,6 +598,22 @@ private fun isAnimatedVideoTarget(targetFormat: TargetFormat): Boolean {
         targetFormat.id == TargetId.Webp ||
         targetFormat.extension.equals("gif", ignoreCase = true) ||
         targetFormat.extension.equals("webp", ignoreCase = true)
+}
+
+private fun isGifVideoTarget(targetFormat: TargetFormat): Boolean {
+    return targetFormat.id == TargetId.Gif ||
+        targetFormat.extension.equals("gif", ignoreCase = true)
+}
+
+internal const val VIDEO_GIF_MODE_STANDARD = "Video gif mode standard"
+internal const val VIDEO_GIF_MODE_STICKER = "Video gif mode sticker"
+private val VIDEO_GIF_MODE_OPTIONS = listOf(
+    VIDEO_GIF_MODE_STANDARD,
+    VIDEO_GIF_MODE_STICKER
+)
+
+private fun gifStickerModeLabelFor(enabled: Boolean): String {
+    return if (enabled) VIDEO_GIF_MODE_STICKER else VIDEO_GIF_MODE_STANDARD
 }
 
 internal const val VIDEO_COMPRESSION_STANDARD = "Video compression standard"
@@ -3234,6 +3251,9 @@ private fun BatchVideoTargetOptions(
     }
 
     val isAnimatedTarget = isAnimatedVideoTarget(target)
+    val isGifTarget = isGifVideoTarget(target)
+    val commonGifMode = commonBatchLabel(files) { gifStickerModeLabelFor(it.videoOptions.gifStickerMode) }
+    val gifStickerActive = isGifTarget && commonGifMode == VIDEO_GIF_MODE_STICKER
     val commonInterpolation = commonBatchLabel(files) {
         videoInterpolationLabelFor(it.videoOptions.frameInterpolation)
     }
@@ -3249,6 +3269,30 @@ private fun BatchVideoTargetOptions(
 
     OptionGrid {
         InsetGroupCard {
+            if (isGifTarget) {
+                OptionDropdown(
+                    menuId = "batch-video-gif-mode",
+                    label = texts.videoCompressionMode,
+                    selected = commonGifMode,
+                    options = VIDEO_GIF_MODE_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = !gifStickerActive
+                ) { value ->
+                    onOpenMenuChange(null)
+                    onUpdateFiles(
+                        files.map { file ->
+                            file.copy(
+                                videoOptions = file.videoOptions.copy(
+                                    gifStickerMode = value == VIDEO_GIF_MODE_STICKER
+                                )
+                            )
+                        }
+                    )
+                }
+            }
+
             if (!isAnimatedTarget) {
                 OptionDropdown(
                     menuId = "batch-video-frame-interpolation",
@@ -3286,7 +3330,7 @@ private fun BatchVideoTargetOptions(
                 }
             }
 
-            if ((!isInterpolationActive || commonInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X) && (isAnimatedTarget || standardCompressionActive || mixedCompression)) {
+            if ((!isInterpolationActive || commonInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X) && ((isAnimatedTarget && !gifStickerActive) || (!isAnimatedTarget && (standardCompressionActive || mixedCompression)))) {
                 val anySourceExceeds1080 = files.any { file ->
                     val w = file.inputInfo?.width ?: 0
                     val h = file.inputInfo?.height ?: 0
@@ -3500,6 +3544,10 @@ private fun BatchVideoTargetOptions(
                     )
                     .padding(horizontal = 10.dp, vertical = 7.dp)
             )
+        }
+
+        if (gifStickerActive) {
+            VideoOptionSummaryBanner(text = texts.gifStickerPresetSummary)
         }
 
         if (presetCompressionActive) {
@@ -4786,6 +4834,7 @@ private fun VideoOptions(
     targetFormat: TargetFormat,
     trimInputMode: TrimInputMode,
     frameInterpolation: String = VIDEO_INTERPOLATION_OFF,
+    gifStickerMode: String = VIDEO_GIF_MODE_STANDARD,
     isRifeModelDownloaded: Boolean = false,
     openMenuId: String?,
     onOpenMenuChange: (String?) -> Unit,
@@ -4794,6 +4843,7 @@ private fun VideoOptions(
     onTrimEndSecondsChange: (Double?) -> Unit,
     onTrimRangeChange: (MediaTrimRange) -> Unit,
     onFrameInterpolationChange: (String) -> Unit = {},
+    onGifStickerModeChange: (String) -> Unit = {},
     onResolutionChange: (String) -> Unit,
     onCompressionModeChange: (String) -> Unit,
     onBitrateChange: (String) -> Unit,
@@ -4846,6 +4896,8 @@ private fun VideoOptions(
     }
 
     val isAnimatedTarget = isAnimatedVideoTarget(targetFormat)
+    val isGifTarget = isGifVideoTarget(targetFormat)
+    val isGifStickerActive = isGifTarget && gifStickerMode == VIDEO_GIF_MODE_STICKER
     val isInterpolationActive = !isAnimatedTarget && videoInterpolationModeFor(frameInterpolation) != VideoFrameInterpolationMode.Off
     val disabledInterpolationOptions = if (isRifeModelDownloaded) emptySet() else setOf(VIDEO_INTERPOLATION_RIFE_2X)
     val isOpticalFlow = !isAnimatedTarget && frameInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X
@@ -4872,6 +4924,19 @@ private fun VideoOptions(
             onTrimRangeChange = onTrimRangeChange
         )
         InsetGroupCard {
+            if (isGifTarget) {
+                OptionDropdown(
+                    menuId = "${menuPrefix}video-gif-mode",
+                    label = texts.videoCompressionMode,
+                    selected = gifStickerMode,
+                    options = VIDEO_GIF_MODE_OPTIONS,
+                    texts = texts,
+                    openMenuId = openMenuId,
+                    onOpenMenuChange = onOpenMenuChange,
+                    showDivider = !isGifStickerActive,
+                    onSelected = onGifStickerModeChange
+                )
+            }
             if (!isAnimatedTarget) {
                 OptionDropdown(
                     menuId = "${menuPrefix}video-frame-interpolation",
@@ -4899,7 +4964,7 @@ private fun VideoOptions(
                     onSelected = onCompressionModeChange
                 )
             }
-            if ((!isInterpolationActive || frameInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X) && (isAnimatedTarget || isStandardCompression)) {
+            if ((!isInterpolationActive || frameInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X) && ((isAnimatedTarget && !isGifStickerActive) || (!isAnimatedTarget && isStandardCompression))) {
                 OptionDropdown(
                     menuId = "${menuPrefix}video-size",
                     label = texts.resolution,
@@ -5011,6 +5076,9 @@ private fun VideoOptions(
                     .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.14f), RoundedCornerShape(8.dp))
                     .padding(horizontal = 10.dp, vertical = 7.dp)
             )
+        }
+        if (isGifStickerActive) {
+            VideoOptionSummaryBanner(text = texts.gifStickerPresetSummary)
         }
         if (presetCompressionActive) {
             Text(
@@ -7630,6 +7698,11 @@ private fun FileRow(
                 text = formatResultInfoLine(file, progress.outputInfo, texts)
             )
         }
+        if (progress?.status == TaskProgressStatus.Completed && progress.noticeMessage != null) {
+            ResultNoticeLine(
+                text = texts.taskMessage(progress.noticeMessage)
+            )
+        }
         if (progress?.status == TaskProgressStatus.Failed) {
             Text(
                 text = texts.taskMessage(progress.message),
@@ -7752,6 +7825,7 @@ private fun QueuedFileOptionsPanel(
                     if (w > 0 && h > 0) minOf(w, h) else null
                 },
                 frameInterpolation = videoInterpolationLabelFor(file.videoOptions.frameInterpolation),
+                gifStickerMode = gifStickerModeLabelFor(file.videoOptions.gifStickerMode),
                 isRifeModelDownloaded = isRifeModelDownloaded,
                 openMenuId = openMenuId,
                 onOpenMenuChange = onOpenMenuChange,
@@ -7809,6 +7883,15 @@ private fun QueuedFileOptionsPanel(
                                 maxShortSidePixels = clampedRes,
                                 compressionMode = if (isInterpolationActive) VideoCompressionMode.Standard else file.videoOptions.compressionMode,
                                 advanced = if (isInterpolationActive) VideoAdvancedOptions() else file.videoOptions.advanced
+                            )
+                        )
+                    )
+                },
+                onGifStickerModeChange = { value ->
+                    onUpdateFile(
+                        file.copy(
+                            videoOptions = file.videoOptions.copy(
+                                gifStickerMode = value == VIDEO_GIF_MODE_STICKER
                             )
                         )
                     )
@@ -8450,6 +8533,42 @@ private fun ResultInfoLine(text: String) {
 }
 
 @Composable
+private fun VideoOptionSummaryBanner(
+    text: String,
+    maxLines: Int = 3
+) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.primary,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.06f), RoundedCornerShape(8.dp))
+            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.14f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp, vertical = 7.dp)
+    )
+}
+
+@Composable
+private fun ResultNoticeLine(text: String) {
+    val color = MaterialTheme.colorScheme.error
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = color,
+        maxLines = 3,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(color.copy(alpha = 0.06f), RoundedCornerShape(8.dp))
+            .border(1.dp, color.copy(alpha = 0.18f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 10.dp, vertical = 7.dp)
+    )
+}
+
+@Composable
 internal fun StatusLine(
     text: String,
     isError: Boolean = false
@@ -8834,6 +8953,7 @@ private fun videoOptionsForTarget(
             maxFrameRate = null,
             compressionMode = VideoCompressionMode.Standard,
             frameInterpolation = VideoFrameInterpolationMode.Off,
+            gifStickerMode = isGifVideoTarget(targetFormat) && current.gifStickerMode,
             advanced = VideoAdvancedOptions()
         )
     }
@@ -8853,7 +8973,10 @@ private fun videoOptionsForTarget(
             VideoExportOptions.VIDEO_MIME_TYPE_H264
         }
     }
-    return current.copy(videoMimeType = codec)
+    return current.copy(
+        videoMimeType = codec,
+        gifStickerMode = false
+    )
 }
 
 private fun imageOptionsForTarget(
@@ -9859,6 +9982,7 @@ private fun shouldShowVideoOutputLargerHint(
     val outputSize = outputSizeBytes?.takeIf { it > 0L } ?: return false
     return file.category == FileCategory.Video &&
         !file.targetFormat.equals("GIF", ignoreCase = true) &&
+        !file.targetFormat.equals("WEBP", ignoreCase = true) &&
         outputSize > inputSize
 }
 

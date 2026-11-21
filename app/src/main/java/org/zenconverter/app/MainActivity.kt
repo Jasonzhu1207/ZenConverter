@@ -2588,7 +2588,8 @@ private fun ConversionTaskState.toUiProgress(): TaskProgress {
         outputUris = outputUris,
         outputDirectoryUri = outputDirectoryUri,
         outputMimeType = outputMimeType,
-        outputInfo = outputInfo
+        outputInfo = outputInfo,
+        noticeMessage = noticeMessage
     )
 }
 

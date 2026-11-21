@@ -208,6 +208,7 @@
     <string name="text_fade_in_label">淡入</string>
     <string name="text_fade_out_label">淡出</string>
     <string name="text_frame_rate_label">帧率 %1$s</string>
+    <string name="text_gif_sticker_preset_summary">尽力而为：自动降低分辨率、帧率和色数，尝试将 GIF 压到 5 MB 以内；超长或复杂画面仍会导出最小版本并提示。</string>
     <string name="text_metadata_backup_label">" · 最新"</string>
     <string name="text_metadata_kind_label">图片</string>
     <string name="text_metadata_kind_label_video">视频</string>
@@ -359,6 +360,7 @@
     <string name="text_option_value_single_pdf">合并为 PDF</string>
     <string name="text_option_value_small">小体积</string>
     <string name="text_option_value_small_file">小体积</string>
+    <string name="text_option_value_gif_sticker_5mb">表情包（≤ 5 MB · 尽力而为）</string>
     <string name="text_option_value_split_frames">拆帧输出</string>
     <string name="text_option_value_standard">标准</string>
     <string name="text_option_value_standard_motion_blur">标准 (5 帧混合)</string>
@@ -397,6 +399,7 @@
     <string name="text_task_message_compatibility_engine_could_not_convert_this_subtitle">兼容引擎无法转换这个字幕</string>
     <string name="text_task_message_compatibility_engine_could_not_create_this_gif">兼容引擎无法生成这个 GIF</string>
     <string name="text_task_message_compatibility_engine_could_not_create_this_webp">兼容引擎无法生成这个 WebP 动图</string>
+    <string name="text_task_message_gif_sticker_exceeded_target_size">已导出最小版本，但仍超过 5 MB 目标体积，建议裁剪缩短时长。</string>
     <string name="text_task_message_compatibility_engine_could_not_open_saf_input">兼容引擎无法打开 SAF 输入文件</string>
     <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_mkv">兼容引擎无法把这个文件转码为 MKV</string>
     <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_mov">兼容引擎无法把这个文件转码为 MOV</string>

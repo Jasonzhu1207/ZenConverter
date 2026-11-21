@@ -833,6 +833,9 @@ internal class UiText(private val context: Context) {
         }
     }
 
+    val gifStickerPresetSummary: String
+        get() = text(R.string.text_gif_sticker_preset_summary)
+
     fun superResolutionSummary(): String {
         return text(R.string.text_super_resolution_summary)
     }
@@ -1253,6 +1256,8 @@ internal class UiText(private val context: Context) {
             VIDEO_COMPRESSION_VISUAL_LOSSLESS -> text(R.string.text_option_value_visual_lossless)
             VIDEO_COMPRESSION_BALANCED -> text(R.string.text_option_value_balanced_shrink)
             VIDEO_COMPRESSION_SMALL -> text(R.string.text_option_value_small_file)
+            VIDEO_GIF_MODE_STANDARD -> text(R.string.text_option_value_off_manual)
+            VIDEO_GIF_MODE_STICKER -> text(R.string.text_option_value_gif_sticker_5mb)
             IMAGE_SUPER_RESOLUTION_OFF -> text(R.string.text_option_value_off)
             IMAGE_SUPER_RESOLUTION_2X -> text(R.string.text_option_value_2_bilinear)
             IMAGE_SUPER_RESOLUTION_3X -> text(R.string.text_option_value_3_bilinear)

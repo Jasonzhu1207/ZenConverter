@@ -219,6 +219,7 @@
     <string name="text_fade_in_label">Fondu en entrée</string>
     <string name="text_fade_out_label">Fondu en sortie</string>
     <string name="text_frame_rate_label">Fréquence d\'images %1$s</string>
+    <string name="text_gif_sticker_preset_summary">Au mieux : réduit automatiquement la résolution, la cadence et les couleurs pour viser moins de 5 Mo. Les clips très longs ou chargés exportent la version la plus compacte avec un avertissement.</string>
     <string name="text_metadata_backup_label">" · le plus récent"</string>
     <string name="text_metadata_kind_label">Image</string>
     <string name="text_metadata_kind_label_video">Vidéo</string>
@@ -370,6 +371,7 @@
     <string name="text_option_value_single_pdf">Fichier PDF unique</string>
     <string name="text_option_value_small">Faible</string>
     <string name="text_option_value_small_file">Fichier de petite taille</string>
+    <string name="text_option_value_gif_sticker_5mb">Autocollant (≤ 5 Mo · au mieux)</string>
     <string name="text_option_value_split_frames">Scinder l\'image</string>
     <string name="text_option_value_standard">Standard</string>
     <string name="text_option_value_standard_motion_blur">Standard (5 images)</string>
@@ -408,6 +410,7 @@
     <string name="text_task_message_compatibility_engine_could_not_convert_this_subtitle">Impossible de convertir ces sous-titres.</string>
     <string name="text_task_message_compatibility_engine_could_not_create_this_gif">Impossible de créer ce GIF.</string>
     <string name="text_task_message_compatibility_engine_could_not_create_this_webp">Impossible de créer ce WebP animé.</string>
+    <string name="text_task_message_gif_sticker_exceeded_target_size">La version la plus compacte a été exportée, mais elle dépasse encore 5 Mo. Raccourcissez le clip pour réduire davantage la taille.</string>
     <string name="text_task_message_compatibility_engine_could_not_open_saf_input">Impossible d\'ouvrir le fichier SAF d\'entrée.</string>
     <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_mkv">Impossible de convertir ce fichier au format MKV.</string>
     <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_mov">Impossible de convertir ce fichier au format MOV.</string>

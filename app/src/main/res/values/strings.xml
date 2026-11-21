@@ -224,6 +224,7 @@
     <string name="text_fade_in_label">Fade in</string>
     <string name="text_fade_out_label">Fade out</string>
     <string name="text_frame_rate_label">Frame rate %1$s</string>
+    <string name="text_gif_sticker_preset_summary">Best effort to keep GIF under 5 MB by lowering resolution, frame rate, and colors. Very long or busy clips still export the smallest pass with a notice.</string>
     <string name="text_metadata_backup_label">" · latest"</string>
     <string name="text_metadata_kind_label">Image</string>
     <string name="text_metadata_kind_label_video">Video</string>
@@ -375,6 +376,7 @@
     <string name="text_option_value_single_pdf">Single PDF</string>
     <string name="text_option_value_small">Small</string>
     <string name="text_option_value_small_file">Small file</string>
+    <string name="text_option_value_gif_sticker_5mb">Sticker (≤ 5 MB · best effort)</string>
     <string name="text_option_value_split_frames">Split frames</string>
     <string name="text_option_value_standard">Standard</string>
     <string name="text_option_value_standard_motion_blur">Standard (5 frames)</string>
@@ -413,6 +415,7 @@
     <string name="text_task_message_compatibility_engine_could_not_convert_this_subtitle">Compatibility engine could not convert this subtitle</string>
     <string name="text_task_message_compatibility_engine_could_not_create_this_gif">Compatibility engine could not create this GIF</string>
     <string name="text_task_message_compatibility_engine_could_not_create_this_webp">Compatibility engine could not create this animated WebP</string>
+    <string name="text_task_message_gif_sticker_exceeded_target_size">Exported the smallest pass, but it still exceeds 5 MB. Trim the clip shorter to reduce size further.</string>
     <string name="text_task_message_compatibility_engine_could_not_open_saf_input">Compatibility engine could not open SAF input</string>
     <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_mkv">Compatibility engine could not transcode this file to MKV</string>
     <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_mov">Compatibility engine could not transcode this file to MOV</string>

@@ -129,6 +129,7 @@ data class VideoExportOptions(
     val maxFrameRate: Int? = null,
     val compressionMode: VideoCompressionMode = VideoCompressionMode.Standard,
     val frameInterpolation: VideoFrameInterpolationMode = VideoFrameInterpolationMode.Off,
+    val gifStickerMode: Boolean = false,
     val trimRange: MediaTrimRange = MediaTrimRange(),
     val advanced: VideoAdvancedOptions = VideoAdvancedOptions()
 ) {
@@ -410,7 +411,8 @@ data class ConversionTaskState(
     val outputUris: List<Uri> = emptyList(),
     val outputDirectoryUri: Uri? = null,
     val outputMimeType: String? = null,
-    val outputInfo: FileBasicInfo? = null
+    val outputInfo: FileBasicInfo? = null,
+    val noticeMessage: LocalizedText? = null
 )
 
 enum class ConversionTaskStatus {
@@ -500,7 +502,8 @@ object ConversionTaskStore {
         outputUris: List<Uri> = outputUri?.let { listOf(it) }.orEmpty(),
         outputDirectoryUri: Uri? = null,
         outputMimeType: String? = null,
-        outputInfo: FileBasicInfo? = null
+        outputInfo: FileBasicInfo? = null,
+        noticeMessage: LocalizedText? = null
     ) {
         updateTask(index) { task ->
             task.copy(
@@ -511,7 +514,8 @@ object ConversionTaskStore {
                 outputUris = outputUris,
                 outputDirectoryUri = outputDirectoryUri,
                 outputMimeType = outputMimeType,
-                outputInfo = outputInfo
+                outputInfo = outputInfo,
+                noticeMessage = noticeMessage
             )
         }
     }

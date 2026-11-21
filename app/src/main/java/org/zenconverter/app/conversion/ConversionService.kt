@@ -4023,10 +4023,15 @@ class ConversionService : Service() {
                             folderName = outputFolderNameForSplit(input),
                             nameGenerator = { index, count ->
                                 outputNameForPart(input, outputProfile.extension, index, count)
-                            }
+                            },
+                            noticeMessage = result.completionNotice
                         )
                     } else {
-                        saveCompletedExport(input, tempFile)
+                        saveCompletedExport(
+                            input = input,
+                            tempFile = tempFile,
+                            noticeMessage = result.completionNotice
+                        )
                     }
                 } else {
                     Log.e(
@@ -4149,6 +4154,7 @@ class ConversionService : Service() {
             )
         }
         if (isVideoAnimatedImageOutput(input)) {
+            val isGifSticker = isVideoGifOutput(input) && input.videoOptions.gifStickerMode
             if (trimWindow.isMultiSegment) {
                 val outputProfile = outputProfileFor(input)
                     ?: return@withContext FfmpegRunResult(
@@ -4158,6 +4164,7 @@ class ConversionService : Service() {
                     )
                 val segmentTempFiles = mutableListOf<File>()
                 val segmentCount = trimWindow.segments.size
+                var completionNotice: LocalizedText? = null
                 for (i in 0 until segmentCount) {
                     if (ConversionTaskStore.isCancelled()) {
                         segmentTempFiles.forEach { it.delete() }
@@ -4169,23 +4176,13 @@ class ConversionService : Service() {
                         tempFile.parentFile ?: (externalCacheDir ?: cacheDir),
                         "${input.fileId}_part_${i + 1}_${System.nanoTime()}.${outputProfile.extension}"
                     )
-                    val segInputSource = openFfmpegInputSource(input.inputUri)
-                        ?: run {
-                            segmentTempFiles.forEach { it.delete() }
-                            return@withContext FfmpegRunResult(
-                                success = false,
-                                cancelled = false,
-                                message = localizedText(R.string.text_task_message_compatibility_engine_could_not_open_saf_input)
-                            )
-                        }
                     val segDurationMs = segment.effectiveDurationMs
                         ?.coerceAtMost(FFMPEG_VIDEO_GIF_MAX_DURATION_MS)
                     val segStartProgress = (i.toFloat() / segmentCount.toFloat()) * FFMPEG_MAX_PROGRESS_BEFORE_SAVE
                     val segEndProgress = ((i + 1).toFloat() / segmentCount.toFloat()) * FFMPEG_MAX_PROGRESS_BEFORE_SAVE
-                    val partResult = try {
-                        runFfmpegVideoAnimatedExport(
+                    val partResult = if (isGifSticker) {
+                        runFfmpegVideoGifStickerExport(
                             input = input,
-                            inputSource = segInputSource,
                             tempFile = partTempFile,
                             durationMs = segDurationMs,
                             trimWindow = segTrimWindow,
@@ -4193,8 +4190,30 @@ class ConversionService : Service() {
                             progressStart = segStartProgress,
                             progressEnd = segEndProgress
                         )
-                    } finally {
-                        segInputSource.close()
+                    } else {
+                        val segInputSource = openFfmpegInputSource(input.inputUri)
+                            ?: run {
+                                segmentTempFiles.forEach { it.delete() }
+                                return@withContext FfmpegRunResult(
+                                    success = false,
+                                    cancelled = false,
+                                    message = localizedText(R.string.text_task_message_compatibility_engine_could_not_open_saf_input)
+                                )
+                            }
+                        try {
+                            runFfmpegVideoAnimatedExport(
+                                input = input,
+                                inputSource = segInputSource,
+                                tempFile = partTempFile,
+                                durationMs = segDurationMs,
+                                trimWindow = segTrimWindow,
+                                logTail = logTail,
+                                progressStart = segStartProgress,
+                                progressEnd = segEndProgress
+                            )
+                        } finally {
+                            segInputSource.close()
+                        }
                     }
                     if (partResult.cancelled || ConversionTaskStore.isCancelled()) {
                         partTempFile.delete()
@@ -4206,12 +4225,25 @@ class ConversionService : Service() {
                         segmentTempFiles.forEach { it.delete() }
                         return@withContext partResult
                     }
+                    if (partResult.completionNotice != null && completionNotice == null) {
+                        completionNotice = partResult.completionNotice
+                    }
                     segmentTempFiles.add(partTempFile)
                 }
                 return@withContext FfmpegRunResult(
                     success = true,
                     cancelled = false,
-                    segmentTempFiles = segmentTempFiles
+                    segmentTempFiles = segmentTempFiles,
+                    completionNotice = completionNotice
+                )
+            }
+            if (isGifSticker) {
+                return@withContext runFfmpegVideoGifStickerExport(
+                    input = input,
+                    tempFile = tempFile,
+                    durationMs = effectiveDurationMs,
+                    trimWindow = trimWindow,
+                    logTail = logTail
                 )
             }
             val inputSource = openFfmpegInputSource(input.inputUri)
@@ -4835,13 +4867,17 @@ class ConversionService : Service() {
         progressStart: Float = 0f,
         progressEnd: Float = FFMPEG_MAX_PROGRESS_BEFORE_SAVE
     ): FfmpegRunResult {
+        val sourceFps = probeVideoFrameRate(input.inputUri, input.inputInfo?.frameRate)
+        val targetFps = sourceFps.coerceIn(1.0f, FFMPEG_VIDEO_GIF_FRAME_RATE.toFloat()).toDouble()
+        val fpsArg = formatFfmpegFps(targetFps)
         return executeFfmpeg(
             input = input,
             arguments = ffmpegVideoGifArgumentsFor(
                 input = input,
                 inputPath = inputSource.path,
                 outputFile = tempFile,
-                trimWindow = trimWindow
+                trimWindow = trimWindow,
+                fpsArg = fpsArg
             ),
             durationMs = durationMs,
             logTail = logTail,
@@ -4849,6 +4885,176 @@ class ConversionService : Service() {
             progressStart = progressStart,
             progressEnd = progressEnd
         )
+    }
+
+    /**
+     * Runs up to [FFMPEG_VIDEO_GIF_STICKER_MAX_ATTEMPTS] adaptive passes to fit the GIF under
+     * [FFMPEG_VIDEO_GIF_STICKER_LIMIT_BYTES], opening a fresh input source per pass and falling
+     * back to the smallest pass with a notice if even the lowest rung exceeds the limit.
+     */
+    private suspend fun runFfmpegVideoGifStickerExport(
+        input: ConversionTaskInput,
+        tempFile: File,
+        durationMs: Long?,
+        trimWindow: FfmpegTrimWindow,
+        logTail: MutableList<String>,
+        progressStart: Float = 0f,
+        progressEnd: Float = FFMPEG_MAX_PROGRESS_BEFORE_SAVE
+    ): FfmpegRunResult = withContext(Dispatchers.IO) {
+        val clipDurationSec = ((trimWindow.effectiveDurationMs ?: durationMs)
+            ?.coerceAtMost(FFMPEG_VIDEO_GIF_MAX_DURATION_MS)
+            ?: 10_000L) / 1000.0
+        var rungIndex = when {
+            clipDurationSec <= 4.5 -> 0
+            clipDurationSec <= 9.0 -> 1
+            clipDurationSec <= 16.0 -> 2
+            clipDurationSec <= 23.0 -> 3
+            else -> 4
+        }
+        val sourceFps = probeVideoFrameRate(input.inputUri, input.inputInfo?.frameRate)
+        val sourceSize = input.inputInfo?.let { info ->
+            val w = info.width ?: 0
+            val h = info.height ?: 0
+            if (w > 0 && h > 0) VideoSize(w, h) else null
+        } ?: readVideoSize(input.inputUri)
+        val sourceShortSide = sourceSize?.shortSide
+        val attemptBands = listOf(
+            0.00f to 0.70f,
+            0.70f to 0.85f,
+            0.85f to 0.94f,
+            0.94f to 1.00f
+        )
+        val cacheDirForAttempts = tempFile.parentFile ?: (externalCacheDir ?: cacheDir)
+        var bestFile: File? = null
+        var bestSizeBytes = Long.MAX_VALUE
+
+        try {
+            for (attempt in 0 until FFMPEG_VIDEO_GIF_STICKER_MAX_ATTEMPTS) {
+                if (ConversionTaskStore.isCancelled()) {
+                    return@withContext FfmpegRunResult(success = false, cancelled = true)
+                }
+                val rung = FFMPEG_VIDEO_GIF_STICKER_RUNGS[rungIndex]
+                val effectiveFps = sourceFps.coerceIn(1.0f, rung.maxFps.toFloat()).toDouble()
+                val fpsArg = formatFfmpegFps(effectiveFps)
+                val band = attemptBands.getOrElse(attempt) { 0.94f to 1.00f }
+                val bandStart = progressStart + (progressEnd - progressStart) * band.first
+                val bandEnd = progressStart + (progressEnd - progressStart) * band.second
+                val candidateFile = File(
+                    cacheDirForAttempts,
+                    "${input.fileId}_sticker_${attempt}_${System.nanoTime()}.gif"
+                )
+                val inputSource = openFfmpegInputSource(input.inputUri)
+                if (inputSource == null) {
+                    if (bestFile == null) {
+                        return@withContext FfmpegRunResult(
+                            success = false,
+                            cancelled = false,
+                            message = localizedText(R.string.text_task_message_compatibility_engine_could_not_open_saf_input)
+                        )
+                    }
+                    break
+                }
+                val partResult = try {
+                    executeFfmpeg(
+                        input = input,
+                        arguments = ffmpegVideoGifStickerArgumentsFor(
+                            input = input,
+                            inputPath = inputSource.path,
+                            outputFile = candidateFile,
+                            trimWindow = trimWindow,
+                            rung = rung,
+                            fpsArg = fpsArg
+                        ),
+                        durationMs = durationMs,
+                        logTail = logTail,
+                        inputSourceLabel = inputSource.label,
+                        progressStart = bandStart,
+                        progressEnd = bandEnd
+                    )
+                } finally {
+                    inputSource.close()
+                }
+                if (partResult.cancelled || ConversionTaskStore.isCancelled()) {
+                    candidateFile.delete()
+                    return@withContext FfmpegRunResult(success = false, cancelled = true)
+                }
+                if (!partResult.success) {
+                    candidateFile.delete()
+                    if (bestFile == null) {
+                        return@withContext partResult
+                    }
+                    break
+                }
+
+                val candidateBytes = candidateFile.length()
+                if (candidateBytes > 0L && candidateBytes < bestSizeBytes) {
+                    bestFile?.delete()
+                    bestFile = candidateFile
+                    bestSizeBytes = candidateBytes
+                } else {
+                    candidateFile.delete()
+                }
+
+                if (bestSizeBytes <= FFMPEG_VIDEO_GIF_STICKER_TARGET_BYTES ||
+                    rungIndex >= FFMPEG_VIDEO_GIF_STICKER_RUNGS.lastIndex
+                ) {
+                    break
+                }
+
+                val basisBytes = if (candidateBytes > 0L) candidateBytes else bestSizeBytes
+                val ratio = basisBytes.toDouble() / FFMPEG_VIDEO_GIF_STICKER_TARGET_BYTES.toDouble()
+                var nextIdx = if (attempt == FFMPEG_VIDEO_GIF_STICKER_MAX_ATTEMPTS - 2) {
+                    FFMPEG_VIDEO_GIF_STICKER_RUNGS.lastIndex
+                } else {
+                    val step = when {
+                        ratio > 3.0 -> 3
+                        ratio > 1.8 -> 2
+                        else -> 1
+                    }
+                    (rungIndex + step).coerceAtMost(FFMPEG_VIDEO_GIF_STICKER_RUNGS.lastIndex)
+                }
+                if (attempt < FFMPEG_VIDEO_GIF_STICKER_MAX_ATTEMPTS - 2 && sourceShortSide != null) {
+                    val nextRung = FFMPEG_VIDEO_GIF_STICKER_RUNGS[nextIdx]
+                    if (ratio > 1.5 &&
+                        minOf(sourceShortSide, nextRung.maxShortSide) == minOf(sourceShortSide, rung.maxShortSide) &&
+                        nextIdx < FFMPEG_VIDEO_GIF_STICKER_RUNGS.lastIndex
+                    ) {
+                        nextIdx += 1
+                    }
+                }
+                rungIndex = nextIdx
+            }
+
+            val chosenFile = bestFile
+            if (chosenFile == null || !chosenFile.exists() || bestSizeBytes <= 0L || bestSizeBytes == Long.MAX_VALUE) {
+                return@withContext FfmpegRunResult(
+                    success = false,
+                    cancelled = false,
+                    message = localizedText(R.string.text_task_message_compatibility_engine_could_not_create_this_gif)
+                )
+            }
+            if (tempFile.exists()) {
+                tempFile.delete()
+            }
+            if (!chosenFile.renameTo(tempFile)) {
+                chosenFile.copyTo(tempFile, overwrite = true)
+                chosenFile.delete()
+            }
+            bestFile = null
+            updateCompatibilityProgress(progressEnd)
+            val notice = if (bestSizeBytes > FFMPEG_VIDEO_GIF_STICKER_LIMIT_BYTES) {
+                localizedText(R.string.text_task_message_gif_sticker_exceeded_target_size)
+            } else {
+                null
+            }
+            return@withContext FfmpegRunResult(
+                success = true,
+                cancelled = false,
+                completionNotice = notice
+            )
+        } finally {
+            bestFile?.delete()
+        }
     }
 
     /**
@@ -4867,11 +5073,7 @@ class ConversionService : Service() {
     ): FfmpegRunResult = withContext(Dispatchers.IO) {
         val sourceFps = probeVideoFrameRate(input.inputUri, input.inputInfo?.frameRate)
         val targetFps = sourceFps.coerceIn(1.0f, FFMPEG_VIDEO_GIF_FRAME_RATE.toFloat()).toDouble()
-        val fpsArg = if (targetFps % 1.0 == 0.0) {
-            targetFps.toInt().toString()
-        } else {
-            String.format(Locale.US, "%.3f", targetFps).trimEnd('0').trimEnd('.')
-        }
+        val fpsArg = formatFfmpegFps(targetFps)
         val clipDurationMs = (trimWindow.effectiveDurationMs ?: durationMs)
             ?.coerceAtMost(FFMPEG_VIDEO_GIF_MAX_DURATION_MS)
         val expectedFrames = clipDurationMs?.let {
@@ -5861,11 +6063,64 @@ class ConversionService : Service() {
         )
     }
 
+    private fun formatFfmpegFps(fps: Double): String {
+        return if (fps % 1.0 == 0.0) {
+            fps.toInt().toString()
+        } else {
+            String.format(Locale.US, "%.3f", fps).trimEnd('0').trimEnd('.')
+        }
+    }
+
     private fun ffmpegVideoGifArgumentsFor(
         input: ConversionTaskInput,
         inputPath: String,
         outputFile: File,
-        trimWindow: FfmpegTrimWindow
+        trimWindow: FfmpegTrimWindow,
+        fpsArg: String
+    ): List<String> {
+        val filterChain = ffmpegVideoGifFilterChainFor(input, fpsArg)
+        val filterComplex =
+            "[0:v:0]$filterChain,split[gifsrc][palette_src];" +
+                "[palette_src]palettegen=max_colors=256[palette];" +
+                "[gifsrc][palette]paletteuse=dither=sierra2_4a:diff_mode=rectangle[gif]"
+        return ffmpegGifArgumentsFor(
+            inputPath = inputPath,
+            outputFile = outputFile,
+            trimWindow = trimWindow,
+            filterComplex = filterComplex
+        )
+    }
+
+    private fun ffmpegVideoGifStickerArgumentsFor(
+        input: ConversionTaskInput,
+        inputPath: String,
+        outputFile: File,
+        trimWindow: FfmpegTrimWindow,
+        rung: GifStickerRung,
+        fpsArg: String
+    ): List<String> {
+        val filterChain = buildList {
+            add("fps=$fpsArg")
+            ffmpegVideoAnimatedScaleFilterFor(input, targetShortSideOverride = rung.maxShortSide)
+                ?.let { add(it) }
+        }.joinToString(separator = ",")
+        val filterComplex =
+            "[0:v:0]$filterChain,split[gifsrc][palette_src];" +
+                "[palette_src]palettegen=max_colors=${rung.maxColors}:stats_mode=diff[palette];" +
+                "[gifsrc][palette]paletteuse=dither=bayer:bayer_scale=${rung.bayerScale}:diff_mode=rectangle[gif]"
+        return ffmpegGifArgumentsFor(
+            inputPath = inputPath,
+            outputFile = outputFile,
+            trimWindow = trimWindow,
+            filterComplex = filterComplex
+        )
+    }
+
+    private fun ffmpegGifArgumentsFor(
+        inputPath: String,
+        outputFile: File,
+        trimWindow: FfmpegTrimWindow,
+        filterComplex: String
     ): List<String> {
         return buildList {
             add("-hide_banner")
@@ -5883,15 +6138,13 @@ class ConversionService : Service() {
             add("-sn")
             add("-dn")
             add("-filter_complex")
-            add(
-                "[0:v:0]${ffmpegVideoGifFilterChainFor(input)},split[gifsrc][palette_src];" +
-                    "[palette_src]palettegen=max_colors=256[palette];" +
-                    "[gifsrc][palette]paletteuse=dither=sierra2_4a[gif]"
-            )
+            add(filterComplex)
             add("-map")
             add("[gif]")
             add("-frames:v")
             add(FFMPEG_VIDEO_GIF_MAX_FRAMES.toString())
+            add("-gifflags")
+            add("+transdiff")
             add("-loop")
             add("0")
             add("-f")
@@ -5942,15 +6195,21 @@ class ConversionService : Service() {
         }
     }
 
-    private fun ffmpegVideoGifFilterChainFor(input: ConversionTaskInput): String {
+    private fun ffmpegVideoGifFilterChainFor(
+        input: ConversionTaskInput,
+        fpsArg: String
+    ): String {
         return buildList {
-            add("fps=$FFMPEG_VIDEO_GIF_FRAME_RATE")
+            add("fps=$fpsArg")
             ffmpegVideoAnimatedScaleFilterFor(input)?.let { add(it) }
         }.joinToString(separator = ",")
     }
 
-    private fun ffmpegVideoAnimatedScaleFilterFor(input: ConversionTaskInput): String? {
-        val targetShortSide = input.videoOptions.maxShortSidePixels
+    private fun ffmpegVideoAnimatedScaleFilterFor(
+        input: ConversionTaskInput,
+        targetShortSideOverride: Int? = input.videoOptions.maxShortSidePixels
+    ): String? {
+        val targetShortSide = targetShortSideOverride
             ?.takeIf { it > 0 }
             ?: return null
         val sourceSize = readVideoSize(input.inputUri)
@@ -7400,7 +7659,8 @@ class ConversionService : Service() {
     private fun saveCompletedExport(
         input: ConversionTaskInput,
         tempFile: File,
-        outputDisplayNameOverride: String? = null
+        outputDisplayNameOverride: String? = null,
+        noticeMessage: LocalizedText? = null
     ) {
         currentTaskSaving = true
         ConversionTaskStore.markSaving(taskIndex)
@@ -7448,7 +7708,8 @@ class ConversionService : Service() {
                         outputUris = listOf(createdOutputUri),
                         outputDirectoryUri = createdOutput.outputDirectoryUri,
                         outputMimeType = outputProfile.mimeType,
-                        outputInfo = outputInfo
+                        outputInfo = outputInfo,
+                        noticeMessage = noticeMessage
                     )
                     taskIndex += 1
                     processNextTask()
@@ -7550,7 +7811,8 @@ class ConversionService : Service() {
         folderName: String,
         nameGenerator: (Int, Int) -> String = { index, count ->
             outputNameForFrame(input, outputProfile.extension, index, count)
-        }
+        },
+        noticeMessage: LocalizedText? = null
     ) {
         currentTaskSaving = true
         ConversionTaskStore.markSaving(taskIndex)
@@ -7597,7 +7859,8 @@ class ConversionService : Service() {
                         outputDirectoryUri = outputFolderOpenUri(outputFolder)
                             ?: defaultOutputDirectoryUriFor(outputProfile),
                         outputMimeType = outputProfile.mimeType,
-                        outputInfo = aggregateOutputInfo(outputProfile, outputUris.size, outputSizeBytes)
+                        outputInfo = aggregateOutputInfo(outputProfile, outputUris.size, outputSizeBytes),
+                        noticeMessage = noticeMessage
                     )
                     taskIndex += 1
                     processNextTask()
@@ -8277,12 +8540,20 @@ class ConversionService : Service() {
     )
 
 
+    private data class GifStickerRung(
+        val maxShortSide: Int,
+        val maxFps: Int,
+        val maxColors: Int,
+        val bayerScale: Int
+    )
+
     private data class FfmpegRunResult(
         val success: Boolean,
         val cancelled: Boolean,
         val message: LocalizedText? = null,
         val outputTail: String? = null,
-        val segmentTempFiles: List<File> = emptyList()
+        val segmentTempFiles: List<File> = emptyList(),
+        val completionNotice: LocalizedText? = null
     )
 
     private data class FfmpegInputSource(
@@ -8701,6 +8972,17 @@ class ConversionService : Service() {
         private const val FFMPEG_VIDEO_GIF_MAX_DURATION_SECONDS = "30"
         private const val FFMPEG_VIDEO_GIF_FRAME_RATE = 30
         private const val FFMPEG_VIDEO_GIF_MAX_FRAMES = 900
+        private const val FFMPEG_VIDEO_GIF_STICKER_TARGET_BYTES = 4_900_000L
+        private const val FFMPEG_VIDEO_GIF_STICKER_LIMIT_BYTES = 5_000_000L
+        private const val FFMPEG_VIDEO_GIF_STICKER_MAX_ATTEMPTS = 4
+        private val FFMPEG_VIDEO_GIF_STICKER_RUNGS = listOf(
+            GifStickerRung(maxShortSide = 480, maxFps = 15, maxColors = 256, bayerScale = 3),
+            GifStickerRung(maxShortSide = 360, maxFps = 15, maxColors = 192, bayerScale = 3),
+            GifStickerRung(maxShortSide = 320, maxFps = 12, maxColors = 128, bayerScale = 4),
+            GifStickerRung(maxShortSide = 240, maxFps = 12, maxColors = 96, bayerScale = 4),
+            GifStickerRung(maxShortSide = 240, maxFps = 10, maxColors = 64, bayerScale = 5),
+            GifStickerRung(maxShortSide = 180, maxFps = 8, maxColors = 64, bayerScale = 5)
+        )
         private const val MIME_TYPE_MP4 = "video/mp4"
         private const val MIME_TYPE_MKV = "video/x-matroska"
         private const val MIME_TYPE_MOV = "video/quicktime"

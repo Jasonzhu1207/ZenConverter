@@ -41,7 +41,7 @@ groups:
         to: gif
         engine: ffmpeg-compatible
         status: stable
-        note: "FFmpeg animated GIF output for video inputs. Uses palettegen/paletteuse, drops audio/subtitles/data streams, loops by default, supports start/end trimming and multi-point splitting into a subfolder, and automatically limits each output to the selected range's first 30 seconds, 30 fps, and 900 frames. Resolution defaults to Original with 1080 px, 720 px, and 480 px short-side options."
+        note: "FFmpeg animated GIF output for video inputs. Standard mode uses palettegen/paletteuse with diff_mode=rectangle and -gifflags +transdiff, caps frame rate at 30 fps without upsampling lower-fps sources, drops audio/subtitles/data streams, loops by default, supports start/end trimming and multi-point splitting into a subfolder, and limits each output to the selected range's first 30 seconds and 900 frames (resolution defaults to Original with 1080 px, 720 px, and 480 px options). Optional Sticker mode (<= 5 MB, best effort) runs up to 4 adaptive passes stepping down short side (480->180 px), frame rate (15->8 fps), and palette size (256->64 colors) with stats_mode=diff and Bayer dithering; if even the smallest pass exceeds 5 MB, exports that smallest pass with an oversize notice."
       - from: video
         to: webp
         engine: ffmpeg-compatible/native-bitmap
