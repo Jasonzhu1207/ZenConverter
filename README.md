@@ -70,7 +70,7 @@ work within the stated compatibility limits.
 | Area | Status | Notes |
 | --- | --- | --- |
 | Video conversion & merge | Stable | MP4 / MKV / MOV (H.264/H.265) and WebM (VP9/VP8) output, always re-encoded with FFmpeg. Adjust codec, bitrate, resolution, frame rate, and audio, or pick a compression preset. Drag to trim or split, and merge several clips into one. |
-| Video to GIF | Stable | Uses the first 30 seconds of the selected range, up to 30 fps and 900 frames. Short side defaults to 480 px; 720 px and Original are available. |
+| Video to GIF / WebP | Stable / Beta | Uses the first 30 seconds of the selected range (or each split part), up to 30 fps and 900 frames. Resolution defaults to Original, with 1080p, 720p, and 480p options. Animated WebP encodes via Android's built-in WebP encoder without extra native binaries. |
 | Video contact sheet | Stable | Samples frames from the whole video or a trimmed range into a JPG or PNG sheet. Start from a preset or set rows, columns, sizes, spacing, fit, background (transparent on PNG), info header, watermark, and timestamps yourself. Capped at 100 frames and about 32 MP. |
 | Audio extraction and conversion | Stable | Extract audio from video or convert between MP3 / M4A / WAV / FLAC / WMA / OPUS, always re-encoded with FFmpeg. MP3 offers CBR or VBR (V0/V2/V4/V6). MP3, Opus, and FLAC outputs keep tags, cover art, and embedded lyrics, and are checked after writing. |
 | Advanced audio/video processing | Stable | Video: reverse (short clips), fade, mirror, rotate, fit/crop, and motion blur. Audio: reverse, noise reduction (`afftdn`), fade, volume/mute, and echo. |

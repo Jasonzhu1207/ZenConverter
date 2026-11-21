@@ -74,8 +74,8 @@
     <string name="help_subtitle_body">在常用字幕与歌词格式之间互相转换，保留时序与时间轴。</string>
     <string name="help_subtitle_title">字幕与歌词</string>
     <string name="help_title">ZenConverter 能做什么</string>
-    <string name="help_video_body">视频格式互转、压缩、裁剪分割、多段合并，也能单独提取音频。还可以做 GIF 动图和拼图，加倒放、运动模糊等效果，或用光流 / AI（实验性）把帧率翻倍。</string>
-    <string name="help_video_formats">MP4 · MKV · MOV · WEBM · AVI · TS  →  MP4 · MKV · MOV · WEBM · GIF · 拼图</string>
+    <string name="help_video_body">视频格式互转、压缩、裁剪分割、多段合并，也能单独提取音频。还可以做 GIF / WebP 动图和拼图，加倒放、运动模糊等效果，或用光流 / AI（实验性）把帧率翻倍。</string>
+    <string name="help_video_formats">MP4 · MKV · MOV · WEBM · AVI · TS  →  MP4 · MKV · MOV · WEBM · GIF · WEBP · 拼图</string>
     <string name="help_video_title">视频</string>
     <string name="language_follow_system">跟随系统</string>
     <string name="message_ai_rife">RIFE 插帧模型未就绪，请先在设置中下载。</string>
@@ -373,6 +373,7 @@
     <string name="text_option_value_ultra_16_mbps">超高（16 Mbps）</string>
     <string name="text_option_value_uncompressed">未压缩</string>
     <string name="text_option_value_up_to_30s_gif">上限 30 秒 GIF</string>
+    <string name="text_option_value_up_to_30s_webp">上限 30 秒 WebP</string>
     <string name="text_option_value_vertical">上下镜像</string>
     <string name="text_option_value_very_high_8_mbps">极高（8 Mbps）</string>
     <string name="text_option_value_visual_lossless">视觉无损</string>
@@ -395,6 +396,7 @@
     <string name="text_task_message_compatibility_engine_could_not_convert_this_audio">兼容引擎无法转换这段音频</string>
     <string name="text_task_message_compatibility_engine_could_not_convert_this_subtitle">兼容引擎无法转换这个字幕</string>
     <string name="text_task_message_compatibility_engine_could_not_create_this_gif">兼容引擎无法生成这个 GIF</string>
+    <string name="text_task_message_compatibility_engine_could_not_create_this_webp">兼容引擎无法生成这个 WebP 动图</string>
     <string name="text_task_message_compatibility_engine_could_not_open_saf_input">兼容引擎无法打开 SAF 输入文件</string>
     <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_mkv">兼容引擎无法把这个文件转码为 MKV</string>
     <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_mov">兼容引擎无法把这个文件转码为 MOV</string>

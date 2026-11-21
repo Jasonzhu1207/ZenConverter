@@ -88,8 +88,8 @@
     <string name="help_subtitle_formats" translatable="false">SRT · VTT · LRC · ASS</string>
     <string name="help_subtitle_title">Subtitles and Lyrics</string>
     <string name="help_title">What ZenConverter can do</string>
-    <string name="help_video_body">Convert, compress, trim, split, or merge videos, and pull out the audio. You can also make GIFs and contact sheets, add effects such as reverse or motion blur, and double the frame rate with optical flow or AI (experimental).</string>
-    <string name="help_video_formats">MP4 · MKV · MOV · WEBM · AVI · TS  →  MP4 · MKV · MOV · WEBM · GIF · Contact sheet</string>
+    <string name="help_video_body">Convert, compress, trim, split, or merge videos, and pull out the audio. You can also make GIFs, animated WebPs, and contact sheets, add effects such as reverse or motion blur, and double the frame rate with optical flow or AI (experimental).</string>
+    <string name="help_video_formats">MP4 · MKV · MOV · WEBM · AVI · TS  →  MP4 · MKV · MOV · WEBM · GIF · WEBP · Contact sheet</string>
     <string name="help_video_title">Video</string>
     <string name="language_follow_system">Follow system</string>
     <string name="message_ai_rife">The RIFE model is not ready. Download it in Settings first.</string>
@@ -389,6 +389,7 @@
     <string name="text_option_value_ultra_16_mbps">Ultra (16 Mbps)</string>
     <string name="text_option_value_uncompressed">Uncompressed</string>
     <string name="text_option_value_up_to_30s_gif">Up to 30s GIF</string>
+    <string name="text_option_value_up_to_30s_webp">Up to 30s WebP</string>
     <string name="text_option_value_vertical">Vertical</string>
     <string name="text_option_value_very_high_8_mbps">Very high (8 Mbps)</string>
     <string name="text_option_value_visual_lossless">Visual lossless</string>
@@ -411,6 +412,7 @@
     <string name="text_task_message_compatibility_engine_could_not_convert_this_audio">Compatibility engine could not convert this audio</string>
     <string name="text_task_message_compatibility_engine_could_not_convert_this_subtitle">Compatibility engine could not convert this subtitle</string>
     <string name="text_task_message_compatibility_engine_could_not_create_this_gif">Compatibility engine could not create this GIF</string>
+    <string name="text_task_message_compatibility_engine_could_not_create_this_webp">Compatibility engine could not create this animated WebP</string>
     <string name="text_task_message_compatibility_engine_could_not_open_saf_input">Compatibility engine could not open SAF input</string>
     <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_mkv">Compatibility engine could not transcode this file to MKV</string>
     <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_mov">Compatibility engine could not transcode this file to MOV</string>

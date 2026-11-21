@@ -83,8 +83,8 @@
     <string name="help_subtitle_body">Convertir les formats de sous-titres et de paroles tout en conservant la synchronisation.</string>
     <string name="help_subtitle_title">Sous-titres et paroles</string>
     <string name="help_title">Ce que ZenConverter peut faire</string>
-    <string name="help_video_body">Convertir, compresser, découper, scinder ou fusionner des vidéos, et en extraire l\'audio. Vous pouvez aussi créer des GIF et des planches contact, ajouter des effets comme la lecture inversée ou le flou de mouvement, et doubler la fréquence d\'images par flux optique ou par IA (expérimental).</string>
-    <string name="help_video_formats">MP4 · MKV · MOV · WEBM · AVI · TS  →  MP4 · MKV · MOV · WEBM · GIF · Planche contact</string>
+    <string name="help_video_body">Convertir, compresser, découper, scinder ou fusionner des vidéos, et en extraire l\'audio. Vous pouvez aussi créer des GIF, des WebP animés et des planches contact, ajouter des effets comme la lecture inversée ou le flou de mouvement, et doubler la fréquence d\'images par flux optique ou par IA (expérimental).</string>
+    <string name="help_video_formats">MP4 · MKV · MOV · WEBM · AVI · TS  →  MP4 · MKV · MOV · WEBM · GIF · WEBP · Planche contact</string>
     <string name="help_video_title">Vidéo</string>
     <string name="language_follow_system">Système</string>
     <string name="message_ai_rife">Le modèle RIFE n\'est pas encore disponible. Téléchargez-le d\'abord dans les paramètres.</string>
@@ -384,6 +384,7 @@
     <string name="text_option_value_ultra_16_mbps">Ultra (16 Mbps)</string>
     <string name="text_option_value_uncompressed">Non compressé</string>
     <string name="text_option_value_up_to_30s_gif">GIF d\'une durée maximale de 30 secondes</string>
+    <string name="text_option_value_up_to_30s_webp">WebP d\'une durée maximale de 30 secondes</string>
     <string name="text_option_value_vertical">Vertical</string>
     <string name="text_option_value_very_high_8_mbps">Très élevé (8 Mbps)</string>
     <string name="text_option_value_visual_lossless">Sans perte visuelle</string>
@@ -406,6 +407,7 @@
     <string name="text_task_message_compatibility_engine_could_not_convert_this_audio">Impossible de convertir ce fichier audio.</string>
     <string name="text_task_message_compatibility_engine_could_not_convert_this_subtitle">Impossible de convertir ces sous-titres.</string>
     <string name="text_task_message_compatibility_engine_could_not_create_this_gif">Impossible de créer ce GIF.</string>
+    <string name="text_task_message_compatibility_engine_could_not_create_this_webp">Impossible de créer ce WebP animé.</string>
     <string name="text_task_message_compatibility_engine_could_not_open_saf_input">Impossible d\'ouvrir le fichier SAF d\'entrée.</string>
     <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_mkv">Impossible de convertir ce fichier au format MKV.</string>
     <string name="text_task_message_compatibility_engine_could_not_transcode_this_file_to_mov">Impossible de convertir ce fichier au format MOV.</string>

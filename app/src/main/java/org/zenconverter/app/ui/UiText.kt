@@ -1171,6 +1171,7 @@ internal class UiText(private val context: Context) {
             "Compatibility" -> text(R.string.text_option_value_multi_format)
             "Re-encode" -> text(R.string.text_option_value_re_encode)
             "30s GIF" -> text(R.string.text_option_value_up_to_30s_gif)
+            "30s WebP" -> text(R.string.text_option_value_up_to_30s_webp)
             "Summary Sheet" -> text(R.string.text_option_value_summary_sheet)
             "contact_sheet_jpg" -> text(R.string.text_option_value_contact_sheet_jpg)
             "contact_sheet_png" -> text(R.string.text_option_value_contact_sheet_png)

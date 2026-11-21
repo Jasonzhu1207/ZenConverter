@@ -50,6 +50,9 @@ import android.os.ext.SdkExtensions
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.system.ErrnoException
+import android.system.Os
+import android.system.OsConstants
 import android.util.Log
 import androidx.annotation.RequiresApi
 import com.arthenica.ffmpegkit.FFmpegKit
@@ -58,6 +61,7 @@ import com.arthenica.ffmpegkit.FFmpegSession
 import com.arthenica.ffmpegkit.FFprobeKit
 import com.arthenica.ffmpegkit.ReturnCode
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -104,12 +108,15 @@ import org.zenconverter.app.conversion.VideoFrameInterpolationMode
 import org.zenconverter.app.markdown.MarkdownAstParser
 import org.zenconverter.app.markdown.MarkdownPdfRenderer
 import org.zenconverter.app.settings.AppPreferences
+import java.io.BufferedInputStream
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -4130,6 +4137,7 @@ class ConversionService : Service() {
         }
         val audioMetadata = metadataPreparation.snapshot
         if (input.category == ConversionMediaCategory.Video &&
+            !isVideoAnimatedImageOutput(input) &&
             input.videoOptions.frameInterpolation == VideoFrameInterpolationMode.Rife2x
         ) {
             return@withContext runFfmpegVideoInterpolationExport(
@@ -4140,7 +4148,72 @@ class ConversionService : Service() {
                 logTail = logTail
             )
         }
-        if (isVideoGifOutput(input)) {
+        if (isVideoAnimatedImageOutput(input)) {
+            if (trimWindow.isMultiSegment) {
+                val outputProfile = outputProfileFor(input)
+                    ?: return@withContext FfmpegRunResult(
+                        success = false,
+                        cancelled = false,
+                        message = localizedText(R.string.message_unsupported_output_format)
+                    )
+                val segmentTempFiles = mutableListOf<File>()
+                val segmentCount = trimWindow.segments.size
+                for (i in 0 until segmentCount) {
+                    if (ConversionTaskStore.isCancelled()) {
+                        segmentTempFiles.forEach { it.delete() }
+                        return@withContext FfmpegRunResult(success = false, cancelled = true)
+                    }
+                    val segment = trimWindow.segments[i]
+                    val segTrimWindow = FfmpegTrimWindow(segments = listOf(segment))
+                    val partTempFile = File(
+                        tempFile.parentFile ?: (externalCacheDir ?: cacheDir),
+                        "${input.fileId}_part_${i + 1}_${System.nanoTime()}.${outputProfile.extension}"
+                    )
+                    val segInputSource = openFfmpegInputSource(input.inputUri)
+                        ?: run {
+                            segmentTempFiles.forEach { it.delete() }
+                            return@withContext FfmpegRunResult(
+                                success = false,
+                                cancelled = false,
+                                message = localizedText(R.string.text_task_message_compatibility_engine_could_not_open_saf_input)
+                            )
+                        }
+                    val segDurationMs = segment.effectiveDurationMs
+                        ?.coerceAtMost(FFMPEG_VIDEO_GIF_MAX_DURATION_MS)
+                    val segStartProgress = (i.toFloat() / segmentCount.toFloat()) * FFMPEG_MAX_PROGRESS_BEFORE_SAVE
+                    val segEndProgress = ((i + 1).toFloat() / segmentCount.toFloat()) * FFMPEG_MAX_PROGRESS_BEFORE_SAVE
+                    val partResult = try {
+                        runFfmpegVideoAnimatedExport(
+                            input = input,
+                            inputSource = segInputSource,
+                            tempFile = partTempFile,
+                            durationMs = segDurationMs,
+                            trimWindow = segTrimWindow,
+                            logTail = logTail,
+                            progressStart = segStartProgress,
+                            progressEnd = segEndProgress
+                        )
+                    } finally {
+                        segInputSource.close()
+                    }
+                    if (partResult.cancelled || ConversionTaskStore.isCancelled()) {
+                        partTempFile.delete()
+                        segmentTempFiles.forEach { it.delete() }
+                        return@withContext FfmpegRunResult(success = false, cancelled = true)
+                    }
+                    if (!partResult.success) {
+                        partTempFile.delete()
+                        segmentTempFiles.forEach { it.delete() }
+                        return@withContext partResult
+                    }
+                    segmentTempFiles.add(partTempFile)
+                }
+                return@withContext FfmpegRunResult(
+                    success = true,
+                    cancelled = false,
+                    segmentTempFiles = segmentTempFiles
+                )
+            }
             val inputSource = openFfmpegInputSource(input.inputUri)
                 ?: return@withContext FfmpegRunResult(
                     success = false,
@@ -4148,7 +4221,7 @@ class ConversionService : Service() {
                     message = localizedText(R.string.text_task_message_compatibility_engine_could_not_open_saf_input)
                 )
             return@withContext try {
-                runFfmpegVideoGifExport(
+                runFfmpegVideoAnimatedExport(
                     input = input,
                     inputSource = inputSource,
                     tempFile = tempFile,
@@ -4717,13 +4790,50 @@ class ConversionService : Service() {
         )
     }
 
+    private suspend fun runFfmpegVideoAnimatedExport(
+        input: ConversionTaskInput,
+        inputSource: FfmpegInputSource,
+        tempFile: File,
+        durationMs: Long?,
+        trimWindow: FfmpegTrimWindow,
+        logTail: MutableList<String>,
+        progressStart: Float = 0f,
+        progressEnd: Float = FFMPEG_MAX_PROGRESS_BEFORE_SAVE
+    ): FfmpegRunResult {
+        return if (isVideoAnimatedWebpOutput(input)) {
+            runFfmpegVideoAnimatedWebpExport(
+                input = input,
+                inputSource = inputSource,
+                tempFile = tempFile,
+                durationMs = durationMs,
+                trimWindow = trimWindow,
+                logTail = logTail,
+                progressStart = progressStart,
+                progressEnd = progressEnd
+            )
+        } else {
+            runFfmpegVideoGifExport(
+                input = input,
+                inputSource = inputSource,
+                tempFile = tempFile,
+                durationMs = durationMs,
+                trimWindow = trimWindow,
+                logTail = logTail,
+                progressStart = progressStart,
+                progressEnd = progressEnd
+            )
+        }
+    }
+
     private suspend fun runFfmpegVideoGifExport(
         input: ConversionTaskInput,
         inputSource: FfmpegInputSource,
         tempFile: File,
         durationMs: Long?,
         trimWindow: FfmpegTrimWindow,
-        logTail: MutableList<String>
+        logTail: MutableList<String>,
+        progressStart: Float = 0f,
+        progressEnd: Float = FFMPEG_MAX_PROGRESS_BEFORE_SAVE
     ): FfmpegRunResult {
         return executeFfmpeg(
             input = input,
@@ -4735,8 +4845,307 @@ class ConversionService : Service() {
             ),
             durationMs = durationMs,
             logTail = logTail,
-            inputSourceLabel = inputSource.label
+            inputSourceLabel = inputSource.label,
+            progressStart = progressStart,
+            progressEnd = progressEnd
         )
+    }
+
+    /**
+     * Streams trimmed/scaled RGBA frames from FFmpeg over a FIFO pipe via the `pam` encoder,
+     * compresses each frame using Android's WebP encoder, and muxes them into an animated WebP.
+     */
+    private suspend fun runFfmpegVideoAnimatedWebpExport(
+        input: ConversionTaskInput,
+        inputSource: FfmpegInputSource,
+        tempFile: File,
+        durationMs: Long?,
+        trimWindow: FfmpegTrimWindow,
+        logTail: MutableList<String>,
+        progressStart: Float = 0f,
+        progressEnd: Float = FFMPEG_MAX_PROGRESS_BEFORE_SAVE
+    ): FfmpegRunResult = withContext(Dispatchers.IO) {
+        val sourceFps = probeVideoFrameRate(input.inputUri, input.inputInfo?.frameRate)
+        val targetFps = sourceFps.coerceIn(1.0f, FFMPEG_VIDEO_GIF_FRAME_RATE.toFloat()).toDouble()
+        val fpsArg = if (targetFps % 1.0 == 0.0) {
+            targetFps.toInt().toString()
+        } else {
+            String.format(Locale.US, "%.3f", targetFps).trimEnd('0').trimEnd('.')
+        }
+        val clipDurationMs = (trimWindow.effectiveDurationMs ?: durationMs)
+            ?.coerceAtMost(FFMPEG_VIDEO_GIF_MAX_DURATION_MS)
+        val expectedFrames = clipDurationMs?.let {
+            ((it / 1000.0) * targetFps).roundToInt().coerceIn(1, FFMPEG_VIDEO_GIF_MAX_FRAMES)
+        }
+        val compressFormat = imageCompressFormatFor("webp", useWebpLossless = false)
+            ?: return@withContext FfmpegRunResult(
+                success = false,
+                cancelled = false,
+                message = localizedText(R.string.text_task_message_compatibility_engine_could_not_create_this_webp)
+            )
+        val pipePath = runCatching {
+            FFmpegKitConfig.registerNewFFmpegPipe(this@ConversionService)
+        }.onFailure { exception ->
+            Log.w(TAG, "Could not register FFmpeg pipe for animated WebP", exception)
+        }.getOrNull()
+        if (pipePath.isNullOrBlank()) {
+            return@withContext FfmpegRunResult(
+                success = false,
+                cancelled = false,
+                message = localizedText(R.string.text_task_message_compatibility_engine_could_not_create_this_webp)
+            )
+        }
+
+        val arguments = ffmpegVideoAnimatedWebpDecodeArgumentsFor(
+            input = input,
+            inputPath = inputSource.path,
+            pipePath = pipePath,
+            trimWindow = trimWindow,
+            fpsArg = fpsArg
+        )
+        Log.i(
+            TAG,
+            "Starting FFmpeg animated WebP export displayName=${input.displayName} " +
+                "fps=$fpsArg durationMs=$clipDurationMs inputSource=${inputSource.label} " +
+                "command=${formatFfmpegArguments(arguments)}"
+        )
+
+        val stateLock = Any()
+        var ffmpegExited = false
+        var readerWillOpen = false
+        val readerOpened = AtomicBoolean(false)
+        val readerFinished = AtomicBoolean(false)
+        val ffmpegDone = CompletableDeferred<FFmpegSession>()
+
+        val session = FFmpegKit.executeWithArgumentsAsync(
+            arguments.toTypedArray(),
+            { completedSession ->
+                activeFfmpegSession = null
+                val shouldUnblock = synchronized(stateLock) {
+                    ffmpegExited = true
+                    readerWillOpen &&
+                        !readerOpened.get() &&
+                        !readerFinished.get() &&
+                        !ReturnCode.isSuccess(completedSession.getReturnCode())
+                }
+                ffmpegDone.complete(completedSession)
+                if (shouldUnblock) {
+                    unblockFifoReader(pipePath, readerOpened, readerFinished)
+                }
+            },
+            { log ->
+                appendFfmpegLogTail(logTail, log.message)
+            },
+            { _ -> }
+        )
+        activeFfmpegSession = session
+        if (ConversionTaskStore.isCancelled()) {
+            runCatching { FFmpegKit.cancel(session.getSessionId()) }
+        }
+
+        var pipeInput: BufferedInputStream? = null
+        var reusableBitmap: Bitmap? = null
+        var writtenFrames = 0
+        var readerError: Throwable? = null
+
+        try {
+            val shouldOpenPipe = synchronized(stateLock) {
+                if (ffmpegExited) {
+                    false
+                } else {
+                    readerWillOpen = true
+                    true
+                }
+            }
+
+            if (shouldOpenPipe) {
+                try {
+                    val buffered = BufferedInputStream(FileInputStream(pipePath), 65_536)
+                    pipeInput = buffered
+                    readerOpened.set(true)
+
+                    val frameBaos = ExposedByteArrayOutputStream()
+                    var rgbaBytes: ByteArray? = null
+                    var frameIndex = 0
+
+                    AnimatedWebpWriter(tempFile).use { writer ->
+                        while (true) {
+                            if (ConversionTaskStore.isCancelled()) {
+                                runCatching { FFmpegKit.cancel(session.getSessionId()) }
+                                break
+                            }
+                            val header = PamFrameStreamReader.readNextHeader(buffered) ?: break
+                            val pixelCount = header.width.toLong() * header.height.toLong()
+                            if (pixelCount <= 0L || pixelCount > AnimatedWebpWriter.MAX_FRAME_PIXELS) {
+                                throw IOException("Animated WebP frame exceeds pixel limit: ${header.width}x${header.height}")
+                            }
+                            val frameByteCountLong = pixelCount * RGBA_BYTES_PER_PIXEL
+                            if (frameByteCountLong > Int.MAX_VALUE) {
+                                throw IOException("Animated WebP frame byte size overflow: $frameByteCountLong")
+                            }
+                            val frameByteCount = frameByteCountLong.toInt()
+                            val currentBuffer = rgbaBytes
+                            val frameBuffer = if (currentBuffer != null && currentBuffer.size == frameByteCount) {
+                                currentBuffer
+                            } else {
+                                ByteArray(frameByteCount).also { rgbaBytes = it }
+                            }
+                            if (!PamFrameStreamReader.readExactBytes(buffered, frameBuffer, frameByteCount)) {
+                                if (ConversionTaskStore.isCancelled()) {
+                                    break
+                                }
+                                throw IOException("Unexpected EOF while reading PAM frame payload")
+                            }
+                            if (ConversionTaskStore.isCancelled()) {
+                                runCatching { FFmpegKit.cancel(session.getSessionId()) }
+                                break
+                            }
+
+                            val existingBitmap = reusableBitmap
+                            val bitmap = if (existingBitmap != null &&
+                                existingBitmap.width == header.width &&
+                                existingBitmap.height == header.height
+                            ) {
+                                existingBitmap
+                            } else {
+                                existingBitmap?.recycle()
+                                Bitmap.createBitmap(
+                                    header.width,
+                                    header.height,
+                                    Bitmap.Config.ARGB_8888
+                                ).also {
+                                    it.setHasAlpha(false)
+                                    reusableBitmap = it
+                                }
+                            }
+                            bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(frameBuffer, 0, frameByteCount))
+                            bitmap.setHasAlpha(false)
+                            frameBaos.reset()
+                            if (!bitmap.compress(compressFormat, FFMPEG_VIDEO_WEBP_QUALITY, frameBaos)) {
+                                throw IOException("Bitmap.compress failed for WebP frame")
+                            }
+
+                            val startMs = Math.round(frameIndex * 1000.0 / targetFps)
+                            val endMs = Math.round((frameIndex + 1) * 1000.0 / targetFps)
+                            val frameDurationMs = (endMs - startMs).toInt().coerceAtLeast(1)
+                            writer.appendSingleFrameWebp(
+                                webpBytes = frameBaos.rawBuffer(),
+                                length = frameBaos.byteCount(),
+                                width = header.width,
+                                height = header.height,
+                                durationMs = frameDurationMs
+                            )
+                            frameIndex += 1
+                            if (expectedFrames != null && expectedFrames > 0) {
+                                updateCompatibilityProgress(
+                                    scaledFfmpegProgress(
+                                        (frameIndex.toFloat() / expectedFrames.toFloat()).coerceIn(0f, 1f),
+                                        progressStart,
+                                        progressEnd
+                                    )
+                                )
+                            }
+                        }
+
+                        if (!ConversionTaskStore.isCancelled() && frameIndex > 0) {
+                            writtenFrames = writer.finish()
+                        }
+                    }
+                } catch (cancelled: CancellationException) {
+                    runCatching { FFmpegKit.cancel(session.getSessionId()) }
+                    throw cancelled
+                } catch (oom: OutOfMemoryError) {
+                    readerError = oom
+                    runCatching { FFmpegKit.cancel(session.getSessionId()) }
+                } catch (throwable: Throwable) {
+                    readerError = throwable
+                    runCatching { FFmpegKit.cancel(session.getSessionId()) }
+                } finally {
+                    readerFinished.set(true)
+                    runCatching { pipeInput?.close() }
+                    pipeInput = null
+                    reusableBitmap?.recycle()
+                    reusableBitmap = null
+                }
+            } else {
+                readerFinished.set(true)
+            }
+
+            val completedSession = ffmpegDone.await()
+            activeFfmpegSession = null
+            val returnCode = completedSession.getReturnCode()
+
+            if (ConversionTaskStore.isCancelled() || ReturnCode.isCancel(returnCode)) {
+                tempFile.delete()
+                Log.i(TAG, "FFmpeg animated WebP export cancelled displayName=${input.displayName}")
+                return@withContext FfmpegRunResult(success = false, cancelled = true)
+            }
+
+            if (readerError != null || !ReturnCode.isSuccess(returnCode) || writtenFrames <= 0) {
+                val outputTail = ffmpegOutputTail(
+                    completedSession.getAllLogsAsString(FFMPEG_LOG_DRAIN_TIMEOUT_MS)
+                ).ifBlank {
+                    snapshotFfmpegLogTail(logTail)
+                }
+                Log.e(
+                    TAG,
+                    "FFmpeg animated WebP export failed displayName=${input.displayName} " +
+                        "returnCode=$returnCode writtenFrames=$writtenFrames " +
+                        "readerError=${readerError?.message} outputTail=$outputTail",
+                    readerError
+                )
+                tempFile.delete()
+                return@withContext FfmpegRunResult(
+                    success = false,
+                    cancelled = false,
+                    message = localizedText(R.string.text_task_message_compatibility_engine_could_not_create_this_webp),
+                    outputTail = outputTail
+                )
+            }
+
+            Log.i(
+                TAG,
+                "FFmpeg animated WebP export completed displayName=${input.displayName} frames=$writtenFrames"
+            )
+            return@withContext FfmpegRunResult(success = true, cancelled = false)
+        } finally {
+            activeFfmpegSession = null
+            if (!ffmpegDone.isCompleted) {
+                runCatching { FFmpegKit.cancel(session.getSessionId()) }
+            }
+            runCatching { pipeInput?.close() }
+            reusableBitmap?.recycle()
+            runCatching { FFmpegKitConfig.closeFFmpegPipe(pipePath) }
+        }
+    }
+
+    private fun unblockFifoReader(
+        pipePath: String,
+        readerOpened: AtomicBoolean,
+        readerFinished: AtomicBoolean
+    ) {
+        Thread {
+            for (attempt in 0 until 200) {
+                if (readerOpened.get() || readerFinished.get()) break
+                try {
+                    val fd = Os.open(pipePath, OsConstants.O_WRONLY or OsConstants.O_NONBLOCK, 0)
+                    runCatching { Os.close(fd) }
+                    break
+                } catch (errno: ErrnoException) {
+                    if (errno.errno != OsConstants.ENXIO) break
+                } catch (_: Throwable) {
+                    break
+                }
+                try {
+                    Thread.sleep(5L)
+                } catch (_: InterruptedException) {
+                    break
+                }
+            }
+        }.apply {
+            isDaemon = true
+            start()
+        }
     }
 
     private suspend fun extractGifFrames(
@@ -5491,14 +5900,56 @@ class ConversionService : Service() {
         }
     }
 
+    private fun ffmpegVideoAnimatedWebpDecodeArgumentsFor(
+        input: ConversionTaskInput,
+        inputPath: String,
+        pipePath: String,
+        trimWindow: FfmpegTrimWindow,
+        fpsArg: String
+    ): List<String> {
+        val filterChain = buildList {
+            add("fps=$fpsArg")
+            ffmpegVideoAnimatedScaleFilterFor(input)?.let { add(it) }
+        }.joinToString(separator = ",")
+        return buildList {
+            add("-hide_banner")
+            add("-nostdin")
+            add("-y")
+            addFfmpegTrimInputOptions(
+                trimWindow,
+                durationLimitMs = trimWindow.effectiveDurationMs
+                    ?.coerceAtMost(FFMPEG_VIDEO_GIF_MAX_DURATION_MS)
+                    ?: FFMPEG_VIDEO_GIF_MAX_DURATION_MS
+            )
+            add("-i")
+            add(inputPath)
+            add("-map")
+            add("0:v:0")
+            add("-an")
+            add("-sn")
+            add("-dn")
+            add("-vf")
+            add(filterChain)
+            add("-frames:v")
+            add(FFMPEG_VIDEO_GIF_MAX_FRAMES.toString())
+            add("-pix_fmt")
+            add("rgba")
+            add("-c:v")
+            add(FFMPEG_PAM_ENCODER)
+            add("-f")
+            add("image2pipe")
+            add(pipePath)
+        }
+    }
+
     private fun ffmpegVideoGifFilterChainFor(input: ConversionTaskInput): String {
         return buildList {
             add("fps=$FFMPEG_VIDEO_GIF_FRAME_RATE")
-            ffmpegVideoGifScaleFilterFor(input)?.let { add(it) }
+            ffmpegVideoAnimatedScaleFilterFor(input)?.let { add(it) }
         }.joinToString(separator = ",")
     }
 
-    private fun ffmpegVideoGifScaleFilterFor(input: ConversionTaskInput): String? {
+    private fun ffmpegVideoAnimatedScaleFilterFor(input: ConversionTaskInput): String? {
         val targetShortSide = input.videoOptions.maxShortSidePixels
             ?.takeIf { it > 0 }
             ?: return null
@@ -5510,7 +5961,7 @@ class ConversionService : Service() {
         }
         Log.w(
             TAG,
-            "Video size metadata unavailable; using FFmpeg dynamic GIF scale filter " +
+            "Video size metadata unavailable; using FFmpeg dynamic animated scale filter " +
                 "targetShortSide=$targetShortSide displayName=${input.displayName}"
         )
         return "scale=w='if(gte(iw\\,ih)\\,-2\\,min(iw\\,$targetShortSide))':" +
@@ -5616,7 +6067,7 @@ class ConversionService : Service() {
         durationMs: Long?
     ): String? {
         val isOpticalFlowActive = input.category == ConversionMediaCategory.Video &&
-            !isVideoGifOutput(input) &&
+            !isVideoAnimatedImageOutput(input) &&
             input.videoOptions.frameInterpolation == VideoFrameInterpolationMode.OpticalFlow2x
         val advanced = if (input.videoOptions.compressionMode == VideoCompressionMode.Standard && !isOpticalFlowActive) {
             input.videoOptions.advanced
@@ -6039,7 +6490,7 @@ class ConversionService : Service() {
         if (durationMs != null) return null
         val presetCompressionActive =
             input.category == ConversionMediaCategory.Video &&
-                !isVideoGifOutput(input) &&
+                !isVideoAnimatedImageOutput(input) &&
                 input.videoOptions.compressionMode != VideoCompressionMode.Standard
         val videoAdvanced = if (presetCompressionActive) {
             VideoAdvancedOptions()
@@ -6053,14 +6504,14 @@ class ConversionService : Service() {
         }
         val videoReverseApplies =
             input.category == ConversionMediaCategory.Video &&
-                !isVideoGifOutput(input) &&
+                !isVideoAnimatedImageOutput(input) &&
                 videoAdvanced.reverse
         val audioFadeOutApplies =
             audioAdvanced.volume != AudioVolumeMode.Mute &&
                 audioAdvanced.fadeOutSeconds != null
         val needsDuration = when (input.category) {
             ConversionMediaCategory.Video ->
-                !isVideoGifOutput(input) &&
+                !isVideoAnimatedImageOutput(input) &&
                     (videoAdvanced.fadeOutSeconds != null || audioFadeOutApplies)
             ConversionMediaCategory.Audio ->
                 audioAdvanced.fadeOutSeconds != null
@@ -6086,7 +6537,7 @@ class ConversionService : Service() {
     ): LocalizedText? {
         if (
             input.category == ConversionMediaCategory.Video &&
-            !isVideoGifOutput(input) &&
+            !isVideoAnimatedImageOutput(input) &&
             input.videoOptions.compressionMode == VideoCompressionMode.Standard &&
             input.videoOptions.advanced.reverse
         ) {
@@ -6187,13 +6638,13 @@ class ConversionService : Service() {
         return buildSet {
             val presetCompressionActive =
                 input.category == ConversionMediaCategory.Video &&
-                    !isVideoGifOutput(input) &&
+                    !isVideoAnimatedImageOutput(input) &&
                     input.videoOptions.compressionMode != VideoCompressionMode.Standard
             val interpolationActive =
                 input.category == ConversionMediaCategory.Video &&
-                    !isVideoGifOutput(input) &&
+                    !isVideoAnimatedImageOutput(input) &&
                     input.videoOptions.frameInterpolation == VideoFrameInterpolationMode.OpticalFlow2x
-            if (input.category == ConversionMediaCategory.Video && !isVideoGifOutput(input)) {
+            if (input.category == ConversionMediaCategory.Video && !isVideoAnimatedImageOutput(input)) {
                 if (interpolationActive) {
                     add("minterpolate")
                 }
@@ -6248,7 +6699,7 @@ class ConversionService : Service() {
             val audioFiltersApply = when (input.category) {
                 ConversionMediaCategory.Audio -> true
                 ConversionMediaCategory.Video ->
-                    !isVideoGifOutput(input) &&
+                    !isVideoAnimatedImageOutput(input) &&
                         audioAdvanced.volume != AudioVolumeMode.Mute
                 ConversionMediaCategory.Image,
                 ConversionMediaCategory.Pdf,
@@ -6295,6 +6746,8 @@ class ConversionService : Service() {
             ConversionMediaCategory.Video -> {
                 if (isVideoGifOutput(input)) {
                     listOf(FFMPEG_GIF_ENCODER)
+                } else if (isVideoAnimatedWebpOutput(input)) {
+                    listOf(FFMPEG_PAM_ENCODER)
                 } else {
                     val profile = ffmpegVideoProfileFor(input) ?: return null
                     val audioOptions = ffmpegVideoAudioOptionsFor(
@@ -6498,6 +6951,9 @@ class ConversionService : Service() {
         if (isVideoGifOutput(input)) {
             return localizedText(R.string.text_task_message_compatibility_engine_could_not_create_this_gif)
         }
+        if (isVideoAnimatedWebpOutput(input)) {
+            return localizedText(R.string.text_task_message_compatibility_engine_could_not_create_this_webp)
+        }
         if (
             input.category == ConversionMediaCategory.Video &&
             (
@@ -6534,6 +6990,7 @@ class ConversionService : Service() {
                 "mov" -> localizedText(R.string.text_task_message_compatibility_engine_could_not_transcode_this_file_to_mov)
                 "webm" -> localizedText(R.string.text_task_message_compatibility_engine_could_not_transcode_this_file_to_webm)
                 "gif" -> localizedText(R.string.text_task_message_compatibility_engine_could_not_create_this_gif)
+                "webp" -> localizedText(R.string.text_task_message_compatibility_engine_could_not_create_this_webp)
                 else -> localizedText(R.string.text_task_message_compatibility_engine_could_not_transcode_this_file_to_mp4)
             }
             ConversionMediaCategory.Audio ->
@@ -6621,7 +7078,7 @@ class ConversionService : Service() {
         trimWindow: FfmpegTrimWindow
     ): Long? {
         val durationMs = trimWindow.effectiveDurationMs ?: sourceDurationMs
-        return if (isVideoGifOutput(input)) {
+        return if (isVideoAnimatedImageOutput(input)) {
             durationMs?.coerceAtMost(FFMPEG_VIDEO_GIF_MAX_DURATION_MS)
         } else {
             durationMs
@@ -6769,6 +7226,15 @@ class ConversionService : Service() {
     private fun isVideoGifOutput(input: ConversionTaskInput): Boolean {
         return input.category == ConversionMediaCategory.Video &&
             videoTargetExtensionFor(input.targetFormat) == "gif"
+    }
+
+    private fun isVideoAnimatedWebpOutput(input: ConversionTaskInput): Boolean {
+        return input.category == ConversionMediaCategory.Video &&
+            videoTargetExtensionFor(input.targetFormat) == "webp"
+    }
+
+    private fun isVideoAnimatedImageOutput(input: ConversionTaskInput): Boolean {
+        return isVideoGifOutput(input) || isVideoAnimatedWebpOutput(input)
     }
 
     private fun isLikelyGifInputUri(uri: Uri): Boolean {
@@ -7592,6 +8058,7 @@ class ConversionService : Service() {
                     "mov" -> OutputProfile(extension = "mov", mimeType = MIME_TYPE_MOV, kind = OutputMediaKind.Video)
                     "webm" -> OutputProfile(extension = "webm", mimeType = MIME_TYPE_WEBM, kind = OutputMediaKind.Video)
                     "gif" -> OutputProfile(extension = "gif", mimeType = MIME_TYPE_GIF, kind = OutputMediaKind.Image)
+                    "webp" -> OutputProfile(extension = "webp", mimeType = MIME_TYPE_WEBP, kind = OutputMediaKind.Image)
                     "jpg" -> OutputProfile(extension = "jpg", mimeType = MIME_TYPE_JPEG, kind = OutputMediaKind.Image)
                     "png" -> OutputProfile(extension = "png", mimeType = MIME_TYPE_PNG, kind = OutputMediaKind.Image)
                     else -> null
@@ -7713,6 +8180,7 @@ class ConversionService : Service() {
             normalized.contains("mov") -> "mov"
             normalized.contains("webm") -> "webm"
             normalized.contains("gif") -> "gif"
+            normalized.contains("webp") -> "webp"
             else -> null
         }
     }
@@ -8199,6 +8667,8 @@ class ConversionService : Service() {
         private const val FFMPEG_VIDEO_ENCODER_VP9 = "libvpx-vp9"
         private const val FFMPEG_VIDEO_ENCODER_VP8 = "libvpx"
         private const val FFMPEG_GIF_ENCODER = "gif"
+        private const val FFMPEG_PAM_ENCODER = "pam"
+        private const val FFMPEG_VIDEO_WEBP_QUALITY = 75
         private const val FFMPEG_AAC_ENCODER = "aac"
         private const val FFMPEG_MP3_ENCODER = "libmp3lame"
         private const val MP3_VBR_QUALITY_MIN = 0

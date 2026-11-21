@@ -285,6 +285,7 @@ enum class FileCategory(
             TargetFormat(TargetId.Mov, "mov", "Re-encode"),
             TargetFormat(TargetId.Webm, "webm", "Re-encode"),
             TargetFormat(TargetId.Gif, "gif", "30s GIF"),
+            TargetFormat(TargetId.Webp, "webp", "30s WebP"),
             TargetFormat(TargetId.ContactSheetJpg, "contact_sheet_jpg", "Summary Sheet"),
             TargetFormat(TargetId.ContactSheetPng, "contact_sheet_png", "Summary Sheet")
         )
@@ -584,11 +585,19 @@ private val VIDEO_RESOLUTION_OPTIONS = listOf(
     VIDEO_RESOLUTION_720P,
     VIDEO_RESOLUTION_480P
 )
-private val VIDEO_GIF_RESOLUTION_OPTIONS = listOf(
-    VIDEO_RESOLUTION_480P,
+private val VIDEO_ANIMATED_RESOLUTION_OPTIONS = listOf(
+    VIDEO_RESOLUTION_ORIGINAL,
+    VIDEO_RESOLUTION_1080P,
     VIDEO_RESOLUTION_720P,
-    VIDEO_RESOLUTION_ORIGINAL
+    VIDEO_RESOLUTION_480P
 )
+
+private fun isAnimatedVideoTarget(targetFormat: TargetFormat): Boolean {
+    return targetFormat.id == TargetId.Gif ||
+        targetFormat.id == TargetId.Webp ||
+        targetFormat.extension.equals("gif", ignoreCase = true) ||
+        targetFormat.extension.equals("webp", ignoreCase = true)
+}
 
 internal const val VIDEO_COMPRESSION_STANDARD = "Video compression standard"
 internal const val VIDEO_COMPRESSION_VISUAL_LOSSLESS = "Video compression visual lossless"
@@ -3224,11 +3233,11 @@ private fun BatchVideoTargetOptions(
         return
     }
 
-    val isGifTarget = target.extension.equals("gif", ignoreCase = true)
+    val isAnimatedTarget = isAnimatedVideoTarget(target)
     val commonInterpolation = commonBatchLabel(files) {
         videoInterpolationLabelFor(it.videoOptions.frameInterpolation)
     }
-    val isInterpolationActive = !isGifTarget && videoInterpolationModeFor(commonInterpolation) != VideoFrameInterpolationMode.Off
+    val isInterpolationActive = !isAnimatedTarget && videoInterpolationModeFor(commonInterpolation) != VideoFrameInterpolationMode.Off
     val disabledInterpolationOptions = if (isRifeModelDownloaded) emptySet() else setOf(VIDEO_INTERPOLATION_RIFE_2X)
     val commonCompression = commonBatchLabel(files) {
         videoCompressionLabelFor(it.videoOptions.compressionMode)
@@ -3236,11 +3245,11 @@ private fun BatchVideoTargetOptions(
     val standardCompressionActive =
         videoCompressionModeFor(commonCompression) == VideoCompressionMode.Standard
     val mixedCompression = commonCompression == BATCH_MIXED_OPTION
-    val presetCompressionActive = !isGifTarget && !isInterpolationActive && !standardCompressionActive && !mixedCompression
+    val presetCompressionActive = !isAnimatedTarget && !isInterpolationActive && !standardCompressionActive && !mixedCompression
 
     OptionGrid {
         InsetGroupCard {
-            if (!isGifTarget) {
+            if (!isAnimatedTarget) {
                 OptionDropdown(
                     menuId = "batch-video-frame-interpolation",
                     label = texts.videoFrameInterpolation,
@@ -3259,7 +3268,7 @@ private fun BatchVideoTargetOptions(
                 }
             }
 
-            if (!isGifTarget && !isInterpolationActive) {
+            if (!isAnimatedTarget && !isInterpolationActive) {
                 OptionDropdown(
                     menuId = "batch-video-compression-mode",
                     label = texts.videoCompressionMode,
@@ -3277,7 +3286,7 @@ private fun BatchVideoTargetOptions(
                 }
             }
 
-            if ((!isInterpolationActive || commonInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X) && (isGifTarget || standardCompressionActive || mixedCompression)) {
+            if ((!isInterpolationActive || commonInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X) && (isAnimatedTarget || standardCompressionActive || mixedCompression)) {
                 val anySourceExceeds1080 = files.any { file ->
                     val w = file.inputInfo?.width ?: 0
                     val h = file.inputInfo?.height ?: 0
@@ -3297,12 +3306,12 @@ private fun BatchVideoTargetOptions(
                     menuId = "batch-video-size",
                     label = texts.resolution,
                     selected = commonBatchLabel(files) { videoResolutionLabelFor(it.videoOptions) },
-                    options = if (isGifTarget) VIDEO_GIF_RESOLUTION_OPTIONS else VIDEO_RESOLUTION_OPTIONS,
+                    options = if (isAnimatedTarget) VIDEO_ANIMATED_RESOLUTION_OPTIONS else VIDEO_RESOLUTION_OPTIONS,
                     texts = texts,
                     openMenuId = openMenuId,
                     onOpenMenuChange = onOpenMenuChange,
                     disabledOptions = disabledBatchResolutionOptions,
-                    showDivider = !isGifTarget && (standardCompressionActive || mixedCompression)
+                    showDivider = !isAnimatedTarget && (standardCompressionActive || mixedCompression)
                 ) { value ->
                     onOpenMenuChange(null)
                     onUpdateFiles(
@@ -3317,7 +3326,7 @@ private fun BatchVideoTargetOptions(
                 }
             }
 
-            if (!isGifTarget && !isInterpolationActive && (standardCompressionActive || mixedCompression)) {
+            if (!isAnimatedTarget && !isInterpolationActive && (standardCompressionActive || mixedCompression)) {
                 OptionDropdown(
                     menuId = "batch-video-bitrate",
                     label = texts.bitrate,
@@ -4836,10 +4845,10 @@ private fun VideoOptions(
         return
     }
 
-    val isGifTarget = targetFormat.extension.equals("gif", ignoreCase = true)
-    val isInterpolationActive = !isGifTarget && videoInterpolationModeFor(frameInterpolation) != VideoFrameInterpolationMode.Off
+    val isAnimatedTarget = isAnimatedVideoTarget(targetFormat)
+    val isInterpolationActive = !isAnimatedTarget && videoInterpolationModeFor(frameInterpolation) != VideoFrameInterpolationMode.Off
     val disabledInterpolationOptions = if (isRifeModelDownloaded) emptySet() else setOf(VIDEO_INTERPOLATION_RIFE_2X)
-    val isOpticalFlow = !isGifTarget && frameInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X
+    val isOpticalFlow = !isAnimatedTarget && frameInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X
     val disabledResolutionOptions = buildSet {
         if (isOpticalFlow) {
             add(VIDEO_RESOLUTION_2160P)
@@ -4850,7 +4859,7 @@ private fun VideoOptions(
         }
     }
     val isStandardCompression = videoCompressionModeFor(compressionMode) == VideoCompressionMode.Standard
-    val presetCompressionActive = !isGifTarget && !isInterpolationActive && !isStandardCompression
+    val presetCompressionActive = !isAnimatedTarget && !isInterpolationActive && !isStandardCompression
     OptionGrid {
         MediaTrimOptions(
             texts = texts,
@@ -4863,7 +4872,7 @@ private fun VideoOptions(
             onTrimRangeChange = onTrimRangeChange
         )
         InsetGroupCard {
-            if (!isGifTarget) {
+            if (!isAnimatedTarget) {
                 OptionDropdown(
                     menuId = "${menuPrefix}video-frame-interpolation",
                     label = texts.videoFrameInterpolation,
@@ -4877,7 +4886,7 @@ private fun VideoOptions(
                     onSelected = onFrameInterpolationChange
                 )
             }
-            if (!isGifTarget && !isInterpolationActive) {
+            if (!isAnimatedTarget && !isInterpolationActive) {
                 OptionDropdown(
                     menuId = "${menuPrefix}video-compression-mode",
                     label = texts.videoCompressionMode,
@@ -4890,21 +4899,21 @@ private fun VideoOptions(
                     onSelected = onCompressionModeChange
                 )
             }
-            if ((!isInterpolationActive || frameInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X) && (isGifTarget || isStandardCompression)) {
+            if ((!isInterpolationActive || frameInterpolation == VIDEO_INTERPOLATION_OPTICAL_FLOW_2X) && (isAnimatedTarget || isStandardCompression)) {
                 OptionDropdown(
                     menuId = "${menuPrefix}video-size",
                     label = texts.resolution,
                     selected = resolution,
-                    options = if (isGifTarget) VIDEO_GIF_RESOLUTION_OPTIONS else VIDEO_RESOLUTION_OPTIONS,
+                    options = if (isAnimatedTarget) VIDEO_ANIMATED_RESOLUTION_OPTIONS else VIDEO_RESOLUTION_OPTIONS,
                     texts = texts,
                     openMenuId = openMenuId,
                     onOpenMenuChange = onOpenMenuChange,
                     disabledOptions = disabledResolutionOptions,
-                    showDivider = !isGifTarget && isStandardCompression,
+                    showDivider = !isAnimatedTarget && isStandardCompression,
                     onSelected = onResolutionChange
                 )
             }
-            if (!isGifTarget && !isInterpolationActive && isStandardCompression) {
+            if (!isAnimatedTarget && !isInterpolationActive && isStandardCompression) {
                 OptionDropdown(
                     menuId = "${menuPrefix}video-bitrate",
                     label = texts.bitrate,
@@ -5017,7 +5026,7 @@ private fun VideoOptions(
                     .padding(horizontal = 10.dp, vertical = 7.dp)
             )
         }
-        if (!isGifTarget && !isInterpolationActive && isStandardCompression) {
+        if (!isAnimatedTarget && !isInterpolationActive && isStandardCompression) {
             VideoAdvancedOptionsPanel(
                 texts = texts,
                 state = videoAdvanced,
@@ -8750,7 +8759,12 @@ private fun fileWithTarget(
     supportedVideoMimeTypes: Set<String>
 ): QueuedFile {
     val targetFormat = target.targetFormat
-    val nextVideoOptions = videoOptionsForTarget(file.videoOptions, targetFormat, supportedVideoMimeTypes)
+    val nextVideoOptions = videoOptionsForTarget(
+        current = file.videoOptions,
+        targetCategory = target.category,
+        targetFormat = targetFormat,
+        supportedVideoMimeTypes = supportedVideoMimeTypes
+    )
         .let { options ->
             if (
                 target.category == FileCategory.Video &&
@@ -8808,16 +8822,18 @@ private fun fileWithTarget(
 
 private fun videoOptionsForTarget(
     current: VideoExportOptions,
+    targetCategory: FileCategory,
     targetFormat: TargetFormat,
     supportedVideoMimeTypes: Set<String>
 ): VideoExportOptions {
-    if (targetFormat.extension.equals("gif", ignoreCase = true)) {
+    if (targetCategory == FileCategory.Video && isAnimatedVideoTarget(targetFormat)) {
         return current.copy(
-            maxShortSidePixels = 480,
+            maxShortSidePixels = current.maxShortSidePixels?.takeIf { it in setOf(1080, 720, 480) },
             videoBitrate = null,
             videoMimeType = VideoExportOptions.VIDEO_MIME_TYPE_H264,
-            maxFrameRate = 30,
+            maxFrameRate = null,
             compressionMode = VideoCompressionMode.Standard,
+            frameInterpolation = VideoFrameInterpolationMode.Off,
             advanced = VideoAdvancedOptions()
         )
     }
@@ -8837,13 +8853,7 @@ private fun videoOptionsForTarget(
             VideoExportOptions.VIDEO_MIME_TYPE_H264
         }
     }
-    return if (current.maxFrameRate == 30 && current.maxShortSidePixels == 480 &&
-        current.videoBitrate == null && current.compressionMode == VideoCompressionMode.Standard
-    ) {
-        current.copy(videoMimeType = codec, maxShortSidePixels = null, maxFrameRate = null)
-    } else {
-        current.copy(videoMimeType = codec)
-    }
+    return current.copy(videoMimeType = codec)
 }
 
 private fun imageOptionsForTarget(

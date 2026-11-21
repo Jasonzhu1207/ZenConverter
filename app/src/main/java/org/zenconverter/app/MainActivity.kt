@@ -2450,12 +2450,15 @@ private fun VideoMergeGroup.toConversionTaskInput(
 
 private fun defaultVideoOptionsFor(targetFormat: TargetFormat): VideoExportOptions {
     return when {
-        targetFormat.extension.equals("gif", ignoreCase = true) -> {
+        targetFormat.id == TargetId.Gif ||
+            targetFormat.id == TargetId.Webp ||
+            targetFormat.extension.equals("gif", ignoreCase = true) ||
+            targetFormat.extension.equals("webp", ignoreCase = true) -> {
             VideoExportOptions(
-                maxShortSidePixels = 480,
+                maxShortSidePixels = null,
                 videoBitrate = null,
                 videoMimeType = VideoExportOptions.VIDEO_MIME_TYPE_H264,
-                maxFrameRate = 30
+                maxFrameRate = null
             )
         }
         targetFormat.id == TargetId.Webm || targetFormat.extension.equals("webm", ignoreCase = true) -> {
