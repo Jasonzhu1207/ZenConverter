@@ -19,9 +19,9 @@
         android:localeConfig="@xml/locales_config"
         android:supportsRtl="true"
         android:allowBackup="true"
-        android:icon="@drawable/zenconverter"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:roundIcon="@drawable/zenconverter"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/Theme.ZenConverter">
         <activity
             android:name=".MainActivity"

@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.ZenConverter" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:windowBackground">@color/splash_background_dark</item>
+    </style>
+</resources>
