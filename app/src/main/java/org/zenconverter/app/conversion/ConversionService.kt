@@ -45,6 +45,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.os.ext.SdkExtensions
 import android.provider.DocumentsContract
 import android.provider.MediaStore
@@ -128,10 +129,15 @@ class ConversionService : Service() {
         Completed
     }
 
+    @Volatile
     private var taskIndex = 0
+    private var currentTaskSaving = false
     private var notificationState = NotificationState.Idle
     private var notificationTitle: LocalizedText = localizedText(R.string.message_preparing)
     private var notificationProgress = 0
+    private var lastNotificationUpdateAtMs = 0L
+    private var lastNotifiedTitle: LocalizedText? = null
+    private var lastNotifiedProgress = -1
     private var activeFfmpegSession: FFmpegSession? = null
     private var activeTempFile: File? = null
     private var copyThread: Thread? = null
@@ -164,14 +170,17 @@ class ConversionService : Service() {
             NotificationState.Running -> {
                 val manager = getSystemService(NotificationManager::class.java)
                 manager.notify(
-                    NOTIFICATION_ID,
+                    PROGRESS_NOTIFICATION_ID,
                     buildProgressNotification(notificationTitle, notificationProgress)
                 )
+                lastNotificationUpdateAtMs = SystemClock.elapsedRealtime()
+                lastNotifiedTitle = notificationTitle
+                lastNotifiedProgress = notificationProgress
             }
             NotificationState.Completed -> {
                 val manager = getSystemService(NotificationManager::class.java)
                 manager.notify(
-                    NOTIFICATION_ID,
+                    COMPLETED_NOTIFICATION_ID,
                     buildCompletedNotification()
                 )
             }
@@ -191,24 +200,32 @@ class ConversionService : Service() {
                     return START_NOT_STICKY
                 }
                 handler.removeCallbacksAndMessages(null)
+                getSystemService(NotificationManager::class.java).cancel(COMPLETED_NOTIFICATION_ID)
                 notificationState = NotificationState.Running
                 notificationTitle = localizedText(R.string.message_preparing)
                 notificationProgress = 0
+                currentTaskSaving = false
+                lastNotificationUpdateAtMs = SystemClock.elapsedRealtime()
+                lastNotifiedTitle = notificationTitle
+                lastNotifiedProgress = 0
                 // mediaProcessing only exists on Android 15 (API 35)+. On Android 14
                 // (API 34) it is unrecognized and would crash with
                 // "Starting FGS with type unknown", so fall back to dataSync there.
                 when {
                     Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM -> startForeground(
-                        NOTIFICATION_ID,
+                        PROGRESS_NOTIFICATION_ID,
                         buildProgressNotification(notificationTitle, 0),
                         ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
                     )
                     Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> startForeground(
-                        NOTIFICATION_ID,
+                        PROGRESS_NOTIFICATION_ID,
                         buildProgressNotification(notificationTitle, 0),
                         ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
                     )
-                    else -> startForeground(NOTIFICATION_ID, buildProgressNotification(notificationTitle, 0))
+                    else -> startForeground(
+                        PROGRESS_NOTIFICATION_ID,
+                        buildProgressNotification(notificationTitle, 0)
+                    )
                 }
                 taskIndex = 0
                 customOutputFallbackOccurred = false
@@ -279,8 +296,13 @@ class ConversionService : Service() {
 
         val tempFile = createTempFileFor(input, outputProfile.extension)
         activeTempFile = tempFile
+        currentTaskSaving = false
         ConversionTaskStore.markRunning(taskIndex)
-        updateNotification(localizedText(R.string.task_processing), (ConversionTaskStore.aggregateProgress() * 100).toInt())
+        updateNotification(
+            localizedText(R.string.task_processing),
+            (ConversionTaskStore.aggregateProgress() * 100).toInt(),
+            force = true
+        )
 
         if (input.category == ConversionMediaCategory.Image) {
             startImageExport(input, tempFile, outputProfile)
@@ -1620,8 +1642,13 @@ class ConversionService : Service() {
         tempFile: File,
         result: FontExportResult
     ) {
+        currentTaskSaving = true
         ConversionTaskStore.markSaving(taskIndex)
-        updateNotification(localizedText(R.string.task_saving), (ConversionTaskStore.aggregateProgress() * 100).toInt())
+        updateNotification(
+            localizedText(R.string.task_saving),
+            (ConversionTaskStore.aggregateProgress() * 100).toInt(),
+            force = true
+        )
 
         copyThread = Thread {
             var outputUri: Uri? = null
@@ -3483,9 +3510,17 @@ class ConversionService : Service() {
     }
 
     private fun updateImageProgress(progress: Float) {
+        val expectedTaskIndex = taskIndex
         handler.post {
-            if (ConversionTaskStore.isCancelled()) return@post
-            ConversionTaskStore.updateProgress(taskIndex, progress.coerceIn(0f, PROGRESS_BEFORE_SAVE))
+            if (
+                ConversionTaskStore.isCancelled() ||
+                notificationState != NotificationState.Running ||
+                taskIndex != expectedTaskIndex ||
+                currentTaskSaving
+            ) {
+                return@post
+            }
+            ConversionTaskStore.updateProgress(expectedTaskIndex, progress.coerceIn(0f, PROGRESS_BEFORE_SAVE))
             updateNotification(
                 localizedText(R.string.task_processing),
                 (ConversionTaskStore.aggregateProgress() * 100).toInt()
@@ -5913,10 +5948,18 @@ class ConversionService : Service() {
     }
 
     private fun updateCompatibilityProgress(progress: Float) {
+        val expectedTaskIndex = taskIndex
         handler.post {
-            if (ConversionTaskStore.isCancelled()) return@post
+            if (
+                ConversionTaskStore.isCancelled() ||
+                notificationState != NotificationState.Running ||
+                taskIndex != expectedTaskIndex ||
+                currentTaskSaving
+            ) {
+                return@post
+            }
             ConversionTaskStore.updateProgress(
-                taskIndex,
+                expectedTaskIndex,
                 progress.coerceIn(0f, FFMPEG_MAX_PROGRESS_BEFORE_SAVE)
             )
             updateNotification(
@@ -6893,8 +6936,13 @@ class ConversionService : Service() {
         tempFile: File,
         outputDisplayNameOverride: String? = null
     ) {
+        currentTaskSaving = true
         ConversionTaskStore.markSaving(taskIndex)
-        updateNotification(localizedText(R.string.task_saving), (ConversionTaskStore.aggregateProgress() * 100).toInt())
+        updateNotification(
+            localizedText(R.string.task_saving),
+            (ConversionTaskStore.aggregateProgress() * 100).toInt(),
+            force = true
+        )
 
         copyThread = Thread {
             var outputUri: Uri? = null
@@ -6960,8 +7008,13 @@ class ConversionService : Service() {
         tempFiles: List<File>,
         outputProfile: OutputProfile
     ) {
+        currentTaskSaving = true
         ConversionTaskStore.markSaving(taskIndex)
-        updateNotification(localizedText(R.string.task_saving), (ConversionTaskStore.aggregateProgress() * 100).toInt())
+        updateNotification(
+            localizedText(R.string.task_saving),
+            (ConversionTaskStore.aggregateProgress() * 100).toInt(),
+            force = true
+        )
 
         copyThread = Thread {
             val outputUris = mutableListOf<Uri>()
@@ -7033,8 +7086,13 @@ class ConversionService : Service() {
             outputNameForFrame(input, outputProfile.extension, index, count)
         }
     ) {
+        currentTaskSaving = true
         ConversionTaskStore.markSaving(taskIndex)
-        updateNotification(localizedText(R.string.task_saving), (ConversionTaskStore.aggregateProgress() * 100).toInt())
+        updateNotification(
+            localizedText(R.string.task_saving),
+            (ConversionTaskStore.aggregateProgress() * 100).toInt(),
+            force = true
+        )
 
         copyThread = Thread {
             val outputUris = mutableListOf<Uri>()
@@ -7107,24 +7165,34 @@ class ConversionService : Service() {
         activeFfmpegSession = null
         activeTempFile?.delete()
         activeTempFile = null
+        currentTaskSaving = false
         ConversionTaskStore.markFailed(taskIndex, message)
-        updateNotification(message, (ConversionTaskStore.aggregateProgress() * 100).toInt())
         taskIndex += 1
+        if (taskIndex < ConversionTaskStore.taskCount()) {
+            updateNotification(
+                message,
+                (ConversionTaskStore.aggregateProgress() * 100).toInt(),
+                force = true
+            )
+        }
         handler.post { processNextTask() }
     }
 
     private fun finishRun() {
+        handler.removeCallbacksAndMessages(null)
         activeFfmpegSession = null
         activeTempFile = null
+        currentTaskSaving = false
         if (customOutputFallbackOccurred && ConversionTaskStore.tasks.none { it.status == ConversionTaskStatus.Failed }) {
             ConversionTaskStore.markRunFinished(localizedText(R.string.text_task_message_custom_output_folder_was_unavailable_saved_to_default_directory))
         } else {
             ConversionTaskStore.markRunFinished()
         }
         notificationState = NotificationState.Completed
-        detachForeground()
+        resetNotificationThrottle()
+        removeForegroundNotification()
         val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(NOTIFICATION_ID, buildCompletedNotification())
+        manager.notify(COMPLETED_NOTIFICATION_ID, buildCompletedNotification())
         stopSelf()
     }
 
@@ -7134,8 +7202,10 @@ class ConversionService : Service() {
         copyThread?.interrupt()
         activeTempFile?.delete()
         activeTempFile = null
+        currentTaskSaving = false
         ConversionTaskStore.cancelAll()
         notificationState = NotificationState.Idle
+        resetNotificationThrottle()
         removeForegroundNotification()
         stopSelf()
     }
@@ -7947,12 +8017,32 @@ class ConversionService : Service() {
             .ifBlank { "ZenConverter" }
     }
 
-    private fun updateNotification(title: LocalizedText, progress: Int) {
+    private fun updateNotification(title: LocalizedText, progress: Int, force: Boolean = false) {
+        val clampedProgress = progress.coerceIn(0, 100)
         notificationTitle = title
-        notificationProgress = progress
+        notificationProgress = clampedProgress
         if (notificationState != NotificationState.Running) return
+
+        val titleChanged = lastNotifiedTitle != title
+        val progressChanged = lastNotifiedProgress != clampedProgress
+        if (!force && !titleChanged && !progressChanged) return
+
+        val nowMs = SystemClock.elapsedRealtime()
+        if (!force && !titleChanged && nowMs - lastNotificationUpdateAtMs < NOTIFICATION_UPDATE_MIN_INTERVAL_MS) {
+            return
+        }
+
+        lastNotificationUpdateAtMs = nowMs
+        lastNotifiedTitle = title
+        lastNotifiedProgress = clampedProgress
         val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(NOTIFICATION_ID, buildProgressNotification(title, progress.coerceIn(0, 100)))
+        manager.notify(PROGRESS_NOTIFICATION_ID, buildProgressNotification(title, clampedProgress))
+    }
+
+    private fun resetNotificationThrottle() {
+        lastNotificationUpdateAtMs = 0L
+        lastNotifiedTitle = null
+        lastNotifiedProgress = -1
     }
 
     private fun buildProgressNotification(title: LocalizedText, progress: Int): Notification {
@@ -7998,6 +8088,7 @@ class ConversionService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        val localized = AppLanguages.localizedContext(this)
         val tasks = ConversionTaskStore.tasks
         val totalCount = tasks.size
         val failedCount = tasks.count { it.status == ConversionTaskStatus.Failed }
@@ -8008,26 +8099,26 @@ class ConversionService : Service() {
 
         when {
             failedCount == totalCount && totalCount > 0 -> {
-                title = getString(R.string.notification_conversion_failed)
+                title = localized.getString(R.string.notification_conversion_failed)
                 contentText = tasks.firstOrNull()?.message?.resolve(this)
                     ?: ConversionTaskStore.summaryMessage.value?.resolve(this)
-                    ?: getString(R.string.ui_failed)
+                    ?: localized.getString(R.string.ui_failed)
             }
             failedCount > 0 && completedCount > 0 -> {
-                title = getString(R.string.ui_flow_complete)
-                contentText = getString(R.string.notification_partial_summary, completedCount, failedCount)
+                title = localized.getString(R.string.ui_flow_complete)
+                contentText = localized.getString(R.string.notification_partial_summary, completedCount, failedCount)
             }
             else -> {
-                title = getString(R.string.ui_flow_complete)
+                title = localized.getString(R.string.ui_flow_complete)
                 contentText = when {
                     customOutputFallbackOccurred -> {
-                        getString(R.string.text_task_message_custom_output_folder_was_unavailable_saved_to_default_directory)
+                        localized.getString(R.string.text_task_message_custom_output_folder_was_unavailable_saved_to_default_directory)
                     }
                     totalCount == 1 -> {
                         tasks.firstOrNull()?.displayName.orEmpty()
                     }
                     totalCount > 1 -> {
-                        resources.getQuantityString(R.plurals.notification_files_converted, completedCount, completedCount)
+                        localized.resources.getQuantityString(R.plurals.notification_files_converted, completedCount, completedCount)
                     }
                     else -> ""
                 }
@@ -8040,22 +8131,12 @@ class ConversionService : Service() {
             .setContentIntent(openPendingIntent)
             .setOngoing(false)
             .setAutoCancel(true)
-            .setProgress(0, 0, false)
 
         if (contentText.isNotBlank()) {
             builder.setContentText(contentText)
         }
 
         return builder.build()
-    }
-
-    @Suppress("DEPRECATION")
-    private fun detachForeground() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_DETACH)
-        } else {
-            stopForeground(false)
-        }
     }
 
     @Suppress("DEPRECATION")
@@ -8066,7 +8147,7 @@ class ConversionService : Service() {
             stopForeground(true)
         }
         val manager = getSystemService(NotificationManager::class.java)
-        manager.cancel(NOTIFICATION_ID)
+        manager.cancel(PROGRESS_NOTIFICATION_ID)
     }
 
     private fun ensureNotificationChannel() {
@@ -8085,7 +8166,9 @@ class ConversionService : Service() {
     companion object {
         private const val TAG = "ConversionService"
         private const val CHANNEL_ID = "conversion_progress"
-        private const val NOTIFICATION_ID = 1001
+        private const val PROGRESS_NOTIFICATION_ID = 1001
+        private const val COMPLETED_NOTIFICATION_ID = 1002
+        private const val NOTIFICATION_UPDATE_MIN_INTERVAL_MS = 500L
         private const val COPY_BUFFER_SIZE = 1024 * 1024
         private const val PROGRESS_BEFORE_SAVE = 0.98f
         private const val MAX_IMAGE_DECODE_PIXELS = 64_000_000L
