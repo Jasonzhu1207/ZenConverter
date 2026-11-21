@@ -476,10 +476,10 @@ internal object MarkdownPdfRenderer {
             when (block) {
                 is MdBlock.FrontMatterBlock -> layoutFrontMatter(block, leftPt, widthPt)
                 is MdBlock.HeadingBlock -> layoutHeading(block, nextBlock, leftPt, widthPt)
-                is MdBlock.ParagraphBlock -> layoutParagraph(block, leftPt, widthPt, basePt = bodyPt, spacingAfterPt = bodyPt * 0.72f)
+                is MdBlock.ParagraphBlock -> layoutParagraph(block, leftPt, widthPt, basePt = bodyPt, spacingAfterPt = bodyPt * 0.72f, nextBlock = nextBlock)
                 is MdBlock.CodeBlock -> layoutCodeBlock(block, leftPt, widthPt)
                 is MdBlock.BlockQuoteBlock -> layoutBlockQuote(block, leftPt, widthPt, isCancelled)
-                is MdBlock.ListBlock -> layoutList(block, leftPt, widthPt, isCancelled)
+                is MdBlock.ListBlock -> layoutList(block, leftPt, widthPt, isCancelled, nextBlock = nextBlock)
                 is MdBlock.TableBlock -> layoutTable(block, leftPt, widthPt, isCancelled)
                 is MdBlock.ThematicBreakBlock -> layoutThematicBreak(leftPt, widthPt)
                 is MdBlock.ImageBlock -> layoutImageBlock(block, leftPt, widthPt)
@@ -568,10 +568,10 @@ internal object MarkdownPdfRenderer {
                 defaultBold = true
             )
             val headingHeightPt = layout.height / LAYOUT_SCALE
-            val ruleExtraPt = if (block.level <= 2) 8f else 0f
-            val minFollowPt = if (nextBlock != null) bodyPt * 2.8f else 0f
+            val afterHeadingPt = if (block.level <= 2) 4f + bodyPt * 0.72f else bodyPt * 0.55f
+            val minFollowPt = estimateMinimumFollowingHeightPt(nextBlock)
 
-            if (topSpacePt + headingHeightPt + ruleExtraPt + minFollowPt > remainingHeightPt() && cursorY > contentTopPt + 1f) {
+            if (topSpacePt + headingHeightPt + afterHeadingPt + minFollowPt > remainingHeightPt() && cursorY > contentTopPt + 1f) {
                 newPage()
             } else {
                 cursorY += topSpacePt
@@ -610,12 +610,29 @@ internal object MarkdownPdfRenderer {
             }
         }
 
+        private fun estimateMinimumFollowingHeightPt(nextBlock: MdBlock?): Float {
+            val raw = when (nextBlock) {
+                null -> 0f
+                is MdBlock.TableBlock -> bodyPt * 7.0f
+                is MdBlock.VideoBlock -> 150f
+                is MdBlock.ImageBlock -> 100f
+                is MdBlock.CodeBlock -> bodyPt * 6.0f
+                is MdBlock.DetailsBlock,
+                is MdBlock.BlockQuoteBlock,
+                is MdBlock.MathBlock -> bodyPt * 5.0f
+                is MdBlock.HeadingBlock -> bodyPt * 4.5f
+                else -> bodyPt * 3.0f
+            }
+            return raw.coerceAtMost((contentBottomPt - contentTopPt) * 0.45f)
+        }
+
         private fun layoutParagraph(
             block: MdBlock.ParagraphBlock,
             leftPt: Float,
             widthPt: Float,
             basePt: Float,
-            spacingAfterPt: Float
+            spacingAfterPt: Float,
+            nextBlock: MdBlock? = null
         ) {
             val spannable = buildSpannable(block.spans, basePt = basePt, defaultColor = COLOR_TEXT_PRIMARY)
             if (spannable.isEmpty()) return
@@ -627,6 +644,17 @@ internal object MarkdownPdfRenderer {
                 alignment = block.alignment,
                 lineSpacingMult = 1.42f
             )
+            if (
+                (nextBlock is MdBlock.VideoBlock || nextBlock is MdBlock.ImageBlock || nextBlock is MdBlock.TableBlock) &&
+                layout.lineCount <= 2
+            ) {
+                val trimmed = spannable.toString().trimEnd()
+                if (trimmed.endsWith(':') || trimmed.endsWith('：')) {
+                    ensureSpaceOrNewPage(
+                        layout.height / LAYOUT_SCALE + spacingAfterPt + estimateMinimumFollowingHeightPt(nextBlock)
+                    )
+                }
+            }
             drawLayoutWithPagination(layout, leftPt, spacingAfterPt)
         }
 
@@ -929,7 +957,8 @@ internal object MarkdownPdfRenderer {
             block: MdBlock.ListBlock,
             leftPt: Float,
             widthPt: Float,
-            isCancelled: () -> Boolean
+            isCancelled: () -> Boolean,
+            nextBlock: MdBlock? = null
         ) {
             val markerWidthPt = if (block.ordered) 22f else 16f
             val childLeftPt = leftPt + markerWidthPt
@@ -937,7 +966,32 @@ internal object MarkdownPdfRenderer {
 
             block.items.forEachIndexed { index, item ->
                 if (isCancelled()) return
-                ensureSpaceOrNewPage(bodyPt * 1.6f)
+                val followBlock = if (index == block.items.lastIndex) nextBlock else null
+                val itemMediaTarget = when {
+                    item.blocks.size >= 2 &&
+                        item.blocks[0] is MdBlock.ParagraphBlock &&
+                        (item.blocks[1] is MdBlock.VideoBlock || item.blocks[1] is MdBlock.ImageBlock || item.blocks[1] is MdBlock.TableBlock) ->
+                        item.blocks[1]
+                    item.blocks.size == 1 &&
+                        item.blocks[0] is MdBlock.ParagraphBlock &&
+                        (followBlock is MdBlock.VideoBlock || followBlock is MdBlock.ImageBlock || followBlock is MdBlock.TableBlock) ->
+                        followBlock
+                    else -> null
+                }
+                val neededItemPt = if (itemMediaTarget != null) {
+                    val leadText = (item.blocks[0] as MdBlock.ParagraphBlock).spans
+                        .filterIsInstance<MdSpan.TextSpan>()
+                        .joinToString("") { it.text }
+                        .trimEnd()
+                    if (leadText.length <= 120 && (leadText.endsWith(':') || leadText.endsWith('：'))) {
+                        bodyPt * 2.4f + estimateMinimumFollowingHeightPt(itemMediaTarget)
+                    } else {
+                        bodyPt * 1.6f
+                    }
+                } else {
+                    bodyPt * 1.6f
+                }
+                ensureSpaceOrNewPage(neededItemPt)
                 val markerY = cursorY
 
                 if (item.checked != null) {
@@ -1531,8 +1585,18 @@ internal object MarkdownPdfRenderer {
             val effectiveText = ssb.subSequence(start, end).toString()
             val effectiveLink = style.linkUrl?.takeIf { it.isNotBlank() }
             val resolvedColor = style.textColor ?: if (effectiveLink != null) COLOR_LINK else defaultColor
+            val unscaledPt = ((style.fontSizePt ?: blockBasePt) * style.fontSizeScale).coerceIn(5.5f, 72f)
+            val isExplicitSize = style.fontSizePt != null || kotlin.math.abs(style.fontSizeScale - 1.0f) > 0.01f
 
             if (style.kbd && effectiveText.length <= 24 && !effectiveText.contains('\n')) {
+                if (isExplicitSize) {
+                    ssb.setSpan(
+                        AbsoluteSizeSpan((unscaledPt * LAYOUT_SCALE).roundToInt(), false),
+                        start,
+                        end,
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                }
                 ssb.setSpan(
                     InlinePillSpan(
                         bgColor = COLOR_KBD_BG,
@@ -1550,6 +1614,14 @@ internal object MarkdownPdfRenderer {
             }
 
             if (style.code && !style.mark && style.textColor == null && effectiveText.length <= 28 && !effectiveText.contains('\n')) {
+                if (isExplicitSize) {
+                    ssb.setSpan(
+                        AbsoluteSizeSpan((unscaledPt * LAYOUT_SCALE).roundToInt(), false),
+                        start,
+                        end,
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                }
                 ssb.setSpan(
                     InlinePillSpan(
                         bgColor = COLOR_CODE_PILL_BG,
@@ -1567,18 +1639,11 @@ internal object MarkdownPdfRenderer {
             }
 
             // Font size
-            val resolvedPt = ((style.fontSizePt ?: blockBasePt) * style.fontSizeScale).coerceIn(5.5f, 72f)
-            val isExplicitSize = style.fontSizePt != null || kotlin.math.abs(style.fontSizeScale - 1.0f) > 0.01f
-            if (isExplicitSize) {
+            val codeScale = if (style.code || style.kbd) 0.88f else 1.0f
+            val resolvedPt = (unscaledPt * codeScale).coerceIn(5.5f, 72f)
+            if (isExplicitSize || style.code || style.kbd) {
                 ssb.setSpan(
                     AbsoluteSizeSpan((resolvedPt * LAYOUT_SCALE).roundToInt(), false),
-                    start,
-                    end,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
-            } else if (style.code || style.kbd) {
-                ssb.setSpan(
-                    AbsoluteSizeSpan((blockBasePt * 0.88f * LAYOUT_SCALE).roundToInt(), false),
                     start,
                     end,
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE

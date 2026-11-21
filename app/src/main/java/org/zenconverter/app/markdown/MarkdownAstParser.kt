@@ -245,7 +245,7 @@ internal object MarkdownAstParser {
                 continue
             }
 
-            outLines.add(rewriteObsidianEmbedsOutsideCode(line))
+            outLines.add(normalizeCjkEmphasisOutsideCode(rewriteObsidianEmbedsOutsideCode(line)))
             i++
         }
 
@@ -266,19 +266,214 @@ internal object MarkdownAstParser {
         outLines.add("")
     }
 
+    private fun findClosingBacktickRun(text: String, openStart: Int): Pair<Int, Int>? {
+        if (openStart >= text.length || text[openStart] != '`') return null
+        var tickLen = 0
+        while (openStart + tickLen < text.length && text[openStart + tickLen] == '`') tickLen++
+        var j = openStart + tickLen
+        while (j < text.length) {
+            if (text[j] == '`') {
+                var runLen = 0
+                while (j + runLen < text.length && text[j + runLen] == '`') runLen++
+                if (runLen == tickLen) {
+                    return tickLen to j
+                }
+                j += runLen
+            } else {
+                j++
+            }
+        }
+        return null
+    }
+
+    private fun findHtmlTagEnd(text: String, start: Int): Int? {
+        if (start >= text.length || text[start] != '<') return null
+        if (text.startsWith("<!--", start)) {
+            val commentEnd = text.indexOf("-->", start + 4)
+            return if (commentEnd >= 0) commentEnd + 3 else null
+        }
+        val second = text.getOrNull(start + 1) ?: return null
+        if (!second.isLetter() && second != '/') return null
+        var quote: Char? = null
+        var j = start + 2
+        while (j < text.length) {
+            val ch = text[j]
+            if (ch == '\n' && quote == null) return null
+            if (quote != null) {
+                if (ch == quote) quote = null
+            } else {
+                when (ch) {
+                    '\'', '"' -> quote = ch
+                    '>' -> return j + 1
+                }
+            }
+            j++
+        }
+        return null
+    }
+
+    private fun isCommonMarkPunctuation(ch: Char): Boolean {
+        val code = ch.code
+        if (
+            code in 0x21..0x2F ||
+            code in 0x3A..0x40 ||
+            code in 0x5B..0x60 ||
+            code in 0x7B..0x7E
+        ) {
+            return true
+        }
+        return when (Character.getType(ch)) {
+            Character.DASH_PUNCTUATION.toInt(),
+            Character.START_PUNCTUATION.toInt(),
+            Character.END_PUNCTUATION.toInt(),
+            Character.CONNECTOR_PUNCTUATION.toInt(),
+            Character.OTHER_PUNCTUATION.toInt(),
+            Character.INITIAL_QUOTE_PUNCTUATION.toInt(),
+            Character.FINAL_QUOTE_PUNCTUATION.toInt(),
+            Character.MATH_SYMBOL.toInt(),
+            Character.CURRENCY_SYMBOL.toInt(),
+            Character.OTHER_SYMBOL.toInt() -> true
+            else -> false
+        }
+    }
+
+    private fun findClosingStarDelimiter(line: String, searchFrom: Int, delimLen: Int): Int? {
+        var j = searchFrom
+        while (j < line.length) {
+            when (val ch = line[j]) {
+                '\\' -> j = minOf(j + 2, line.length)
+                '`' -> {
+                    val backtick = findClosingBacktickRun(line, j)
+                    j = if (backtick != null) backtick.second + backtick.first else j + 1
+                }
+                '<' -> {
+                    val tagEnd = findHtmlTagEnd(line, j)
+                    j = tagEnd ?: (j + 1)
+                }
+                '*' -> {
+                    var runLen = 0
+                    while (j + runLen < line.length && line[j + runLen] == '*') runLen++
+                    if (runLen == delimLen) {
+                        val prevChar = line.getOrNull(j - 1)
+                        if (prevChar != null && !prevChar.isWhitespace()) {
+                            return j
+                        }
+                    }
+                    j += runLen
+                }
+                else -> j++
+            }
+        }
+        return null
+    }
+
+    private fun normalizeCjkEmphasisOutsideCode(line: String): String {
+        if (!line.contains("**")) return line
+        val out = StringBuilder(line.length + 16)
+        var i = 0
+        while (i < line.length) {
+            when (line[i]) {
+                '\\' -> {
+                    val end = minOf(i + 2, line.length)
+                    out.append(line, i, end)
+                    i = end
+                }
+                '`' -> {
+                    val backtick = findClosingBacktickRun(line, i)
+                    if (backtick != null) {
+                        val end = backtick.second + backtick.first
+                        out.append(line, i, end)
+                        i = end
+                    } else {
+                        out.append('`')
+                        i++
+                    }
+                }
+                '<' -> {
+                    val tagEnd = findHtmlTagEnd(line, i)
+                    if (tagEnd != null) {
+                        out.append(line, i, tagEnd)
+                        i = tagEnd
+                    } else {
+                        out.append('<')
+                        i++
+                    }
+                }
+                '*' -> {
+                    var delimLen = 0
+                    while (i + delimLen < line.length && line[i + delimLen] == '*') delimLen++
+                    val nextAfterOpen = line.getOrNull(i + delimLen)
+                    if ((delimLen == 2 || delimLen == 3) && nextAfterOpen != null && !nextAfterOpen.isWhitespace()) {
+                        val closeIdx = findClosingStarDelimiter(line, i + delimLen, delimLen)
+                        if (closeIdx != null && closeIdx > i + delimLen) {
+                            val inner = line.substring(i + delimLen, closeIdx)
+                            if (inner.isNotEmpty() && !inner.first().isWhitespace() && !inner.last().isWhitespace()) {
+                                val beforeOpen = line.getOrNull(i - 1)
+                                val afterClose = line.getOrNull(closeIdx + delimLen)
+                                val openBlocked = beforeOpen != null &&
+                                    !beforeOpen.isWhitespace() &&
+                                    !isCommonMarkPunctuation(beforeOpen) &&
+                                    isCommonMarkPunctuation(inner.first())
+                                val closeBlocked = isCommonMarkPunctuation(inner.last()) &&
+                                    afterClose != null &&
+                                    !afterClose.isWhitespace() &&
+                                    !isCommonMarkPunctuation(afterClose)
+                                if (openBlocked || closeBlocked) {
+                                    val normalizedInner = normalizeCjkEmphasisOutsideCode(inner)
+                                    if (delimLen == 3) {
+                                        out.append("<strong><em>").append(normalizedInner).append("</em></strong>")
+                                    } else {
+                                        out.append("<strong>").append(normalizedInner).append("</strong>")
+                                    }
+                                    i = closeIdx + delimLen
+                                    continue
+                                }
+                            }
+                        }
+                    }
+                    out.append(line, i, i + delimLen)
+                    i += delimLen
+                }
+                else -> {
+                    out.append(line[i])
+                    i++
+                }
+            }
+        }
+        return out.toString()
+    }
+
+    private fun containsBlockHtmlOutsideBackticks(text: String): Boolean {
+        val stripped = buildString(text.length) {
+            var i = 0
+            while (i < text.length) {
+                if (text[i] == '`') {
+                    val backtick = findClosingBacktickRun(text, i)
+                    if (backtick != null) {
+                        i = backtick.second + backtick.first
+                        append(' ')
+                        continue
+                    }
+                }
+                append(text[i])
+                i++
+            }
+        }
+        return Regex("""<(?:div|p|table|details|video|h[1-6]|blockquote|pre|ul|ol|hr)\b""", RegexOption.IGNORE_CASE)
+            .containsMatchIn(stripped)
+    }
+
     private fun rewriteObsidianEmbedsOutsideCode(line: String): String {
         if (!line.contains("![[")) return line
         val out = StringBuilder(line.length)
         var i = 0
         while (i < line.length) {
             if (line[i] == '`') {
-                var tickLen = 0
-                while (i + tickLen < line.length && line[i + tickLen] == '`') tickLen++
-                val closePattern = "`".repeat(tickLen)
-                val closeIdx = line.indexOf(closePattern, i + tickLen)
-                if (closeIdx >= 0) {
-                    out.append(line, i, closeIdx + tickLen)
-                    i = closeIdx + tickLen
+                val backtick = findClosingBacktickRun(line, i)
+                if (backtick != null) {
+                    val end = backtick.second + backtick.first
+                    out.append(line, i, end)
+                    i = end
                     continue
                 }
             }
@@ -779,7 +974,7 @@ internal object MarkdownAstParser {
             }
 
             // If inner contains nested block elements (<p>, <div>, <table>, <video>, <h1>..<h6>), recurse!
-            if (Regex("""<(?:div|p|table|details|video|h[1-6]|blockquote|pre|ul|ol|hr)\b""", RegexOption.IGNORE_CASE).containsMatchIn(inner)) {
+            if (containsBlockHtmlOutsideBackticks(inner)) {
                 val innerDoc = PARSER.parse(inner)
                 result.addAll(parseContainerBlocks(innerDoc.firstChild, nextStyle, nextAlignment, context))
                 return result
@@ -1166,7 +1361,7 @@ internal object MarkdownAstParser {
         context: ParseContext
     ): List<MdSpan> {
         if (markdown.isEmpty()) return emptyList()
-        val doc = PARSER.parse(markdown)
+        val doc = PARSER.parse(normalizeCjkEmphasisOutsideCode(markdown))
         val out = mutableListOf<MdSpan>()
         var child = doc.firstChild
         while (child != null) {
@@ -1191,21 +1386,54 @@ internal object MarkdownAstParser {
         val out = mutableListOf<MdSpan>()
         val styleStack = ArrayDeque<Pair<String, MdInlineStyle>>()
         styleStack.addLast("root" to baseStyle)
-        val tagFinder = Regex("""<[^>]+>""")
-        var cursor = 0
-        for (match in tagFinder.findAll(html)) {
-            if (match.range.first > cursor) {
-                val text = MarkdownStyleParser.decodeHtmlEntities(html.substring(cursor, match.range.first))
-                collectPlainTextExtras(text, styleStack.last().second, context, out)
+        val textBuffer = StringBuilder()
+
+        fun flushText() {
+            if (textBuffer.isEmpty()) return
+            val decoded = MarkdownStyleParser.decodeHtmlEntities(textBuffer.toString())
+            textBuffer.clear()
+            collectPlainTextExtras(decoded, styleStack.last().second, context, out)
+        }
+
+        var i = 0
+        while (i < html.length) {
+            val currentStyle = styleStack.last().second
+            if (html[i] == '`' && !currentStyle.code) {
+                val backtick = findClosingBacktickRun(html, i)
+                if (backtick != null) {
+                    val (tickLen, closeIdx) = backtick
+                    flushText()
+                    var rawCode = html.substring(i + tickLen, closeIdx).replace('\n', ' ')
+                    if (rawCode.length >= 2 && rawCode.startsWith(' ') && rawCode.endsWith(' ') && rawCode.any { it != ' ' }) {
+                        rawCode = rawCode.substring(1, rawCode.length - 1)
+                    }
+                    out.add(
+                        MdSpan.TextSpan(
+                            text = rawCode,
+                            style = currentStyle.copy(
+                                code = true,
+                                fontFamily = MdFontFamily.Monospace
+                            )
+                        )
+                    )
+                    i = closeIdx + tickLen
+                    continue
+                }
             }
-            handleInlineHtmlTag(match.value, styleStack, out)
-            cursor = match.range.last + 1
+            if (html[i] == '<') {
+                val tagEnd = findHtmlTagEnd(html, i)
+                if (tagEnd != null) {
+                    flushText()
+                    handleInlineHtmlTag(html.substring(i, tagEnd), styleStack, out)
+                    i = tagEnd
+                    continue
+                }
+            }
+            textBuffer.append(html[i])
+            i++
         }
-        if (cursor < html.length) {
-            val text = MarkdownStyleParser.decodeHtmlEntities(html.substring(cursor))
-            collectPlainTextExtras(text, styleStack.last().second, context, out)
-        }
-        return out
+        flushText()
+        return mergeAdjacentTextSpans(out)
     }
 
     private fun collectSpansFromChildren(
