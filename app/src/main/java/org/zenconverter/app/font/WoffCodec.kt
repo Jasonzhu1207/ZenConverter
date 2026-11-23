@@ -63,7 +63,10 @@ object WoffCodec {
                 tag = table.tag,
                 checksum = table.checksum,
                 origLength = table.length,
-                data = zlibCompress(sfnt.copyOfRange(table.offset, table.offset + table.length))
+                // WOFF stores a table as-is when zlib does not make it smaller.
+                data = sfnt.copyOfRange(table.offset, table.offset + table.length).let { raw ->
+                    zlibCompress(raw).takeIf { it.size < raw.size } ?: raw
+                }
             )
         }
 
@@ -150,10 +153,8 @@ object WoffCodec {
         }
 
         val decompressed = tables.map { table ->
-            zlibDecompress(
-                woff.copyOfRange(table.offset, table.offset + table.compLength),
-                table.origLength
-            )
+            val data = woff.copyOfRange(table.offset, table.offset + table.compLength)
+            if (table.compLength == table.origLength) data else zlibDecompress(data, table.origLength)
         }
 
         val searchRangeBase = largestPowerOfTwo(numTables)
